@@ -42,7 +42,7 @@ returns void language plpgsql as $$
 declare v_entry uuid;
 begin
   select public.create_gl_entry(
-    p_org, current_date, 'manual'::app.journal_source,
+    p_org, pg_temp.today(), 'manual'::app.journal_source,
     jsonb_build_array(
       jsonb_build_object(
         'account_id', (select id from public.accounts
@@ -63,7 +63,7 @@ returns uuid language plpgsql as $$
 declare v_entry uuid;
 begin
   select public.create_gl_entry(
-    p_org, current_date, 'manual'::app.journal_source,
+    p_org, pg_temp.today(), 'manual'::app.journal_source,
     jsonb_build_array(
       jsonb_build_object(
         'account_id', (select id from public.accounts
@@ -85,7 +85,7 @@ returns void language plpgsql as $$
 declare v_entry uuid;
 begin
   select public.create_gl_entry(
-    p_org, current_date, 'manual'::app.journal_source,
+    p_org, pg_temp.today(), 'manual'::app.journal_source,
     jsonb_build_array(
       jsonb_build_object(
         'account_id', (select id from public.accounts
@@ -151,14 +151,14 @@ declare
   v_row  record;
 begin
   perform public.create_fiscal_year(v_org,
-    date_trunc('year', current_date)::date);
+    date_trunc('year', pg_temp.today())::date);
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'C1', 'Klien Sdn Bhd', 'customer') returning id into v_cust;
 
   insert into public.projects
     (org_id, code, name, contact_id, budget_amount, start_date)
   values (v_org, 'JOB-1', 'Warehouse fit-out', v_cust, 50000,
-          current_date - 60)
+          pg_temp.today() - 60)
   returning id into v_proj;
   insert into public.projects (org_id, code, name)
   values (v_org, 'JOB-2', 'No budget on this one') returning id into v_bare;
@@ -228,7 +228,7 @@ declare
   v_n     integer;
 begin
   perform public.create_fiscal_year(v_org,
-    date_trunc('year', current_date)::date);
+    date_trunc('year', pg_temp.today())::date);
   insert into public.projects (org_id, code, name, budget_amount)
   values (v_org, 'JOB-1', 'Fit-out', 10000) returning id into v_proj;
   insert into public.projects (org_id, code, name)
@@ -237,24 +237,24 @@ begin
   insert into public.time_entries
     (org_id, project_id, user_id, entry_date, description, minutes,
      hourly_rate, amount, is_billable, is_billed)
-  values (v_org, v_proj, auth.uid(), current_date - 5, 'Site work', 480,
+  values (v_org, v_proj, auth.uid(), pg_temp.today() - 5, 'Site work', 480,
           250, 2000, true, false);
   insert into public.time_entries
     (org_id, project_id, user_id, entry_date, description, minutes,
      hourly_rate, amount, is_billable, is_billed)
-  values (v_org, v_proj, auth.uid(), current_date - 4, 'More site work',
+  values (v_org, v_proj, auth.uid(), pg_temp.today() - 4, 'More site work',
           240, 250, 1000, true, false);
   -- Already invoiced, so not part of the question.
   insert into public.time_entries
     (org_id, project_id, user_id, entry_date, description, minutes,
      hourly_rate, amount, is_billable, is_billed)
-  values (v_org, v_proj, auth.uid(), current_date - 3, 'Billed already',
+  values (v_org, v_proj, auth.uid(), pg_temp.today() - 3, 'Billed already',
           60, 250, 250, true, true);
   -- Never billable, so also not part of it.
   insert into public.time_entries
     (org_id, project_id, user_id, entry_date, description, minutes,
      hourly_rate, amount, is_billable, is_billed)
-  values (v_org, v_proj, auth.uid(), current_date - 2, 'Internal', 60,
+  values (v_org, v_proj, auth.uid(), pg_temp.today() - 2, 'Internal', 60,
           0, 0, false, false);
 
   select * into v_row from public.report_project_budget(v_org)

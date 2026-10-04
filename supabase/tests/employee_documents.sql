@@ -46,7 +46,7 @@ begin
           date '1990-01-01', p_residency::app.residency_status,
           p_status::app.employment_status,
           case when p_status in ('resigned', 'terminated', 'retired')
-               then current_date - 30 end)
+               then pg_temp.today() - 30 end)
   returning id into v_id;
   return v_id;
 end $$;
@@ -133,7 +133,7 @@ declare
   v_said text;
   v_n    integer;
   v_row  record;
-  v_today date := current_date;
+  v_today date := pg_temp.today();
 begin
   v_emp := pg_temp.ed_employee(v_org, 'E1', 'Mr Chen', 'expatriate');
 
@@ -322,12 +322,12 @@ begin
   v_emp := pg_temp.ed_employee(v_org, 'E1', 'Encik Ali');
   insert into public.employee_documents
     (org_id, employee_id, doc_type, title, expires_date)
-  values (v_org, v_emp, 'certificate', 'First aid', current_date + 30)
+  values (v_org, v_emp, 'certificate', 'First aid', pg_temp.today() + 30)
   returning id into v_doc;
 
   perform pg_temp.sign_in_as(v_out);
   begin
-    perform public.renew_employee_document(v_doc, current_date + 400);
+    perform public.renew_employee_document(v_doc, pg_temp.today() + 400);
     raise exception 'FAIL: an outsider renewed a document';
   exception when sqlstate '42501' then
     v_said := sqlerrm;
@@ -343,7 +343,7 @@ begin
   -- person reading it goes looking for a role they already have.
   begin
     perform public.renew_employee_document(
-      '00000000-0000-0000-0000-000000000000', current_date + 400);
+      '00000000-0000-0000-0000-000000000000', pg_temp.today() + 400);
     raise exception 'FAIL: a document that does not exist was renewed';
   exception when sqlstate 'P0002' or sqlstate '42501' then
     v_said := sqlerrm;
@@ -411,13 +411,13 @@ begin
 
   insert into public.employees
     (org_id, employee_no, full_name, user_id, hire_date)
-  values (v_org, 'E-001', 'Pekerja', v_them, current_date)
+  values (v_org, 'E-001', 'Pekerja', v_them, pg_temp.today())
   returning id into v_person;
 
   insert into public.employee_documents
     (org_id, employee_id, title, doc_type, issued_date, expires_date)
   values (v_org, v_person, 'Passport', 'identity',
-          current_date - 100, current_date + 500)
+          pg_temp.today() - 100, pg_temp.today() + 500)
   returning id into v_doc;
 
   -- The scan, filed by HR. Path in the shape the column's check
@@ -528,7 +528,7 @@ begin
     perform pg_temp.sign_in_as(v_owner);
     insert into public.employees
       (org_id, employee_no, full_name, hire_date)
-    values (v_org, 'E-002', 'Rakan', current_date)
+    values (v_org, 'E-002', 'Rakan', pg_temp.today())
     returning id into v_other_person;
     insert into public.employee_documents
       (org_id, employee_id, title, doc_type)

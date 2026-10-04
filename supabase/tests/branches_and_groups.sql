@@ -53,7 +53,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, contact_id, doc_date, status, total_amount,
      branch_id)
-  values (v_a, 'bill', 'B-OWN', pg_temp.supplier(v_a, 'S-1'), current_date,
+  values (v_a, 'bill', 'B-OWN', pg_temp.supplier(v_a, 'S-1'), pg_temp.today(),
           'draft', 0, v_branch);
   raise notice 'ok   a document may name its own company''s branch';
 
@@ -66,7 +66,7 @@ begin
     format($q$ insert into public.purchase_documents
                  (org_id, doc_type, doc_no, contact_id, doc_date, status,
                   total_amount, branch_id)
-               values (%L, 'bill', 'B-BORROWED', %L, current_date,
+               values (%L, 'bill', 'B-BORROWED', %L, pg_temp.today(),
                        'draft', 0, %L) $q$,
            v_b, pg_temp.supplier(v_b, 'S-1'), v_branch),
     '%branch belongs to another company%', '23514');
@@ -78,7 +78,7 @@ begin
   -- says so by the insert simply working.
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, contact_id, doc_date, status, total_amount)
-  values (v_b, 'bill', 'B-NONE', pg_temp.supplier(v_b, 'S-2'), current_date,
+  values (v_b, 'bill', 'B-NONE', pg_temp.supplier(v_b, 'S-2'), pg_temp.today(),
           'draft', 0);
   raise notice 'ok   a document with no branch is still fine';
 end $$;

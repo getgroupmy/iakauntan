@@ -45,9 +45,9 @@ begin
   v_org := pg_temp.test_org('Kilang Roti Sinar Sdn Bhd');
   -- Last year, and this one.
   v_prior := public.create_fiscal_year(
-    v_org, (date_trunc('year', current_date) - interval '1 year')::date);
+    v_org, (date_trunc('year', pg_temp.today()) - interval '1 year')::date);
   v_year  := public.create_fiscal_year(
-    v_org, date_trunc('year', current_date)::date);
+    v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['accounting','sales','purchases']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
@@ -92,7 +92,7 @@ begin
      exchange_rate, status)
   values (v_org, 'invoice', 'INV-1',
           (select start_date from public.fiscal_periods where id = v_p1),
-          current_date, v_cust, 'MYR', 1, 'draft')
+          pg_temp.today(), v_cust, 'MYR', 1, 'draft')
   returning id into v_inv;
   insert into public.sales_document_lines
     (org_id, document_id, line_no, line_type, item_id, description,

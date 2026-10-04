@@ -380,8 +380,8 @@ declare
   v_owner uuid := pg_temp.test_user();
   v_them uuid;
   v_type uuid; v_retired uuid; v_emp uuid; v_their_emp uuid;
-  v_year integer := extract(year from current_date)::integer;
-  v_on date := make_date(extract(year from current_date)::integer, 1, 1)
+  v_year integer := extract(year from pg_temp.today())::integer;
+  v_on date := make_date(extract(year from pg_temp.today())::integer, 1, 1)
                + interval '4 months';
   v_n integer;
 begin
@@ -473,8 +473,8 @@ declare
   v_org uuid := pg_temp.test_org('Mohon Cuti Sdn Bhd');
   v_owner uuid := pg_temp.test_user();
   v_type uuid; v_emp uuid; v_req uuid; v_fresh uuid;
-  v_year integer := extract(year from current_date)::integer;
-  v_next date := make_date(extract(year from current_date)::integer + 1, 3, 2);
+  v_year integer := extract(year from pg_temp.today())::integer;
+  v_next date := make_date(extract(year from pg_temp.today())::integer + 1, 3, 2);
 begin
   v_type  := pg_temp.ly_type(v_org, 'AL', 'Annual', 14, false, 20);
   -- A paid leave type nobody has drawn a balance for.

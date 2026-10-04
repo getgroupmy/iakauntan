@@ -51,7 +51,7 @@ declare
   v_other_bank uuid;
 begin
   v_org := pg_temp.test_org('Kedai Pautan Sdn Bhd');
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
 
   insert into public.contacts (org_id, code, name, contact_type, email)
   values (v_org, 'CUST', 'Encik Rahman', 'customer', 'rahman@example.test')
@@ -69,7 +69,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'invoice', 'INV-PAY-1', current_date, current_date,
+  values (v_org, 'invoice', 'INV-PAY-1', pg_temp.today(), pg_temp.today(),
           v_cust, 'MYR', 1, 'draft')
   returning id into v_doc;
   insert into public.sales_document_lines
@@ -285,7 +285,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'invoice', 'INV-PAY-2', current_date, current_date,
+  values (v_org, 'invoice', 'INV-PAY-2', pg_temp.today(), pg_temp.today(),
           v_cust, 'MYR', 1, 'draft')
   returning id into v_doc;
   insert into public.sales_document_lines
@@ -318,7 +318,7 @@ begin
   insert into public.receipts
     (org_id, receipt_no, receipt_date, contact_id, payment_mode_code,
      bank_account_id, currency, exchange_rate, amount, base_amount, status)
-  values (v_org, v_no, current_date, v_cust, '03', v_bank, 'MYR', 1,
+  values (v_org, v_no, pg_temp.today(), v_cust, '03', v_bank, 'MYR', 1,
           100.00, 100.00, 'draft')
   returning id into v_rcp;
   insert into public.payment_allocations
@@ -345,7 +345,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'invoice', 'INV-PAY-3', current_date, current_date,
+  values (v_org, 'invoice', 'INV-PAY-3', pg_temp.today(), pg_temp.today(),
           v_cust, 'MYR', 1, 'draft')
   returning id into v_doc;
   insert into public.sales_document_lines

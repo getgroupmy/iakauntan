@@ -45,7 +45,7 @@ declare
   v_lost   integer;
 begin
   v_org := pg_temp.test_org('Kedai Void Sdn Bhd');
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['pos','inventory']) m
   on conflict (org_id, module_code) do update set is_enabled = true;

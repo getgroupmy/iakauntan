@@ -57,7 +57,7 @@ declare
   v_missing text;
 begin
   v_org := pg_temp.test_org('Pengurusan Hartanah Empat Belas Sdn Bhd');
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
 
   insert into public.tax_codes
     (org_id, code, name, tax_type_code, rate,
@@ -91,7 +91,7 @@ begin
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status, shipping_amount, service_charge_amount,
      branch_id)
-  values (v_org, 'invoice', 'INV-TEMPLATE', current_date, current_date,
+  values (v_org, 'invoice', 'INV-TEMPLATE', pg_temp.today(), pg_temp.today(),
           v_cust, 'MYR', 1, 'draft', 12.00, 45.00, v_branch)
   returning id into v_doc;
 
@@ -106,8 +106,8 @@ begin
     a.total_amount, 381.00);
 
   v_rec := public.create_recurring_document(
-    v_doc, 'Monthly maintenance', 'monthly', current_date);
-  perform app.raise_recurring_document(v_rec, current_date);
+    v_doc, 'Monthly maintenance', 'monthly', pg_temp.today());
+  perform app.raise_recurring_document(v_rec, pg_temp.today());
 
   select * into b from public.sales_documents
    where org_id = v_org and id <> v_doc
@@ -148,7 +148,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status, matter_id)
-  values (v_org, 'invoice', 'INV-RETAINER', current_date, current_date,
+  values (v_org, 'invoice', 'INV-RETAINER', pg_temp.today(), pg_temp.today(),
           v_client, 'MYR', 1, 'draft', v_matter)
   returning id into v_doc;
   insert into public.sales_document_lines
@@ -158,8 +158,8 @@ begin
           300.00, v_st8, 8);
 
   v_rec := public.create_recurring_document(
-    v_doc, 'Monthly retainer', 'monthly', current_date);
-  perform app.raise_recurring_document(v_rec, current_date);
+    v_doc, 'Monthly retainer', 'monthly', pg_temp.today());
+  perform app.raise_recurring_document(v_rec, pg_temp.today());
 
   select * into b from public.sales_documents
    where org_id = v_org and doc_no not in ('INV-TEMPLATE', 'INV-RETAINER')
@@ -174,7 +174,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status, shipping_amount, branch_id)
-  values (v_org, 'bill', 'BILL-TEMPLATE', current_date, current_date,
+  values (v_org, 'bill', 'BILL-TEMPLATE', pg_temp.today(), pg_temp.today(),
           v_supp, 'MYR', 1, 'draft', 30.00, v_branch)
   returning id into v_bill;
   insert into public.purchase_document_lines
@@ -185,8 +185,8 @@ begin
 
   select * into a from public.purchase_documents where id = v_bill;
   v_rec := public.create_recurring_document(
-    v_bill, 'Monthly cleaning', 'monthly', current_date);
-  perform app.raise_recurring_document(v_rec, current_date);
+    v_bill, 'Monthly cleaning', 'monthly', pg_temp.today());
+  perform app.raise_recurring_document(v_rec, pg_temp.today());
 
   select * into b from public.purchase_documents
    where org_id = v_org and id <> v_bill
@@ -314,7 +314,7 @@ declare
   ];
 begin
   v_org := pg_temp.test_org('Setiap Lajur Sdn Bhd');
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'C1', 'Sesiapa', 'customer') returning id into v_cust;
   insert into public.items
@@ -325,7 +325,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'invoice', 'INV-COLS', current_date, current_date, v_cust,
+  values (v_org, 'invoice', 'INV-COLS', pg_temp.today(), pg_temp.today(), v_cust,
           'MYR', 1, 'draft')
   returning id into v_doc;
   insert into public.sales_document_lines
@@ -336,7 +336,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'bill', 'BILL-COLS', current_date, current_date, v_cust,
+  values (v_org, 'bill', 'BILL-COLS', pg_temp.today(), pg_temp.today(), v_cust,
           'MYR', 1, 'draft')
   returning id into v_bill;
   insert into public.purchase_document_lines

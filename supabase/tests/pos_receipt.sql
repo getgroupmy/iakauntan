@@ -38,7 +38,7 @@ declare
   v_cfg    record;
 begin
   v_org := pg_temp.test_org('Kedai Resit Sdn Bhd');
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['pos','inventory']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
@@ -59,7 +59,7 @@ begin
     (select id from public.accounts where org_id = v_org and code = '1410'),
     false, false);
   perform public.set_sst_registration(
-    v_org, true, current_date - 30, 'W10-1234-56789012', 'ST8');
+    v_org, true, pg_temp.today() - 30, 'W10-1234-56789012', 'ST8');
 
   insert into public.warehouses (org_id, code, name)
   values (v_org, 'MAIN', 'Store') returning id into v_wh;

@@ -50,7 +50,7 @@ do $$
 declare
   v_org   uuid;
   v_emp   uuid;
-  v_year  integer := extract(year from current_date)::integer;
+  v_year  integer := extract(year from pg_temp.today())::integer;
   v_sched uuid;
   v_cap   numeric;
   v_before numeric;

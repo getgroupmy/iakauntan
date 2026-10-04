@@ -49,7 +49,7 @@ declare
   v_n      integer;
 begin
   v_org := pg_temp.test_org('Pasar Timbang Sdn Bhd');
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['pos','inventory']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
@@ -95,8 +95,8 @@ begin
     (org_id, movement_no, movement_date, movement_type, item_id,
      warehouse_id, quantity, unit_cost)
   values
-    (v_org, 'OB-1', current_date, 'opening_balance', v_ikan, v_wh, 50, 18.00),
-    (v_org, 'OB-2', current_date, 'opening_balance', v_kuih, v_wh, 20, 20.00);
+    (v_org, 'OB-1', pg_temp.today(), 'opening_balance', v_ikan, v_wh, 50, 18.00),
+    (v_org, 'OB-2', pg_temp.today(), 'opening_balance', v_kuih, v_wh, 20, 20.00);
 
   -- ------------------------------------------------------------------
   -- 1. The check digit

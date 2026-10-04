@@ -25,7 +25,7 @@ returns uuid language plpgsql as $$
 declare v_org uuid := pg_temp.test_org(p_name);
 begin
   perform public.create_fiscal_year(
-    v_org, date_trunc('year', current_date)::date);
+    v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.items
     (org_id, code, name, item_type, track_inventory, unit_price)
   values (v_org, 'SVC', 'Service', 'service', false, 100);
@@ -41,10 +41,10 @@ begin
     p_org,
     jsonb_build_array(jsonb_build_object(
       'contact_code', p_code, 'doc_no', p_no,
-      'doc_date', to_char(current_date - 200, 'YYYY-MM-DD'),
-      'due_date',  to_char(current_date - 170, 'YYYY-MM-DD'),
+      'doc_date', to_char(pg_temp.today() - 200, 'YYYY-MM-DD'),
+      'due_date',  to_char(pg_temp.today() - 170, 'YYYY-MM-DD'),
       'outstanding_amount', p_amount::text)),
-    current_date, true);
+    pg_temp.today(), true);
   return 'ok';
 exception when others then
   get stacked diagnostics v_msg = message_text;
@@ -126,7 +126,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
      currency, exchange_rate, notes)
-  values (v_org, 'invoice', 'NEW-1', current_date, current_date, v_c,
+  values (v_org, 'invoice', 'NEW-1', pg_temp.today(), pg_temp.today(), v_c,
           'draft', 'MYR', 1, 'Opening balance brought forward on today')
   returning id into v_doc;
   insert into public.sales_document_lines

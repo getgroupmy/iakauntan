@@ -41,7 +41,7 @@ declare
   v_n      numeric;
 begin
   v_org := pg_temp.test_org('Kedai Besi Sinar Sdn Bhd');
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['sales','purchases','accounting']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
@@ -66,7 +66,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'invoice', 'INV-1', current_date, current_date, v_both,
+  values (v_org, 'invoice', 'INV-1', pg_temp.today(), pg_temp.today(), v_both,
           'MYR', 1, 'draft')
   returning id into v_inv;
   insert into public.sales_document_lines
@@ -79,7 +79,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'bill', 'BILL-1', current_date, v_both, 'MYR', 1, 'draft')
+  values (v_org, 'bill', 'BILL-1', pg_temp.today(), v_both, 'MYR', 1, 'draft')
   returning id into v_bill;
   insert into public.purchase_document_lines
     (org_id, document_id, line_no, line_type, item_id, description,
@@ -99,7 +99,7 @@ begin
   -- ------------------------------------------------------------------
   begin
     perform public.create_contra(
-      v_org, current_date,
+      v_org, pg_temp.today(),
       jsonb_build_array(jsonb_build_object('document', v_inv, 'amount', 8000)),
       jsonb_build_array(jsonb_build_object('document', v_bill, 'amount', 5000)),
       null);
@@ -117,7 +117,7 @@ begin
   --
   -- The smaller figure cancels, and both subsidiary ledgers say so.
   v_ctr := public.create_contra(
-    v_org, current_date,
+    v_org, pg_temp.today(),
     jsonb_build_array(jsonb_build_object('document', v_inv, 'amount', 5000)),
     jsonb_build_array(jsonb_build_object('document', v_bill, 'amount', 5000)),
     'Agreed at the yard');
@@ -195,7 +195,7 @@ begin
   -- its id, and the next line would then void a contra that no longer
   -- exists.
   v_ctr := public.create_contra(
-    v_org, current_date,
+    v_org, pg_temp.today(),
     jsonb_build_array(jsonb_build_object('document', v_inv, 'amount', 100)),
     jsonb_build_array(jsonb_build_object('document', v_bill, 'amount', 100)),
     null);
@@ -222,7 +222,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'invoice', 'INV-2', current_date, current_date, v_cust,
+  values (v_org, 'invoice', 'INV-2', pg_temp.today(), pg_temp.today(), v_cust,
           'MYR', 1, 'draft')
   returning id into v_inv2;
   insert into public.sales_document_lines
@@ -234,7 +234,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'bill', 'BILL-2', current_date, v_sup, 'MYR', 1, 'draft')
+  values (v_org, 'bill', 'BILL-2', pg_temp.today(), v_sup, 'MYR', 1, 'draft')
   returning id into v_bill2;
   insert into public.purchase_document_lines
     (org_id, document_id, line_no, line_type, item_id, description,
@@ -243,7 +243,7 @@ begin
   perform public.post_purchase_document(v_bill2);
 
   v_ctr := public.create_contra(
-    v_org, current_date,
+    v_org, pg_temp.today(),
     jsonb_build_array(jsonb_build_object('document', v_inv2, 'amount', 1000)),
     jsonb_build_array(jsonb_build_object('document', v_bill2, 'amount', 1000)),
     null);
@@ -269,7 +269,7 @@ begin
   -- settle a different supplier's bill.
   begin
     perform public.create_contra(
-      v_org, current_date,
+      v_org, pg_temp.today(),
       jsonb_build_array(jsonb_build_object('document', v_inv, 'amount', 100)),
       jsonb_build_array(jsonb_build_object('document', v_bill2, 'amount', 100)),
       null);
@@ -284,7 +284,7 @@ begin
   -- More than is outstanding.
   begin
     perform public.create_contra(
-      v_org, current_date,
+      v_org, pg_temp.today(),
       jsonb_build_array(jsonb_build_object('document', v_inv, 'amount', 99000)),
       jsonb_build_array(jsonb_build_object('document', v_bill, 'amount', 99000)),
       null);
@@ -298,7 +298,7 @@ begin
   -- One-sided.
   begin
     perform public.create_contra(
-      v_org, current_date,
+      v_org, pg_temp.today(),
       jsonb_build_array(jsonb_build_object('document', v_inv, 'amount', 100)),
       '[]'::jsonb, null);
     perform pg_temp.check_true('a one-sided contra is a contra', false);
@@ -312,7 +312,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'invoice', 'INV-3', current_date, current_date, v_both,
+  values (v_org, 'invoice', 'INV-3', pg_temp.today(), pg_temp.today(), v_both,
           'USD', 4.7, 'draft')
   returning id into v_inv2;
   insert into public.sales_document_lines
@@ -322,7 +322,7 @@ begin
   perform public.post_sales_document(v_inv2);
   begin
     perform public.create_contra(
-      v_org, current_date,
+      v_org, pg_temp.today(),
       jsonb_build_array(jsonb_build_object('document', v_inv2, 'amount', 100)),
       jsonb_build_array(jsonb_build_object('document', v_bill, 'amount', 100)),
       null);
@@ -338,11 +338,11 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'bill', 'BILL-3', current_date, v_both, 'MYR', 1, 'draft')
+  values (v_org, 'bill', 'BILL-3', pg_temp.today(), v_both, 'MYR', 1, 'draft')
   returning id into v_bill2;
   begin
     perform public.create_contra(
-      v_org, current_date,
+      v_org, pg_temp.today(),
       jsonb_build_array(jsonb_build_object('document', v_inv, 'amount', 100)),
       jsonb_build_array(jsonb_build_object('document', v_bill2, 'amount', 100)),
       null);
@@ -362,7 +362,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'bill', 'BILL-4', current_date, v_both, 'MYR', 1, 'draft')
+  values (v_org, 'bill', 'BILL-4', pg_temp.today(), v_both, 'MYR', 1, 'draft')
   returning id into v_bill2;
   insert into public.purchase_document_lines
     (org_id, document_id, line_no, line_type, item_id, description,
@@ -371,7 +371,7 @@ begin
   perform public.post_purchase_document(v_bill2);
 
   v_ctr := public.create_contra(
-    v_org, current_date,
+    v_org, pg_temp.today(),
     jsonb_build_array(jsonb_build_object('document', v_inv, 'amount', 3000)),
     jsonb_build_array(
       jsonb_build_object('document', v_bill, 'amount', 1000),
@@ -421,7 +421,7 @@ begin
   perform pg_temp.allow_many_companies();
   v_org := pg_temp.test_org('Contra Kebenaran Sdn Bhd');
   perform pg_temp.allow_many_companies();
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['sales','purchases','accounting']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
@@ -436,7 +436,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'invoice', 'INV-K1', current_date, current_date, v_party,
+  values (v_org, 'invoice', 'INV-K1', pg_temp.today(), pg_temp.today(), v_party,
           'MYR', 1, 'draft')
   returning id into v_inv;
   insert into public.sales_document_lines
@@ -448,7 +448,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'bill', 'BILL-K1', current_date, v_party, 'MYR', 1, 'draft')
+  values (v_org, 'bill', 'BILL-K1', pg_temp.today(), v_party, 'MYR', 1, 'draft')
   returning id into v_bill;
   insert into public.purchase_document_lines
     (org_id, document_id, line_no, line_type, item_id, description,
@@ -457,7 +457,7 @@ begin
   perform public.post_purchase_document(v_bill);
 
   v_ctr := public.create_contra(
-    v_org, current_date,
+    v_org, pg_temp.today(),
     jsonb_build_array(jsonb_build_object('document', v_inv, 'amount', 4000)),
     jsonb_build_array(jsonb_build_object('document', v_bill, 'amount', 4000)),
     'Set off');

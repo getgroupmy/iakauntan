@@ -38,7 +38,7 @@ declare
   v_pros uuid;
   v_new  uuid;
 begin
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['ticketing', 'crm']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
@@ -93,7 +93,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
      subtotal, total_amount, balance_amount, status, custom_fields)
-  values (v_org, 'quotation', 'QT-W1', current_date, v_cust, 'MYR', 1,
+  values (v_org, 'quotation', 'QT-W1', pg_temp.today(), v_cust, 'MYR', 1,
           0, 0, 0, 'draft', '{"cost_centre":"KL-01"}'::jsonb)
   returning id into v_q;
   insert into public.sales_document_lines

@@ -91,7 +91,7 @@ begin
   end;
 
   begin
-    perform app.run_recurring_journals(current_date);
+    perform app.run_recurring_journals(pg_temp.today());
     raise exception
       'FAIL: a stranger posted every tenant''s recurring journals';
   exception when insufficient_privilege then
@@ -142,7 +142,7 @@ begin
   perform app.roll_leave_year(c.theirs, 2026);
   raise notice 'ok   the scheduler still rolls a leave year';
 
-  perform app.run_recurring_journals(current_date);
+  perform app.run_recurring_journals(pg_temp.today());
   raise notice 'ok   and still posts the recurring journals';
 
   -- Org creation seeds a chart of accounts, which is the other pair.

@@ -72,7 +72,7 @@ declare
   ];
   v_row   text[];
 begin
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
 
   foreach v_row slice 1 in array v_cases loop
     v_call := v_row[1];

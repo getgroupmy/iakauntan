@@ -32,7 +32,7 @@ declare v_org uuid;
 begin
   v_org := pg_temp.test_org(p_name);
   perform public.create_fiscal_year(
-    v_org, date_trunc('year', current_date)::date);
+    v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true
     from unnest(array['sales', 'purchases', 'accounting']) m
@@ -72,7 +72,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status)
-  values (p_org, 'invoice', p_no, current_date, current_date,
+  values (p_org, 'invoice', p_no, pg_temp.today(), pg_temp.today(),
           pg_temp.gp_contact(p_org, 'CUST'), 'MYR', 1, 'draft')
   returning id into v_id;
   insert into public.sales_document_lines
@@ -93,7 +93,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status)
-  values (p_org, 'bill', p_no, current_date,
+  values (p_org, 'bill', p_no, pg_temp.today(),
           pg_temp.gp_contact(p_org, 'SUP'), 'MYR', 1, 'draft')
   returning id into v_id;
   insert into public.purchase_document_lines
@@ -143,7 +143,7 @@ begin
   v_inv_b := pg_temp.gp_invoice(v_b, 'INV-B1', 2500);
 
   v_batch := public.record_group_payment(
-    current_date, 'TT-8891',
+    pg_temp.today(), 'TT-8891',
     jsonb_build_array(
       jsonb_build_object('invoice_id', v_inv_a, 'amount', 1000,
                          'bank_account_id', pg_temp.gp_bank(v_a)),
@@ -229,7 +229,7 @@ begin
   v_inv := pg_temp.gp_invoice(v_a, 'INV-T1', 750);
 
   v_batch := public.record_group_payment(
-    current_date, 'TT-1',
+    pg_temp.today(), 'TT-1',
     jsonb_build_array(
       jsonb_build_object('invoice_id', v_inv, 'amount', 750)));
 
@@ -273,7 +273,7 @@ begin
   v_bill_b := pg_temp.gp_bill(v_b, 'BILL-B1', 600);
 
   v_batch := public.record_group_payment(
-    current_date, 'CHQ 77',
+    pg_temp.today(), 'CHQ 77',
     jsonb_build_array(
       jsonb_build_object('bill_id', v_bill_a, 'amount', 400),
       jsonb_build_object('bill_id', v_bill_b, 'amount', 600)));
@@ -320,7 +320,7 @@ begin
   -- Invoices and bills together. That is a contra, and contra has party
   -- checks this does not.
   begin
-    perform public.record_group_payment(current_date, 'X',
+    perform public.record_group_payment(pg_temp.today(), 'X',
       jsonb_build_array(
         jsonb_build_object('invoice_id', v_inv, 'amount', 100),
         jsonb_build_object('bill_id', v_bill, 'amount', 100)));
@@ -335,7 +335,7 @@ begin
   -- A draft invoice. Its receivable is not in the ledger, so clearing
   -- its balance would clear something nobody has recorded.
   begin
-    perform public.record_group_payment(current_date, 'X',
+    perform public.record_group_payment(pg_temp.today(), 'X',
       jsonb_build_array(
         jsonb_build_object('invoice_id', v_draft, 'amount', 100)));
     perform pg_temp.check_true('a draft invoice can be paid', false);
@@ -348,7 +348,7 @@ begin
   -- More than is outstanding, which is how a balance goes negative and
   -- a customer starts appearing as a debtor in credit.
   begin
-    perform public.record_group_payment(current_date, 'X',
+    perform public.record_group_payment(pg_temp.today(), 'X',
       jsonb_build_array(
         jsonb_build_object('invoice_id', v_inv, 'amount', 1001)));
     perform pg_temp.check_true('an invoice can be over-allocated', false);
@@ -362,7 +362,7 @@ begin
   -- The same invoice on two lines. It would add up, and it would also
   -- be somebody about to make a mistake.
   begin
-    perform public.record_group_payment(current_date, 'X',
+    perform public.record_group_payment(pg_temp.today(), 'X',
       jsonb_build_array(
         jsonb_build_object('invoice_id', v_inv, 'amount', 400),
         jsonb_build_object('invoice_id', v_inv, 'amount', 600)));
@@ -376,7 +376,7 @@ begin
   -- Another company's bank account. This is the one that would move
   -- money between two sets of books without anybody saying so.
   begin
-    perform public.record_group_payment(current_date, 'X',
+    perform public.record_group_payment(pg_temp.today(), 'X',
       jsonb_build_array(
         jsonb_build_object('invoice_id', v_inv, 'amount', 100,
                            'bank_account_id', pg_temp.gp_bank(v_b))));
@@ -396,7 +396,7 @@ begin
     false, false);
 
   begin
-    perform public.record_group_payment(current_date, 'X',
+    perform public.record_group_payment(pg_temp.today(), 'X',
       jsonb_build_array(
         jsonb_build_object('invoice_id', v_inv, 'amount', 100,
                            'bank_account_id', pg_temp.gp_bank(v_a)),
@@ -413,7 +413,7 @@ begin
 
   -- Nothing at all.
   begin
-    perform public.record_group_payment(current_date, 'X', '[]'::jsonb);
+    perform public.record_group_payment(pg_temp.today(), 'X', '[]'::jsonb);
     perform pg_temp.check_true('a payment can settle nothing', false);
   exception when others then
     get stacked diagnostics v_msg = message_text;
@@ -423,7 +423,7 @@ begin
 
   -- A line naming neither document.
   begin
-    perform public.record_group_payment(current_date, 'X',
+    perform public.record_group_payment(pg_temp.today(), 'X',
       jsonb_build_array(jsonb_build_object('amount', 100)));
     perform pg_temp.check_true('a line can name no document', false);
   exception when others then
@@ -468,7 +468,7 @@ begin
   perform pg_temp.sign_in_as(v_who);
 
   begin
-    perform public.record_group_payment(current_date, 'TT-9',
+    perform public.record_group_payment(pg_temp.today(), 'TT-9',
       jsonb_build_array(
         jsonb_build_object('invoice_id', v_inv_a, 'amount', 300),
         jsonb_build_object('invoice_id', v_inv_b, 'amount', 300)));
@@ -488,7 +488,7 @@ begin
 
   -- The company they can post in, on its own, still works.
   perform pg_temp.check_true('and what they can do, they can still do',
-    public.record_group_payment(current_date, 'TT-10',
+    public.record_group_payment(pg_temp.today(), 'TT-10',
       jsonb_build_array(
         jsonb_build_object('invoice_id', v_inv_a, 'amount', 300)))
     is not null);
@@ -518,7 +518,7 @@ begin
   perform pg_temp.sign_in_as(v_who);
 
   begin
-    perform public.record_group_payment(current_date, 'TT-11',
+    perform public.record_group_payment(pg_temp.today(), 'TT-11',
       jsonb_build_array(
         jsonb_build_object('invoice_id', v_inv_a, 'amount', 300),
         jsonb_build_object('invoice_id', v_inv_b, 'amount', 300)));
@@ -547,7 +547,7 @@ begin
   v_b := pg_temp.gp_org('Lihat Dua Sdn Bhd');
 
   v_batch := public.record_group_payment(
-    current_date, 'TT-55',
+    pg_temp.today(), 'TT-55',
     jsonb_build_array(
       jsonb_build_object('invoice_id', pg_temp.gp_invoice(v_a, 'INV-L1', 100),
                          'amount', 100),

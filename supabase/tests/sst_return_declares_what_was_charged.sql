@@ -54,7 +54,7 @@ declare
   v_base   numeric;
 begin
   v_org := pg_temp.test_org('Restoran Lapan Puluh Sen Sdn Bhd');
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
 
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['pos','inventory']) m
@@ -140,7 +140,7 @@ begin
   -- The two identities
   -- ------------------------------------------------------------------
   select coalesce(sum(tax_amount), 0) into v_return
-    from public.report_sst_summary(v_org, current_date - 1, current_date + 1)
+    from public.report_sst_summary(v_org, pg_temp.today() - 1, pg_temp.today() + 1)
    where direction = 'output';
 
   -- What posting actually put in output tax. 2130 is credited by
@@ -174,7 +174,7 @@ begin
   -- charge, so a return that declares 8.80 on a taxable value of 300 is
   -- a return that says the rate is not eight per cent.
   select coalesce(sum(taxable_amount), 0) into v_base
-    from public.report_sst_summary(v_org, current_date - 1, current_date + 1)
+    from public.report_sst_summary(v_org, pg_temp.today() - 1, pg_temp.today() + 1)
    where direction = 'output';
 
   -- Three set dinners at 100, plus ten per cent on the two eaten in.
@@ -190,7 +190,7 @@ begin
   -- it was not charged under balances and still misstates the return.
   perform pg_temp.check_eq('and it is all under service tax, type 02',
     (select coalesce(sum(tax_amount), 0)
-       from public.report_sst_summary(v_org, current_date - 1, current_date + 1)
+       from public.report_sst_summary(v_org, pg_temp.today() - 1, pg_temp.today() + 1)
       where direction = 'output' and tax_type_code = '02'),
     v_return);
 

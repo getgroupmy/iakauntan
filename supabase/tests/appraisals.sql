@@ -212,7 +212,7 @@ begin
     (org_id, name, period_start, period_end,
      self_review_due, manager_review_due, rating_scale_max)
   values (v_org, 'FY2026', date '2026-01-01', date '2026-12-31',
-          current_date + 7, current_date + 21, 5)
+          pg_temp.today() + 7, pg_temp.today() + 21, 5)
   returning id into v_cycle;
   perform public.open_appraisal_cycle(v_cycle);
   select id into v_ap from public.appraisals

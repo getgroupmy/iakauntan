@@ -34,7 +34,7 @@ declare
   v_o   uuid;
 begin
   perform public.create_fiscal_year(
-    v_org, date_trunc('year', current_date)::date);
+    v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['pos', 'accounting', 'inventory']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
@@ -180,10 +180,10 @@ begin
     v_org,
     jsonb_build_array(jsonb_build_object(
       'contact_code', 'REG', 'doc_no', 'OLD-1',
-      'doc_date', to_char(current_date - 100, 'YYYY-MM-DD'),
-      'due_date', to_char(current_date - 70, 'YYYY-MM-DD'),
+      'doc_date', to_char(pg_temp.today() - 100, 'YYYY-MM-DD'),
+      'due_date', to_char(pg_temp.today() - 70, 'YYYY-MM-DD'),
       'outstanding_amount', '500')),
-    current_date, true);
+    pg_temp.today(), true);
 
   v_out := pg_temp.till_sell(v_org, 'TUNAI', 5.00);
   perform pg_temp.check_eq(
@@ -225,10 +225,10 @@ begin
     v_org,
     jsonb_build_array(jsonb_build_object(
       'contact_code', 'REG', 'doc_no', 'OLD-1',
-      'doc_date', to_char(current_date - 100, 'YYYY-MM-DD'),
-      'due_date', to_char(current_date - 70, 'YYYY-MM-DD'),
+      'doc_date', to_char(pg_temp.today() - 100, 'YYYY-MM-DD'),
+      'due_date', to_char(pg_temp.today() - 70, 'YYYY-MM-DD'),
       'outstanding_amount', '500')),
-    current_date, true);
+    pg_temp.today(), true);
 
   v_out := pg_temp.till_split(v_org, 80, 20);
   perform pg_temp.check_eq(
@@ -269,7 +269,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
      currency, exchange_rate)
-  values (v_org, 'invoice', 'INV-1', current_date, current_date, v_c,
+  values (v_org, 'invoice', 'INV-1', pg_temp.today(), pg_temp.today(), v_c,
           'draft', 'MYR', 1)
   returning id into v_doc;
   insert into public.sales_document_lines

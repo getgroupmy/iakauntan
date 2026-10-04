@@ -22,13 +22,13 @@ declare
   v_org uuid := pg_temp.test_org('FX Test Sdn Bhd');
 begin
   perform pg_temp.check_eq('base currency resolves to 1',
-    app.exchange_rate_for(v_org, 'MYR', current_date), 1);
+    app.exchange_rate_for(v_org, 'MYR', pg_temp.today()), 1);
 
   -- The important one. Defaulting a missing rate to 1 would post a
   -- USD 10,000 invoice as RM 10,000: balanced, four times understated,
   -- and invisible to every other assertion in this suite.
   begin
-    perform app.exchange_rate_for(v_org, 'USD', current_date);
+    perform app.exchange_rate_for(v_org, 'USD', pg_temp.today());
     raise exception 'FAIL: a missing rate was silently treated as 1';
   exception when sqlstate 'P0002' then
     raise notice 'ok   a missing rate refuses to guess';
@@ -36,16 +36,16 @@ begin
 
   insert into public.exchange_rates
     (org_id, from_currency, to_currency, rate, rate_date, source)
-  values (v_org,'USD','MYR',4.20,current_date - 30,'manual'),
-         (v_org,'USD','MYR',4.70,current_date -  1,'manual'),
-         (v_org,'USD','MYR',9.99,current_date +  5,'manual');
+  values (v_org,'USD','MYR',4.20,pg_temp.today() - 30,'manual'),
+         (v_org,'USD','MYR',4.70,pg_temp.today() -  1,'manual'),
+         (v_org,'USD','MYR',9.99,pg_temp.today() +  5,'manual');
 
   -- A document is converted at the rate that was known on its own date,
   -- so a rate entered for next week must not reach back and restate it.
   perform pg_temp.check_eq('rate today',
-    app.exchange_rate_for(v_org,'USD',current_date), 4.70);
+    app.exchange_rate_for(v_org,'USD',pg_temp.today()), 4.70);
   perform pg_temp.check_eq('rate for a back-dated document',
-    app.exchange_rate_for(v_org,'USD',current_date - 15), 4.20);
+    app.exchange_rate_for(v_org,'USD',pg_temp.today() - 15), 4.20);
 
   perform pg_temp.sign_out();
 end $$;
@@ -59,16 +59,16 @@ declare
   v_ar uuid; v_sales uuid; v_entry uuid;
   v_base numeric; v_fc numeric;
 begin
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   select id into v_ar    from public.accounts where org_id=v_org and code='1210';
   select id into v_sales from public.accounts where org_id=v_org and code='4100';
 
   insert into public.exchange_rates
     (org_id, from_currency, to_currency, rate, rate_date, source)
-  values (v_org,'USD','MYR',4.70,current_date,'manual');
+  values (v_org,'USD','MYR',4.70,pg_temp.today(),'manual');
 
   v_entry := app.create_gl_entry_internal(
-    v_org, current_date, 'manual',
+    v_org, pg_temp.today(), 'manual',
     jsonb_build_array(
       jsonb_build_object('account_id', v_ar,    'debit', 47000, 'credit', 0),
       jsonb_build_object('account_id', v_sales, 'debit', 0, 'credit', 47000)),
@@ -86,7 +86,7 @@ begin
   -- A ringgit entry leaves the foreign columns empty, so a non-zero
   -- figure there always means "this line was in another currency".
   v_entry := app.create_gl_entry_internal(
-    v_org, current_date, 'manual',
+    v_org, pg_temp.today(), 'manual',
     jsonb_build_array(
       jsonb_build_object('account_id', v_ar,    'debit', 100, 'credit', 0),
       jsonb_build_object('account_id', v_sales, 'debit', 0, 'credit', 100)),
@@ -97,7 +97,7 @@ begin
   -- A foreign entry with no usable rate would post zeroes and balance.
   begin
     perform app.create_gl_entry_internal(
-      v_org, current_date, 'manual',
+      v_org, pg_temp.today(), 'manual',
       jsonb_build_array(
         jsonb_build_object('account_id', v_ar, 'debit', 1, 'credit', 0),
         jsonb_build_object('account_id', v_sales, 'debit', 0, 'credit', 1)),
@@ -125,7 +125,7 @@ declare
   v_cust uuid; v_bank uuid; v_ar uuid; v_inv uuid; v_rcp uuid;
   v_bal numeric; v_diff numeric;
 begin
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   select id into v_ar from public.accounts where org_id=v_org and code='1210';
 
   insert into public.contacts (org_id, code, name, contact_type)
@@ -134,14 +134,14 @@ begin
   v_bank := pg_temp.test_bank_account(v_org, 'Current account');
 
   insert into public.exchange_rates (org_id,from_currency,to_currency,rate,rate_date,source)
-  values (v_org,'USD','MYR',4.70,current_date - 10,'manual'),
-         (v_org,'USD','MYR',4.50,current_date,'manual');
+  values (v_org,'USD','MYR',4.70,pg_temp.today() - 10,'manual'),
+         (v_org,'USD','MYR',4.50,pg_temp.today(),'manual');
 
   -- USD 10,000 invoiced when a dollar was RM 4.70.
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
      subtotal, total_amount, balance_amount, status)
-  values (v_org,'invoice','FX-INV-1', current_date - 10, v_cust,'USD',4.70,
+  values (v_org,'invoice','FX-INV-1', pg_temp.today() - 10, v_cust,'USD',4.70,
           10000,10000,10000,'draft')
   returning id into v_inv;
   insert into public.sales_document_lines
@@ -159,7 +159,7 @@ begin
   insert into public.receipts
     (org_id, receipt_no, receipt_date, contact_id, amount, unapplied_amount,
      currency, exchange_rate, bank_account_id)
-  values (v_org,'FX-RCP-1', current_date, v_cust, 10000, 10000,'USD',4.50, v_bank)
+  values (v_org,'FX-RCP-1', pg_temp.today(), v_cust, 10000, 10000,'USD',4.50, v_bank)
   returning id into v_rcp;
   insert into public.payment_allocations (org_id, receipt_id, invoice_id, amount)
   values (v_org, v_rcp, v_inv, 10000);
@@ -188,18 +188,18 @@ declare
   v_org uuid := pg_temp.test_org('FX Gain Sdn Bhd');
   v_cust uuid; v_bank uuid; v_ar uuid; v_inv uuid; v_rcp uuid; v_bal numeric;
 begin
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   select id into v_ar from public.accounts where org_id=v_org and code='1210';
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org,'FXC-2','Overseas Buyer Inc','customer') returning id into v_cust;
   v_bank := pg_temp.test_bank_account(v_org, 'Current account');
   insert into public.exchange_rates (org_id,from_currency,to_currency,rate,rate_date,source)
-  values (v_org,'USD','MYR',4.50,current_date - 10,'manual');
+  values (v_org,'USD','MYR',4.50,pg_temp.today() - 10,'manual');
 
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
      subtotal, total_amount, balance_amount, status)
-  values (v_org,'invoice','FX-INV-2', current_date - 10, v_cust,'USD',4.50,
+  values (v_org,'invoice','FX-INV-2', pg_temp.today() - 10, v_cust,'USD',4.50,
           10000,10000,10000,'draft')
   returning id into v_inv;
   insert into public.sales_document_lines
@@ -211,7 +211,7 @@ begin
   insert into public.receipts
     (org_id, receipt_no, receipt_date, contact_id, amount, unapplied_amount,
      currency, exchange_rate, bank_account_id)
-  values (v_org,'FX-RCP-2', current_date, v_cust, 10000, 10000,'USD',4.70, v_bank)
+  values (v_org,'FX-RCP-2', pg_temp.today(), v_cust, 10000, 10000,'USD',4.70, v_bank)
   returning id into v_rcp;
   insert into public.payment_allocations (org_id, receipt_id, invoice_id, amount)
   values (v_org, v_rcp, v_inv, 10000);
@@ -252,7 +252,7 @@ declare
   v_sup uuid; v_bank uuid; v_ap uuid; v_bill uuid; v_pay uuid;
   v_bal numeric; v_diff numeric;
 begin
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   select id into v_ap from public.accounts where org_id=v_org and code='2110';
 
   insert into public.contacts (org_id, code, name, contact_type)
@@ -261,14 +261,14 @@ begin
   v_bank := pg_temp.test_bank_account(v_org, 'Current account');
 
   insert into public.exchange_rates (org_id,from_currency,to_currency,rate,rate_date,source)
-  values (v_org,'USD','MYR',4.70,current_date - 10,'manual'),
-         (v_org,'USD','MYR',4.50,current_date,'manual');
+  values (v_org,'USD','MYR',4.70,pg_temp.today() - 10,'manual'),
+         (v_org,'USD','MYR',4.50,pg_temp.today(),'manual');
 
   -- USD 10,000 billed when a dollar was RM 4.70.
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
      subtotal, total_amount, balance_amount, status)
-  values (v_org,'bill','FX-BILL-1', current_date - 10, v_sup,'USD',4.70,
+  values (v_org,'bill','FX-BILL-1', pg_temp.today() - 10, v_sup,'USD',4.70,
           10000,10000,10000,'draft')
   returning id into v_bill;
   insert into public.purchase_document_lines
@@ -289,7 +289,7 @@ begin
   insert into public.purchase_payments
     (org_id, payment_no, payment_date, contact_id, amount, unapplied_amount,
      currency, exchange_rate, bank_account_id)
-  values (v_org,'FX-PAY-1', current_date, v_sup, 10000, 10000,'USD',4.50, v_bank)
+  values (v_org,'FX-PAY-1', pg_temp.today(), v_sup, 10000, 10000,'USD',4.50, v_bank)
   returning id into v_pay;
   insert into public.payment_allocations (org_id, payment_id, bill_id, amount)
   values (v_org, v_pay, v_bill, 10000);
@@ -325,7 +325,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
      subtotal, total_amount, balance_amount, status)
-  values (v_org,'bill','FX-BILL-2', current_date - 10, v_sup,'USD',4.70,
+  values (v_org,'bill','FX-BILL-2', pg_temp.today() - 10, v_sup,'USD',4.70,
           1000,1000,1000,'draft')
   returning id into v_bill;
   insert into public.purchase_document_lines
@@ -337,7 +337,7 @@ begin
   insert into public.purchase_payments
     (org_id, payment_no, payment_date, contact_id, amount, unapplied_amount,
      currency, exchange_rate, bank_account_id)
-  values (v_org,'FX-PAY-2', current_date, v_sup, 4500, 4500,'MYR',1, v_bank)
+  values (v_org,'FX-PAY-2', pg_temp.today(), v_sup, 4500, 4500,'MYR',1, v_bank)
   returning id into v_pay;
   insert into public.payment_allocations (org_id, payment_id, bill_id, amount)
   values (v_org, v_pay, v_bill, 1000);
@@ -359,17 +359,17 @@ declare
   v_org uuid := pg_temp.test_org('FX Mismatch Sdn Bhd');
   v_cust uuid; v_bank uuid; v_inv uuid; v_rcp uuid;
 begin
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org,'FXC-3','Overseas Buyer Inc','customer') returning id into v_cust;
   v_bank := pg_temp.test_bank_account(v_org, 'Current account');
   insert into public.exchange_rates (org_id,from_currency,to_currency,rate,rate_date,source)
-  values (v_org,'USD','MYR',4.50,current_date,'manual');
+  values (v_org,'USD','MYR',4.50,pg_temp.today(),'manual');
 
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
      subtotal, total_amount, balance_amount, status)
-  values (v_org,'invoice','FX-INV-3', current_date, v_cust,'USD',4.50,
+  values (v_org,'invoice','FX-INV-3', pg_temp.today(), v_cust,'USD',4.50,
           100,100,100,'draft')
   returning id into v_inv;
   insert into public.sales_document_lines
@@ -381,7 +381,7 @@ begin
   insert into public.receipts
     (org_id, receipt_no, receipt_date, contact_id, amount, unapplied_amount,
      currency, exchange_rate, bank_account_id)
-  values (v_org,'FX-RCP-3', current_date, v_cust, 100, 100,'MYR',1, v_bank)
+  values (v_org,'FX-RCP-3', pg_temp.today(), v_cust, 100, 100,'MYR',1, v_bank)
   returning id into v_rcp;
   insert into public.payment_allocations (org_id, receipt_id, invoice_id, amount)
   values (v_org, v_rcp, v_inv, 100);

@@ -69,7 +69,7 @@ declare
 begin
   perform pg_temp.sign_in_as(v_owner);
   v_org := pg_temp.test_org('Jual Sdn Bhd');
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['sales','purchases','accounting','inventory']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
@@ -86,7 +86,7 @@ begin
   insert into public.stock_movements
     (org_id, movement_no, movement_date, movement_type, item_id, warehouse_id,
      quantity, unit_cost)
-  values (v_org, 'JS-0001', current_date, 'opening_balance', v_barang, v_wh, 100, 20);
+  values (v_org, 'JS-0001', pg_temp.today(), 'opening_balance', v_barang, v_wh, 100, 20);
 
   -- A service, with an average cost written on it. A service never has
   -- one in practice; it is here because the guard being tested is
@@ -105,7 +105,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'quotation', 'QT-1', current_date, current_date, v_cust,
+  values (v_org, 'quotation', 'QT-1', pg_temp.today(), pg_temp.today(), v_cust,
           'MYR', 1, 'draft')
   returning id into v_quote;
   insert into public.sales_document_lines
@@ -131,7 +131,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'invoice', 'INV-1', current_date, current_date, v_cust,
+  values (v_org, 'invoice', 'INV-1', pg_temp.today(), pg_temp.today(), v_cust,
           'MYR', 1, 'draft')
   returning id into v_inv;
   insert into public.sales_document_lines
@@ -161,7 +161,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'invoice', 'INV-2', current_date, current_date, v_cust,
+  values (v_org, 'invoice', 'INV-2', pg_temp.today(), pg_temp.today(), v_cust,
           'MYR', 1, 'draft')
   returning id into v_inv2;
   insert into public.sales_document_lines
@@ -184,7 +184,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status, discount_amount)
-  values (v_org, 'invoice', 'INV-3', current_date, current_date, v_cust,
+  values (v_org, 'invoice', 'INV-3', pg_temp.today(), pg_temp.today(), v_cust,
           'MYR', 1, 'draft', 100)
   returning id into v_disc;
   insert into public.sales_document_lines
@@ -208,14 +208,14 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'delivery_order', 'DO-1', current_date, current_date,
+  values (v_org, 'delivery_order', 'DO-1', pg_temp.today(), pg_temp.today(),
           v_cust, 'MYR', 1, 'draft')
   returning id into v_do;
 
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status, parent_id)
-  values (v_org, 'invoice', 'INV-DO', current_date, current_date, v_cust,
+  values (v_org, 'invoice', 'INV-DO', pg_temp.today(), pg_temp.today(), v_cust,
           'MYR', 1, 'draft', v_do)
   returning id into v_inv_do;
   insert into public.sales_document_lines

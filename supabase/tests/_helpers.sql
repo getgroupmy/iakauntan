@@ -34,6 +34,41 @@
 -- psql from. Everything lives in pg_temp and dies with the session.
 -- =====================================================================
 
+-- ---------------------------------------------------------------------
+-- The product's clock, named once for the whole suite
+--
+-- `current_date` is the SESSION's date, which is UTC in CI. The
+-- product's date is `app.today()` -- Kuala Lumpur, UTC+8. From 16:00
+-- UTC the two are different days, every day, for eight hours.
+--
+-- That has turned a branch red three times:
+--
+--   * run 2176, `pos.sql` asked `pos_einvoice_outstanding` for
+--     September while the sales it had just made were filed under
+--     October;
+--   * run 2178, `group_trial_balance_shapes.sql` had its report window
+--     moved to Kuala Lumpur and its fixture dates left behind -- HALF a
+--     fix, which is worse than none;
+--   * run 2213, a 30-day share window measured as
+--     `expires_at::date - pg_temp.today()` read 29, on a commit that
+--     changed one markdown file.
+--
+-- Every one of those was found by CI rather than before a push, because
+-- the bug is invisible for sixteen hours out of twenty-four. So the
+-- clock lives HERE, in the file all 382 of the others include, and
+-- `check_test_clock.py` refuses a bare `current_date` anywhere in
+-- `supabase/tests`. A new file gets the right clock by default instead
+-- of by remembering.
+--
+-- `app.today()` would do as well and is deliberately not used: it is
+-- the thing under test in `malaysian_clock.sql`, and a suite that
+-- asserts the product's clock by calling the product's clock proves
+-- only that it equals itself.
+create or replace function pg_temp.today()
+returns date language sql stable as $$
+  select (now() at time zone 'Asia/Kuala_Lumpur')::date
+$$;
+
 create or replace function pg_temp.check_eq(
   p_label text, p_actual numeric, p_expected numeric)
 returns void language plpgsql as $$

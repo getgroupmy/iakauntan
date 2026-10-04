@@ -54,7 +54,7 @@ declare
 begin
   v_org := pg_temp.test_org('Buku Besar Sdn Bhd');
   perform pg_temp.sign_in_as(v_owner);
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
 
   select id, start_date into v_period, v_closed
     from public.fiscal_periods where org_id = v_org
@@ -63,7 +63,7 @@ begin
 
   select start_date into v_open from public.fiscal_periods
    where org_id = v_org and status = 'open'
-     and start_date <= current_date and end_date >= current_date limit 1;
+     and start_date <= pg_temp.today() and end_date >= pg_temp.today() limit 1;
 
   select a.id into v_asset from public.accounts a
    where a.org_id = v_org and not a.is_group and a.is_active
@@ -133,7 +133,7 @@ begin
   -- is proved by posting, not by the presence of a grant. If revoking
   -- INSERT had broken the front door this is what would say so.
   v_entry := public.post_manual_journal(
-    c.org, coalesce(c.open_on, current_date), jsonb_build_array(
+    c.org, coalesce(c.open_on, pg_temp.today()), jsonb_build_array(
       jsonb_build_object('account_id', c.asset,   'debit', 100, 'credit', 0),
       jsonb_build_object('account_id', c.revenue, 'debit', 0, 'credit', 100)),
     'An ordinary journal', null);

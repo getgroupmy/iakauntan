@@ -232,7 +232,7 @@ begin
   insert into public.expenses
     (org_id, expense_no, expense_date, amount, total_amount, status,
      account_id)
-  values (v_org, 'EXP-1', current_date, 100, 100, 'draft',
+  values (v_org, 'EXP-1', pg_temp.today(), 100, 100, 'draft',
           (select id from public.accounts
             where org_id = v_org and not is_group limit 1))
   returning id into v_exp;

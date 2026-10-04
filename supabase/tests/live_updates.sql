@@ -185,19 +185,19 @@ begin
 
   insert into public.employees
     (org_id, employee_no, full_name, user_id, hire_date)
-  values (v_org, 'E-1', 'Claimant', v_mine_user, current_date)
+  values (v_org, 'E-1', 'Claimant', v_mine_user, pg_temp.today())
   returning id into v_mine;
 
   -- Same company, no relationship: not their manager, no HR role, not
   -- allowed to post. The ordinary colleague.
   insert into public.employees
     (org_id, employee_no, full_name, user_id, hire_date)
-  values (v_org, 'E-2', 'Colleague', v_nosy_user, current_date)
+  values (v_org, 'E-2', 'Colleague', v_nosy_user, pg_temp.today())
   returning id into v_nosy;
 
   insert into public.expense_claims
     (org_id, claim_no, employee_id, claim_date, title, status, total_amount)
-  values (v_org, 'CLM-PRIVATE', v_mine, current_date, 'Clinic', 'submitted', 90)
+  values (v_org, 'CLM-PRIVATE', v_mine, pg_temp.today(), 'Clinic', 'submitted', 90)
   returning id into v_claim;
 
   perform pg_temp.sign_in_as(v_nosy_user);

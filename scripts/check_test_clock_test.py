@@ -53,6 +53,53 @@ begin
 end $$;
 """
 
+#: The real 383e505d bug: a timestamptz cast in the session's time zone
+#: minus a Kuala Lumpur date, inside ONE statement. Run 2213 went red on
+#: this on a commit that changed one markdown file.
+TWO_CLOCK_STATEMENT = """
+do $$
+begin
+  perform pg_temp.check_eq('a null share window takes 30 days',
+    (select (expires_at::date - pg_temp.today())
+       from public.document_share_links where document_id = v_fresh), 30);
+end $$;
+"""
+
+#: The fix: both sides on the same clock, so no clock is in it at all.
+ONE_CLOCK_STATEMENT = """
+do $$
+begin
+  perform pg_temp.check_eq('a null share window takes 30 days',
+    (select (expires_at::date - created_at::date)
+       from public.document_share_links where document_id = v_fresh), 30);
+end $$;
+"""
+
+#: The granularity that matters. A `_at::date` in one assertion and a
+#: Kuala Lumpur date in an UNRELATED one are two facts, not a
+#: comparison -- a per-file rule would cry wolf on this and a per-file
+#: rule is what the mixed count already is.
+TWO_STATEMENTS_NOT_ONE = """
+do $$
+begin
+  perform pg_temp.check_true('the link expired', (select expires_at::date
+    from public.document_share_links where document_id = v_a) is not null);
+  perform pg_temp.check_eq('and the year is open',
+    (select count(*) from public.fiscal_years
+      where start_date = date_trunc('year', pg_temp.today())::date), 1);
+end $$;
+"""
+
+#: `app.today()` is the product's Kuala Lumpur helper and counts too.
+APP_TODAY_STATEMENT = """
+do $$
+begin
+  perform pg_temp.check_true('started on the day it was paid for',
+    (select started_on from public.pos_membership_subscriptions s
+      where s.id = v_sub) = (v_sale.completed_at::date - app.today()));
+end $$;
+"""
+
 YEARS = """
 do $$
 begin
@@ -110,6 +157,11 @@ def run(
             source,
             flags=re.M,
         )
+        # The scratch tree holds one file called a.sql, so the real
+        # EXEMPT entry would fail its own staleness check on every run.
+        source = re.sub(
+            r"^EXEMPT = \{[^}]*\}$", "EXEMPT = set()", source, flags=re.M,
+        )
         copy = scripts / "check_test_clock.py"
         copy.write_text(source, encoding="utf-8")
 
@@ -166,6 +218,25 @@ def main() -> int:
 
     code, out = run({"a.sql": ONE_CLOCK}, budget=0)
     expect("one clock throughout is not mixing", code, 0, out)
+
+    # Both clocks in ONE STATEMENT, which neither rule above can see:
+    # the file names only the Kuala Lumpur one, so the mixed count stays
+    # clean. Refused outright rather than counted -- there are none left,
+    # and a ratchet at zero cannot drift.
+    code, out = run({"a.sql": TWO_CLOCK_STATEMENT}, budget=0)
+    expect("a timestamptz cast beside a KL date is refused", code, 1, out)
+    if code == 1 and "expires_at::date" not in out:
+        failures.append(f"the refusal does not quote the expression:\n{out}")
+
+    code, out = run({"a.sql": ONE_CLOCK_STATEMENT}, budget=0)
+    expect("and measuring against created_at is not", code, 0, out)
+
+    code, out = run({"a.sql": TWO_STATEMENTS_NOT_ONE}, budget=0)
+    expect("two unrelated statements are two facts, not a comparison",
+           code, 0, out)
+
+    code, out = run({"a.sql": APP_TODAY_STATEMENT}, budget=0)
+    expect("app.today() counts as the Kuala Lumpur clock too", code, 1, out)
 
     if failures:
         print("\n\n".join(failures), file=sys.stderr)

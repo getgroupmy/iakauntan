@@ -54,7 +54,7 @@ begin
      -- is reading. A fixture that opens one has to say whose it is.
      hiring_manager_id)
   values (p_org, p_no, 'Bookkeeper', p_headcount, 'open',
-          current_date - 30, p_type::app.employment_type, v_mgr)
+          pg_temp.today() - 30, p_type::app.employment_type, v_mgr)
   returning id into v_id;
   return v_id;
 end $$;
@@ -105,7 +105,7 @@ begin
   perform pg_temp.check_true('hired means somebody is on the payroll',
     v_said like '%not when the label says so%');
 
-  v_emp := public.hire_applicant(v_app, 'E-100', current_date + 14, 4500,
+  v_emp := public.hire_applicant(v_app, 'E-100', pg_temp.today() + 14, 4500,
     date '1990-01-01');
 
   select * into v_row from public.employees where id = v_emp;
@@ -143,7 +143,7 @@ begin
 
   -- Twice is the mistake the link exists to make impossible.
   begin
-    perform public.hire_applicant(v_app, 'E-101', current_date + 30, 4500);
+    perform public.hire_applicant(v_app, 'E-101', pg_temp.today() + 30, 4500);
     raise exception 'FAIL: the same candidate was hired twice';
   exception when sqlstate '23505' then
     v_said := sqlerrm;
@@ -235,7 +235,7 @@ begin
   v_a2 := pg_temp.hi_applicant(v_org, 'Two', v_req);
   v_a3 := pg_temp.hi_applicant(v_org, 'Three', v_req);
 
-  perform public.hire_applicant(v_a1, 'E-1', current_date, 4000);
+  perform public.hire_applicant(v_a1, 'E-1', pg_temp.today(), 4000);
   perform pg_temp.check_eq('one of two filled leaves it open',
     (select status::text from public.job_requisitions where id = v_req),
     'open');
@@ -243,13 +243,13 @@ begin
     (select closed_date is null from public.job_requisitions
       where id = v_req));
 
-  perform public.hire_applicant(v_a2, 'E-2', current_date, 4000);
+  perform public.hire_applicant(v_a2, 'E-2', pg_temp.today(), 4000);
   perform pg_temp.check_eq('the second closes it',
     (select status::text from public.job_requisitions where id = v_req),
     'filled');
 
   begin
-    perform public.hire_applicant(v_a3, 'E-3', current_date, 4000);
+    perform public.hire_applicant(v_a3, 'E-3', pg_temp.today(), 4000);
     raise exception 'FAIL: a third was hired against two positions';
   exception when sqlstate '23514' then
     v_said := sqlerrm;
@@ -263,7 +263,7 @@ begin
   update public.job_requisitions set headcount = 3, status = 'open'
    where id = v_req;
   perform pg_temp.check_true('raising it lets the third through',
-    public.hire_applicant(v_a3, 'E-3', current_date, 4000) is not null);
+    public.hire_applicant(v_a3, 'E-3', pg_temp.today(), 4000) is not null);
 
   perform pg_temp.sign_out();
 end $$;
@@ -298,7 +298,7 @@ begin
   v_a2 := pg_temp.hi_applicant(v_org, 'Introduced Two', null, null, v_mei);
   v_a3 := pg_temp.hi_applicant(v_org, 'Introduced Three', null, null, v_ali);
 
-  perform public.hire_applicant(v_a1, 'E-100', current_date, 4000);
+  perform public.hire_applicant(v_a1, 'E-100', pg_temp.today(), 4000);
 
   select * into r from public.report_referral_hires(v_org);
   perform pg_temp.check_eq('the referrer with a hire comes first',
@@ -321,7 +321,7 @@ begin
   -- Dated, because a referral scheme pays for a quarter.
   perform pg_temp.check_eq('and the window is honoured',
     (select count(*) from public.report_referral_hires(
-       v_org, current_date + 1)), 0);
+       v_org, pg_temp.today() + 1)), 0);
 
   perform pg_temp.sign_out();
 end $$;
@@ -357,7 +357,7 @@ begin
 
   update public.applicants set status = 'withdrawn' where id = v_app;
   begin
-    perform public.hire_applicant(v_app, 'E-1', current_date, 4000);
+    perform public.hire_applicant(v_app, 'E-1', pg_temp.today(), 4000);
     raise exception 'FAIL: somebody who withdrew was hired anyway';
   exception when sqlstate '23514' then
     v_said := sqlerrm;
@@ -367,7 +367,7 @@ begin
   update public.applicants set status = 'offer' where id = v_app;
 
   begin
-    perform public.hire_applicant(v_app, '   ', current_date, 4000);
+    perform public.hire_applicant(v_app, '   ', pg_temp.today(), 4000);
     raise exception 'FAIL: a hire had no employee number';
   exception when sqlstate '23514' then null;
   end;
@@ -377,7 +377,7 @@ begin
   exception when sqlstate '23514' then null;
   end;
   begin
-    perform public.hire_applicant(gen_random_uuid(), 'E-1', current_date, 4000);
+    perform public.hire_applicant(gen_random_uuid(), 'E-1', pg_temp.today(), 4000);
     raise exception 'FAIL: a candidate who does not exist was hired';
   exception when sqlstate 'P0002' then null;
   end;
@@ -396,7 +396,7 @@ begin
 
   perform pg_temp.sign_in_as(v_out);
   begin
-    perform public.hire_applicant(v_app, 'E-1', current_date, 4000);
+    perform public.hire_applicant(v_app, 'E-1', pg_temp.today(), 4000);
     raise exception 'FAIL: an outsider hired somebody';
   exception when sqlstate '42501' then null;
   end;

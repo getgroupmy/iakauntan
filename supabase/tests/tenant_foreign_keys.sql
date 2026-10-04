@@ -67,7 +67,7 @@ begin
   returning id into v_contact;
 
   insert into public.gl_entries (org_id, entry_no, entry_date)
-  values (v_org_a, 'FKTEST-JV', current_date)
+  values (v_org_a, 'FKTEST-JV', pg_temp.today())
   returning id into v_entry;
 
   -- 1. A receipt in A naming B's bank account.
@@ -75,7 +75,7 @@ begin
   begin
     insert into public.receipts
       (org_id, receipt_no, receipt_date, contact_id, bank_account_id, amount)
-    values (v_org_a, 'FKTEST-1', current_date, v_contact, v_bank_b, 1.00);
+    values (v_org_a, 'FKTEST-1', pg_temp.today(), v_contact, v_bank_b, 1.00);
     raise exception
       'a receipt in one company was allowed to name another company''s '
       'bank account';
@@ -193,11 +193,11 @@ begin
 
   insert into public.employees
     (org_id, employee_no, full_name, hire_date, employment_status)
-  values (v_a, 'EB-A', 'A''s employee', current_date - 400, 'active')
+  values (v_a, 'EB-A', 'A''s employee', pg_temp.today() - 400, 'active')
   returning id into v_emp_a;
   insert into public.employees
     (org_id, employee_no, full_name, hire_date, employment_status)
-  values (v_b, 'EB-B', 'B''s employee', current_date - 400, 'active')
+  values (v_b, 'EB-B', 'B''s employee', pg_temp.today() - 400, 'active')
   returning id into v_emp_b;
 
   -- 1. An attendance record in A for B's employee: the subject of the
@@ -205,7 +205,7 @@ begin
   v_tried := v_tried + 1;
   begin
     insert into public.attendance_records (org_id, employee_id, work_date)
-    values (v_a, v_emp_b, current_date);
+    values (v_a, v_emp_b, pg_temp.today());
     raise exception 'a day in A was recorded against B''s employee';
   exception when foreign_key_violation then
     v_refused := v_refused + 1;
@@ -258,7 +258,7 @@ begin
   begin
     insert into public.stock_transfers
       (org_id, transfer_no, transfer_date, from_warehouse_id, to_warehouse_id)
-    values (v_a, 'TR-CROSS', current_date, v_wh_a, v_wh_b);
+    values (v_a, 'TR-CROSS', pg_temp.today(), v_wh_a, v_wh_b);
     raise exception 'a transfer left A''s store and arrived in B''s';
   exception when foreign_key_violation then
     v_refused := v_refused + 1;
@@ -269,7 +269,7 @@ begin
   begin
     insert into public.stock_transfers
       (org_id, transfer_no, transfer_date, from_warehouse_id, to_warehouse_id)
-    values (v_a, 'TR-OWN', current_date, v_wh_a, v_wh_a2);
+    values (v_a, 'TR-OWN', pg_temp.today(), v_wh_a, v_wh_a2);
     v_refused := v_refused + 1;
   exception when others then
     raise exception
@@ -290,7 +290,7 @@ begin
   begin
     insert into public.sales_documents
       (org_id, doc_type, doc_no, doc_date, contact_id)
-    values (v_a, 'invoice', 'INV-X', current_date, v_con_b);
+    values (v_a, 'invoice', 'INV-X', pg_temp.today(), v_con_b);
     raise exception 'an invoice in A was raised against B''s customer';
   exception when foreign_key_violation then
     v_refused := v_refused + 1;
@@ -304,7 +304,7 @@ begin
     insert into public.fixed_assets
       (org_id, asset_no, name, acquisition_date, cost,
        useful_life_months, supplier_id)
-    values (v_a, 'FA-X', 'Van', current_date - 30, 90000, 60, v_con_b);
+    values (v_a, 'FA-X', 'Van', pg_temp.today() - 30, 90000, 60, v_con_b);
     raise exception 'an asset in A was bought from B''s supplier';
   exception when foreign_key_violation then
     v_refused := v_refused + 1;
@@ -315,11 +315,11 @@ begin
     insert into public.fixed_assets
       (org_id, asset_no, name, acquisition_date, cost,
        useful_life_months, supplier_id)
-    values (v_a, 'FA-OWN', 'Lori', current_date - 30, 90000, 60, v_con_a);
+    values (v_a, 'FA-OWN', 'Lori', pg_temp.today() - 30, 90000, 60, v_con_a);
     insert into public.fixed_assets
       (org_id, asset_no, name, acquisition_date, cost,
        useful_life_months, supplier_id)
-    values (v_a, 'FA-NONE', 'Meja', current_date - 30, 900, 60, null);
+    values (v_a, 'FA-NONE', 'Meja', pg_temp.today() - 30, 900, 60, null);
     v_refused := v_refused + 1;
   exception when others then
     raise exception
@@ -346,7 +346,7 @@ begin
       (org_id, movement_no, movement_date, movement_type, item_id,
        warehouse_id, quantity, unit_cost, total_cost, balance_quantity,
        balance_value, average_cost_after)
-    values (v_a, 'SM-X', current_date, 'purchase_receipt', v_item_b, v_wh_a,
+    values (v_a, 'SM-X', pg_temp.today(), 'purchase_receipt', v_item_b, v_wh_a,
             5, 10, 50, 5, 50, 10);
     raise exception 'a movement in A moved B''s item';
   exception when foreign_key_violation then
@@ -366,7 +366,7 @@ begin
   -- that key is there.
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, contact_id)
-  values (v_a, 'invoice', 'INV-ITEM', current_date, v_con_a)
+  values (v_a, 'invoice', 'INV-ITEM', pg_temp.today(), v_con_a)
   returning id into v_doc_a;
 
   v_tried := v_tried + 1;
@@ -466,11 +466,11 @@ begin
   -- transaction rolls back).
   insert into public.gl_entries
     (org_id, entry_no, entry_date, source, total_debit, total_credit)
-  values (v_a, 'JV-A', current_date, 'manual', 0, 0)
+  values (v_a, 'JV-A', pg_temp.today(), 'manual', 0, 0)
   returning id into v_ent_a;
   insert into public.gl_entries
     (org_id, entry_no, entry_date, source, total_debit, total_credit)
-  values (v_b, 'JV-B', current_date, 'manual', 0, 0)
+  values (v_b, 'JV-B', pg_temp.today(), 'manual', 0, 0)
   returning id into v_ent_b;
 
   v_tried := v_tried + 1;
@@ -489,7 +489,7 @@ begin
     insert into public.gl_entries
       (org_id, entry_no, entry_date, source, total_debit, total_credit,
        is_reversal, reversed_entry_id)
-    values (v_a, 'JV-A-REV', current_date, 'manual', 0, 0, true, v_ent_b);
+    values (v_a, 'JV-A-REV', pg_temp.today(), 'manual', 0, 0, true, v_ent_b);
     raise exception 'a reversal in A cancelled B''s journal';
   exception when foreign_key_violation then
     v_refused := v_refused + 1;
@@ -503,10 +503,10 @@ begin
     insert into public.gl_entries
       (org_id, entry_no, entry_date, source, total_debit, total_credit,
        is_reversal, reversed_entry_id)
-    values (v_a, 'JV-A-REV', current_date, 'manual', 0, 0, true, v_ent_a);
+    values (v_a, 'JV-A-REV', pg_temp.today(), 'manual', 0, 0, true, v_ent_a);
     insert into public.gl_entries
       (org_id, entry_no, entry_date, source, total_debit, total_credit)
-    values (v_a, 'JV-A2', current_date, 'manual', 0, 0);
+    values (v_a, 'JV-A2', pg_temp.today(), 'manual', 0, 0);
     v_refused := v_refused + 1;
   exception when others then
     raise exception
@@ -522,7 +522,7 @@ begin
   -- somebody who was never meant to see it.
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, contact_id)
-  values (v_b, 'invoice', 'INV-B', current_date, v_con_b)
+  values (v_b, 'invoice', 'INV-B', pg_temp.today(), v_con_b)
   returning id into v_doc_b;
 
   v_tried := v_tried + 1;
@@ -541,7 +541,7 @@ begin
   begin
     insert into public.sales_documents
       (org_id, doc_type, doc_no, doc_date, contact_id, original_invoice_id)
-    values (v_a, 'credit_note', 'CN-X', current_date, v_con_a, v_doc_b);
+    values (v_a, 'credit_note', 'CN-X', pg_temp.today(), v_con_a, v_doc_b);
     raise exception 'a credit note in A cancelled B''s invoice';
   exception when foreign_key_violation then
     v_refused := v_refused + 1;
@@ -554,10 +554,10 @@ begin
     values (v_a, v_doc_a, 'hash-own', now() + interval '7 days');
     insert into public.sales_documents
       (org_id, doc_type, doc_no, doc_date, contact_id, original_invoice_id)
-    values (v_a, 'credit_note', 'CN-OWN', current_date, v_con_a, v_doc_a);
+    values (v_a, 'credit_note', 'CN-OWN', pg_temp.today(), v_con_a, v_doc_a);
     insert into public.sales_documents
       (org_id, doc_type, doc_no, doc_date, contact_id, original_invoice_id)
-    values (v_a, 'invoice', 'INV-A2', current_date, v_con_a, null);
+    values (v_a, 'invoice', 'INV-A2', pg_temp.today(), v_con_a, null);
     v_refused := v_refused + 1;
   exception when others then
     raise exception
@@ -627,12 +627,12 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, total_amount,
      base_total_amount, balance_amount)
-  values (v_a, 'bill', 'BILL-A', current_date, v_con_a, 100, 100, 100)
+  values (v_a, 'bill', 'BILL-A', pg_temp.today(), v_con_a, 100, 100, 100)
   returning id into v_bill_a;
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, total_amount,
      base_total_amount, balance_amount)
-  values (v_b, 'bill', 'BILL-B', current_date, v_con_b, 100, 100, 100)
+  values (v_b, 'bill', 'BILL-B', pg_temp.today(), v_con_b, 100, 100, 100)
   returning id into v_bill_b;
 
   v_tried := v_tried + 1;
@@ -640,7 +640,7 @@ begin
     insert into public.purchase_documents
       (org_id, doc_type, doc_no, doc_date, contact_id, total_amount,
        base_total_amount, balance_amount, original_bill_id)
-    values (v_a, 'purchase_debit_note', 'DN-X', current_date, v_con_a,
+    values (v_a, 'purchase_debit_note', 'DN-X', pg_temp.today(), v_con_a,
             100, 100, 100, v_bill_b);
     raise exception 'a debit note in A cancelled B''s bill';
   exception when foreign_key_violation then
@@ -652,12 +652,12 @@ begin
     insert into public.purchase_documents
       (org_id, doc_type, doc_no, doc_date, contact_id, total_amount,
        base_total_amount, balance_amount, original_bill_id)
-    values (v_a, 'purchase_debit_note', 'DN-OWN', current_date, v_con_a,
+    values (v_a, 'purchase_debit_note', 'DN-OWN', pg_temp.today(), v_con_a,
             100, 100, 100, v_bill_a);
     insert into public.purchase_documents
       (org_id, doc_type, doc_no, doc_date, contact_id, total_amount,
        base_total_amount, balance_amount, original_bill_id)
-    values (v_a, 'bill', 'BILL-A2', current_date, v_con_a,
+    values (v_a, 'bill', 'BILL-A2', pg_temp.today(), v_con_a,
             100, 100, 100, null);
     v_refused := v_refused + 1;
   exception when others then
@@ -700,7 +700,7 @@ begin
   begin
     insert into public.corp_officers
       (org_id, entity_id, person_id, role, appointed_on)
-    values (v_a, v_ent2_a, v_per_b, 'director', current_date - 30);
+    values (v_a, v_ent2_a, v_per_b, 'director', pg_temp.today() - 30);
     raise exception 'B''s person was appointed to A''s board';
   exception when foreign_key_violation then
     v_refused := v_refused + 1;
@@ -710,7 +710,7 @@ begin
   begin
     insert into public.corp_officers
       (org_id, entity_id, person_id, role, appointed_on)
-    values (v_a, v_ent2_a, v_per_a, 'director', current_date - 30);
+    values (v_a, v_ent2_a, v_per_a, 'director', pg_temp.today() - 30);
     v_refused := v_refused + 1;
   exception when others then
     raise exception
@@ -951,11 +951,11 @@ begin
   -- and a department head, both pointing at the same person.
   insert into public.employees
     (org_id, employee_no, full_name, hire_date, employment_status)
-  values (v_org, 'BK-1', 'Ketua', current_date - 400, 'active')
+  values (v_org, 'BK-1', 'Ketua', pg_temp.today() - 400, 'active')
   returning id into v_boss;
   insert into public.employees
     (org_id, employee_no, full_name, hire_date, employment_status, manager_id)
-  values (v_org, 'BK-2', 'Kaki', current_date - 400, 'active', v_boss)
+  values (v_org, 'BK-2', 'Kaki', pg_temp.today() - 400, 'active', v_boss)
   returning id into v_kaki;
   insert into public.departments (org_id, code, name, head_employee_id)
   values (v_org, 'OPS', 'Operations', v_boss);

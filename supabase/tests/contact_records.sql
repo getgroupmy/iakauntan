@@ -104,7 +104,7 @@ begin
   v_org := pg_temp.test_org('Perkakasan Sdn Bhd');
   v_yr := to_char(app.today(), 'YYYY');
   perform public.create_fiscal_year(
-    v_org, date_trunc('year', current_date)::date);
+    v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.items
     (org_id, code, name, item_type, track_inventory, unit_price)
   values (v_org, 'SVC', 'Service', 'service', false, 100)
@@ -137,7 +137,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
      currency, exchange_rate)
-  values (v_org, 'invoice', 'INV-AH1', current_date, current_date, v_cust,
+  values (v_org, 'invoice', 'INV-AH1', pg_temp.today(), pg_temp.today(), v_cust,
           'draft', 'MYR', 1)
   returning id into v_doc;
   insert into public.sales_document_lines
@@ -265,7 +265,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
      currency, exchange_rate)
-  values (v_org, 'bill', 'BILL-AH1', current_date, current_date, v_sup,
+  values (v_org, 'bill', 'BILL-AH1', pg_temp.today(), pg_temp.today(), v_sup,
           'draft', 'MYR', 1)
   returning id into v_doc;
   insert into public.purchase_document_lines

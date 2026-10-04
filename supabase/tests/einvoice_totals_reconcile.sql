@@ -46,7 +46,7 @@ begin
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status, shipping_amount, service_charge_amount,
      discount_amount)
-  values (p_org, 'invoice', p_no, current_date, current_date, p_contact,
+  values (p_org, 'invoice', p_no, pg_temp.today(), pg_temp.today(), p_contact,
           'MYR', 1, 'draft', p_shipping, p_service, p_discount)
   returning id into v_doc;
 
@@ -76,7 +76,7 @@ declare
   e      record;
 begin
   v_org := pg_temp.test_org('Restoran Sepuluh Belas Sdn Bhd');
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
 
   -- e-Invoice has to be on, and the company has to be able to identify
   -- itself, or `prepare_einvoice` refuses before it maps anything.

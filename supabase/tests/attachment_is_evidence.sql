@@ -57,7 +57,7 @@ begin
   perform pg_temp.sign_in_as(pg_temp.test_user());
   v_org := pg_temp.test_org('Simpan Kertas Sdn Bhd');
   perform public.create_fiscal_year(v_org,
-                                    date_trunc('year', current_date)::date);
+                                    date_trunc('year', pg_temp.today())::date);
 
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'S-1', 'Pembekal Sdn Bhd', 'supplier') returning id into v_sup;
@@ -80,7 +80,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'bill', 'BILL-EV-1', current_date, v_sup, 'MYR', 1, 'draft')
+  values (v_org, 'bill', 'BILL-EV-1', pg_temp.today(), v_sup, 'MYR', 1, 'draft')
   returning id into v_draft;
 
   v_spare := pg_temp.a_file(v_org, 'purchase_documents', v_draft, 'dua.pdf');
@@ -165,7 +165,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'bill', 'BILL-EV-2', current_date, v_sup, 'MYR', 1, 'draft')
+  values (v_org, 'bill', 'BILL-EV-2', pg_temp.today(), v_sup, 'MYR', 1, 'draft')
   returning id into v_posted;
   insert into public.purchase_document_lines
     (org_id, document_id, line_no, line_type, item_id, description,
@@ -283,7 +283,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'bill', 'BILL-EV-3', current_date, v_sup, 'MYR', 1, 'draft')
+  values (v_org, 'bill', 'BILL-EV-3', pg_temp.today(), v_sup, 'MYR', 1, 'draft')
   returning id into v_bill;
   v_file := pg_temp.a_file(v_org, 'purchase_documents', v_bill, 'empat.pdf');
   update public.purchase_documents set entry_source = 'ai_smartscan'

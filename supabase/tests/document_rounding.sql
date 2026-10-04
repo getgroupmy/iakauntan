@@ -67,7 +67,7 @@ begin
     'nearest_5cent');
 
   perform public.create_fiscal_year(v_org,
-                                   date_trunc('year', current_date)::date);
+                                   date_trunc('year', pg_temp.today())::date);
 
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'S-1', 'Google Asia Pacific Pte. Ltd.', 'supplier')
@@ -100,7 +100,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status, supplier_doc_no)
-  values (v_org, 'bill', 'BILL-ROUND-1', current_date, v_sup, 'MYR', 1,
+  values (v_org, 'bill', 'BILL-ROUND-1', pg_temp.today(), v_sup, 'MYR', 1,
           'draft', '5665871390')
   returning id into v_bill;
 
@@ -190,7 +190,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status, rounding_method)
-  values (v_org, 'bill', 'BILL-ROUND-2', current_date, v_sup, 'MYR', 1,
+  values (v_org, 'bill', 'BILL-ROUND-2', pg_temp.today(), v_sup, 'MYR', 1,
           'draft', 'none')
   returning id into v_sched;
 
@@ -201,8 +201,8 @@ begin
           1086.12, v_tax, 8);
 
   v_rec := public.create_recurring_document(
-    v_sched, 'Langganan bulanan', 'monthly', current_date);
-  perform app.raise_recurring_document(v_rec, current_date);
+    v_sched, 'Langganan bulanan', 'monthly', pg_temp.today());
+  perform app.raise_recurring_document(v_rec, pg_temp.today());
 
   select rounding_method, total_amount into v_method, v_total
     from public.purchase_documents

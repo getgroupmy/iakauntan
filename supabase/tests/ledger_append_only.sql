@@ -48,7 +48,7 @@ begin
   -- nothing posts outside one: "No fiscal period covers ...". Derived
   -- from today rather than pinned to 2026, so this file does not quietly
   -- stop testing anything when the year turns.
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
 
   select id into v_a from public.accounts
    where org_id = v_org and not is_group and is_active and deleted_at is null
@@ -62,7 +62,7 @@ begin
 
   insert into pg_temp_ledger (step, entry)
   values ('org', v_org),
-         ('entry', public.post_manual_journal(v_org, current_date,
+         ('entry', public.post_manual_journal(v_org, pg_temp.today(),
             jsonb_build_array(
               jsonb_build_object('account_id', v_a, 'debit',  100, 'credit', 0),
               jsonb_build_object('account_id', v_b, 'debit',    0, 'credit', 100)),
@@ -152,7 +152,7 @@ begin
     (select total_debit from public.gl_entries where id = v_entry), 100);
 
   -- And the supported way to undo one still works, from the same hand.
-  perform public.reverse_gl_entry(v_entry, current_date);
+  perform public.reverse_gl_entry(v_entry, pg_temp.today());
   perform pg_temp.check_eq('reversal writes a second entry rather than editing the first',
     (select count(*)::int from public.gl_entries
       where org_id = (select entry from pg_temp_ledger where step = 'org')), 2);

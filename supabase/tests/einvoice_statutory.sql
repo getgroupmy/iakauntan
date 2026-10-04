@@ -50,7 +50,7 @@ begin
      issue_date, supplier_name, supplier_tin, buyer_name, buyer_tin,
      status, validated_at)
   values (p_org, p_source_table, coalesce(p_source, gen_random_uuid()),
-          '01', 'INV-0001', current_date, 'Penjual Sdn Bhd', 'C1234567890',
+          '01', 'INV-0001', pg_temp.today(), 'Penjual Sdn Bhd', 'C1234567890',
           'Pembeli Sdn Bhd', 'C0987654321', p_status::app.einvoice_status, p_validated)
   returning id into v_id;
   return v_id;
@@ -67,7 +67,7 @@ begin
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, subtotal, total_amount, balance_amount, status)
   values (p_org, 'invoice', 'INV-' || substr(gen_random_uuid()::text, 1, 8),
-          current_date, current_date + 30, p_contact, 'MYR', 1,
+          pg_temp.today(), pg_temp.today() + 30, p_contact, 'MYR', 1,
           100, 100, 100, 'draft')
   returning id into v_doc;
   insert into public.sales_document_lines
@@ -92,7 +92,7 @@ begin
      exchange_rate, subtotal, total_amount, balance_amount, status)
   values (p_org, p_type::app.sales_doc_type,
           upper(left(p_type, 3)) || '-' || substr(gen_random_uuid()::text, 1, 8),
-          current_date, current_date + 30, p_contact, 'MYR', 1,
+          pg_temp.today(), pg_temp.today() + 30, p_contact, 'MYR', 1,
           100, 100, 100, 'draft')
   returning id into v_doc;
   insert into public.sales_document_lines
@@ -216,7 +216,7 @@ begin
   perform pg_temp.check_eq('the general public TIN is LHDN''s literal',
     app.general_public_tin(), 'EI00000000010');
 
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   update public.organizations
      set einvoice_enabled = true, tin = 'C1234567890' where id = v_org;
 
@@ -267,7 +267,7 @@ declare
   v_contact uuid; v_doc uuid; v_ein uuid;
   v_state text;
 begin
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   update public.organizations
      set einvoice_enabled = true, tin = 'C1234567890' where id = v_org;
   insert into public.contacts (org_id, code, contact_type, name, tin)
@@ -489,7 +489,7 @@ declare
   v_org uuid := pg_temp.test_org('Sawit Sdn Bhd');
   v_contact uuid; v_doc uuid; v_ein uuid;
 begin
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   update public.organizations
      set einvoice_enabled = true, tin = 'C1234567890',
          msic_code = '01261', business_activity = null
@@ -528,7 +528,7 @@ begin
      issue_date, supplier_name, supplier_tin, supplier_business_activity,
      buyer_name, buyer_tin, status)
   values (v_org, 'sales_documents', gen_random_uuid(), '01', 'INV-HIST',
-          current_date, 'Sawit Sdn Bhd', 'C1234567890',
+          pg_temp.today(), 'Sawit Sdn Bhd', 'C1234567890',
           'What it did in 2019', 'Pembeli Sdn Bhd', 'C1111111111',
           'valid')
   returning id into v_ein;
@@ -545,7 +545,7 @@ begin
      issue_date, supplier_name, supplier_tin, supplier_business_activity,
      buyer_name, buyer_tin, status)
   values (v_org, 'sales_documents', gen_random_uuid(), '01', 'INV-BLANK',
-          current_date, 'Sawit Sdn Bhd', 'C1234567890', '   ',
+          pg_temp.today(), 'Sawit Sdn Bhd', 'C1234567890', '   ',
           'Pembeli Sdn Bhd', 'C1111111111', 'valid')
   returning id into v_ein;
   perform pg_temp.check_eq('a blank on the row is filled in, not left',
@@ -605,7 +605,7 @@ declare
 begin
   v_boss := (select user_id from public.org_members
               where org_id = v_org and role = 'owner' limit 1);
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   update public.organizations
      set einvoice_enabled = true,
          tin              = 'C1111111111',
@@ -741,7 +741,7 @@ begin
     v_org2 uuid; v_c2 uuid; v_d2 uuid; v_e2 uuid;
   begin
     v_org2 := pg_temp.test_org('Only e-Invois TIN Sdn Bhd');
-    perform public.create_fiscal_year(v_org2, date_trunc('year', current_date)::date);
+    perform public.create_fiscal_year(v_org2, date_trunc('year', pg_temp.today())::date);
     update public.organizations
        set einvoice_enabled = true, tin = null, einvoice_tin = 'C9999999999'
      where id = v_org2;

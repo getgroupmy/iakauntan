@@ -54,7 +54,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'bill', 'BILL-SRC-1', current_date, v_sup, 'MYR', 1,
+  values (v_org, 'bill', 'BILL-SRC-1', pg_temp.today(), v_sup, 'MYR', 1,
           'draft')
   returning id into v_bill;
 
@@ -104,7 +104,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'bill', 'BILL-SRC-2', current_date, v_sup, 'MYR', 1,
+  values (v_org, 'bill', 'BILL-SRC-2', pg_temp.today(), v_sup, 'MYR', 1,
           'draft')
   returning id into v_typed;
   perform pg_temp.check_eq('a bill somebody typed is not tagged',

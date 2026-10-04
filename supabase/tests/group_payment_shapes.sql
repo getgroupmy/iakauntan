@@ -37,9 +37,9 @@ declare v_org uuid;
 begin
   v_org := pg_temp.test_org(p_name);
   perform public.create_fiscal_year(
-    v_org, date_trunc('year', current_date)::date);
+    v_org, date_trunc('year', pg_temp.today())::date);
   perform public.create_fiscal_year(
-    v_org, (date_trunc('year', current_date) - interval '1 year')::date);
+    v_org, (date_trunc('year', pg_temp.today()) - interval '1 year')::date);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true
     from unnest(array['sales', 'purchases', 'accounting']) m
@@ -75,7 +75,7 @@ create or replace function pg_temp.gs_invoice(
   p_org uuid, p_no text, p_amount numeric,
   p_contact text default 'CUST', p_post boolean default true,
   p_currency char(3) default 'MYR', p_rate numeric default 1,
-  p_date date default current_date)
+  p_date date default pg_temp.today())
 returns uuid language plpgsql as $$
 declare v_id uuid;
 begin
@@ -104,7 +104,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status)
-  values (p_org, 'bill', p_no, current_date,
+  values (p_org, 'bill', p_no, pg_temp.today(),
           pg_temp.gs_contact(p_org, p_contact), 'MYR', 1, 'draft')
   returning id into v_id;
   insert into public.purchase_document_lines
@@ -157,7 +157,7 @@ begin
   -- 333.333... is not payable. The parser rounds it to the sen before
   -- anything compares it to anything.
   v_batch := public.record_group_payment(
-    current_date, 'REF-SEN',
+    pg_temp.today(), 'REF-SEN',
     jsonb_build_array(pg_temp.gs_line(v_inv, 1000.0 / 3)));
 
   select * into v_rec from public.receipts where batch_id = v_batch;
@@ -187,20 +187,20 @@ begin
 
   perform pg_temp.check_refused('a payment of nothing at all is refused',
     format($q$ select public.record_group_payment(
-                 current_date, 'R', null::jsonb) $q$),
+                 pg_temp.today(), 'R', null::jsonb) $q$),
     '%settles something%', '23514');
   perform pg_temp.check_refused('and so is an object where a list belongs',
     format($q$ select public.record_group_payment(
-                 current_date, 'R', '{"invoice_id": null}'::jsonb) $q$),
+                 pg_temp.today(), 'R', '{"invoice_id": null}'::jsonb) $q$),
     '%settles something%', '23514');
   perform pg_temp.check_refused('and a list with nothing in it',
     format($q$ select public.record_group_payment(
-                 current_date, 'R', '[]'::jsonb) $q$),
+                 pg_temp.today(), 'R', '[]'::jsonb) $q$),
     '%settles something%', '23514');
   -- A string and a number are both valid jsonb and neither is a list.
   perform pg_temp.check_refused('and a bare number',
     format($q$ select public.record_group_payment(
-                 current_date, 'R', '7'::jsonb) $q$),
+                 pg_temp.today(), 'R', '7'::jsonb) $q$),
     '%settles something%', '23514');
 end $$;
 
@@ -223,7 +223,7 @@ begin
   -- would silently drop the bill.
   perform pg_temp.check_refused(
     'a line naming an invoice AND a bill is refused',
-    format($q$ select public.record_group_payment(current_date, 'R',
+    format($q$ select public.record_group_payment(pg_temp.today(), 'R',
                  jsonb_build_array(jsonb_build_object(
                    'invoice_id', %L::uuid, 'bill_id', %L::uuid,
                    'amount', 100))) $q$, v_inv, v_bill),
@@ -232,14 +232,14 @@ begin
   -- Nought is not a payment. It would cut a receipt for nothing, number
   -- it, and post it.
   perform pg_temp.check_refused('an allocation of nought is refused',
-    format($q$ select public.record_group_payment(current_date, 'R',
+    format($q$ select public.record_group_payment(pg_temp.today(), 'R',
                  jsonb_build_array(jsonb_build_object(
                    'invoice_id', %L::uuid, 'amount', 0))) $q$, v_inv),
     '%allocation is of something%', '23514');
   -- And a line with no amount at all, which is what a form field left
   -- blank serialises to.
   perform pg_temp.check_refused('and so is a line with no amount on it',
-    format($q$ select public.record_group_payment(current_date, 'R',
+    format($q$ select public.record_group_payment(pg_temp.today(), 'R',
                  jsonb_build_array(jsonb_build_object(
                    'invoice_id', %L::uuid))) $q$, v_inv),
     '%allocation is of something%', '23514');
@@ -251,7 +251,7 @@ begin
   v_gone := pg_temp.gs_invoice(v_org, 'INV-GONE', 400);
   update public.sales_documents set deleted_at = now() where id = v_gone;
   perform pg_temp.check_refused('a deleted invoice cannot be paid',
-    format($q$ select public.record_group_payment(current_date, 'R',
+    format($q$ select public.record_group_payment(pg_temp.today(), 'R',
                  jsonb_build_array(jsonb_build_object(
                    'invoice_id', %L::uuid, 'amount', 100))) $q$, v_gone),
     '%does not exist%', 'P0002');
@@ -259,7 +259,7 @@ begin
   v_gone := pg_temp.gs_bill(v_org, 'BILL-GONE', 400);
   update public.purchase_documents set deleted_at = now() where id = v_gone;
   perform pg_temp.check_refused('and neither can a deleted bill',
-    format($q$ select public.record_group_payment(current_date, 'R',
+    format($q$ select public.record_group_payment(pg_temp.today(), 'R',
                  jsonb_build_array(jsonb_build_object(
                    'bill_id', %L::uuid, 'amount', 100))) $q$, v_gone),
     '%does not exist%', 'P0002');
@@ -268,7 +268,7 @@ begin
   -- bank check, which the cross-company case never reaches.
   perform pg_temp.check_refused(
     'a bank account that does not exist is refused',
-    format($q$ select public.record_group_payment(current_date, 'R',
+    format($q$ select public.record_group_payment(pg_temp.today(), 'R',
                  jsonb_build_array(jsonb_build_object(
                    'invoice_id', %L::uuid, 'amount', 100,
                    'bank_account_id', %L::uuid))) $q$,
@@ -281,12 +281,12 @@ begin
   -- 'posted'.
   v_part := pg_temp.gs_invoice(v_org, 'INV-PART', 1000);
   perform public.record_group_payment(
-    current_date, 'FIRST', jsonb_build_array(pg_temp.gs_line(v_part, 400)));
+    pg_temp.today(), 'FIRST', jsonb_build_array(pg_temp.gs_line(v_part, 400)));
   perform pg_temp.check_eq('a part payment leaves the invoice partial',
     (select status::text from public.sales_documents where id = v_part),
     'partial');
   v_batch := public.record_group_payment(
-    current_date, 'SECOND', jsonb_build_array(pg_temp.gs_line(v_part, 600)));
+    pg_temp.today(), 'SECOND', jsonb_build_array(pg_temp.gs_line(v_part, 600)));
   perform pg_temp.check_true('and the rest of it may still be paid',
     v_batch is not null);
   perform pg_temp.check_eq('which settles it',
@@ -323,7 +323,7 @@ begin
   v_b1 := pg_temp.gs_invoice(v_org, 'INV-B1', 450, 'CUST2');
 
   v_batch := public.record_group_payment(
-    current_date, 'REF-2C',
+    pg_temp.today(), 'REF-2C',
     jsonb_build_array(
       pg_temp.gs_line(v_a1, 300),
       pg_temp.gs_line(v_a2, 700),
@@ -401,7 +401,7 @@ begin
   update public.bank_accounts set is_default = true  where id = v_second;
   v_inv := pg_temp.gs_invoice(v_org, 'INV-BK0', 50);
   v_batch := public.record_group_payment(
-    current_date, 'R0', jsonb_build_array(pg_temp.gs_line(v_inv, 50)));
+    pg_temp.today(), 'R0', jsonb_build_array(pg_temp.gs_line(v_inv, 50)));
   perform pg_temp.check_true(
     'the default account is chosen, not the oldest one',
     (select bank_account_id = v_second from public.receipts
@@ -411,7 +411,7 @@ begin
 
   v_inv := pg_temp.gs_invoice(v_org, 'INV-BK1', 100);
   v_batch := public.record_group_payment(
-    current_date, 'R1', jsonb_build_array(pg_temp.gs_line(v_inv, 100)));
+    pg_temp.today(), 'R1', jsonb_build_array(pg_temp.gs_line(v_inv, 100)));
   perform pg_temp.check_true(
     'with no account named the money lands in the default one',
     (select bank_account_id = v_main from public.receipts
@@ -422,7 +422,7 @@ begin
   -- silently moved to the office account.
   v_inv := pg_temp.gs_invoice(v_org, 'INV-BK2', 200);
   v_batch := public.record_group_payment(
-    current_date, 'R2',
+    pg_temp.today(), 'R2',
     jsonb_build_array(pg_temp.gs_line(v_inv, 200, null, v_second)));
   perform pg_temp.check_true(
     'and an account that is named is the one used, default or not',
@@ -436,7 +436,7 @@ begin
    where id = v_shut;
   v_inv := pg_temp.gs_invoice(v_org, 'INV-BK3', 300);
   v_batch := public.record_group_payment(
-    current_date, 'R3', jsonb_build_array(pg_temp.gs_line(v_inv, 300)));
+    pg_temp.today(), 'R3', jsonb_build_array(pg_temp.gs_line(v_inv, 300)));
   perform pg_temp.check_true(
     'a closed account is not chosen even when it is the default',
     (select bank_account_id is distinct from v_shut from public.receipts
@@ -461,13 +461,13 @@ do $$
 declare
   v_org uuid := pg_temp.gs_org('Kemudian Sdn Bhd');
   v_inv uuid; v_batch uuid; v_rec public.receipts;
-  v_then date := current_date - 30;
+  v_then date := pg_temp.today() - 30;
 begin
   -- The rate on the day it cleared, and a different one since.
   insert into public.exchange_rates
     (org_id, from_currency, to_currency, rate, rate_date, source)
   values (v_org, 'USD', 'MYR', 4.10, v_then, 'manual'),
-         (v_org, 'USD', 'MYR', 4.80, current_date, 'manual');
+         (v_org, 'USD', 'MYR', 4.80, pg_temp.today(), 'manual');
 
   v_inv := pg_temp.gs_invoice(v_org, 'INV-USD', 1000, 'CUST', true,
                               'USD', 4.10, v_then);
@@ -500,8 +500,8 @@ do $$
 declare
   v_org  uuid := pg_temp.gs_org('Diskaun Lewat Sdn Bhd');
   v_term uuid; v_inv uuid; v_batch uuid;
-  v_raised date := current_date - 28;
-  v_paid   date := current_date - 20;
+  v_raised date := pg_temp.today() - 28;
+  v_paid   date := pg_temp.today() - 20;
 begin
   insert into public.payment_terms
     (org_id, code, name, days, term_type, discount_percent, discount_days)
@@ -530,7 +530,7 @@ begin
   -- The window really is shut by now, which is what makes the assertion
   -- above about the DAY and not about the discount.
   perform pg_temp.check_true('and the ten days are long past today',
-    current_date > v_raised + 10);
+    pg_temp.today() > v_raised + 10);
 end $$;
 
 -- ---------------------------------------------------------------------
@@ -547,7 +547,7 @@ declare
 begin
   v_inv := pg_temp.gs_invoice(v_org, 'INV-R', 100);
   v_batch := public.record_group_payment(
-    current_date, '  TT-99881  ',
+    pg_temp.today(), '  TT-99881  ',
     jsonb_build_array(pg_temp.gs_line(v_inv, 100)), '   ');
 
   select * into v_b from public.payment_batches where id = v_batch;
@@ -564,7 +564,7 @@ begin
   -- A reference of nothing at all is stored as nothing, not as ''.
   v_inv := pg_temp.gs_invoice(v_org, 'INV-R2', 100);
   v_batch := public.record_group_payment(
-    current_date, '', jsonb_build_array(pg_temp.gs_line(v_inv, 100)));
+    pg_temp.today(), '', jsonb_build_array(pg_temp.gs_line(v_inv, 100)));
   perform pg_temp.check_true('and an empty reference is null, not blank',
     (select reference is null from public.payment_batches where id = v_batch));
 end $$;
@@ -587,7 +587,7 @@ begin
   -- is the part that could have failed.
   perform pg_temp.check_eq(
     'the rate lookup answers one for the base currency, with no rate on file',
-    app.exchange_rate_for(v_org, 'MYR', current_date), 1);
+    app.exchange_rate_for(v_org, 'MYR', pg_temp.today()), 1);
   perform pg_temp.check_eq('and nothing in the table says so',
     (select count(*)::integer from public.exchange_rates
       where org_id = v_org and from_currency = 'MYR'), 0);
@@ -644,7 +644,7 @@ begin
     v_bank uuid := pg_temp.gs_bank(v_org, 'Current account');
   begin
     v_batch := public.record_group_payment(
-      current_date, 'MIX',
+      pg_temp.today(), 'MIX',
       jsonb_build_array(
         pg_temp.gs_line(v_inv, 100, null, v_bank),
         pg_temp.gs_line(v_inv2, 200)));
@@ -681,7 +681,7 @@ begin
   v_c := pg_temp.gs_invoice(v_org, 'INV-T3', 400);
 
   v_batch := public.record_group_payment(
-    current_date, 'THIRDS',
+    pg_temp.today(), 'THIRDS',
     jsonb_build_array(
       pg_temp.gs_line(v_a, 1000.0 / 3),
       pg_temp.gs_line(v_b, 1000.0 / 3),
@@ -730,7 +730,7 @@ begin
   -- through.
   perform pg_temp.check_refused(
     'a sen over the balance is over the balance, however it was typed',
-    format($q$ select public.record_group_payment(current_date, 'R',
+    format($q$ select public.record_group_payment(pg_temp.today(), 'R',
                  jsonb_build_array(jsonb_build_object(
                    'invoice_id', %L::uuid,
                    'amount', 99.995, 'discount', 0.005))) $q$, v_inv),
@@ -742,7 +742,7 @@ begin
   update public.sales_documents set payment_term_id = v_term where id = v_other;
   perform public.post_sales_document(v_other);
   v_batch := public.record_group_payment(
-    current_date, 'R2',
+    pg_temp.today(), 'R2',
     jsonb_build_array(jsonb_build_object(
       'invoice_id', v_other, 'amount', 90.5, 'discount', 9.494)));
   perform pg_temp.check_eq('a discount is kept to the sen',
@@ -773,7 +773,7 @@ begin
   v_b2 := pg_temp.gs_bill(v_org, 'BILL-S2', 250, 'SUP2');
 
   v_batch := public.record_group_payment(
-    current_date, 'REF-2S',
+    pg_temp.today(), 'REF-2S',
     jsonb_build_array(
       pg_temp.gs_bline(v_b1, 600),
       pg_temp.gs_bline(v_b2, 250)));
@@ -806,14 +806,14 @@ declare
 begin
   insert into public.exchange_rates
     (org_id, from_currency, to_currency, rate, rate_date, source)
-  values (v_org, 'USD', 'MYR', 4.20, current_date - 7, 'manual');
+  values (v_org, 'USD', 'MYR', 4.20, pg_temp.today() - 7, 'manual');
 
   v_myr := pg_temp.gs_invoice(v_org, 'INV-MYR', 500, 'CUST');
   v_usd := pg_temp.gs_invoice(v_org, 'INV-USD2', 200, 'CUST2', true,
                               'USD', 4.20);
 
   v_batch := public.record_group_payment(
-    current_date, 'REF-2CUR',
+    pg_temp.today(), 'REF-2CUR',
     jsonb_build_array(
       pg_temp.gs_line(v_myr, 500),
       pg_temp.gs_line(v_usd, 200)));

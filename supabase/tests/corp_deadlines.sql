@@ -561,6 +561,15 @@ begin
   returning id into v_e;
 
   execute format('set local timezone = %L', v_tz);
+  -- `current_date`, ON PURPOSE, and the ONE place in this suite where it
+  -- is right. The point of this block is that the product reads a
+  -- deadline on Malaysian time WHATEVER the server's zone is, so the
+  -- line above moves the session somewhere else and this one proves it
+  -- moved. `pg_temp.today()` is always Kuala Lumpur, so asking it here
+  -- compares Malaysia with Malaysia and can never differ -- the 4
+  -- October sweep did exactly that and the assertion failed outright,
+  -- which is the only reason this comment exists. `corp_deadlines.sql`
+  -- is EXEMPT in check_test_clock.py for this line.
   perform pg_temp.check_true('the session really is somewhere else',
     current_date <> v_kl);
 

@@ -28,7 +28,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate, status)
   values (p_org, 'quotation', 'QT-' || substr(gen_random_uuid()::text, 1, 8),
-          current_date, v_cust, 'MYR', 1, 'draft')
+          pg_temp.today(), v_cust, 'MYR', 1, 'draft')
   returning id into v_doc;
 
   insert into public.sales_document_lines
@@ -253,14 +253,14 @@ declare
 begin
   insert into public.exchange_rates
     (org_id, from_currency, to_currency, rate, rate_date, source)
-  values (v_org, 'USD', 'MYR', 4.70, current_date, 'manual');
+  values (v_org, 'USD', 'MYR', 4.70, pg_temp.today(), 'manual');
 
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'S-001', 'Overseas Supplier', 'supplier') returning id into v_supp;
 
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate, status)
-  values (v_org, 'purchase_order', 'PO-001', current_date, v_supp, 'USD', 4.70, 'draft')
+  values (v_org, 'purchase_order', 'PO-001', pg_temp.today(), v_supp, 'USD', 4.70, 'draft')
   returning id into v_po;
 
   insert into public.purchase_document_lines

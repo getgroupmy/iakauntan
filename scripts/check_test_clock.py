@@ -41,6 +41,42 @@ The fix in every case is the same. Ask the clock the product asks:
     (now() at time zone 'Asia/Kuala_Lumpur')::date
 
 Comment lines are ignored, so a file may describe the bug it fixed.
+
+## The third shape, and the one neither rule above can see
+
+The two rules above compare the test's clock with the product's. There
+is a worse case where BOTH clocks are inside one expression and neither
+is `current_date`:
+
+    expires_at::date - pg_temp.today()
+
+`expires_at` is a `timestamptz` and `::date` casts it in the SESSION's
+time zone, which is UTC in CI. `pg_temp.today()` is Kuala Lumpur. So this
+is a UTC date minus a KL date: right for sixteen hours a day and short by
+one for the other eight, and the file names only ONE clock, so the mixed
+count stays clean.
+
+It has happened twice:
+
+  * `0424`, on the PRODUCT side -- `completed_at::date` gave the
+    session's day, so a membership bought at half past midnight began the
+    day before and lost a day at the far end. `pos_service.sql` still
+    describes it.
+  * `383e505d`, 3 October 2026, in `idempotency.sql`. A 30-day share
+    window measured as `expires_at::date - pg_temp.today()` read 30 for
+    sixteen hours and 29 for the other eight. Every run of the tranche
+    that wrote it was inside the sixteen; **run 2213 then went red at
+    16:10 UTC on a commit that changed one markdown file.**
+
+So this is refused too, per STATEMENT rather than per file: a `::date`
+cast of a `_at` column in the same statement as a Kuala Lumpur date.
+There are none left, which is the point of adding it -- a ratchet at zero
+is the only kind that cannot drift.
+
+The fix is to measure against a column on the same clock. The share
+window became `expires_at::date - created_at::date`: both are `now()` in
+one transaction, cast in one time zone, so their difference is exact at
+any hour, and no clock appears in the assertion at all.
 """
 from __future__ import annotations
 
@@ -56,7 +92,7 @@ REFUSED = ("month", "week", "quarter")
 
 #: `date_trunc('year', current_date)`, which is nearly always a fiscal
 #: year being created for a fixture. It may fall; it may not rise.
-YEAR_BUDGET = 148
+YEAR_BUDGET = 0
 
 #: Files that name BOTH clocks in code -- the Kuala Lumpur expression
 #: somewhere and a bare `current_date` somewhere else.
@@ -73,23 +109,77 @@ YEAR_BUDGET = 148
 #: on a file that had just been made more correct. Leaving both clocks
 #: alone would have passed.
 #:
-#: So: a file may already mix them, and no NEW file may start to. It
-#: may fall; it may not rise.
-MIXED_BUDGET = 27
+#: On 4 October the whole suite moved onto `pg_temp.today()`, defined
+#: once in `_helpers.sql`, and this went to ZERO. Keeping the rule costs
+#: nothing and a ratchet at zero cannot drift.
+#:
+#: It read 27 until the KL side of the test learnt to recognise
+#: `app.today()` and `pg_temp.today()` as well as the raw expression.
+#: Twelve files were pairing the HELPER with a bare `current_date` and
+#: the gate could not see them, so the pin had been under-counting the
+#: real backlog by nearly a third.
+MIXED_BUDGET = 0
+
+#: The one file that must keep a bare `current_date`, with the reason.
+#:
+#: `malaysian_clock.sql` is the file that tests this very rule. It builds
+#: the regex `'(\mcurrent_date\M)|(\mlocaltimestamp\M)'` and feeds it
+#: `'select current_date + 1'` to prove it matches, and
+#: `'select current_date_of_birth from x'` to prove it does not. Those
+#: are inputs inside string literals, not dates being evaluated.
+#:
+#: Named here rather than excused by a rule that ignores quoted text,
+#: because dynamic SQL -- `execute 'select ... current_date ...'` -- IS
+#: evaluated, and a gate that skipped every quoted occurrence would hold
+#: the door open for it.
+EXEMPT = {
+    # Tests this very rule: it builds the regex
+    # '(\mcurrent_date\M)|(\mlocaltimestamp\M)' and feeds it
+    # 'select current_date + 1' to prove it matches, and
+    # 'select current_date_of_birth from x' to prove it does not. Inputs
+    # inside string literals, not dates being evaluated.
+    #
+    # Named here rather than excused by a rule that ignores quoted text,
+    # because dynamic SQL -- execute 'select ... current_date ...' -- IS
+    # evaluated, and a gate that skipped every quoted occurrence would
+    # hold the door open for it.
+    "malaysian_clock.sql",
+    # The one place in the suite where a BARE current_date is correct.
+    # The block sets the session's time zone to somewhere that is not
+    # Malaysia and then asserts the session's date really differs, to
+    # prove corp_upcoming_filings reads deadlines on Malaysian time
+    # whatever the server's zone is. pg_temp.today() is always Kuala
+    # Lumpur, so asking it there compares Malaysia with Malaysia and the
+    # assertion can never pass -- the 4 October sweep did that and the
+    # suite caught it. The file names both clocks because it is ABOUT
+    # both clocks.
+    "corp_deadlines.sql",
+}
+
+#: A Kuala Lumpur date, however it is spelt: the raw expression, the
+#: product's helper, or the fixture helper this suite uses.
+_KL_DATE = re.compile(
+    r"at time zone 'Asia/Kuala_Lumpur'|\bapp\.today\(\)|\bpg_temp\.today\(\)"
+)
+
+#: `something_at::date` or `(something_at)::date` -- a timestamptz cast
+#: to a date in the session's time zone.
+_AT_DATE = re.compile(r"\b\w*_at\s*\)?\s*::\s*date\b")
 
 _REFUSED = re.compile(
     r"date_trunc\(\s*'(" + "|".join(REFUSED) + r")'\s*,\s*current_date\s*\)"
 )
 _YEAR = re.compile(r"date_trunc\(\s*'year'\s*,\s*current_date\s*\)")
-_KL = re.compile(r"at time zone 'Asia/Kuala_Lumpur'")
 _BARE = re.compile(r"\bcurrent_date\b")
 
 
-def offenders(root: Path) -> tuple[list[str], int, list[str]]:
-    """Short buckets, how many use the year one, and files with two clocks."""
+def offenders(root: Path) -> tuple[list[str], int, list[str], list[str]]:
+    """Short buckets, year-bucket count, two-clock files, two-clock
+    STATEMENTS."""
     bad: list[str] = []
     years = 0
     mixed: list[str] = []
+    mixed_expr: list[str] = []
     for path in sorted(root.glob("*.sql")):
         kl = bare = 0
         for n, line in enumerate(
@@ -101,13 +191,32 @@ def offenders(root: Path) -> tuple[list[str], int, list[str]]:
             if _REFUSED.search(line):
                 bad.append(f"{path.relative_to(root.parent.parent)}:{n}: {line.strip()}")
             years += len(_YEAR.findall(line))
-            if _KL.search(line):
+            if _KL_DATE.search(line):
                 kl += 1
             if _BARE.search(line):
                 bare += 1
-        if kl and bare:
+        if kl and bare and path.name not in EXEMPT:
             mixed.append(path.name)
-    return bad, years, mixed
+
+        # The third shape: both clocks inside ONE statement, neither of
+        # them `current_date`. Split on `;` after dropping comment
+        # lines -- a plpgsql statement ends with one, so this is the
+        # right granularity: a `_at::date` in one assertion and a KL
+        # date in an unrelated one are two facts, not a comparison.
+        body = "\n".join(
+            line for line in path.read_text(encoding="utf-8").splitlines()
+            if not line.lstrip().startswith("--")
+        )
+        for statement in body.split(";"):
+            if _AT_DATE.search(statement) and _KL_DATE.search(statement):
+                first = next(
+                    (ln.strip() for ln in statement.splitlines()
+                     if _AT_DATE.search(ln) or _KL_DATE.search(ln)), ""
+                )
+                mixed_expr.append(
+                    f"{path.relative_to(root.parent.parent)}: {first[:88]}"
+                )
+    return bad, years, mixed, mixed_expr
 
 
 def main() -> int:
@@ -115,8 +224,22 @@ def main() -> int:
         print(f"no such directory: {TESTS}", file=sys.stderr)
         return 2
 
-    bad, years, mixed = offenders(TESTS)
+    bad, years, mixed, mixed_expr = offenders(TESTS)
     problems = []
+
+    if mixed_expr:
+        problems.append(
+            "These put BOTH clocks in one statement: a timestamptz cast to a\n"
+            "date in the session's time zone, beside a Kuala Lumpur date. The\n"
+            "difference is right for sixteen hours a day and wrong for eight,\n"
+            "and the file names only one clock so the mixed count stays\n"
+            "clean. Run 2213 went red on exactly this, on a commit that\n"
+            "changed one markdown file:\n\n"
+            + "\n".join(f"  {m}" for m in mixed_expr)
+            + "\n\nMeasure against a column on the SAME clock -- the share\n"
+            "window became expires_at::date - created_at::date, which has no\n"
+            "clock in it at all."
+        )
 
     if bad:
         problems.append(
@@ -138,6 +261,24 @@ def main() -> int:
             "(now() at time zone 'Asia/Kuala_Lumpur')::date.\n\n"
             + "\n".join(f"  {m}" for m in mixed)
         )
+
+    for name in sorted(EXEMPT):
+        path = TESTS / name
+        if not path.is_file():
+            problems.append(
+                f"{name} is EXEMPT but no longer exists. Drop the entry."
+            )
+            continue
+        body = "\n".join(
+            line for line in path.read_text(encoding="utf-8").splitlines()
+            if not line.lstrip().startswith("--")
+        )
+        if not (_KL_DATE.search(body) and _BARE.search(body)):
+            problems.append(
+                f"{name} is EXEMPT from the two-clock rule but no longer "
+                f"names both clocks. Drop the entry -- an exemption nobody "
+                f"prunes stops being evidence."
+            )
 
     if years > YEAR_BUDGET:
         problems.append(

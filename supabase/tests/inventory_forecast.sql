@@ -358,13 +358,13 @@ begin
     (org_id, movement_no, movement_type, movement_date, item_id, warehouse_id,
      quantity, unit_cost)
   values
-    (v_org, 'R0', 'purchase_receipt', current_date - 30, v_bolt, v_wh, 12, 10),
-    (v_org, 'R1', 'sales_delivery',   current_date - 20, v_bolt, v_wh, -5, 0),
-    (v_org, 'R2', 'sales_delivery',   current_date - 12, v_bolt, v_wh, -7, 0),
-    (v_org, 'R4', 'purchase_receipt', current_date - 30, v_nut,  v_wh, 3,  5),
-    (v_org, 'R3', 'sales_delivery',   current_date - 4,  v_nut,  v_wh, -3, 0),
-    (v_org, 'R5', 'purchase_receipt', current_date - 30, v_gasket, v_wh, 500, 1.25),
-    (v_org, 'R6', 'sales_delivery',   current_date - 10, v_gasket, v_wh, -2, 0);
+    (v_org, 'R0', 'purchase_receipt', pg_temp.today() - 30, v_bolt, v_wh, 12, 10),
+    (v_org, 'R1', 'sales_delivery',   pg_temp.today() - 20, v_bolt, v_wh, -5, 0),
+    (v_org, 'R2', 'sales_delivery',   pg_temp.today() - 12, v_bolt, v_wh, -7, 0),
+    (v_org, 'R4', 'purchase_receipt', pg_temp.today() - 30, v_nut,  v_wh, 3,  5),
+    (v_org, 'R3', 'sales_delivery',   pg_temp.today() - 4,  v_nut,  v_wh, -3, 0),
+    (v_org, 'R5', 'purchase_receipt', pg_temp.today() - 30, v_gasket, v_wh, 500, 1.25),
+    (v_org, 'R6', 'sales_delivery',   pg_temp.today() - 10, v_gasket, v_wh, -2, 0);
 
   -- Target pinned, so the suggestion is exactly the target: nothing is
   -- on hand, so ordering up to it is the whole quantity.

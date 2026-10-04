@@ -56,7 +56,7 @@ declare
   s        record;
 begin
   v_org := pg_temp.test_org('Warung Sepuluh Peratus Sdn Bhd');
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
 
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['pos','inventory']) m
@@ -337,7 +337,7 @@ declare
   d      record;
 begin
   v_org := pg_temp.test_org('Pejabat Berkhidmat Sdn Bhd');
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
 
   insert into public.tax_codes
     (org_id, code, name, tax_type_code, rate, applies_to,
@@ -363,7 +363,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'invoice', 'INV-LINE', current_date, current_date, v_cust,
+  values (v_org, 'invoice', 'INV-LINE', pg_temp.today(), pg_temp.today(), v_cust,
           'MYR', 1, 'draft')
   returning id into v_doc;
   insert into public.sales_document_lines
@@ -408,7 +408,7 @@ begin
   -- says the two agree.
   perform pg_temp.check_eq('and the SST-02 return declares it',
     (select coalesce(sum(tax_amount), 0)
-       from public.report_sst_summary(v_org, current_date - 1, current_date + 1)
+       from public.report_sst_summary(v_org, pg_temp.today() - 1, pg_temp.today() + 1)
       where direction = 'output'), 8.80);
 end $$;
 

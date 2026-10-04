@@ -48,7 +48,7 @@ declare
   v_tier   record;
 begin
   v_org := pg_temp.test_org('Pasaraya Mesra Sdn Bhd');
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
 
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['pos','loyalty','purchases','inventory']) m
@@ -259,7 +259,7 @@ begin
 
   update public.loyalty_entries set created_at = now() - interval '3 years'
    where account_id = v_acct;
-  update public.loyalty_accounts set joined_on = current_date - 1500 where id = v_acct;
+  update public.loyalty_accounts set joined_on = pg_temp.today() - 1500 where id = v_acct;
 
   v_c := app.loyalty_balance(v_acct);
   perform pg_temp.check_true('there were points there to lose', v_c > 0);
@@ -652,7 +652,7 @@ declare
   v_top uuid;
 begin
   v_org := pg_temp.test_org('Kedai Ujian Sdn Bhd');
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['pos','loyalty','inventory']) m
   on conflict (org_id, module_code) do update set is_enabled = true;

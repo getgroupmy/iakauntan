@@ -36,12 +36,12 @@ begin
 
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, contact_id, doc_date, status, total_amount)
-  values (v_org, 'bill', 'BILL-TEST-1', v_supplier, current_date, 'draft', 0)
+  values (v_org, 'bill', 'BILL-TEST-1', v_supplier, pg_temp.today(), 'draft', 0)
   returning id into v_bill;
 
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, contact_id, doc_date, status, total_amount)
-  values (v_org, 'bill', 'BILL-TEST-2', v_supplier, current_date, 'draft', 0)
+  values (v_org, 'bill', 'BILL-TEST-2', v_supplier, pg_temp.today(), 'draft', 0)
   returning id into v_other;
 
   insert into public.attachments
@@ -85,12 +85,12 @@ begin
   values (v_org, v_user, 'employee') on conflict do nothing;
   insert into public.employees
     (org_id, employee_no, full_name, user_id, hire_date)
-  values (v_org, 'E-1', 'Staff', v_user, current_date)
+  values (v_org, 'E-1', 'Staff', v_user, pg_temp.today())
   returning id into v_employee;
 
   insert into public.expense_claims
     (org_id, claim_no, employee_id, claim_date, title, status, total_amount)
-  values (v_org, 'CLM-T-1', v_employee, current_date, 'Parking', 'draft', 12)
+  values (v_org, 'CLM-T-1', v_employee, pg_temp.today(), 'Parking', 'draft', 12)
   returning id into v_claim;
 
   insert into public.attachments

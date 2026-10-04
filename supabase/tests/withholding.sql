@@ -341,10 +341,10 @@ begin
 
   -- Credited long enough ago that its month has certainly run out.
   v_late := public.create_withholding(v_bill, 'S109B_SPECIAL',
-    p_gross_amount => 100000, p_cert_date => current_date - 120);
+    p_gross_amount => 100000, p_cert_date => pg_temp.today() - 120);
   -- And one that has not.
   v_soon := public.create_withholding(v_bill, 'S109B_SPECIAL',
-    p_gross_amount => 100000, p_cert_date => current_date);
+    p_gross_amount => 100000, p_cert_date => pg_temp.today());
 
   select * into r from public.report_withholding(v_org)
    where certificate_id = v_late;

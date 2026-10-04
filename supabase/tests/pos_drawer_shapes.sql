@@ -36,7 +36,7 @@ declare
   v_org uuid; v_wh uuid; v_walkin uuid; v_outlet uuid;
 begin
   v_org := pg_temp.test_org(p_name);
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['pos','inventory','loyalty']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
@@ -736,7 +736,7 @@ begin
 
   -- Dormant: joined two years ago, earned once eighteen months ago.
   insert into public.loyalty_accounts (org_id, program_id, contact_id, joined_on)
-  values (v_org, v_prog, v_c1, (current_date - 730))
+  values (v_org, v_prog, v_c1, (pg_temp.today() - 730))
   returning id into v_old;
   insert into public.loyalty_entries
     (org_id, account_id, kind, points, note, created_at)
@@ -746,7 +746,7 @@ begin
   -- measured from the last thing that happened, not from joining --
   -- otherwise every long-standing customer is wiped out.
   insert into public.loyalty_accounts (org_id, program_id, contact_id, joined_on)
-  values (v_org, v_prog, v_c2, (current_date - 730))
+  values (v_org, v_prog, v_c2, (pg_temp.today() - 730))
   returning id into v_recent;
   insert into public.loyalty_entries
     (org_id, account_id, kind, points, note, created_at)
@@ -756,7 +756,7 @@ begin
   -- entries alone this account has no date at all and is skipped; the
   -- joining date is the fallback that catches it.
   insert into public.loyalty_accounts (org_id, program_id, contact_id, joined_on)
-  values (v_org, v_prog, v_c3, (current_date - 540))
+  values (v_org, v_prog, v_c3, (pg_temp.today() - 540))
   returning id into v_edge;
   insert into public.loyalty_entries
     (org_id, account_id, kind, points, note, created_at)
@@ -765,7 +765,7 @@ begin
   -- Dormant but with nothing left to expire. It must not get an entry
   -- of nought, which would reset its own dormancy for ever after.
   insert into public.loyalty_accounts (org_id, program_id, contact_id, joined_on)
-  values (v_org, v_prog, v_c4, (current_date - 730))
+  values (v_org, v_prog, v_c4, (pg_temp.today() - 730))
   returning id into v_empty;
 
   select count(*)::integer into v_n from public.expire_loyalty_points(v_org);
@@ -804,7 +804,7 @@ begin
   values (v_org, 'KAD', 'Kad Selamanya', 1, 0.01, 100, true, null)
   returning id into v_prog;
   insert into public.loyalty_accounts (org_id, program_id, contact_id, joined_on)
-  values (v_org, v_prog, v_c, (current_date - 2000))
+  values (v_org, v_prog, v_c, (pg_temp.today() - 2000))
   returning id into v_acc;
   insert into public.loyalty_entries
     (org_id, account_id, kind, points, note, created_at)
@@ -843,7 +843,7 @@ begin
   values (v_org, 'KAD', 'Kad Kedai', 1, 0.01, 100, true, 12)
   returning id into v_prog;
   insert into public.loyalty_accounts (org_id, program_id, contact_id, joined_on)
-  values (v_org, v_prog, v_c, (current_date - 730))
+  values (v_org, v_prog, v_c, (pg_temp.today() - 730))
   returning id into v_acc;
   insert into public.loyalty_entries
     (org_id, account_id, kind, points, note, created_at)
@@ -882,7 +882,7 @@ begin
   values (v_org, 'KAD', 'Kad Dua Belas Bulan', 1, 0.01, 100, true, 12)
   returning id into v_prog;
   insert into public.loyalty_accounts (org_id, program_id, contact_id, joined_on)
-  values (v_org, v_prog, v_c, (current_date - 900))
+  values (v_org, v_prog, v_c, (pg_temp.today() - 900))
   returning id into v_six;
   insert into public.loyalty_entries
     (org_id, account_id, kind, points, note, created_at)
@@ -920,7 +920,7 @@ begin
   -- Joined four years ago, last shopped eighteen months ago. The two
   -- dates are far apart on purpose.
   insert into public.loyalty_accounts (org_id, program_id, contact_id, joined_on)
-  values (v_org, v_prog, v_c, (current_date - 1460))
+  values (v_org, v_prog, v_c, (pg_temp.today() - 1460))
   returning id into v_acc;
   insert into public.loyalty_entries
     (org_id, account_id, kind, points, note, created_at)
@@ -976,7 +976,7 @@ begin
   values (v_org, 'KAD', 'Kad Kedai', 1, 0.01, 100, true, 12)
   returning id into v_prog;
   insert into public.loyalty_accounts (org_id, program_id, contact_id, joined_on)
-  values (v_org, v_prog, v_c, (current_date - 900))
+  values (v_org, v_prog, v_c, (pg_temp.today() - 900))
   returning id into v_acc;
   perform pg_temp.check_eq(
     'a card with no entries has no points, whenever it was opened',

@@ -144,7 +144,7 @@ begin
                              or m.balance_value <> c.balance_value),
          count(*)
     into v_bad, v_seen
-    from public.report_stock_card(v_org, v_item, null, current_date, v_a) c
+    from public.report_stock_card(v_org, v_item, null, pg_temp.today(), v_a) c
     join public.stock_movements m
       on m.org_id = v_org and m.movement_no = c.movement_no;
 
@@ -181,11 +181,11 @@ begin
   -- Narrowed to that shed, the card agrees with the stored figure again.
   perform pg_temp.check_eq('narrowed to the shed, it agrees',
     (select c.balance_quantity
-       from public.report_stock_card(v_org, v_item, null, current_date, v_b) c
+       from public.report_stock_card(v_org, v_item, null, pg_temp.today(), v_b) c
       where c.movement_no = 'SM-0005'), 40);
   perform pg_temp.check_eq('and the shed holds nothing else',
     (select count(*)
-       from public.report_stock_card(v_org, v_item, null, current_date, v_b)),
+       from public.report_stock_card(v_org, v_item, null, pg_temp.today(), v_b)),
     1);
 end;
 $$;

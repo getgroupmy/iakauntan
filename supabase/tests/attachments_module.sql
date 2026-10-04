@@ -236,7 +236,7 @@ begin
   returning id into v_employee;
   insert into public.expense_claims
     (org_id, claim_no, employee_id, claim_date, title, total_amount, status)
-  values (v_org, 'C1', v_employee, current_date, 'Teksi', 42, 'draft')
+  values (v_org, 'C1', v_employee, pg_temp.today(), 'Teksi', 42, 'draft')
   returning id into v_claim;
 
   perform pg_temp.sign_in_as(v_staff);

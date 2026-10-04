@@ -38,7 +38,7 @@ declare
   v_n      numeric;
 begin
   v_org := pg_temp.test_org('Perniagaan Cek Lambat Sdn Bhd');
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['sales','purchases','accounting']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
@@ -62,7 +62,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'invoice', 'INV-1', current_date, current_date, v_cust,
+  values (v_org, 'invoice', 'INV-1', pg_temp.today(), pg_temp.today(), v_cust,
           'MYR', 1, 'draft')
   returning id into v_inv;
   insert into public.sales_document_lines
@@ -75,9 +75,9 @@ begin
   -- 1. The assertion this migration is built around
   -- ------------------------------------------------------------------
   v_pdc := public.record_pdc(
-    v_org, 'incoming', v_cust, '123456', current_date + 45, 40000,
+    v_org, 'incoming', v_cust, '123456', pg_temp.today() + 45, 40000,
     jsonb_build_array(jsonb_build_object('document', v_inv, 'amount', 40000)),
-    v_bank, 'CIMB', current_date, 'Dated the fifteenth of next month');
+    v_bank, 'CIMB', pg_temp.today(), 'Dated the fifteenth of next month');
 
   perform pg_temp.check_eq(
     'the bank balance has not moved, because no money has arrived',
@@ -113,7 +113,7 @@ begin
   -- ------------------------------------------------------------------
   -- 2. Banking it is not clearing it
   -- ------------------------------------------------------------------
-  perform public.deposit_pdc(v_pdc, current_date + 44);
+  perform public.deposit_pdc(v_pdc, pg_temp.today() + 44);
   perform pg_temp.check_eq('paid in',
     (select c.status::text from public.post_dated_cheques c where c.id = v_pdc),
     'deposited');
@@ -125,7 +125,7 @@ begin
   -- ------------------------------------------------------------------
   -- 3. Now it is money
   -- ------------------------------------------------------------------
-  v_entry := public.clear_pdc(v_pdc, current_date + 46);
+  v_entry := public.clear_pdc(v_pdc, pg_temp.today() + 46);
   perform pg_temp.check_eq('the bank has it at last',
     (select b.current_balance from public.bank_accounts b where b.id = v_bank),
     40000::numeric);
@@ -149,7 +149,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'invoice', 'INV-2', current_date, current_date, v_cust,
+  values (v_org, 'invoice', 'INV-2', pg_temp.today(), pg_temp.today(), v_cust,
           'MYR', 1, 'draft')
   returning id into v_inv;
   insert into public.sales_document_lines
@@ -159,14 +159,14 @@ begin
   perform public.post_sales_document(v_inv);
 
   v_pdc := public.record_pdc(
-    v_org, 'incoming', v_cust, '123457', current_date + 30, 5000,
+    v_org, 'incoming', v_cust, '123457', pg_temp.today() + 30, 5000,
     jsonb_build_array(jsonb_build_object('document', v_inv, 'amount', 5000)),
     v_bank, 'CIMB');
   perform pg_temp.check_eq('settled again, for now',
     (select d.balance_amount from public.sales_documents d where d.id = v_inv),
     0::numeric);
 
-  v_entry := public.bounce_pdc(v_pdc, 'Refer to drawer', current_date + 31);
+  v_entry := public.bounce_pdc(v_pdc, 'Refer to drawer', pg_temp.today() + 31);
 
   perform pg_temp.check_eq('he owes it again',
     (select d.balance_amount from public.sales_documents d where d.id = v_inv),
@@ -198,7 +198,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'bill', 'BILL-1', current_date, v_sup, 'MYR', 1, 'draft')
+  values (v_org, 'bill', 'BILL-1', pg_temp.today(), v_sup, 'MYR', 1, 'draft')
   returning id into v_bill;
   insert into public.purchase_document_lines
     (org_id, document_id, line_no, line_type, item_id, description,
@@ -207,7 +207,7 @@ begin
   perform public.post_purchase_document(v_bill);
 
   v_out := public.record_pdc(
-    v_org, 'outgoing', v_sup, '990001', current_date + 60, 8000,
+    v_org, 'outgoing', v_sup, '990001', pg_temp.today() + 60, 8000,
     jsonb_build_array(jsonb_build_object('document', v_bill, 'amount', 8000)),
     v_bank, 'Maybank');
   select c.gl_entry_id into v_entry
@@ -231,7 +231,7 @@ begin
     (select b.current_balance from public.bank_accounts b where b.id = v_bank),
     40000::numeric);
 
-  perform public.clear_pdc(v_out, current_date + 61);
+  perform public.clear_pdc(v_out, pg_temp.today() + 61);
   perform pg_temp.check_eq('until he presents it',
     (select b.current_balance from public.bank_accounts b where b.id = v_bank),
     32000::numeric);
@@ -243,22 +243,22 @@ begin
   -- One dated a week out and one whose date went by while nobody was
   -- looking. The second is the whole reason to read this list.
   perform public.record_pdc(
-    v_org, 'incoming', v_cust, '123458', current_date + 7, 100,
+    v_org, 'incoming', v_cust, '123458', pg_temp.today() + 7, 100,
     '[]'::jsonb, v_bank, 'CIMB');
   insert into public.post_dated_cheques
     (org_id, pdc_no, direction, contact_id, cheque_no, cheque_date,
      amount, received_on, bank_account_id)
   values (v_org, 'PDC-FORGOTTEN', 'incoming', v_cust, '123459',
-          current_date - 5, 250, current_date - 40, v_bank);
+          pg_temp.today() - 5, 250, pg_temp.today() - 40, v_bank);
 
   perform pg_temp.check_eq('the week ahead has one in it',
-    (select count(*) from public.pdc_maturing(v_org, current_date, current_date + 7)
+    (select count(*) from public.pdc_maturing(v_org, pg_temp.today(), pg_temp.today() + 7)
       where not overdue), 1::numeric);
   perform pg_temp.check_eq('and the one nobody banked is on it too',
-    (select count(*) from public.pdc_maturing(v_org, current_date, current_date + 7)
+    (select count(*) from public.pdc_maturing(v_org, pg_temp.today(), pg_temp.today() + 7)
       where overdue), 1::numeric);
   perform pg_temp.check_eq('a cleared cheque is not on the list at all',
-    (select count(*) from public.pdc_maturing(v_org, current_date - 90, current_date + 90)
+    (select count(*) from public.pdc_maturing(v_org, pg_temp.today() - 90, pg_temp.today() + 90)
       where status = 'cleared'), 0::numeric);
 
   -- ------------------------------------------------------------------
@@ -266,7 +266,7 @@ begin
   -- ------------------------------------------------------------------
   begin
     perform public.record_pdc(
-      v_org, 'incoming', v_cust, '123460', current_date, 100,
+      v_org, 'incoming', v_cust, '123460', pg_temp.today(), 100,
       '[]'::jsonb, v_bank);
     perform pg_temp.check_true('a cheque dated today is post-dated', false);
   exception when others then
@@ -279,7 +279,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'invoice', 'INV-3', current_date, current_date, v_cust,
+  values (v_org, 'invoice', 'INV-3', pg_temp.today(), pg_temp.today(), v_cust,
           'MYR', 1, 'draft')
   returning id into v_inv;
   insert into public.sales_document_lines
@@ -290,7 +290,7 @@ begin
 
   begin
     perform public.record_pdc(
-      v_org, 'incoming', v_cust, '123461', current_date + 10, 3000,
+      v_org, 'incoming', v_cust, '123461', pg_temp.today() + 10, 3000,
       jsonb_build_array(jsonb_build_object('document', v_inv, 'amount', 1000)),
       v_bank);
     perform pg_temp.check_true('a cheque can half-settle and half-float', false);
@@ -303,7 +303,7 @@ begin
 
   begin
     perform public.record_pdc(
-      v_org, 'incoming', v_cust, '123462', current_date + 10, 3000,
+      v_org, 'incoming', v_cust, '123462', pg_temp.today() + 10, 3000,
       jsonb_build_array(jsonb_build_object('document', v_bill, 'amount', 3000)),
       v_bank);
     perform pg_temp.check_true('an incoming cheque can settle our own bill', false);
@@ -314,7 +314,7 @@ begin
   end;
 
   v_pdc := public.record_pdc(
-    v_org, 'incoming', v_cust, '123463', current_date + 10, 3000,
+    v_org, 'incoming', v_cust, '123463', pg_temp.today() + 10, 3000,
     jsonb_build_array(jsonb_build_object('document', v_inv, 'amount', 3000)),
     v_bank);
   begin
@@ -375,7 +375,7 @@ declare
   v_today date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
 begin
   v_org := pg_temp.test_org('Daftar Cek Sdn Bhd');
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['sales','purchases','accounting']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
@@ -428,7 +428,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, subtotal, total_amount, balance_amount, status)
-  values (v_org, 'invoice', 'INV-PDC', current_date, current_date + 30,
+  values (v_org, 'invoice', 'INV-PDC', pg_temp.today(), pg_temp.today() + 30,
           v_cust, 'MYR', 1, 1500, 1500, 1500, 'draft')
   returning id into v_inv;
   insert into public.payment_allocations (org_id, invoice_id, amount, pdc_id)
@@ -535,7 +535,7 @@ begin
   perform pg_temp.allow_many_companies();
   v_org := pg_temp.test_org('Cek Kami Sdn Bhd');
   perform pg_temp.allow_many_companies();
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['sales','accounting']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
@@ -554,12 +554,12 @@ begin
   insert into public.post_dated_cheques
     (org_id, pdc_no, direction, contact_id, cheque_no, cheque_date, amount,
      received_on, bank_account_id, status)
-  values (v_org, 'PDC-JIRAN', 'incoming', v_cust, '600001', current_date,
-          800, current_date, v_bank, 'held')
+  values (v_org, 'PDC-JIRAN', 'incoming', v_cust, '600001', pg_temp.today(),
+          800, pg_temp.today(), v_bank, 'held')
   returning id into v_pdc;
 
   begin
-    perform public.clear_pdc(v_pdc, current_date, v_theirs);
+    perform public.clear_pdc(v_pdc, pg_temp.today(), v_theirs);
     raise exception 'FAIL cleared a cheque into another company''s account';
   exception when sqlstate '42501' then
     get stacked diagnostics v_msg = message_text;
@@ -574,7 +574,7 @@ begin
        from public.post_dated_cheques c where c.id = v_pdc));
 
   -- Into its own, it clears.
-  perform public.clear_pdc(v_pdc, current_date, v_bank);
+  perform public.clear_pdc(v_pdc, pg_temp.today(), v_bank);
   perform pg_temp.check_eq('cleared into its own account, the money arrives',
     (select b.current_balance from public.bank_accounts b where b.id = v_bank),
     800::numeric);
@@ -615,7 +615,7 @@ declare
   v_msg text; v_took boolean;
 begin
   v_org := pg_temp.test_org('Cek Sapu Sdn Bhd');
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['sales','purchases','accounting']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
@@ -634,7 +634,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
      currency, exchange_rate)
-  values (v_org, 'invoice', 'INV-1', current_date, current_date + 30, v_cust,
+  values (v_org, 'invoice', 'INV-1', pg_temp.today(), pg_temp.today() + 30, v_cust,
           'draft', 'MYR', 1) returning id into v_inv;
   insert into public.sales_document_lines
     (org_id, document_id, line_no, line_type, item_id, description,
@@ -646,14 +646,14 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
      currency, exchange_rate, subtotal, total_amount, balance_amount)
-  values (v_org, 'quotation', 'QUO-1', current_date, current_date + 30,
+  values (v_org, 'quotation', 'QUO-1', pg_temp.today(), pg_temp.today() + 30,
           v_cust, 'posted', 'MYR', 1, 1000, 1000, 1000)
   returning id into v_quote;
 
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
      currency, exchange_rate, subtotal, total_amount, balance_amount)
-  values (v_org, 'bill', 'BILL-1', current_date, current_date + 30, v_sup,
+  values (v_org, 'bill', 'BILL-1', pg_temp.today(), pg_temp.today() + 30, v_sup,
           'posted', 'MYR', 1, 1000, 1000, 1000) returning id into v_bill;
 
   -- ==================================================================
@@ -661,7 +661,7 @@ begin
   -- ==================================================================
   begin
     perform public.record_pdc(v_org, 'sideways', v_cust, '1',
-      current_date + 30, 100);
+      pg_temp.today() + 30, 100);
     raise exception 'a cheque went sideways';
   exception when others then
     get stacked diagnostics v_msg = message_text;
@@ -671,7 +671,7 @@ begin
 
   begin
     perform public.record_pdc(v_org, 'incoming', v_cust, '1',
-      current_date + 30, 0);
+      pg_temp.today() + 30, 0);
     raise exception 'a cheque for nothing was recorded';
   exception when others then
     get stacked diagnostics v_msg = message_text;
@@ -681,7 +681,7 @@ begin
 
   begin
     perform public.record_pdc(v_org, 'incoming', v_cust, '   ',
-      current_date + 30, 100);
+      pg_temp.today() + 30, 100);
     raise exception 'a cheque with no number was recorded';
   exception when others then
     get stacked diagnostics v_msg = message_text;
@@ -700,7 +700,7 @@ begin
 
   begin
     perform public.record_pdc(v_org, 'incoming', gen_random_uuid(), '1',
-      current_date + 30, 100);
+      pg_temp.today() + 30, 100);
     raise exception 'a cheque was taken from nobody';
   exception when others then
     get stacked diagnostics v_msg = message_text;
@@ -711,7 +711,7 @@ begin
   -- And a contact of ANOTHER company, which is a different question:
   -- the row exists, it is simply not ours.
   v_far_org := pg_temp.test_org('Syarikat Lain Sdn Bhd');
-  perform public.create_fiscal_year(v_far_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_far_org, date_trunc('year', pg_temp.today())::date);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_far_org, m, true from unnest(array['sales','purchases','accounting']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
@@ -720,14 +720,14 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
      currency, exchange_rate, subtotal, total_amount, balance_amount)
-  values (v_far_org, 'invoice', 'INV-LAIN', current_date, current_date + 30,
+  values (v_far_org, 'invoice', 'INV-LAIN', pg_temp.today(), pg_temp.today() + 30,
           v_far_cust, 'posted', 'MYR', 1, 1000, 1000, 1000)
   returning id into v_far_inv;
   perform pg_temp.sign_in_as(v_owner);
 
   begin
     perform public.record_pdc(v_org, 'incoming', v_far_cust, '1',
-      current_date + 30, 100);
+      pg_temp.today() + 30, 100);
     raise exception 'a cheque was taken from another company''s customer';
   exception when others then
     get stacked diagnostics v_msg = message_text;
@@ -740,7 +740,7 @@ begin
   -- ==================================================================
   begin
     perform public.record_pdc(v_org, 'incoming', v_cust, '1',
-      current_date + 30, 100,
+      pg_temp.today() + 30, 100,
       jsonb_build_array(jsonb_build_object('document', v_inv, 'amount', 0)));
     raise exception 'a settlement for nothing was accepted';
   exception when others then
@@ -753,7 +753,7 @@ begin
   -- cheque, would clear a receivable in books we cannot see.
   begin
     perform public.record_pdc(v_org, 'incoming', v_cust, '1',
-      current_date + 30, 1000,
+      pg_temp.today() + 30, 1000,
       jsonb_build_array(jsonb_build_object('document', v_far_inv,
                                            'amount', 1000)));
     raise exception 'a cheque settled another company''s invoice';
@@ -767,7 +767,7 @@ begin
   -- money nobody has been billed for.
   begin
     perform public.record_pdc(v_org, 'incoming', v_cust, '1',
-      current_date + 30, 1000,
+      pg_temp.today() + 30, 1000,
       jsonb_build_array(jsonb_build_object('document', v_quote,
                                            'amount', 1000)));
     raise exception 'a cheque settled a quotation';
@@ -784,12 +784,12 @@ begin
       (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
        currency, exchange_rate, subtotal, total_amount, balance_amount,
        deleted_at)
-    values (v_org, 'invoice', 'INV-GONE', current_date, current_date + 30,
+    values (v_org, 'invoice', 'INV-GONE', pg_temp.today(), pg_temp.today() + 30,
             v_cust, 'posted', 'MYR', 1, 1000, 1000, 1000, now())
     returning id into v_gone;
     begin
       perform public.record_pdc(v_org, 'incoming', v_cust, '1',
-        current_date + 30, 1000,
+        pg_temp.today() + 30, 1000,
         jsonb_build_array(jsonb_build_object('document', v_gone,
                                              'amount', 1000)));
       raise exception 'a cheque settled a deleted invoice';
@@ -809,19 +809,19 @@ begin
     insert into public.purchase_documents
       (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
        currency, exchange_rate, subtotal, total_amount, balance_amount)
-    values (v_far_org, 'bill', 'BILL-LAIN', current_date, current_date + 30,
+    values (v_far_org, 'bill', 'BILL-LAIN', pg_temp.today(), pg_temp.today() + 30,
             v_far_cust, 'posted', 'MYR', 1, 1000, 1000, 1000)
     returning id into v_far_bill;
     insert into public.purchase_documents
       (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
        currency, exchange_rate, subtotal, total_amount, balance_amount)
-    values (v_org, 'purchase_order', 'PO-1', current_date, current_date + 30,
+    values (v_org, 'purchase_order', 'PO-1', pg_temp.today(), pg_temp.today() + 30,
             v_sup, 'posted', 'MYR', 1, 1000, 1000, 1000)
     returning id into v_po;
 
     begin
       perform public.record_pdc(v_org, 'outgoing', v_sup, '2',
-        current_date + 30, 1000,
+        pg_temp.today() + 30, 1000,
         jsonb_build_array(jsonb_build_object('document', v_far_bill,
                                              'amount', 1000)));
       raise exception 'a cheque settled another company''s bill';
@@ -833,7 +833,7 @@ begin
 
     begin
       perform public.record_pdc(v_org, 'outgoing', v_sup, '2',
-        current_date + 30, 1000,
+        pg_temp.today() + 30, 1000,
         jsonb_build_array(jsonb_build_object('document', v_po,
                                              'amount', 1000)));
       raise exception 'a cheque settled a purchase order';
@@ -850,12 +850,12 @@ begin
     insert into public.sales_documents
       (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
        currency, exchange_rate, subtotal, total_amount, balance_amount)
-    values (v_org, 'invoice', 'INV-DRAFT', current_date, current_date + 30,
+    values (v_org, 'invoice', 'INV-DRAFT', pg_temp.today(), pg_temp.today() + 30,
             v_cust, 'draft', 'MYR', 1, 1000, 1000, 1000)
     returning id into v_draft;
     begin
       perform public.record_pdc(v_org, 'incoming', v_cust, '1',
-        current_date + 30, 1000,
+        pg_temp.today() + 30, 1000,
         jsonb_build_array(jsonb_build_object('document', v_draft,
                                              'amount', 1000)));
       raise exception 'a cheque settled a draft';
@@ -875,12 +875,12 @@ begin
     insert into public.sales_documents
       (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
        currency, exchange_rate, subtotal, total_amount, balance_amount)
-    values (v_org, 'invoice', 'INV-2', current_date, current_date + 30,
+    values (v_org, 'invoice', 'INV-2', pg_temp.today(), pg_temp.today() + 30,
             v_other_cust, 'posted', 'MYR', 1, 1000, 1000, 1000)
     returning id into v_other_inv;
     begin
       perform public.record_pdc(v_org, 'incoming', v_cust, '1',
-        current_date + 30, 1000,
+        pg_temp.today() + 30, 1000,
         jsonb_build_array(jsonb_build_object('document', v_other_inv,
                                              'amount', 1000)));
       raise exception 'one customer''s cheque settled another''s invoice';
@@ -898,12 +898,12 @@ begin
     insert into public.sales_documents
       (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
        currency, exchange_rate, subtotal, total_amount, balance_amount)
-    values (v_org, 'invoice', 'INV-USD', current_date, current_date + 30,
+    values (v_org, 'invoice', 'INV-USD', pg_temp.today(), pg_temp.today() + 30,
             v_cust, 'posted', 'USD', 4.7, 1000, 1000, 1000)
     returning id into v_usd;
     begin
       perform public.record_pdc(v_org, 'incoming', v_cust, '1',
-        current_date + 30, 1000,
+        pg_temp.today() + 30, 1000,
         jsonb_build_array(jsonb_build_object('document', v_usd,
                                              'amount', 1000)));
       raise exception 'a cheque settled a foreign invoice';
@@ -918,7 +918,7 @@ begin
   -- More than the document owes.
   begin
     perform public.record_pdc(v_org, 'incoming', v_cust, '1',
-      current_date + 30, 1500,
+      pg_temp.today() + 30, 1500,
       jsonb_build_array(jsonb_build_object('document', v_inv, 'amount', 1500)));
     raise exception 'a cheque settled more than the invoice owed';
   exception when others then
@@ -951,16 +951,16 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
      currency, exchange_rate, subtotal, total_amount, balance_amount)
-  values (v_org, 'invoice', 'INV-REL', current_date, current_date + 30,
+  values (v_org, 'invoice', 'INV-REL', pg_temp.today(), pg_temp.today() + 30,
           v_rel, 'posted', 'MYR', 1, 600, 600, 600) returning id into v_relinv;
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
      currency, exchange_rate, subtotal, total_amount, balance_amount)
-  values (v_org, 'bill', 'BILL-REL', current_date, current_date + 30,
+  values (v_org, 'bill', 'BILL-REL', pg_temp.today(), pg_temp.today() + 30,
           v_relsup, 'posted', 'MYR', 1, 700, 700, 700) returning id into v_relbill;
 
   v_pdc := public.record_pdc(v_org, 'incoming', v_rel, '900',
-    current_date + 30, 600,
+    pg_temp.today() + 30, 600,
     jsonb_build_array(jsonb_build_object('document', v_relinv, 'amount', 600)),
     v_bank);
   perform pg_temp.check_eq(
@@ -999,7 +999,7 @@ begin
     (select cheque_no from public.post_dated_cheques where id = v_pdc), '900');
 
   v_pdc := public.record_pdc(v_org, 'outgoing', v_relsup, '  901  ',
-    current_date + 30, 700,
+    pg_temp.today() + 30, 700,
     jsonb_build_array(jsonb_build_object('document', v_relbill, 'amount', 700)),
     v_bank);
   perform pg_temp.check_eq(
@@ -1024,13 +1024,13 @@ begin
     insert into public.sales_documents
       (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
        currency, exchange_rate, subtotal, total_amount, balance_amount)
-    values (v_org, 'invoice', 'INV-HALF', current_date, current_date + 30,
+    values (v_org, 'invoice', 'INV-HALF', pg_temp.today(), pg_temp.today() + 30,
             v_cust, 'posted', 'MYR', 1, 1000, 1000, 1000)
     returning id into v_half;
     insert into public.receipts
       (org_id, receipt_no, receipt_date, contact_id, bank_account_id,
        currency, exchange_rate, amount, unapplied_amount)
-    values (v_org, 'RCP-HALF', current_date, v_cust, v_bank, 'MYR', 1,
+    values (v_org, 'RCP-HALF', pg_temp.today(), v_cust, v_bank, 'MYR', 1,
             400, 400) returning id into v_rcp;
     insert into public.payment_allocations
       (org_id, receipt_id, invoice_id, amount)
@@ -1040,7 +1040,7 @@ begin
       'partial');
 
     v_pdc := public.record_pdc(v_org, 'incoming', v_cust, '906',
-      current_date + 30, 600,
+      pg_temp.today() + 30, 600,
       jsonb_build_array(jsonb_build_object('document', v_half, 'amount', 600)),
       v_bank);
     perform pg_temp.check_eq(
@@ -1053,7 +1053,7 @@ begin
   -- 4. A cheque against nothing is in the register and nowhere else
   -- ==================================================================
   v_pdc := public.record_pdc(v_org, 'incoming', v_cust, '902',
-    current_date + 30, 250, '[]'::jsonb, v_bank);
+    pg_temp.today() + 30, 250, '[]'::jsonb, v_bank);
   perform pg_temp.check_true('a cheque against nothing posts no journal',
     (select gl_entry_id is null from public.post_dated_cheques where id = v_pdc));
   perform pg_temp.check_eq('and settles nothing',
@@ -1072,7 +1072,7 @@ begin
     perform pg_temp.sign_in_as(v_clerk);
     begin
       perform public.record_pdc(v_org, 'incoming', v_cust, '903',
-        current_date + 30, 100);
+        pg_temp.today() + 30, 100);
       v_msg := null;
     exception when others then get stacked diagnostics v_msg = message_text;
     end;
@@ -1090,7 +1090,7 @@ begin
      where org_id = v_org and module_code = 'purchases';
     begin
       perform public.record_pdc(v_org, 'outgoing', v_sup, '904',
-        current_date + 30, 100);
+        pg_temp.today() + 30, 100);
       v_msg := null;
     exception when others then get stacked diagnostics v_msg = message_text;
     end;
@@ -1099,7 +1099,7 @@ begin
       v_msg, 'not permitted to write for this organization');
     -- The control: with sales still on, an incoming one goes through.
     v_pdc := public.record_pdc(v_org, 'incoming', v_cust, '905',
-      current_date + 30, 100, '[]'::jsonb, v_bank);
+      pg_temp.today() + 30, 100, '[]'::jsonb, v_bank);
     perform pg_temp.check_true('while an incoming one still may be taken',
       v_pdc is not null);
     update public.org_modules set is_enabled = true

@@ -26,7 +26,7 @@ returns uuid language plpgsql as $$
 declare v_org uuid := pg_temp.test_org(p_name);
 begin
   perform public.create_fiscal_year(
-    v_org, date_trunc('year', current_date)::date);
+    v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.items
     (org_id, code, name, item_type, track_inventory, unit_price)
   values (v_org, 'SVC', 'Service', 'service', false, 100);
@@ -50,7 +50,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
      currency, exchange_rate)
-  values (p_org, 'invoice', p_no, current_date, current_date, p_contact,
+  values (p_org, 'invoice', p_no, pg_temp.today(), pg_temp.today(), p_contact,
           'draft', 'MYR', 1)
   returning id into v_id;
   insert into public.sales_document_lines
@@ -69,7 +69,7 @@ returns uuid language sql as $$
   insert into public.receipts
     (org_id, receipt_no, receipt_date, contact_id, bank_account_id,
      currency, exchange_rate, amount, unapplied_amount)
-  values (p_org, p_no, current_date, p_contact,
+  values (p_org, p_no, pg_temp.today(), p_contact,
           (select id from public.bank_accounts where org_id = p_org limit 1),
           'MYR', 1, p_amt, p_amt)
   returning id;
@@ -100,7 +100,7 @@ begin
 
   begin
     perform public.allocate_with_discount(v_rcp, v_inv, 500, null,
-                                          current_date);
+                                          pg_temp.today());
     v_took := true;
   exception when others then
     get stacked diagnostics v_msg = message_text;
@@ -123,7 +123,7 @@ begin
   -- A's own invoice, settled by A's receipt, is untouched by any of it.
   perform public.allocate_with_discount(
     v_rcp, pg_temp.ap_invoice(v_org, 'INV-A', v_a, 500), 500, null,
-    current_date);
+    pg_temp.today());
   perform pg_temp.check_eq('A''s receipt still settles A''s invoice',
     (select unapplied_amount from public.receipts where id = v_rcp),
     0::numeric);
@@ -159,7 +159,7 @@ begin
   v_rcp := pg_temp.ap_receipt(v_org, 'RCP-HQ', v_hq, 700);
 
   perform public.allocate_with_discount(v_rcp, v_inv, 700, null,
-                                        current_date);
+                                        pg_temp.today());
   perform pg_temp.check_eq(
     'so head office can settle the branch''s invoice',
     (select balance_amount from public.sales_documents where id = v_inv),
@@ -198,7 +198,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, status, currency,
      exchange_rate)
-  values (v_org, 'bill', 'BILL-S2', current_date, v_s2, 'draft', 'MYR', 1)
+  values (v_org, 'bill', 'BILL-S2', pg_temp.today(), v_s2, 'draft', 'MYR', 1)
   returning id into v_bill;
   insert into public.purchase_document_lines
     (org_id, document_id, line_no, line_type, item_id, description,
@@ -209,14 +209,14 @@ begin
   insert into public.purchase_payments
     (org_id, payment_no, payment_date, contact_id, bank_account_id,
      currency, exchange_rate, amount, unapplied_amount)
-  values (v_org, 'PAY-S1', current_date, v_s1,
+  values (v_org, 'PAY-S1', pg_temp.today(), v_s1,
           (select id from public.bank_accounts where org_id = v_org limit 1),
           'MYR', 1, 300, 300)
   returning id into v_pay;
 
   begin
     perform public.allocate_payment_with_discount(v_pay, v_bill, 300, null,
-                                                  current_date);
+                                                  pg_temp.today());
     v_took := true;
   exception when others then
     get stacked diagnostics v_msg = message_text;
@@ -262,7 +262,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, status, currency,
      exchange_rate)
-  values (v_org, 'bill', 'BILL-X', current_date, v_both, 'draft', 'MYR', 1)
+  values (v_org, 'bill', 'BILL-X', pg_temp.today(), v_both, 'draft', 'MYR', 1)
   returning id into v_bill;
   insert into public.purchase_document_lines
     (org_id, document_id, line_no, line_type, item_id, description,
@@ -271,7 +271,7 @@ begin
   perform public.post_purchase_document(v_bill);
 
   v_id := public.create_contra(
-    v_org, current_date,
+    v_org, pg_temp.today(),
     jsonb_build_array(jsonb_build_object('document', v_inv, 'amount', 400)),
     jsonb_build_array(jsonb_build_object('document', v_bill, 'amount', 400)),
     null);
@@ -329,7 +329,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
      currency, exchange_rate, subtotal, total_amount, balance_amount)
-  values (v_org, 'credit_note', 'CN-A', current_date, current_date, v_a,
+  values (v_org, 'credit_note', 'CN-A', pg_temp.today(), pg_temp.today(), v_a,
           'posted', 'MYR', 1, 500, 500, 500)
   returning id into v_cn;
 
@@ -342,14 +342,14 @@ begin
   insert into public.post_dated_cheques
     (org_id, pdc_no, direction, contact_id, cheque_no, cheque_date, amount)
   values (v_org, 'PDC-A', 'incoming', v_a, '000123',
-          current_date + 30, 500) returning id into v_pdc;
+          pg_temp.today() + 30, 500) returning id into v_pdc;
 
   -- Tax withheld from A.
   insert into public.withholding_certificates
     (org_id, certificate_no, contact_id, wht_code, section, gross_amount,
      rate, tax_amount, due_date)
   values (v_org, 'WHT-A', v_a, 'S109_INTEREST', '109', 5000, 10, 500,
-          current_date + 30) returning id into v_wht;
+          pg_temp.today() + 30) returning id into v_wht;
 
   -- Each in turn, against B's invoice.
   v_took := false;
@@ -447,14 +447,14 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
      currency, exchange_rate, subtotal, total_amount, balance_amount)
-  values (v_org, 'bill', 'BILL-1', current_date, current_date, v_sup,
+  values (v_org, 'bill', 'BILL-1', pg_temp.today(), pg_temp.today(), v_sup,
           'posted', 'MYR', 1, 1000, 1000, 1000)
   returning id into v_bill;
 
   insert into public.purchase_payments
     (org_id, payment_no, payment_date, contact_id, bank_account_id,
      currency, exchange_rate, amount, unapplied_amount)
-  values (v_org, 'PAY-1', current_date, v_sup,
+  values (v_org, 'PAY-1', pg_temp.today(), v_sup,
           (select id from public.bank_accounts where org_id = v_org limit 1),
           'MYR', 1, 400, 400)
   returning id into v_pay;

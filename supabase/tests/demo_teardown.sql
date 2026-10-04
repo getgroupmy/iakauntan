@@ -160,7 +160,7 @@ begin
   insert into public.platform_invoices
     (invoice_no, org_id, issue_date, currency, issuer_name, bill_to_name,
      description, subtotal, tax_rate, tax_amount, total_amount, status)
-  values ('DEMO-TD-1', v_demo_org, current_date, 'MYR', 'iAkauntan',
+  values ('DEMO-TD-1', v_demo_org, pg_temp.today(), 'MYR', 'iAkauntan',
           'Proper Demo Sdn Bhd', 'Subscription', 100, 0, 0, 100, 'issued');
 
   -- Two references to the demo user that no organization will carry out

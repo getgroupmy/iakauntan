@@ -57,7 +57,7 @@ begin
 
   insert into public.gl_entries (org_id, entry_no, entry_date, source,
     description, total_debit, total_credit, status, posted_at)
-  values (p_org, 'IC-' || substr(gen_random_uuid()::text, 1, 8), current_date,
+  values (p_org, 'IC-' || substr(gen_random_uuid()::text, 1, 8), pg_temp.today(),
           'sales_invoice', 'intercompany', p_net + p_tax, p_net + p_tax,
           'posted', now())
   returning id into v_entry;

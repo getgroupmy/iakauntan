@@ -41,7 +41,7 @@ begin;
 -- A posted, balanced entry with both lines against one matter.
 create or replace function pg_temp.post_to(
   p_org uuid, p_matter uuid, p_debit uuid, p_credit uuid,
-  p_amount numeric, p_on date default current_date)
+  p_amount numeric, p_on date default pg_temp.today())
 returns uuid language plpgsql as $$
 declare v_entry uuid;
 begin
@@ -186,7 +186,7 @@ begin
   -- -------------------------------------------------------------------
   insert into public.gl_entries
     (org_id, entry_no, entry_date, description, status)
-  values (v_org, 'T-draft', current_date, 'not posted', 'draft');
+  values (v_org, 'T-draft', pg_temp.today(), 'not posted', 'draft');
   insert into public.gl_lines
     (org_id, entry_id, line_no, account_id, debit, credit, matter_id)
   select v_org, id, 1, v_cash, 999.00, 0, v_m1 from public.gl_entries
@@ -287,7 +287,7 @@ begin
    where org_id = v_mine and code = '1120';
   insert into public.gl_entries
     (org_id, entry_no, entry_date, description, status)
-  values (v_mine, 'T-probe', current_date, 'probe', 'draft')
+  values (v_mine, 'T-probe', pg_temp.today(), 'probe', 'draft')
   returning id into v_entry;
 
   perform pg_temp.check_refused(

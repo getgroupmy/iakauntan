@@ -51,7 +51,7 @@ declare
 begin
   v_org := pg_temp.test_org('Invois Beku Sdn Bhd');
   perform pg_temp.sign_in_as(v_owner);
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
 
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'C-1', 'Pembeli Bhd', 'customer') returning id into v_cust;
@@ -62,7 +62,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
      status)
-  values (v_org, 'invoice', 'INV-POSTED', current_date, v_cust, 'MYR', 1,
+  values (v_org, 'invoice', 'INV-POSTED', pg_temp.today(), v_cust, 'MYR', 1,
           'draft') returning id into v_inv;
   insert into public.sales_document_lines
     (org_id, document_id, line_no, description, quantity, unit_price)
@@ -83,7 +83,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
      status)
-  values (v_org, 'invoice', 'INV-DRAFT', current_date, v_cust, 'MYR', 1,
+  values (v_org, 'invoice', 'INV-DRAFT', pg_temp.today(), v_cust, 'MYR', 1,
           'draft') returning id into v_draft;
   insert into public.sales_document_lines
     (org_id, document_id, line_no, description, quantity, unit_price)
@@ -93,7 +93,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
      status)
-  values (v_org, 'bill', 'BILL-POSTED', current_date, v_supp, 'MYR', 1,
+  values (v_org, 'bill', 'BILL-POSTED', pg_temp.today(), v_supp, 'MYR', 1,
           'draft') returning id into v_bill;
   insert into public.purchase_document_lines
     (org_id, document_id, line_no, description, quantity, unit_price)
@@ -337,7 +337,7 @@ begin
     'valid');
 
   update public.sales_documents
-     set internal_notes = 'Chased 1 September', due_date = current_date + 30,
+     set internal_notes = 'Chased 1 September', due_date = pg_temp.today() + 30,
          reference = 'PO-77'
    where id = c.inv;
   perform pg_temp.check_eq('and somebody can still write on it',

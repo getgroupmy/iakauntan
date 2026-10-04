@@ -91,7 +91,7 @@ begin
   -- look the same from a company that has its own rows to see.
   v_theirs := pg_temp.test_org('Syarikat Jiran Sdn Bhd');
   perform pg_temp.sign_in_as(v_owner);
-  perform public.create_fiscal_year(v_theirs, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_theirs, date_trunc('year', pg_temp.today())::date);
 
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_theirs, 'C-1', 'Pelanggan Jiran', 'customer') returning id into v_cust;
@@ -101,7 +101,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
      status)
-  values (v_theirs, 'invoice', 'INV-J1', current_date, v_cust, 'MYR', 1, 'draft')
+  values (v_theirs, 'invoice', 'INV-J1', pg_temp.today(), v_cust, 'MYR', 1, 'draft')
   returning id into v_doc;
   insert into public.sales_document_lines
     (org_id, document_id, line_no, description, quantity, unit_price)
@@ -114,7 +114,7 @@ begin
   insert into public.expenses
     (org_id, expense_no, expense_date, description, amount, tax_amount,
      total_amount, currency, exchange_rate, account_id)
-  values (v_theirs, 'EXP-J1', current_date, 'Elektrik', 320, 0, 320,
+  values (v_theirs, 'EXP-J1', pg_temp.today(), 'Elektrik', 320, 0, 320,
           'MYR', 1, v_cat);
 
   insert into public.employees

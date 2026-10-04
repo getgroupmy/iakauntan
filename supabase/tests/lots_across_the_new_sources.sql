@@ -50,7 +50,7 @@ declare
   v_doc    uuid;
 begin
   v_org := pg_temp.test_org('Dapur Batch Sdn Bhd');
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['pos','inventory','purchases']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
@@ -111,7 +111,7 @@ begin
   -- ------------------------------------------------------------------
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate, status)
-  values (v_org, 'bill', 'BILL-1', current_date, v_walkin, 'MYR', 1, 'draft')
+  values (v_org, 'bill', 'BILL-1', pg_temp.today(), v_walkin, 'MYR', 1, 'draft')
   returning id into v_bill;
   insert into public.purchase_document_lines
     (org_id, document_id, line_no, line_type, item_id, description,
@@ -187,7 +187,7 @@ begin
   -- which would want 0.4.
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate, status)
-  values (v_org, 'bill', 'BILL-X', current_date, v_walkin, 'MYR', 1, 'draft')
+  values (v_org, 'bill', 'BILL-X', pg_temp.today(), v_walkin, 'MYR', 1, 'draft')
   returning id into v_doc;
 
   perform pg_temp.check_true('there is santan to run down',
@@ -226,7 +226,7 @@ begin
   -- 3. A batch that goes in the van keeps its name and its date
   -- ------------------------------------------------------------------
   v_t := public.upsert_stock_transfer(
-    null, v_org, v_kitchen, v_shop, current_date,
+    null, v_org, v_kitchen, v_shop, pg_temp.today(),
     jsonb_build_array(
       jsonb_build_object('item', v_chicken, 'quantity', 4, 'uom', 'C62')));
   perform public.send_stock_transfer(v_t);
@@ -252,7 +252,7 @@ begin
   -- A short delivery leaves the difference behind rather than
   -- inventing a batch for it.
   v_t := public.upsert_stock_transfer(
-    null, v_org, v_kitchen, v_shop, current_date,
+    null, v_org, v_kitchen, v_shop, pg_temp.today(),
     jsonb_build_array(
       jsonb_build_object('item', v_chicken, 'quantity', 4, 'uom', 'C62')));
   perform public.send_stock_transfer(v_t);
@@ -270,7 +270,7 @@ begin
 
   -- And it will not ship a batch it has not got.
   v_t := public.upsert_stock_transfer(
-    null, v_org, v_kitchen, v_shop, current_date,
+    null, v_org, v_kitchen, v_shop, pg_temp.today(),
     jsonb_build_array(
       jsonb_build_object('item', v_chicken, 'quantity', 50, 'uom', 'C62')));
   begin

@@ -301,7 +301,7 @@ begin
 
   begin
     perform public.submit_leave_request(
-      v_org, v_annual, current_date + 10, current_date + 10, -20,
+      v_org, v_annual, pg_temp.today() + 10, pg_temp.today() + 10, -20,
       'Manufacture');
     raise exception 'FAIL: leave for minus twenty days was filed';
   exception when sqlstate '23514' then
@@ -323,7 +323,7 @@ begin
 
   begin
     perform public.submit_leave_request(
-      v_org, v_annual, current_date + 10, current_date + 10, 0, 'None');
+      v_org, v_annual, pg_temp.today() + 10, pg_temp.today() + 10, 0, 'None');
     raise exception 'FAIL: leave for no days was filed';
   exception when sqlstate '23514' then
     get stacked diagnostics v_msg = message_text;
@@ -334,7 +334,7 @@ begin
 
   begin
     perform public.submit_leave_request(
-      v_org, v_annual, current_date + 10, current_date + 10, 0.25,
+      v_org, v_annual, pg_temp.today() + 10, pg_temp.today() + 10, 0.25,
       'A quarter');
     raise exception 'FAIL: a quarter of a day was filed';
   exception when sqlstate '23514' then
@@ -349,7 +349,7 @@ begin
   -- The upper bound, which needs nothing but the dates.
   begin
     perform public.submit_leave_request(
-      v_org, v_unpaid, current_date + 10, current_date + 10, 300,
+      v_org, v_unpaid, pg_temp.today() + 10, pg_temp.today() + 10, 300,
       'One day, three hundred claimed');
     raise exception 'FAIL: one day was filed as three hundred';
   exception when sqlstate '23514' then
@@ -363,7 +363,7 @@ begin
   -- entitlement stands in for the check being made.
   perform pg_temp.check_true('a request for exactly its own span is fine',
     public.submit_leave_request(
-      v_org, v_unpaid, current_date + 50, current_date + 52, 3,
+      v_org, v_unpaid, pg_temp.today() + 50, pg_temp.today() + 52, 3,
       'Three of three') is not null);
 
   -- ------------------------------------------------------------------
@@ -380,12 +380,12 @@ begin
 
   perform pg_temp.check_true('a half day may be asked for at last',
     public.submit_leave_request(
-      v_org, v_half, current_date + 60, current_date + 60, 0.5,
+      v_org, v_half, pg_temp.today() + 60, pg_temp.today() + 60, 0.5,
       'Afternoon off', true, 'afternoon') is not null);
 
   begin
     perform public.submit_leave_request(
-      v_org, v_half, current_date + 61, current_date + 61, 1,
+      v_org, v_half, pg_temp.today() + 61, pg_temp.today() + 61, 1,
       'Marked half, asking for a whole', true, 'morning');
     raise exception 'FAIL: a half day was filed as a whole one';
   exception when sqlstate '23514' then
@@ -394,7 +394,7 @@ begin
 
   begin
     perform public.submit_leave_request(
-      v_org, v_half, current_date + 62, current_date + 63, 0.5,
+      v_org, v_half, pg_temp.today() + 62, pg_temp.today() + 63, 0.5,
       'Half a day across two', true, 'morning');
     raise exception 'FAIL: a half day spanned two dates';
   exception when sqlstate '23514' then
@@ -406,7 +406,7 @@ begin
   -- what every caller did, since nothing ever set the flag.
   begin
     perform public.submit_leave_request(
-      v_org, v_whole, current_date + 64, current_date + 64, 0.5,
+      v_org, v_whole, pg_temp.today() + 64, pg_temp.today() + 64, 0.5,
       'Half, quietly');
     raise exception
       'FAIL: half a day was taken on a type that forbids half days';
@@ -420,7 +420,7 @@ begin
   -- Which is what lets 0365's own rule finally be reached.
   begin
     perform public.submit_leave_request(
-      v_org, v_whole, current_date + 65, current_date + 65, 0.5,
+      v_org, v_whole, pg_temp.today() + 65, pg_temp.today() + 65, 0.5,
       'Half, openly', true, 'morning');
     raise exception 'FAIL: 0365''s half-day rule did not fire';
   exception when sqlstate '23514' then
@@ -432,7 +432,7 @@ begin
 
   begin
     perform public.submit_leave_request(
-      v_org, v_half, current_date + 66, current_date + 66, 1,
+      v_org, v_half, pg_temp.today() + 66, pg_temp.today() + 66, 1,
       'Which half of a whole day?', false, 'morning');
     raise exception 'FAIL: a period was set on a whole-day request';
   exception when sqlstate '23514' then
@@ -494,7 +494,7 @@ begin
 
   perform pg_temp.sign_in_as(v_staff);
   v_away := public.submit_leave_request(
-    v_org, v_unpaid, current_date + 30, current_date + 34, 5,
+    v_org, v_unpaid, pg_temp.today() + 30, pg_temp.today() + 34, 5,
     'Kampung', false, null, null, '+60 12-555 0101');
   perform pg_temp.check_eq('the contact given at submission is kept',
     (select contact_while_away from public.leave_requests where id = v_away),
@@ -503,7 +503,7 @@ begin
   -- A form that posts every field posts the empty ones too, and a
   -- contact of '' reads on a report as a contact that was given.
   v_far := public.submit_leave_request(
-    v_org, v_unpaid, current_date + 200, current_date + 201, 2,
+    v_org, v_unpaid, pg_temp.today() + 200, pg_temp.today() + 201, 2,
     'Later', false, null, null, '   ');
   perform pg_temp.check_true('a blank contact is stored as no contact',
     (select contact_while_away from public.leave_requests where id = v_far)
@@ -566,7 +566,7 @@ begin
   -- rejected request is not an absence at all. Both refusals name
   -- which one spoke.
   v_past := public.submit_leave_request(
-    v_org, v_unpaid, current_date - 10, current_date - 5, 6,
+    v_org, v_unpaid, pg_temp.today() - 10, pg_temp.today() - 5, 6,
     'Already back', false, null, v_e_staff);
   begin
     perform public.update_leave_contact(v_past, '+60 12-555 0404');
@@ -614,12 +614,12 @@ begin
     'submitted');
   perform pg_temp.check_eq('so nobody is away',
     (select count(*) from public.report_who_is_away(
-       v_org, current_date + 30, current_date + 34)), 0);
+       v_org, pg_temp.today() + 30, pg_temp.today() + 34)), 0);
   perform pg_temp.sign_in_as(v_boss);
   perform public.decide_leave_request(v_away, true, 'Enjoy');
 
   select * into r from public.report_who_is_away(
-    v_org, current_date + 30, current_date + 34);
+    v_org, pg_temp.today() + 30, pg_temp.today() + 34);
   perform pg_temp.check_eq('an approved absence is reported', r.request_id,
     v_away);
   perform pg_temp.check_eq('with the contact', r.contact_while_away,
@@ -634,29 +634,29 @@ begin
   perform pg_temp.sign_in_as(v_staff);
   perform pg_temp.check_eq('the employee sees their own absence',
     (select count(*) from public.report_who_is_away(
-       v_org, current_date + 30, current_date + 34)), 1);
+       v_org, pg_temp.today() + 30, pg_temp.today() + 34)), 1);
 
   -- The window is inclusive at both ends and the overlap is the
   -- ordinary one: leave that spans the window without either of its
   -- own dates falling inside it is still somebody who is away.
   perform pg_temp.check_eq('the first day is inside the window',
     (select count(*) from public.report_who_is_away(
-       v_org, current_date + 34, current_date + 40)), 1);
+       v_org, pg_temp.today() + 34, pg_temp.today() + 40)), 1);
   perform pg_temp.check_eq('and the last day is too',
     (select count(*) from public.report_who_is_away(
-       v_org, current_date + 20, current_date + 30)), 1);
+       v_org, pg_temp.today() + 20, pg_temp.today() + 30)), 1);
   perform pg_temp.check_eq('leave spanning the window counts',
     (select count(*) from public.report_who_is_away(
-       v_org, current_date + 31, current_date + 32)), 1);
+       v_org, pg_temp.today() + 31, pg_temp.today() + 32)), 1);
   perform pg_temp.check_eq('the day before it starts does not',
     (select count(*) from public.report_who_is_away(
-       v_org, current_date + 29, current_date + 29)), 0);
+       v_org, pg_temp.today() + 29, pg_temp.today() + 29)), 0);
   perform pg_temp.check_eq('nor the day after it ends',
     (select count(*) from public.report_who_is_away(
-       v_org, current_date + 35, current_date + 35)), 0);
+       v_org, pg_temp.today() + 35, pg_temp.today() + 35)), 0);
   begin
     perform public.report_who_is_away(
-      v_org, current_date + 34, current_date + 30);
+      v_org, pg_temp.today() + 34, pg_temp.today() + 30);
     raise exception 'FAIL: a window that ends before it begins was accepted';
   exception when sqlstate '22023' then
     raise notice 'ok   a window ends after it begins';
@@ -673,12 +673,12 @@ begin
   insert into public.employees
     (org_id, employee_no, full_name, hire_date, basic_salary,
      date_of_birth, residency_status, user_id)
-  values (v_org, 'E3', 'Cik Mei', current_date - 400, 5000,
+  values (v_org, 'E3', 'Cik Mei', pg_temp.today() - 400, 5000,
           date '1990-01-01', 'citizen', v_other)
   returning id into v_e_other;
 
   perform public.submit_leave_request(
-    v_org, v_unpaid, current_date + 30, current_date + 34, 5,
+    v_org, v_unpaid, pg_temp.today() + 30, pg_temp.today() + 34, 5,
     'Hers', false, null, v_e_other, '+60 13-555 0606');
   perform public.decide_leave_request(
     (select id from public.leave_requests
@@ -686,17 +686,17 @@ begin
     true, 'Granted');
   perform pg_temp.check_eq('HR sees the whole organization',
     (select count(*) from public.report_who_is_away(
-       v_org, current_date + 30, current_date + 34)), 2);
+       v_org, pg_temp.today() + 30, pg_temp.today() + 34)), 2);
 
   perform pg_temp.sign_in_as(v_boss);
   perform pg_temp.check_true('the manager is not HR',
     not app.can_manage_hr(v_org));
   perform pg_temp.check_eq('and sees only their own reporting line',
     (select count(*) from public.report_who_is_away(
-       v_org, current_date + 30, current_date + 34)), 1);
+       v_org, pg_temp.today() + 30, pg_temp.today() + 34)), 1);
   perform pg_temp.check_eq('which is the one they manage',
     (select employee_name from public.report_who_is_away(
-       v_org, current_date + 30, current_date + 34)), 'Encik Zul');
+       v_org, pg_temp.today() + 30, pg_temp.today() + 34)), 'Encik Zul');
 
   -- Somebody with no employee record is neither, and is told so rather
   -- than handed an empty result: an empty report and a refused one mean
@@ -704,7 +704,7 @@ begin
   perform pg_temp.sign_in_as(v_clerk);
   begin
     perform public.report_who_is_away(
-      v_org, current_date + 30, current_date + 34);
+      v_org, pg_temp.today() + 30, pg_temp.today() + 34);
     raise exception 'FAIL: a member with no employee record read who is away';
   exception when sqlstate '42501' then
     get stacked diagnostics v_msg = message_text;
@@ -740,28 +740,28 @@ begin
   perform pg_temp.allow_many_companies();
   v_a := pg_temp.test_org('Cuti Kami Sdn Bhd');
   perform pg_temp.allow_many_companies();
-  perform public.create_fiscal_year(v_a, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_a, date_trunc('year', pg_temp.today())::date);
   insert into public.employees
     (org_id, employee_no, user_id, full_name, hire_date, employment_status)
-  values (v_a, 'EMP-A', v_owner, 'Our employee', current_date - 400, 'active')
+  values (v_a, 'EMP-A', v_owner, 'Our employee', pg_temp.today() - 400, 'active')
   returning id into v_emp_a;
   insert into public.leave_types (org_id, code, name, default_days, is_paid)
   values (v_a, 'AL', 'Annual', 14, true) returning id into v_type;
   insert into public.leave_balances
     (org_id, employee_id, leave_type_id, leave_year, entitled_days)
-  values (v_a, v_emp_a, v_type, extract(year from current_date)::int, 14)
+  values (v_a, v_emp_a, v_type, extract(year from pg_temp.today())::int, 14)
   on conflict do nothing;
 
   v_b := pg_temp.test_org('Cuti Jiran Sdn Bhd');
   perform pg_temp.sign_in_as(v_owner);
   insert into public.employees
     (org_id, employee_no, full_name, hire_date, employment_status)
-  values (v_b, 'EMP-B', 'Their employee', current_date - 400, 'active')
+  values (v_b, 'EMP-B', 'Their employee', pg_temp.today() - 400, 'active')
   returning id into v_emp_b;
 
   begin
     perform public.submit_leave_request(
-      v_a, v_type, current_date + 10, current_date + 11, 2,
+      v_a, v_type, pg_temp.today() + 10, pg_temp.today() + 11, 2,
       'Filed against their employee', false, null, v_emp_b, null);
     raise exception 'FAIL filed leave for another company''s employee';
   exception when sqlstate '42501' then
@@ -783,8 +783,8 @@ begin
     insert into public.leave_requests
       (org_id, request_no, employee_id, leave_type_id, start_date, end_date,
        total_days, status)
-    values (v_a, 'LR-JIRAN', v_emp_b, v_type, current_date + 10,
-            current_date + 11, 2, 'submitted');
+    values (v_a, 'LR-JIRAN', v_emp_b, v_type, pg_temp.today() + 10,
+            pg_temp.today() + 11, 2, 'submitted');
     raise exception 'FAIL wrote a request for another company''s employee';
   exception when foreign_key_violation then
     raise notice 'ok   and the key refuses it even without the function';
@@ -793,7 +793,7 @@ begin
   -- Filed for its own, it goes through.
   perform pg_temp.check_true('leave for its own employee is filed',
     public.submit_leave_request(
-      v_a, v_type, current_date + 10, current_date + 11, 2,
+      v_a, v_type, pg_temp.today() + 10, pg_temp.today() + 11, 2,
       'Ours', false, null, v_emp_a, null) is not null);
 
   perform pg_temp.sign_out();

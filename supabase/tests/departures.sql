@@ -130,7 +130,7 @@ begin
 
   -- A year out, so this holds whenever the file is run.
   perform public.record_departure(
-    v_emp, (current_date + 365), 'resigned', 'Better offer');
+    v_emp, (pg_temp.today() + 365), 'resigned', 'Better offer');
   perform pg_temp.check_eq(
     'a last working day still to come reads as serving notice',
     (select employment_status::text from public.employees where id = v_emp),
@@ -142,7 +142,7 @@ begin
     ((now() at time zone 'Asia/Kuala_Lumpur')::date)::text);
 
   -- Once it has passed, the same call reads as the departure it is.
-  perform public.record_departure(v_emp, (current_date - 1), 'resigned');
+  perform public.record_departure(v_emp, (pg_temp.today() - 1), 'resigned');
   perform pg_temp.check_eq('and once it has passed, as resigned',
     (select employment_status::text from public.employees where id = v_emp),
     'resigned');
@@ -211,7 +211,7 @@ begin
 
   -- Not a departure at all.
   begin
-    perform public.record_departure(v_emp, current_date, 'suspended');
+    perform public.record_departure(v_emp, pg_temp.today(), 'suspended');
     raise exception 'FAIL: suspension was recorded as a departure';
   exception when sqlstate '22023' then
     v_said := sqlerrm;

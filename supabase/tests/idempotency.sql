@@ -40,19 +40,9 @@ begin;
 
 \i supabase/tests/_helpers.sql
 
--- One clock, named once.
---
--- `check_test_clock.py` fails a file that uses both `current_date` and a
--- Kuala Lumpur date in code, because the two are a different day for
--- eight hours out of every twenty-four and a fixture built from one and
--- asserted against the other is red overnight and green by lunchtime.
--- This file used `current_date` throughout and gained KL dates when the
--- 0733 blocks arrived, so it is all on this instead -- and the
--- expression lives in one function rather than twenty call sites.
-create or replace function pg_temp.today()
-returns date language sql stable as $$
-  select (now() at time zone 'Asia/Kuala_Lumpur')::date
-$$;
+-- The clock now lives in `_helpers.sql`, which this file already
+-- includes, so the local copy that used to sit here is gone. Its
+-- reasoning moved with it.
 
 -- Two postable accounts and an open year, which anything touching the
 -- ledger needs.

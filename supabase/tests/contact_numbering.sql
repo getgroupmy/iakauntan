@@ -49,8 +49,8 @@ begin
 
   for v_seq in select * from public.number_sequences where doc_type = 'contact' loop
     v_period := case v_seq.reset_policy
-      when 'yearly' then to_char(current_date, 'YYYY')
-      when 'monthly' then to_char(current_date, 'YYYYMM')
+      when 'yearly' then to_char(pg_temp.today(), 'YYYY')
+      when 'monthly' then to_char(pg_temp.today(), 'YYYYMM')
       else null end;
     v_pattern := '^' || regexp_replace(coalesce(v_seq.prefix, ''), '([.^$*+?()\[\]{}|\\])', '\\\1', 'g')
       || coalesce(v_period || '-', '') || '(\d+)'
@@ -72,7 +72,7 @@ $$;
 do $$
 declare
   v_org uuid := pg_temp.test_org('Numbering Sdn Bhd');
-  v_year text := to_char(current_date, 'YYYY');
+  v_year text := to_char(pg_temp.today(), 'YYYY');
   v_taken text;
   v_failed boolean := false;
 begin
@@ -109,7 +109,7 @@ end $$;
 do $$
 declare
   v_org uuid := (select id from public.organizations where name = 'Numbering Sdn Bhd');
-  v_year text := to_char(current_date, 'YYYY');
+  v_year text := to_char(pg_temp.today(), 'YYYY');
   v_code text;
 begin
   perform pg_temp.resync_contact_numbers();

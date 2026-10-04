@@ -402,7 +402,7 @@ begin
   begin
     set local role authenticated;
     update public.accounts
-       set opening_balance_date = current_date where id = v_id;
+       set opening_balance_date = pg_temp.today() where id = v_id;
     v_took := true;
   exception when insufficient_privilege then
     v_took := false;

@@ -127,7 +127,7 @@ begin
   v_org := pg_temp.test_org('Kedai Konsolidasi Sdn Bhd',
                             array['pos','purchases','inventory','einvoice']);
   perform pg_temp.allow_many_companies();
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   update public.organizations
      set einvoice_enabled = true, tin = 'C11223344550',
          registration_no = '202601000001'
@@ -218,7 +218,7 @@ begin
   v_them := pg_temp.test_org('Kedai Sebelah Sdn Bhd',
                              array['pos','purchases','inventory','einvoice']);
   perform pg_temp.allow_many_companies();
-  perform public.create_fiscal_year(v_them, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_them, date_trunc('year', pg_temp.today())::date);
   update public.organizations
      set einvoice_enabled = true, tin = 'C55667788990'
    where id = v_them;

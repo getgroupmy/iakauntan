@@ -52,12 +52,12 @@ begin
 
   insert into public.employees
     (org_id, employee_no, full_name, user_id, hire_date)
-  values (v_org, 'E-001', 'Pekerja', v_them, current_date)
+  values (v_org, 'E-001', 'Pekerja', v_them, pg_temp.today())
   returning id into v_person;
 
   insert into public.employee_documents
     (org_id, employee_id, title, doc_type, expires_date)
-  values (v_org, v_person, 'Passport', 'identity', current_date + 90)
+  values (v_org, v_person, 'Passport', 'identity', pg_temp.today() + 90)
   returning id into v_doc;
 
   -- ------------------------------------------------------------------

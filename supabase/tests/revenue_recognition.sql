@@ -33,9 +33,9 @@ declare v_org uuid;
 begin
   v_org := pg_temp.test_org(p_name);
   -- Two years open, so a twelve-month contract has somewhere to land.
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   perform public.create_fiscal_year(
-    v_org, (date_trunc('year', current_date) + interval '1 year')::date);
+    v_org, (date_trunc('year', pg_temp.today()) + interval '1 year')::date);
   return v_org;
 end $$;
 
@@ -52,7 +52,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
      subtotal, total_amount, balance_amount, status)
-  values (p_org, 'invoice', p_no, coalesce(p_from, current_date), v_cust,
+  values (p_org, 'invoice', p_no, coalesce(p_from, pg_temp.today()), v_cust,
           'MYR', 1, p_amount, p_amount, p_amount, 'draft')
   returning id into v_doc;
 
@@ -98,7 +98,7 @@ end $$;
 do $$
 declare
   v_org uuid; v_doc uuid; v_rev uuid; v_def uuid;
-  v_start date := date_trunc('year', current_date)::date;
+  v_start date := date_trunc('year', pg_temp.today())::date;
 begin
   v_org := pg_temp.rev_org('Tertunda Sdn Bhd');
   -- A full calendar year: twelve periods, and RM 1,200 over 365 days is
@@ -211,7 +211,7 @@ end $$;
 do $$
 declare
   v_org uuid; v_doc uuid; v_rev uuid; v_def uuid;
-  v_start date := date_trunc('year', current_date)::date;
+  v_start date := date_trunc('year', pg_temp.today())::date;
   v_third date; v_n integer; v_again integer;
 begin
   v_org := pg_temp.rev_org('Lepas Sdn Bhd');
@@ -273,7 +273,7 @@ end $$;
 do $$
 declare
   v_org uuid; v_doc uuid;
-  v_start date := date_trunc('year', current_date)::date;
+  v_start date := date_trunc('year', pg_temp.today())::date;
   v_first date := (v_start + interval '1 month' - interval '1 day')::date;
 begin
   v_org := pg_temp.rev_org('Tutup Sdn Bhd');
@@ -307,7 +307,7 @@ end $$;
 do $$
 declare
   v_org uuid; v_doc uuid; v_user uuid; v_role text; v_wrote boolean := false;
-  v_start date := date_trunc('year', current_date)::date;
+  v_start date := date_trunc('year', pg_temp.today())::date;
 begin
   v_org := pg_temp.rev_org('Sulit Jadual Sdn Bhd');
   v_doc := pg_temp.service_invoice(v_org, 'INV-RLS', 1200, v_start,
@@ -381,7 +381,7 @@ end $$;
 do $$
 declare
   v_org uuid; v_inv uuid; v_cn uuid; v_def uuid; v_rev uuid;
-  v_start date := date_trunc('year', current_date)::date;
+  v_start date := date_trunc('year', pg_temp.today())::date;
   v_third date; v_earned numeric;
 begin
   v_org := pg_temp.rev_org('Batal Sdn Bhd');
@@ -435,7 +435,7 @@ end $$;
 do $$
 declare
   v_org uuid; v_inv uuid; v_cn uuid; v_def uuid;
-  v_start date := date_trunc('year', current_date)::date;
+  v_start date := date_trunc('year', pg_temp.today())::date;
   v_third date; v_left_before numeric; v_left_after numeric; v_cancelled numeric;
 begin
   v_org := pg_temp.rev_org('Separuh Sdn Bhd');
@@ -497,7 +497,7 @@ end $$;
 do $$
 declare
   v_org uuid; v_inv uuid; v_cn uuid; v_cust uuid;
-  v_start date := date_trunc('year', current_date)::date;
+  v_start date := date_trunc('year', pg_temp.today())::date;
 begin
   v_org := pg_temp.rev_org('Bebas Sdn Bhd');
   v_inv := pg_temp.service_invoice(v_org, 'INV-FREE', 1200, v_start,
@@ -534,8 +534,8 @@ do $$
 declare
   v_org uuid; v_doc uuid; v_n integer;
   v_rows integer; v_total numeric;
-  v_start date := date_trunc('year', current_date)::date;
-  v_end   date := (date_trunc('year', current_date)
+  v_start date := date_trunc('year', pg_temp.today())::date;
+  v_end   date := (date_trunc('year', pg_temp.today())
                    + interval '1 year' - interval '1 day')::date;
 begin
   v_org := pg_temp.rev_org('Papar Jadual Sdn Bhd');
@@ -583,8 +583,8 @@ end $$;
 do $$
 declare
   v_org uuid; v_doc uuid;
-  v_start date := date_trunc('year', current_date)::date;
-  v_end   date := (date_trunc('year', current_date)
+  v_start date := date_trunc('year', pg_temp.today())::date;
+  v_end   date := (date_trunc('year', pg_temp.today())
                    + interval '1 year' - interval '1 day')::date;
 begin
   v_org := pg_temp.rev_org('Sen Sahaja Sdn Bhd');
@@ -616,10 +616,10 @@ end $$;
 do $$
 declare
   v_org uuid; v_doc uuid; v_acct uuid;
-  v_start date := date_trunc('year', current_date)::date;
-  v_end   date := (date_trunc('year', current_date)
+  v_start date := date_trunc('year', pg_temp.today())::date;
+  v_end   date := (date_trunc('year', pg_temp.today())
                    + interval '1 year' - interval '1 day')::date;
-  v_feb   date := (date_trunc('year', current_date)
+  v_feb   date := (date_trunc('year', pg_temp.today())
                    + interval '2 months' - interval '1 day')::date;
   v_r     record;
 begin
@@ -680,10 +680,10 @@ end $$;
 do $$
 declare
   v_org uuid; v_inv uuid; v_cn uuid; v_r record;
-  v_start date := date_trunc('year', current_date)::date;
-  v_end   date := (date_trunc('year', current_date)
+  v_start date := date_trunc('year', pg_temp.today())::date;
+  v_end   date := (date_trunc('year', pg_temp.today())
                    + interval '1 year' - interval '1 day')::date;
-  v_mar   date := (date_trunc('year', current_date)
+  v_mar   date := (date_trunc('year', pg_temp.today())
                    + interval '3 months' - interval '1 day')::date;
 begin
   v_org := pg_temp.rev_org('Audit Kredit Sdn Bhd');
@@ -719,8 +719,8 @@ end $$;
 do $$
 declare
   v_org uuid; v_doc uuid; v_user uuid; v_role text; v_refused boolean := false;
-  v_start date := date_trunc('year', current_date)::date;
-  v_end   date := (date_trunc('year', current_date)
+  v_start date := date_trunc('year', pg_temp.today())::date;
+  v_end   date := (date_trunc('year', pg_temp.today())
                    + interval '1 year' - interval '1 day')::date;
 begin
   v_org := pg_temp.rev_org('Sulit Papar Sdn Bhd');

@@ -49,7 +49,7 @@ declare
   v_n      numeric;
 begin
   v_org := pg_temp.test_org('Warung Pulang Sdn Bhd');
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['pos','inventory','purchases']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
@@ -95,12 +95,12 @@ begin
   insert into public.stock_movements
     (org_id, movement_no, movement_date, movement_type, item_id,
      warehouse_id, quantity, unit_cost)
-  values (v_org, 'OB-1', current_date, 'opening_balance', v_rice, v_wh, 100, 4.00);
+  values (v_org, 'OB-1', pg_temp.today(), 'opening_balance', v_rice, v_wh, 100, 4.00);
 
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'bill', 'BILL-1', current_date, v_walkin, 'MYR', 1, 'draft')
+  values (v_org, 'bill', 'BILL-1', pg_temp.today(), v_walkin, 'MYR', 1, 'draft')
   returning id into v_bill;
   insert into public.purchase_document_lines
     (org_id, document_id, line_no, line_type, item_id, description,
@@ -261,7 +261,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'invoice', 'INV-ZZ', current_date, current_date, v_walkin,
+  values (v_org, 'invoice', 'INV-ZZ', pg_temp.today(), pg_temp.today(), v_walkin,
           'MYR', 1, 'draft')
   returning id into v_inv;
   insert into public.sales_document_lines
@@ -308,7 +308,7 @@ declare
   v_cust uuid; v_st8 uuid; v_inv uuid; v_note uuid; v_part uuid;
   v_line uuid;
 begin
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
 
   insert into public.tax_codes
     (org_id, code, name, tax_type_code, rate,
@@ -325,7 +325,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status, shipping_amount, service_charge_amount)
-  values (v_org, 'invoice', 'INV-CHG', current_date, current_date + 30,
+  values (v_org, 'invoice', 'INV-CHG', pg_temp.today(), pg_temp.today() + 30,
           v_cust, 'MYR', 1, 'draft', 500, 300)
   returning id into v_inv;
   insert into public.sales_document_lines

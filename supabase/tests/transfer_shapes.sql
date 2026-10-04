@@ -58,7 +58,7 @@ begin
     (org_id, doc_type, doc_no, doc_date, valid_until, contact_id,
      currency, exchange_rate, subtotal, total_amount, balance_amount, status)
   values (p_org, 'quotation', 'QT-' || substr(gen_random_uuid()::text, 1, 8),
-          current_date, p_valid, p_cust, 'MYR', 1, 0, 0, 0, 'draft')
+          pg_temp.today(), p_valid, p_cust, 'MYR', 1, 0, 0, 0, 'draft')
   returning id into v_id;
   insert into public.sales_document_lines
     (org_id, document_id, line_no, line_type, item_id, description,
@@ -117,7 +117,7 @@ declare
   v_doc    record;
   v_line   record;
 begin
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
 
   -- ------------------------------------------------------------------
   -- Everything a document can point at, each one distinguishable
@@ -195,7 +195,7 @@ begin
     (org_id, opportunity_no, name, contact_id, pipeline_id, stage_id,
      amount, expected_close_date)
   values (v_org, 'OPP-PINDAH-1', 'Kontrak penyelenggaraan', v_cust,
-          v_pipe, v_stage, 5000, current_date + 60)
+          v_pipe, v_stage, 5000, pg_temp.today() + 60)
   returning id into v_opp;
 
   -- A matter and an opportunity are two different pointers, and a
@@ -218,8 +218,8 @@ begin
      payment_term_id, salesperson_id, branch_id, opportunity_id, matter_id,
      currency, exchange_rate, subtotal, total_amount, balance_amount,
      shipping_amount, discount_amount, service_charge_amount, status)
-  values (v_org, 'quotation', 'QT-SHAPES-1', current_date - 5,
-          current_date + 30, current_date + 21,
+  values (v_org, 'quotation', 'QT-SHAPES-1', pg_temp.today() - 5,
+          pg_temp.today() + 30, pg_temp.today() + 21,
           v_cust, v_person, v_addr,
           'PO ref: THEIRS-8891', 'Penyelenggaraan tahunan',
           'Bayar dalam empat puluh lima hari.',
@@ -240,7 +240,7 @@ begin
   values (v_org, v_q, 1, 'item', 'Penyelenggaraan bulanan',
           '009', 10, 'MON', 120,
           5, 60.00, v_tax, 6, true, v_wh, v_acct, 'PROJ-A', 'DEPT-B',
-          current_date + 1, current_date + 365)
+          pg_temp.today() + 1, pg_temp.today() + 365)
   returning id into v_l1;
 
   insert into public.sales_document_lines
@@ -293,7 +293,7 @@ begin
   perform pg_temp.check_eq('and the invoice is dated today, not the quote''s day',
     v_doc.doc_date::text, app.today()::text);
   perform pg_temp.check_true('which is not the day the quotation carries',
-    v_doc.doc_date <> (current_date - 5));
+    v_doc.doc_date <> (pg_temp.today() - 5));
   -- Forty-five days, because the customer's terms say so and not
   -- because thirty is the default.
   perform pg_temp.check_eq('the due date is the customer''s own terms',
@@ -366,7 +366,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, subtotal, total_amount, balance_amount, status)
-  values (v_org, 'quotation', 'QT-SHAPES-3', current_date, v_cust,
+  values (v_org, 'quotation', 'QT-SHAPES-3', pg_temp.today(), v_cust,
           'MYR', 1, 0, 0, 0, 'draft')
   returning id into v_two;
   insert into public.sales_document_lines
@@ -431,7 +431,7 @@ begin
   v_so := public.transfer_document(v_q, 'sales_order');
   perform pg_temp.check_eq('the day promised travels to the order',
     (select delivery_date::text from public.sales_documents where id = v_so),
-    (current_date + 21)::text);
+    (pg_temp.today() + 21)::text);
 
   -- ------------------------------------------------------------------
   -- A document somebody deleted
@@ -520,7 +520,7 @@ begin
     (org_id, doc_type, doc_no, doc_date, contact_id, contact_person_id,
      shipping_address_id, currency, exchange_rate,
      subtotal, total_amount, balance_amount, status)
-  values (v_org, 'quotation', 'QT-SHAPES-2', current_date, v_pros,
+  values (v_org, 'quotation', 'QT-SHAPES-2', pg_temp.today(), v_pros,
           v_pperson, v_paddr, 'MYR', 1, 0, 0, 0, 'draft')
   returning id into v_so;
   insert into public.sales_document_lines
@@ -593,7 +593,7 @@ begin
     (org_id, doc_type, doc_no, doc_date, contact_id, contact_person_id,
      shipping_address_id, currency, exchange_rate,
      subtotal, total_amount, balance_amount, status)
-  values (v_org, 'quotation', 'QT-SHAPES-4', current_date, v_pros2,
+  values (v_org, 'quotation', 'QT-SHAPES-4', pg_temp.today(), v_pros2,
           v_pperson2, v_paddr2, 'MYR', 1, 0, 0, 0, 'draft')
   returning id into v_pq;
   insert into public.sales_document_lines
@@ -633,7 +633,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, contact_person_id,
      currency, exchange_rate, subtotal, total_amount, balance_amount, status)
-  values (v_org, 'quotation', 'QT-SHAPES-5', current_date, v_pros3,
+  values (v_org, 'quotation', 'QT-SHAPES-5', pg_temp.today(), v_pros3,
           v_pperson3, 'MYR', 1, 0, 0, 0, 'draft')
   returning id into v_pq;
   insert into public.sales_document_lines
@@ -655,7 +655,7 @@ begin
     (org_id, doc_type, doc_no, doc_date, contact_id, payment_term_id,
      branch_id, currency, exchange_rate, subtotal, total_amount,
      balance_amount, shipping_amount, discount_amount, status)
-  values (v_org, 'purchase_order', 'PO-SHAPES-1', current_date - 3, v_supp,
+  values (v_org, 'purchase_order', 'PO-SHAPES-1', pg_temp.today() - 3, v_supp,
           v_terms, v_branch, 'USD', 4.10, 0, 0, 0, 30.00, 20.00, 'draft')
   returning id into v_po;
   insert into public.purchase_document_lines
@@ -684,7 +684,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, subtotal, total_amount, balance_amount, status)
-  values (v_org, 'purchase_order', 'PO-SHAPES-2', current_date, v_supp,
+  values (v_org, 'purchase_order', 'PO-SHAPES-2', pg_temp.today(), v_supp,
           'MYR', 1, 0, 0, 0, 'draft')
   returning id into v_npo;
   insert into public.purchase_document_lines

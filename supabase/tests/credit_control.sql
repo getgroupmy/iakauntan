@@ -179,7 +179,7 @@ declare
   v_msg  text;
 begin
   v_org := pg_temp.test_org('Kedai Tahan Kredit');
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   -- Warn, deliberately: the weaker of the two modes, so what is proved
   -- below is the hold and not the limit.
   update public.organizations set credit_control = 'warn' where id = v_org;
@@ -192,7 +192,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, contact_id, doc_date, status,
      total_amount, base_total_amount, balance_amount)
-  values (v_org, 'invoice', 'INV-STOP-1', v_cust, current_date, 'draft',
+  values (v_org, 'invoice', 'INV-STOP-1', v_cust, pg_temp.today(), 'draft',
           100, 100, 100)
   returning id into v_inv;
   insert into public.sales_document_lines
@@ -219,7 +219,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, contact_id, doc_date, status,
      total_amount, base_total_amount, balance_amount)
-  values (v_org, 'credit_note', 'CN-STOP-1', v_cust, current_date, 'draft',
+  values (v_org, 'credit_note', 'CN-STOP-1', v_cust, pg_temp.today(), 'draft',
           50, 50, 50)
   returning id into v_cn;
   insert into public.sales_document_lines

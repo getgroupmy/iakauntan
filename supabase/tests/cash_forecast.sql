@@ -40,7 +40,7 @@ declare
   i        integer;
 begin
   v_org := pg_temp.test_org('Syarikat Aliran Tunai Sdn Bhd');
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['accounting','sales','purchases']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
@@ -89,7 +89,7 @@ begin
       (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
        exchange_rate, status)
     values (v_org, 'invoice', 'OLD-' || i,
-            current_date - (200 - i * 30), current_date - (200 - i * 30),
+            pg_temp.today() - (200 - i * 30), pg_temp.today() - (200 - i * 30),
             v_slow, 'MYR', 1, 'draft')
     returning id into v_inv;
     insert into public.sales_document_lines
@@ -101,19 +101,19 @@ begin
     insert into public.payment_allocations
       (org_id, credit_note_id, invoice_id, amount, allocated_at)
     select v_org, null, v_inv, 1000,
-           (current_date - (200 - i * 30) + 45)::timestamptz
+           (pg_temp.today() - (200 - i * 30) + 45)::timestamptz
      where false;
     -- The allocation needs a source, so a receipt carries it.
     insert into public.receipts
       (org_id, receipt_no, receipt_date, contact_id, currency, exchange_rate,
        amount, unapplied_amount, status, bank_account_id)
-    values (v_org, 'R-' || i, current_date - (200 - i * 30) + 45, v_slow,
+    values (v_org, 'R-' || i, pg_temp.today() - (200 - i * 30) + 45, v_slow,
             'MYR', 1, 1000, 0, 'draft', v_bank)
     returning id into v_pdc;
     insert into public.payment_allocations
       (org_id, receipt_id, invoice_id, amount, allocated_at)
     values (v_org, v_pdc, v_inv, 1000,
-            (current_date - (200 - i * 30) + 45)::timestamptz);
+            (pg_temp.today() - (200 - i * 30) + 45)::timestamptz);
   end loop;
 
   perform pg_temp.check_eq(
@@ -125,7 +125,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'invoice', 'INV-SLOW', current_date, current_date + 7,
+  values (v_org, 'invoice', 'INV-SLOW', pg_temp.today(), pg_temp.today() + 7,
           v_slow, 'MYR', 1, 'draft')
   returning id into v_inv;
   insert into public.sales_document_lines
@@ -138,19 +138,19 @@ begin
   -- week eight, not week two.
   perform pg_temp.check_eq('the invoice is not expected when it falls due',
     (select count(*) from public.cash_forecast_detail(
-       v_org, current_date, current_date + 13)
+       v_org, pg_temp.today(), pg_temp.today() + 13)
       where reference = 'INV-SLOW'), 0::numeric);
   perform pg_temp.check_eq('but forty-five days after that',
     (select d.expected_on from public.cash_forecast_detail(
-       v_org, current_date, current_date + 90) d
-      where d.reference = 'INV-SLOW')::text, (current_date + 52)::text);
+       v_org, pg_temp.today(), pg_temp.today() + 90) d
+      where d.reference = 'INV-SLOW')::text, (pg_temp.today() + 52)::text);
 
   -- And with the history turned off it lands on the due date, which is
   -- the comparison that shows the shift is doing something.
   perform pg_temp.check_eq('without history it lands on the due date',
     (select d.expected_on from public.cash_forecast_detail(
-       v_org, current_date, current_date + 90, false) d
-      where d.reference = 'INV-SLOW')::text, (current_date + 7)::text);
+       v_org, pg_temp.today(), pg_temp.today() + 90, false) d
+      where d.reference = 'INV-SLOW')::text, (pg_temp.today() + 7)::text);
 
   -- ------------------------------------------------------------------
   -- 3. A customer with no history gets his terms as written
@@ -158,7 +158,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'invoice', 'INV-FAST', current_date, current_date + 10,
+  values (v_org, 'invoice', 'INV-FAST', pg_temp.today(), pg_temp.today() + 10,
           v_prompt, 'MYR', 1, 'draft')
   returning id into v_inv;
   insert into public.sales_document_lines
@@ -169,8 +169,8 @@ begin
 
   perform pg_temp.check_eq('a new customer is taken at his word',
     (select d.expected_on from public.cash_forecast_detail(
-       v_org, current_date, current_date + 90) d
-      where d.reference = 'INV-FAST')::text, (current_date + 10)::text);
+       v_org, pg_temp.today(), pg_temp.today() + 90) d
+      where d.reference = 'INV-FAST')::text, (pg_temp.today() + 10)::text);
 
   -- ------------------------------------------------------------------
   -- 4. Our own bills are not quietly stretched
@@ -178,7 +178,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'bill', 'BILL-1', current_date, current_date + 3, v_sup,
+  values (v_org, 'bill', 'BILL-1', pg_temp.today(), pg_temp.today() + 3, v_sup,
           'MYR', 1, 'draft')
   returning id into v_bill;
   insert into public.purchase_document_lines
@@ -189,11 +189,11 @@ begin
 
   perform pg_temp.check_eq('a bill lands on the day it is due',
     (select d.expected_on from public.cash_forecast_detail(
-       v_org, current_date, current_date + 90) d
-      where d.reference = 'BILL-1')::text, (current_date + 3)::text);
+       v_org, pg_temp.today(), pg_temp.today() + 90) d
+      where d.reference = 'BILL-1')::text, (pg_temp.today() + 3)::text);
   perform pg_temp.check_eq('and it is money going out',
     (select d.direction from public.cash_forecast_detail(
-       v_org, current_date, current_date + 90) d
+       v_org, pg_temp.today(), pg_temp.today() + 90) d
       where d.reference = 'BILL-1'), 'out');
 
   -- ------------------------------------------------------------------
@@ -202,7 +202,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'invoice', 'INV-CHQ', current_date, current_date + 5,
+  values (v_org, 'invoice', 'INV-CHQ', pg_temp.today(), pg_temp.today() + 5,
           v_prompt, 'MYR', 1, 'draft')
   returning id into v_inv;
   insert into public.sales_document_lines
@@ -212,38 +212,38 @@ begin
   perform public.post_sales_document(v_inv);
 
   v_pdc := public.record_pdc(
-    v_org, 'incoming', v_prompt, '778899', current_date + 20, 3000,
+    v_org, 'incoming', v_prompt, '778899', pg_temp.today() + 20, 3000,
     jsonb_build_array(jsonb_build_object('document', v_inv, 'amount', 3000)),
     v_bank, 'CIMB');
 
   perform pg_temp.check_eq('the cheque is expected on its own date',
     (select d.expected_on from public.cash_forecast_detail(
-       v_org, current_date, current_date + 90) d
-      where d.source = 'cheque')::text, (current_date + 20)::text);
+       v_org, pg_temp.today(), pg_temp.today() + 90) d
+      where d.source = 'cheque')::text, (pg_temp.today() + 20)::text);
   -- 0275 took the invoice off the receivable ledger when the cheque was
   -- recorded, so the invoice arm cannot see it any more and the money
   -- appears exactly once.
   perform pg_temp.check_eq('and its invoice is not counted again beside it',
     (select count(*) from public.cash_forecast_detail(
-       v_org, current_date, current_date + 90)
+       v_org, pg_temp.today(), pg_temp.today() + 90)
       where reference = 'INV-CHQ'), 0::numeric);
 
   -- ------------------------------------------------------------------
   -- 6. What only a person knows
   -- ------------------------------------------------------------------
   perform public.upsert_cash_forecast_item(
-    null, v_org, 'out', 'Income tax instalment', 2500, current_date + 14,
-    'monthly', current_date + 100);
+    null, v_org, 'out', 'Income tax instalment', 2500, pg_temp.today() + 14,
+    'monthly', pg_temp.today() + 100);
   perform pg_temp.check_eq('a monthly instalment repeats across the horizon',
     (select count(*) from public.cash_forecast_detail(
-       v_org, current_date, current_date + 100)
+       v_org, pg_temp.today(), pg_temp.today() + 100)
       where reference = 'Income tax instalment'), 3::numeric);
 
   perform public.upsert_cash_forecast_item(
-    null, v_org, 'out', 'A lorry', 90000, current_date + 21);
+    null, v_org, 'out', 'A lorry', 90000, pg_temp.today() + 21);
   perform pg_temp.check_eq('and a one-off happens once',
     (select count(*) from public.cash_forecast_detail(
-       v_org, current_date, current_date + 365)
+       v_org, pg_temp.today(), pg_temp.today() + 365)
       where reference = 'A lorry'), 1::numeric);
 
   -- ------------------------------------------------------------------
@@ -257,7 +257,7 @@ begin
     public.cash_runs_out_on(v_org, 13) is not null);
   perform pg_temp.check_true('in the week the lorry is paid for',
     public.cash_runs_out_on(v_org, 13)
-      between current_date + 14 and current_date + 21);
+      between pg_temp.today() + 14 and pg_temp.today() + 21);
 
   -- The running balance is a running balance: each week opens where the
   -- last one closed.
@@ -282,7 +282,7 @@ begin
   -- ------------------------------------------------------------------
   begin
     perform public.upsert_cash_forecast_item(
-      null, v_org, 'out', '   ', 100, current_date);
+      null, v_org, 'out', '   ', 100, pg_temp.today());
     perform pg_temp.check_true('a nameless line is allowed', false);
   exception when others then
     get stacked diagnostics v_msg = message_text;
@@ -292,8 +292,8 @@ begin
 
   begin
     perform public.upsert_cash_forecast_item(
-      null, v_org, 'out', 'Backwards', 100, current_date + 30, 'monthly',
-      current_date + 10);
+      null, v_org, 'out', 'Backwards', 100, pg_temp.today() + 30, 'monthly',
+      pg_temp.today() + 10);
     perform pg_temp.check_true('something can stop before it starts', false);
   exception when others then
     get stacked diagnostics v_msg = message_text;

@@ -47,7 +47,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status, payment_term_id)
-  values (p_org, 'invoice', p_no, coalesce(p_date, current_date), p_due,
+  values (p_org, 'invoice', p_no, coalesce(p_date, pg_temp.today()), p_due,
           p_cust, 'MYR', 1, 'draft', p_terms)
   returning id into v_id;
   insert into public.sales_document_lines
@@ -71,7 +71,7 @@ declare
   v_said text;
 begin
   perform public.create_fiscal_year(v_org,
-    date_trunc('year', current_date)::date);
+    date_trunc('year', pg_temp.today())::date);
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'C-1', 'Pembeli Sdn Bhd', 'customer') returning id into v_cust;
 
@@ -136,7 +136,7 @@ declare
   v_today date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
 begin
   perform public.create_fiscal_year(v_org,
-    date_trunc('year', current_date)::date);
+    date_trunc('year', pg_temp.today())::date);
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'C-1', 'Pembeli Sdn Bhd', 'customer') returning id into v_cust;
 
@@ -207,7 +207,7 @@ declare
   v_today  date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
 begin
   perform public.create_fiscal_year(v_org,
-    date_trunc('year', current_date)::date);
+    date_trunc('year', pg_temp.today())::date);
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'C-1', 'Pembeli Sdn Bhd', 'customer') returning id into v_cust;
   insert into public.bank_accounts
@@ -290,7 +290,7 @@ declare
   v_today date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
 begin
   perform public.create_fiscal_year(v_org,
-    date_trunc('year', current_date)::date);
+    date_trunc('year', pg_temp.today())::date);
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'C-1', 'Pembeli Sdn Bhd', 'customer') returning id into v_cust;
   insert into public.bank_accounts
@@ -430,7 +430,7 @@ declare
   v_today  date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
 begin
   perform public.create_fiscal_year(v_org,
-    date_trunc('year', current_date)::date);
+    date_trunc('year', pg_temp.today())::date);
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'S-1', 'Pembekal Sdn Bhd', 'supplier') returning id into v_sup;
   insert into public.bank_accounts
@@ -592,7 +592,7 @@ declare
   v_today date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
 begin
   perform public.create_fiscal_year(v_org,
-    date_trunc('year', current_date)::date);
+    date_trunc('year', pg_temp.today())::date);
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'C-1', 'Pembeli Sdn Bhd', 'customer') returning id into v_cust;
   insert into public.bank_accounts

@@ -271,7 +271,7 @@ declare
   v_shift uuid;
   v_emp   uuid;
   v_type  uuid;
-  v_yday  date := current_date - 1;
+  v_yday  date := pg_temp.today() - 1;
 begin
   v_org := pg_temp.test_org('Kerja Malam Sdn Bhd', array['hr']);
 
@@ -300,10 +300,10 @@ begin
   insert into public.leave_balances
     (org_id, employee_id, leave_type_id, leave_year, entitled_days,
      carried_forward, taken_days)
-  values (v_org, v_emp, v_type, extract(year from current_date)::integer,
+  values (v_org, v_emp, v_type, extract(year from pg_temp.today())::integer,
           14, 5, 0);
 
-  perform app.run_daily_jobs(current_date);
+  perform app.run_daily_jobs(pg_temp.today());
 
   perform pg_temp.check_eq(
     'the nightly run marks yesterday''s forgotten punch-out',

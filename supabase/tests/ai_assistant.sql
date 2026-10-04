@@ -29,7 +29,7 @@ returns uuid language plpgsql as $$
 declare v_org uuid := pg_temp.test_org(p_name);
 begin
   perform public.create_fiscal_year(
-    v_org, date_trunc('year', current_date)::date);
+    v_org, date_trunc('year', pg_temp.today())::date);
   perform app.demo_modules(v_org, array['ai', 'accounting']);
   -- Something to pay for the questions with.
   perform app.move_credit(v_org, 'topup', 100, 'For the test', null, null, false);
@@ -262,7 +262,7 @@ begin
   -- every module there is, which would make this whole block vacuous.
   v_org := pg_temp.test_org('Tiada AI Sdn Bhd', array['accounting']);
   perform public.create_fiscal_year(
-    v_org, date_trunc('year', current_date)::date);
+    v_org, date_trunc('year', pg_temp.today())::date);
   perform app.move_credit(v_org, 'topup', 100, 'For the test', null, null, false);
 
   perform pg_temp.check_true('and it really has not got the module',
@@ -292,7 +292,7 @@ begin
   perform pg_temp.sign_in_as(pg_temp.test_user());
   v_org := pg_temp.test_org('Kosong Sdn Bhd', array['accounting', 'ai']);
   perform public.create_fiscal_year(
-    v_org, date_trunc('year', current_date)::date);
+    v_org, date_trunc('year', pg_temp.today())::date);
   perform pg_temp.check_true('this one has the module',
     app.has_module(v_org, 'ai'));
 

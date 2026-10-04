@@ -43,7 +43,7 @@ declare
   v_stock numeric;
 begin
   v_org := pg_temp.test_org('Pulang Barang Sdn Bhd');
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
 
   insert into public.warehouses (org_id, code, name)
   values (v_org, 'MAIN', 'Store') returning id into v_wh;
@@ -57,7 +57,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'bill', 'BILL-1', current_date, v_sup, 'MYR', 1, 'draft')
+  values (v_org, 'bill', 'BILL-1', pg_temp.today(), v_sup, 'MYR', 1, 'draft')
   returning id into v_bill;
   insert into public.purchase_document_lines
     (org_id, document_id, line_no, line_type, item_id, description,
@@ -109,7 +109,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status, original_bill_id)
-  values (v_org, 'purchase_credit_note', 'PCN-DRAFT', current_date, v_sup,
+  values (v_org, 'purchase_credit_note', 'PCN-DRAFT', pg_temp.today(), v_sup,
           'MYR', 1, 'draft', v_bill)
   returning id into v_draft;
   insert into public.purchase_document_lines
@@ -193,7 +193,7 @@ declare
   v_r    record;
 begin
   v_org := pg_temp.test_org('Dua Baris Sdn Bhd');
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.warehouses (org_id, code, name)
   values (v_org, 'MAIN', 'Store') returning id into v_wh;
   insert into public.contacts (org_id, code, name, contact_type)
@@ -206,7 +206,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'bill', 'BILL-1', current_date, v_sup, 'MYR', 1, 'draft')
+  values (v_org, 'bill', 'BILL-1', pg_temp.today(), v_sup, 'MYR', 1, 'draft')
   returning id into v_bill;
   -- Same item, different descriptions: the good pallet and the damaged
   -- one. Collapsing them would let a credit against one exhaust the
@@ -255,7 +255,7 @@ declare
   v_note  uuid;
 begin
   v_org := pg_temp.test_org('Nota Debit Sdn Bhd');
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.warehouses (org_id, code, name)
   values (v_org, 'MAIN', 'Store') returning id into v_wh;
   insert into public.contacts (org_id, code, name, contact_type)
@@ -271,7 +271,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'bill', 'BILL-USD', current_date, v_sup, 'USD', 4.50,
+  values (v_org, 'bill', 'BILL-USD', pg_temp.today(), v_sup, 'USD', 4.50,
           'draft')
   returning id into v_bill;
   insert into public.purchase_document_lines
@@ -287,7 +287,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status, original_bill_id)
-  values (v_org, 'purchase_debit_note', 'PDN-1', current_date, v_sup,
+  values (v_org, 'purchase_debit_note', 'PDN-1', pg_temp.today(), v_sup,
           'USD', 4.50, 'posted', v_bill)
   returning id into v_debit;
   insert into public.purchase_document_lines

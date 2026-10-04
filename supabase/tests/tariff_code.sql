@@ -87,7 +87,7 @@ begin
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, subtotal, total_amount, balance_amount, status)
   values (p_org, 'invoice', 'INV-' || substr(gen_random_uuid()::text, 1, 8),
-          current_date, current_date + 30, p_buyer, 'MYR', 1,
+          pg_temp.today(), pg_temp.today() + 30, p_buyer, 'MYR', 1,
           100, 100, 100, 'draft')
   returning id into v_doc;
   insert into public.sales_document_lines
@@ -174,7 +174,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, subtotal, total_amount, balance_amount, status)
-  values (v_org, 'invoice', 'INV-FREE', current_date, current_date + 30,
+  values (v_org, 'invoice', 'INV-FREE', pg_temp.today(), pg_temp.today() + 30,
           v_buyer, 'MYR', 1, 100, 100, 100, 'draft')
   returning id into v_doc;
   insert into public.sales_document_lines

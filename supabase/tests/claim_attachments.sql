@@ -29,7 +29,7 @@ begin
   insert into public.expense_claims
     (org_id, claim_no, employee_id, claim_date, title, status, total_amount)
   values (p_org, 'CLM-' || substr(gen_random_uuid()::text, 1, 8), p_employee,
-          current_date, 'Parking', 'submitted', 12.00)
+          pg_temp.today(), 'Parking', 'submitted', 12.00)
   returning id into v_claim;
   return v_claim;
 end; $$;
@@ -61,12 +61,12 @@ begin
 
   insert into public.employees
     (org_id, employee_no, full_name, user_id, hire_date)
-  values (v_org, 'E-001', 'Aminah', v_staff_user, current_date)
+  values (v_org, 'E-001', 'Aminah', v_staff_user, pg_temp.today())
   returning id into v_staff;
 
   insert into public.employees
     (org_id, employee_no, full_name, user_id, hire_date)
-  values (v_org, 'E-002', 'Rajesh', v_other_user, current_date)
+  values (v_org, 'E-002', 'Rajesh', v_other_user, pg_temp.today())
   returning id into v_other;
 
   v_mine := pg_temp.claim_for(v_org, v_staff);

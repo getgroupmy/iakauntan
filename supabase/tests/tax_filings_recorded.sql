@@ -295,7 +295,7 @@ begin
   perform pg_temp.check_refused(
     'a sole proprietor cannot tick off a Form C',
     format('select public.record_tax_filing(%L, ''form_c'', '
-           'date ''2026-12-31'', ''filed'', current_date)', v_org),
+           'date ''2026-12-31'', ''filed'', pg_temp.today())', v_org),
     'No form_c obligation%', '22023');
 
   -- Their own return records perfectly well.
@@ -329,7 +329,7 @@ begin
   perform pg_temp.check_refused(
     'somebody outside the company cannot record a filing',
     format('select public.record_tax_filing(%L, ''form_c'', '
-           'date ''2026-06-30'', ''filed'', current_date)', v_org),
+           'date ''2026-06-30'', ''filed'', pg_temp.today())', v_org),
     'Not permitted to record a tax filing%', '42501');
 
   perform pg_temp.check_refused(

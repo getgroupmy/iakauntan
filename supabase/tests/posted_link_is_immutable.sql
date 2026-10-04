@@ -59,7 +59,7 @@ declare
 begin
   v_org := pg_temp.test_org('Sekali Sahaja Sdn Bhd');
   perform pg_temp.sign_in_as(v_owner);
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
 
   select id into v_cat from public.accounts
    where org_id = v_org and not is_group and is_active
@@ -69,7 +69,7 @@ begin
   insert into public.expenses
     (org_id, expense_no, expense_date, description, amount, tax_amount,
      total_amount, currency, exchange_rate, account_id, bank_account_id)
-  values (v_org, 'EXP-1', current_date, 'Petrol', 100, 0, 100, 'MYR', 1,
+  values (v_org, 'EXP-1', pg_temp.today(), 'Petrol', 100, 0, 100, 'MYR', 1,
           v_cat, v_bank) returning id into v_exp;
   v_entry := public.post_expense(v_exp);
 
@@ -78,7 +78,7 @@ begin
   insert into public.expenses
     (org_id, expense_no, expense_date, description, amount, tax_amount,
      total_amount, currency, exchange_rate, account_id, bank_account_id)
-  values (v_org, 'EXP-2', current_date, 'Tol', 20, 0, 20, 'MYR', 1,
+  values (v_org, 'EXP-2', pg_temp.today(), 'Tol', 20, 0, 20, 'MYR', 1,
           v_cat, v_bank) returning id into v_rcp;
 
   -- A journal belonging to something else, so the "pointed at a
@@ -90,7 +90,7 @@ begin
   insert into public.expenses
     (org_id, expense_no, expense_date, description, amount, tax_amount,
      total_amount, currency, exchange_rate, account_id, bank_account_id)
-  values (v_org, 'EXP-OTHER', current_date, 'Parkir', 5, 0, 5, 'MYR', 1,
+  values (v_org, 'EXP-OTHER', pg_temp.today(), 'Parkir', 5, 0, 5, 'MYR', 1,
           v_cat, v_bank) returning id into v_other;
   v_other_entry := public.post_expense(v_other);
 
@@ -243,7 +243,7 @@ declare
 begin
   v_org := pg_temp.test_org('Padanan Bank Sdn Bhd');
   perform pg_temp.sign_in_as(v_owner);
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
 
   select id into v_cat from public.accounts
    where org_id = v_org and not is_group and is_active
@@ -257,7 +257,7 @@ begin
   insert into public.expenses
     (org_id, expense_no, expense_date, description, amount, tax_amount,
      total_amount, currency, exchange_rate, account_id, bank_account_id)
-  values (v_org, 'EXP-B', current_date, 'Yuran', 50, 0, 50, 'MYR', 1, v_cat,
+  values (v_org, 'EXP-B', pg_temp.today(), 'Yuran', 50, 0, 50, 'MYR', 1, v_cat,
           v_bank)
   returning id into v_exp;
   v_entry := public.post_expense(v_exp);
@@ -265,7 +265,7 @@ begin
   insert into public.bank_transactions
     (org_id, bank_account_id, transaction_date, description, amount,
      transaction_type, gl_entry_id)
-  values (v_org, v_bank, current_date, 'Yuran bank', -50, 'charge', v_entry)
+  values (v_org, v_bank, pg_temp.today(), 'Yuran bank', -50, 'charge', v_entry)
   returning id into v_txn;
 
   update public.bank_transactions set gl_entry_id = null where id = v_txn;

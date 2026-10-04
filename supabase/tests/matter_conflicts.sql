@@ -227,7 +227,7 @@ declare
   r      record;
 begin
   perform public.create_fiscal_year(v_org,
-    date_trunc('year', current_date)::date);
+    date_trunc('year', pg_temp.today())::date);
   v_cl := pg_temp.mc_client(v_org, 'Sebuah Syarikat Sdn Bhd');
 
   v_m := public.open_matter(v_org, 'M-1', 'Fixed fee advice', v_cl, null,
@@ -244,7 +244,7 @@ begin
   -- the client will be asked for, not what they have been asked for.
   insert into public.time_entries
     (org_id, matter_id, entry_date, description, minutes, hourly_rate)
-  values (v_org, v_m, current_date, 'Drafting', 1200, 300);
+  values (v_org, v_m, pg_temp.today(), 'Drafting', 1200, 300);
   perform pg_temp.check_eq('unbilled time counts towards it',
     (select over_by from public.report_matters_over_agreed_fee(v_org)
       where matter_no = 'M-1'), 1000);
@@ -253,7 +253,7 @@ begin
   -- time goes on it.
   insert into public.time_entries
     (org_id, matter_id, entry_date, description, minutes, hourly_rate)
-  values (v_org, v_free, current_date, 'Attendance', 6000, 300);
+  values (v_org, v_free, pg_temp.today(), 'Attendance', 6000, 300);
   perform pg_temp.check_eq('a matter with no agreed fee is not over it',
     (select count(*) from public.report_matters_over_agreed_fee(v_org)
       where matter_no = 'M-2'), 0);
@@ -263,7 +263,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status, matter_id)
-  values (v_org, 'invoice', 'INV-1', current_date, v_cl, 'MYR', 1,
+  values (v_org, 'invoice', 'INV-1', pg_temp.today(), v_cl, 'MYR', 1,
           'approved', v_m)
   returning id into v_inv;
   insert into public.sales_document_lines
@@ -308,7 +308,7 @@ declare
   v_out uuid := pg_temp.another_user('outsider@mc.test');
 begin
   perform public.create_fiscal_year(v_org,
-    date_trunc('year', current_date)::date);
+    date_trunc('year', pg_temp.today())::date);
   v_cl := pg_temp.mc_client(v_org, 'Sebuah Syarikat Sdn Bhd');
   v_m := public.open_matter(v_org, 'M-1', 'Advice', v_cl, 'Somebody Bhd',
     'corporate', null, null, 1000, 300);
@@ -318,7 +318,7 @@ begin
   -- firm with nothing on its books.
   insert into public.time_entries
     (org_id, matter_id, entry_date, description, minutes, hourly_rate)
-  values (v_org, v_m, current_date, 'Advice', 600, 300);
+  values (v_org, v_m, pg_temp.today(), 'Advice', 600, 300);
 
   perform pg_temp.check_eq('the firm sees its own conflict',
     (select count(*) from public.check_matter_conflict(

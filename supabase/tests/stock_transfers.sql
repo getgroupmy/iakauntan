@@ -51,7 +51,7 @@ declare
   v_value  numeric;
 begin
   v_org := pg_temp.test_org('Dapur Pusat Sdn Bhd');
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['inventory','pos']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
@@ -88,14 +88,14 @@ begin
     (org_id, movement_no, movement_date, movement_type, item_id,
      warehouse_id, quantity, unit_cost)
   values
-    (v_org, 'OB-1', current_date, 'opening_balance', v_rice,    v_kitchen, 100, 4.00),
-    (v_org, 'OB-2', current_date, 'opening_balance', v_chicken, v_kitchen,  10, 12.00);
+    (v_org, 'OB-1', pg_temp.today(), 'opening_balance', v_rice,    v_kitchen, 100, 4.00),
+    (v_org, 'OB-2', pg_temp.today(), 'opening_balance', v_chicken, v_kitchen,  10, 12.00);
 
   -- ------------------------------------------------------------------
   -- 1. Writing a transfer down
   -- ------------------------------------------------------------------
   v_t := public.upsert_stock_transfer(
-    null, v_org, v_kitchen, v_shop, current_date,
+    null, v_org, v_kitchen, v_shop, pg_temp.today(),
     jsonb_build_array(
       jsonb_build_object('item', v_rice, 'quantity', 20, 'uom', 'KGM')),
     'Monday delivery');
@@ -110,7 +110,7 @@ begin
   -- Two places, and they have to be two.
   begin
     perform public.upsert_stock_transfer(
-      null, v_org, v_kitchen, v_kitchen, current_date, '[]'::jsonb);
+      null, v_org, v_kitchen, v_kitchen, pg_temp.today(), '[]'::jsonb);
     perform pg_temp.check_true('a store cannot send to itself', false);
   exception when others then
     perform pg_temp.check_true('a store cannot send to itself', true);
@@ -120,7 +120,7 @@ begin
   -- nothing.
   begin
     perform public.upsert_stock_transfer(
-      null, v_org, v_kitchen, v_shop, current_date,
+      null, v_org, v_kitchen, v_shop, pg_temp.today(),
       jsonb_build_array(
         jsonb_build_object('item', v_breast, 'quantity', 1, 'uom', 'LTR')));
     perform pg_temp.check_true('a unit that does not convert is refused', false);
@@ -133,7 +133,7 @@ begin
 
   -- And a kitchen cannot send what it has not got.
   perform public.upsert_stock_transfer(
-    v_t, v_org, v_kitchen, v_shop, current_date,
+    v_t, v_org, v_kitchen, v_shop, pg_temp.today(),
     jsonb_build_array(
       jsonb_build_object('item', v_rice, 'quantity', 500, 'uom', 'KGM')));
   begin
@@ -152,7 +152,7 @@ begin
   -- Written in bags, which this shop has said hold ten kilograms each.
   perform public.upsert_item_uom_pack(v_rice, 'BG', 10);
   perform public.upsert_stock_transfer(
-    v_t, v_org, v_kitchen, v_shop, current_date,
+    v_t, v_org, v_kitchen, v_shop, pg_temp.today(),
     jsonb_build_array(
       jsonb_build_object('item', v_rice, 'quantity', 2, 'uom', 'BG')));
 
@@ -192,7 +192,7 @@ begin
   -- A sent transfer is a record, not a draft.
   begin
     perform public.upsert_stock_transfer(
-      v_t, v_org, v_kitchen, v_shop, current_date, '[]'::jsonb);
+      v_t, v_org, v_kitchen, v_shop, pg_temp.today(), '[]'::jsonb);
     perform pg_temp.check_true('a sent transfer cannot be re-typed', false);
   exception when others then
     get stacked diagnostics v_msg = message_text;
@@ -268,7 +268,7 @@ begin
   -- 4. A van that loses a bag
   -- ------------------------------------------------------------------
   v_t := public.upsert_stock_transfer(
-    null, v_org, v_kitchen, v_shop, current_date,
+    null, v_org, v_kitchen, v_shop, pg_temp.today(),
     jsonb_build_array(
       jsonb_build_object('item', v_rice, 'quantity', 10, 'uom', 'KGM')));
   perform public.send_stock_transfer(v_t);
@@ -541,7 +541,7 @@ begin
   perform pg_temp.allow_many_companies();
   v_org := pg_temp.test_org('Van Kedua Sdn Bhd');
   perform pg_temp.allow_many_companies();
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['inventory','pos']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
@@ -558,13 +558,13 @@ begin
   insert into public.stock_movements
     (org_id, movement_no, movement_date, movement_type, item_id,
      warehouse_id, quantity, unit_cost)
-  values (v_org, 'VK-0001', current_date, 'opening_balance', v_item, v_a, 20, 5);
+  values (v_org, 'VK-0001', pg_temp.today(), 'opening_balance', v_item, v_a, 20, 5);
 
   -- ------------------------------------------------------------------
   -- Nothing on it
   -- ------------------------------------------------------------------
   v_empty := public.upsert_stock_transfer(
-    null, v_org, v_a, v_b, current_date, '[]'::jsonb, 'Empty van');
+    null, v_org, v_a, v_b, pg_temp.today(), '[]'::jsonb, 'Empty van');
   begin
     perform public.send_stock_transfer(v_empty);
     raise exception 'FAIL sent a transfer with nothing on it';
@@ -578,7 +578,7 @@ begin
   -- Who may send it
   -- ------------------------------------------------------------------
   v_t := public.upsert_stock_transfer(
-    null, v_org, v_a, v_b, current_date,
+    null, v_org, v_a, v_b, pg_temp.today(),
     jsonb_build_array(jsonb_build_object(
       'item', v_item, 'quantity', 5, 'uom', 'C62')),
     'Five boxes');
@@ -620,7 +620,7 @@ begin
   -- are asserted, because the setting is only a setting if turning it
   -- on changes something.
   v_short := public.upsert_stock_transfer(
-    null, v_org, v_a, v_b, current_date,
+    null, v_org, v_a, v_b, pg_temp.today(),
     jsonb_build_array(jsonb_build_object(
       'item', v_item, 'quantity', 20, 'uom', 'C62')),
     'More than there is');
@@ -663,12 +663,12 @@ begin
   insert into public.stock_movements
     (org_id, movement_no, movement_date, movement_type, item_id,
      warehouse_id, quantity, unit_cost)
-  values (v_org, 'VK-0002', current_date, 'opening_balance', v_tracked, v_a, 6, 9)
+  values (v_org, 'VK-0002', pg_temp.today(), 'opening_balance', v_tracked, v_a, 6, 9)
   returning id into v_mv;
 
   update public.items set tracking = 'batch' where id = v_tracked;
   insert into public.stock_lots (org_id, item_id, lot_ref, kind, expiry_date)
-  values (v_org, v_tracked, 'LOT-A', 'batch', current_date + 365)
+  values (v_org, v_tracked, 'LOT-A', 'batch', pg_temp.today() + 365)
   returning id into v_lot;
   insert into public.stock_movement_lots (org_id, movement_id, lot_id, quantity)
   values (v_org, v_mv, v_lot, 6);
@@ -677,7 +677,7 @@ begin
     app.lot_available(v_tracked, v_a), 6);
 
   v_batch := public.upsert_stock_transfer(
-    null, v_org, v_a, v_b, current_date,
+    null, v_org, v_a, v_b, pg_temp.today(),
     jsonb_build_array(jsonb_build_object(
       'item', v_tracked, 'quantity', 10, 'uom', 'C62')),
     'Ten of six');
@@ -714,7 +714,7 @@ begin
   perform pg_temp.allow_many_companies();
   v_org := pg_temp.test_org('Van Ketiga Sdn Bhd');
   perform pg_temp.allow_many_companies();
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['inventory','pos']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
@@ -730,10 +730,10 @@ begin
   insert into public.stock_movements
     (org_id, movement_no, movement_date, movement_type, item_id,
      warehouse_id, quantity, unit_cost)
-  values (v_org, 'VT-0001', current_date, 'opening_balance', v_item, v_a, 20, 3);
+  values (v_org, 'VT-0001', pg_temp.today(), 'opening_balance', v_item, v_a, 20, 3);
 
   v_t := public.upsert_stock_transfer(
-    null, v_org, v_a, v_b, current_date,
+    null, v_org, v_a, v_b, pg_temp.today(),
     jsonb_build_array(jsonb_build_object(
       'item', v_item, 'quantity', 8, 'uom', 'C62')),
     'Eight tins');
@@ -827,7 +827,7 @@ begin
   perform pg_temp.allow_many_companies();
   v_org := pg_temp.test_org('Van Keempat Sdn Bhd');
   perform pg_temp.allow_many_companies();
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['inventory','pos']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
@@ -843,10 +843,10 @@ begin
   insert into public.stock_movements
     (org_id, movement_no, movement_date, movement_type, item_id,
      warehouse_id, quantity, unit_cost)
-  values (v_org, 'VK-0001', current_date, 'opening_balance', v_item, v_a, 12, 4);
+  values (v_org, 'VK-0001', pg_temp.today(), 'opening_balance', v_item, v_a, 12, 4);
 
   v_t := public.upsert_stock_transfer(
-    null, v_org, v_a, v_b, current_date,
+    null, v_org, v_a, v_b, pg_temp.today(),
     jsonb_build_array(jsonb_build_object(
       'item', v_item, 'quantity', 5, 'uom', 'C62')),
     'Five bags');

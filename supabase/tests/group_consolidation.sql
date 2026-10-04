@@ -75,7 +75,7 @@ begin
   -- A management fee: 1,000 plus 80 of service tax, in both ledgers.
   insert into public.gl_entries (org_id, entry_no, entry_date, source,
     description, total_debit, total_credit, status, posted_at)
-  values (v_a, 'A-1', current_date, 'sales_invoice', 'to B',
+  values (v_a, 'A-1', pg_temp.today(), 'sales_invoice', 'to B',
           1080, 1080, 'posted', now()) returning id into v_e;
   insert into public.gl_lines (org_id, entry_id, line_no, account_id,
     debit, credit, contact_id)
@@ -85,7 +85,7 @@ begin
 
   insert into public.gl_entries (org_id, entry_no, entry_date, source,
     description, total_debit, total_credit, status, posted_at)
-  values (v_b, 'B-1', current_date, 'purchase_bill', 'from A',
+  values (v_b, 'B-1', pg_temp.today(), 'purchase_bill', 'from A',
           1080, 1080, 'posted', now()) returning id into v_e;
   insert into public.gl_lines (org_id, entry_id, line_no, account_id,
     debit, credit, contact_id)

@@ -44,7 +44,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
      status, valid_until, delivery_date)
-  values (p_org, 'quotation', p_no, current_date - 400, v_cust, 'MYR', 1,
+  values (p_org, 'quotation', p_no, pg_temp.today() - 400, v_cust, 'MYR', 1,
           'draft', p_valid, p_delivery)
   returning id into v_doc;
 
@@ -66,8 +66,8 @@ declare
   v_order uuid;
   v_said  text;
 begin
-  v_old  := pg_temp.dd_quote(v_org, 'QT-OLD',  current_date - 30);
-  v_live := pg_temp.dd_quote(v_org, 'QT-LIVE', current_date + 30);
+  v_old  := pg_temp.dd_quote(v_org, 'QT-OLD',  pg_temp.today() - 30);
+  v_live := pg_temp.dd_quote(v_org, 'QT-LIVE', pg_temp.today() + 30);
   -- Every quotation raised before `0374` has none, and refusing them all
   -- would break every open quote in every company on the day it applied.
   v_none := pg_temp.dd_quote(v_org, 'QT-NONE', null);
@@ -92,7 +92,7 @@ begin
 
   -- The way through, which is the half that keeps the refusal honest.
   begin
-    perform public.extend_document_validity(v_old, current_date - 1);
+    perform public.extend_document_validity(v_old, pg_temp.today() - 1);
     raise exception 'FAIL: a quotation was extended into the past';
   exception when sqlstate '23514' then
     v_said := sqlerrm;
@@ -101,22 +101,22 @@ begin
     v_said like '%already passed%');
 
   begin
-    perform public.extend_document_validity(v_old, current_date - 500);
+    perform public.extend_document_validity(v_old, pg_temp.today() - 500);
     raise exception 'FAIL: a quotation expired before it was raised';
   exception when sqlstate '23514' then
     null;  -- caught above by the same guard; the ordering is the point
   end;
 
-  perform public.extend_document_validity(v_old, current_date + 14);
+  perform public.extend_document_validity(v_old, pg_temp.today() + 14);
   perform pg_temp.check_eq('extended, it carries the new date',
     (select valid_until from public.sales_documents where id = v_old)::text,
-    (current_date + 14)::text);
+    (pg_temp.today() + 14)::text);
   v_order := public.transfer_document(v_old, 'sales_order');
   perform pg_temp.check_true('and then it transfers', v_order is not null);
 
   -- Only the two document types that are offers have a validity at all.
   begin
-    perform public.extend_document_validity(v_order, current_date + 30);
+    perform public.extend_document_validity(v_order, pg_temp.today() + 30);
     raise exception 'FAIL: a sales order was given a validity';
   exception when sqlstate '22023' then
     v_said := sqlerrm;

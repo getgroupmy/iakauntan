@@ -77,7 +77,7 @@ declare
   v_t      text;
 begin
   v_org := pg_temp.test_org('Beli Barang Sdn Bhd');
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
 
   insert into public.warehouses (org_id, code, name, is_default)
   values (v_org, 'MAIN', 'Store', true) returning id into v_wh;
@@ -118,7 +118,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'purchase_order', 'PO-1', current_date, v_sup, 'MYR', 1,
+  values (v_org, 'purchase_order', 'PO-1', pg_temp.today(), v_sup, 'MYR', 1,
           'draft')
   returning id into v_po;
 
@@ -155,7 +155,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status, shipping_amount, supplier_doc_no)
-  values (v_org, 'bill', 'BILL-1', current_date - 3, v_sup, 'MYR', 1,
+  values (v_org, 'bill', 'BILL-1', pg_temp.today() - 3, v_sup, 'MYR', 1,
           'draft', 50, 'INV-THEIRS-1')
   returning id into v_bill;
 
@@ -264,7 +264,7 @@ begin
   select entry_date::text, source::text into v_t, v_msg
     from public.gl_entries where id = v_entry;
   perform pg_temp.check_eq('the journal carries the bill''s own date',
-    v_t, (current_date - 3)::text);
+    v_t, (pg_temp.today() - 3)::text);
   perform pg_temp.check_true(
     'and is filed as a purchase bill: ' || v_msg,
     v_msg = 'purchase_bill');
@@ -317,7 +317,7 @@ begin
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status, subtotal, total_amount, base_total_amount,
      balance_amount)
-  values (v_org, 'goods_received', 'GRN-1', current_date, v_sup, 'MYR', 1,
+  values (v_org, 'goods_received', 'GRN-1', pg_temp.today(), v_sup, 'MYR', 1,
           'draft', 200, 200, 200, 200)
   returning id into v_grn;
   insert into public.purchase_document_lines
@@ -339,7 +339,7 @@ begin
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status, subtotal, total_amount, base_total_amount,
      balance_amount, parent_id)
-  values (v_org, 'bill', 'BILL-2', current_date, v_sup, 'MYR', 1, 'draft',
+  values (v_org, 'bill', 'BILL-2', pg_temp.today(), v_sup, 'MYR', 1, 'draft',
           200, 200, 200, 200, v_grn)
   returning id into v_child;
   insert into public.purchase_document_lines
@@ -382,7 +382,7 @@ begin
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status, subtotal, total_amount, base_total_amount,
      balance_amount, original_bill_id)
-  values (v_org, 'purchase_credit_note', 'PCN-1', current_date, v_sup,
+  values (v_org, 'purchase_credit_note', 'PCN-1', pg_temp.today(), v_sup,
           'MYR', 1, 'draft', 400, 400, 400, 400, v_bill)
   returning id into v_note;
   insert into public.purchase_document_lines

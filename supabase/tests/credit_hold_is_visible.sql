@@ -29,7 +29,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
      currency, exchange_rate)
-  values (p_org, 'invoice', p_no, current_date, current_date, p_contact,
+  values (p_org, 'invoice', p_no, pg_temp.today(), pg_temp.today(), p_contact,
           'draft', 'MYR', 1)
   returning id into v_doc;
   insert into public.sales_document_lines
@@ -55,7 +55,7 @@ begin
   perform pg_temp.sign_in_as(pg_temp.test_user());
   v_org := pg_temp.test_org('Tahan Kredit Sdn Bhd');
   perform public.create_fiscal_year(
-    v_org, date_trunc('year', current_date)::date);
+    v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.items
     (org_id, code, name, item_type, track_inventory, unit_price)
   values (v_org, 'SVC', 'Service', 'service', false, 100);

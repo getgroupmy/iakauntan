@@ -246,7 +246,7 @@ begin
   v_first := substring(inv.invoice_no from '[0-9]+$')::integer;
 
   perform pg_temp.check_true('the invoice is numbered by year',
-    inv.invoice_no like 'KH-' || to_char(current_date, 'YYYY') || '-%');
+    inv.invoice_no like 'KH-' || to_char(pg_temp.today(), 'YYYY') || '-%');
   perform pg_temp.check_true('and carries both registration numbers',
     inv.issuer_registration_no = '201901030189'
     and inv.issuer_old_registration_no = '1339519K');
@@ -289,7 +289,7 @@ begin
   perform pg_temp.check_eq('numbers run in sequence',
     substring(inv.invoice_no from '[0-9]+$')::integer, v_first + 1);
   perform pg_temp.check_true('and stay padded and prefixed',
-    inv.invoice_no ~ ('^KH-' || to_char(current_date, 'YYYY') || '-[0-9]{4}$'));
+    inv.invoice_no ~ ('^KH-' || to_char(pg_temp.today(), 'YYYY') || '-[0-9]{4}$'));
 
   -- Goodwill, and taking it back, both leave a line.
   perform public.platform_adjust_credit(v_org, 25, 'Outage on 12 Aug');

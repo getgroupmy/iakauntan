@@ -550,7 +550,7 @@ begin
   insert into public.device_tokens (user_id, token, platform, last_seen_at)
   values (v_siti, 'token-fresh', 'android', now());
 
-  perform app.run_daily_jobs(current_date);
+  perform app.run_daily_jobs(pg_temp.today());
 
   select status::text, end_reason into v_status, v_reason
     from public.chat_calls where id = v_call;

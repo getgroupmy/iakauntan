@@ -41,7 +41,7 @@ declare
   v_n      numeric;
 begin
   v_org := pg_temp.test_org('Pengimport Bahan Sdn Bhd');
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['inventory','purchases','sales']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
@@ -70,7 +70,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'bill', 'BILL-1', current_date, v_sup, 'MYR', 1, 'draft')
+  values (v_org, 'bill', 'BILL-1', pg_temp.today(), v_sup, 'MYR', 1, 'draft')
   returning id into v_bill;
   insert into public.purchase_document_lines
     (org_id, document_id, line_no, line_type, item_id, description,
@@ -98,7 +98,7 @@ begin
   -- RM 400 of ocean freight over RM 1000 of tiles and RM 3000 of taps:
   -- a quarter to the tiles, three quarters to the taps.
   v_run := public.upsert_landed_cost_run(
-    null, v_org, current_date,
+    null, v_org, pg_temp.today(),
     jsonb_build_array(jsonb_build_object('bill', v_bill)),
     jsonb_build_array(jsonb_build_object(
       'description', 'Ocean freight', 'amount', 400, 'basis', 'value')),
@@ -166,7 +166,7 @@ begin
   v_org2 := pg_temp.test_org('Pengimport Lain Sdn Bhd');
   perform pg_temp.sign_in_as(v_owner);
   insert into public.landed_cost_runs (org_id, run_no, run_date, status)
-  values (v_org2, 'LC-OTHER', current_date, 'draft') returning id into v_run2;
+  values (v_org2, 'LC-OTHER', pg_temp.today(), 'draft') returning id into v_run2;
   insert into public.landed_cost_charges
     (org_id, run_id, line_no, description, amount, basis, account_id)
   values (v_org2, v_run2, 1, 'Ocean freight', 90, 'value',
@@ -224,7 +224,7 @@ begin
   -- Customs duty is on the count, not the value: the same hundred of
   -- each takes the same hundred ringgit each.
   v_run := public.upsert_landed_cost_run(
-    null, v_org, current_date,
+    null, v_org, pg_temp.today(),
     jsonb_build_array(jsonb_build_object('bill', v_bill)),
     jsonb_build_array(jsonb_build_object(
       'description', 'Import duty', 'amount', 200, 'basis', 'quantity',
@@ -255,7 +255,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'invoice', 'INV-1', current_date, current_date, v_cust,
+  values (v_org, 'invoice', 'INV-1', pg_temp.today(), pg_temp.today(), v_cust,
           'MYR', 1, 'draft')
   returning id into v_inv;
   insert into public.sales_document_lines
@@ -269,7 +269,7 @@ begin
     50::numeric);
 
   v_run := public.upsert_landed_cost_run(
-    null, v_org, current_date,
+    null, v_org, pg_temp.today(),
     jsonb_build_array(jsonb_build_object('bill', v_bill)),
     jsonb_build_array(jsonb_build_object(
       'description', 'A late haulage invoice', 'amount', 400,
@@ -307,7 +307,7 @@ begin
   -- 4. A charge that does not divide, still lands to the sen
   -- ------------------------------------------------------------------
   v_run := public.upsert_landed_cost_run(
-    null, v_org, current_date,
+    null, v_org, pg_temp.today(),
     jsonb_build_array(jsonb_build_object('bill', v_bill)),
     jsonb_build_array(jsonb_build_object(
       'description', 'Port charges', 'amount', 100.01, 'basis', 'quantity')),
@@ -324,7 +324,7 @@ begin
   -- 5. What it refuses
   -- ------------------------------------------------------------------
   v_run := public.upsert_landed_cost_run(
-    null, v_org, current_date,
+    null, v_org, pg_temp.today(),
     jsonb_build_array(jsonb_build_object('bill', v_bill)),
     jsonb_build_array(jsonb_build_object(
       'description', 'Insurance', 'amount', 50, 'basis', 'value')),
@@ -342,7 +342,7 @@ begin
 
   begin
     perform public.upsert_landed_cost_run(
-      v_run, v_org, current_date,
+      v_run, v_org, pg_temp.today(),
       jsonb_build_array(jsonb_build_object('bill', v_bill)),
       jsonb_build_array(jsonb_build_object(
         'description', 'Insurance', 'amount', 5000, 'basis', 'value')),
@@ -359,11 +359,11 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'bill', 'BILL-2', current_date, v_sup, 'MYR', 1, 'draft')
+  values (v_org, 'bill', 'BILL-2', pg_temp.today(), v_sup, 'MYR', 1, 'draft')
   returning id into v_bill;
   begin
     perform public.upsert_landed_cost_run(
-      null, v_org, current_date,
+      null, v_org, pg_temp.today(),
       jsonb_build_array(jsonb_build_object('bill', v_bill)),
       jsonb_build_array(jsonb_build_object(
         'description', 'Freight', 'amount', 10, 'basis', 'value')),
@@ -389,7 +389,7 @@ begin
    where item_id = v_tap and movement_type = 'landed_cost';
 
   v_run := public.upsert_landed_cost_run(
-    null, v_org, current_date,
+    null, v_org, pg_temp.today(),
     jsonb_build_array(jsonb_build_object(
       'bill', (select t.bill_id from public.landed_cost_targets t
                 join public.landed_cost_runs r on r.id = t.run_id
@@ -438,7 +438,7 @@ declare
   v_bill_a uuid; v_bill_b uuid; v_inv uuid;
   v_a1 uuid; v_a2 uuid; v_a3 uuid; v_inv_acct uuid;
   v_run    uuid; v_entry uuid; v_bare uuid; v_entry_run uuid;
-  v_when   date := current_date - 30;
+  v_when   date := pg_temp.today() - 30;
   v_msg    text;
 begin
   perform pg_temp.sign_in_as(v_owner);
@@ -448,8 +448,8 @@ begin
   -- The run is dated thirty days back, which can be last year in
   -- January, so both years get a fiscal period.
   perform public.create_fiscal_year(v_org,
-    (date_trunc('year', current_date) - interval '1 year')::date);
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+    (date_trunc('year', pg_temp.today()) - interval '1 year')::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['inventory','purchases','sales']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
@@ -479,7 +479,7 @@ begin
   -- Two bills, so a run can be aimed at one item or at both.
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate, status)
-  values (v_org, 'bill', 'BILL-A', current_date - 40, v_sup, 'MYR', 1, 'draft')
+  values (v_org, 'bill', 'BILL-A', pg_temp.today() - 40, v_sup, 'MYR', 1, 'draft')
   returning id into v_bill_a;
   insert into public.purchase_document_lines
     (org_id, document_id, line_no, line_type, item_id, description,
@@ -489,7 +489,7 @@ begin
 
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate, status)
-  values (v_org, 'bill', 'BILL-B', current_date - 40, v_sup, 'MYR', 1, 'draft')
+  values (v_org, 'bill', 'BILL-B', pg_temp.today() - 40, v_sup, 'MYR', 1, 'draft')
   returning id into v_bill_b;
   insert into public.purchase_document_lines
     (org_id, document_id, line_no, line_type, item_id, description,
@@ -502,7 +502,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'invoice', 'INV-A', current_date - 35, current_date - 35,
+  values (v_org, 'invoice', 'INV-A', pg_temp.today() - 35, pg_temp.today() - 35,
           v_cust, 'MYR', 1, 'draft')
   returning id into v_inv;
   insert into public.sales_document_lines
@@ -768,7 +768,7 @@ declare
 begin
   perform pg_temp.sign_in_as(v_owner);
   v_org := pg_temp.test_org('Kos Enggan Sdn Bhd');
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   perform pg_temp.sign_in_as(v_owner);
 
   insert into public.warehouses (org_id, code, name, is_default)
@@ -784,7 +784,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'bill', 'BILL-K', current_date, v_sup, 'MYR', 1, 'draft')
+  values (v_org, 'bill', 'BILL-K', pg_temp.today(), v_sup, 'MYR', 1, 'draft')
   returning id into v_bill;
   insert into public.purchase_document_lines
     (org_id, document_id, line_no, line_type, item_id, description,
@@ -796,13 +796,13 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'bill', 'BILL-DRAF', current_date, v_sup, 'MYR', 1, 'draft')
+  values (v_org, 'bill', 'BILL-DRAF', pg_temp.today(), v_sup, 'MYR', 1, 'draft')
   returning id into v_draft;
 
   -- Freight on a bill nobody has posted: the goods are not on a shelf,
   -- so there is nothing for the cost to land on.
   begin
-    perform public.upsert_landed_cost_run(null, v_org, current_date,
+    perform public.upsert_landed_cost_run(null, v_org, pg_temp.today(),
       jsonb_build_array(jsonb_build_object('bill', v_draft)),
       '[]'::jsonb, 'draf');
     perform pg_temp.check_true(
@@ -820,7 +820,7 @@ begin
   select id into v_group from public.accounts
    where org_id = v_org and is_group limit 1;
   begin
-    perform public.upsert_landed_cost_run(null, v_org, current_date,
+    perform public.upsert_landed_cost_run(null, v_org, pg_temp.today(),
       '[]'::jsonb,
       jsonb_build_array(jsonb_build_object(
         'description', 'Ocean freight', 'amount', 100,
@@ -842,10 +842,10 @@ begin
   v_org2 := pg_temp.test_org('Kos Jiran Sdn Bhd');
   perform pg_temp.sign_in_as(v_owner);
   insert into public.landed_cost_runs (org_id, run_no, run_date, status)
-  values (v_org2, 'LC-JIRAN', current_date, 'draft') returning id into v_theirs;
+  values (v_org2, 'LC-JIRAN', pg_temp.today(), 'draft') returning id into v_theirs;
 
   begin
-    perform public.upsert_landed_cost_run(v_theirs, v_org, current_date,
+    perform public.upsert_landed_cost_run(v_theirs, v_org, pg_temp.today(),
       '[]'::jsonb, '[]'::jsonb, 'jiran');
     perform pg_temp.check_true(
       'another company''s run cannot be edited from here', false);
@@ -866,12 +866,12 @@ begin
     insert into public.purchase_documents
       (org_id, doc_type, doc_no, doc_date, contact_id, currency,
        exchange_rate, status)
-    values (v_org2, 'bill', 'BILL-J', current_date, v_theirbill, 'MYR', 1,
+    values (v_org2, 'bill', 'BILL-J', pg_temp.today(), v_theirbill, 'MYR', 1,
             'posted')
     returning id into v_theirbill;
 
     begin
-      perform public.upsert_landed_cost_run(null, v_org, current_date,
+      perform public.upsert_landed_cost_run(null, v_org, pg_temp.today(),
         jsonb_build_array(jsonb_build_object('bill', v_theirbill)),
         '[]'::jsonb, 'bil jiran');
       perform pg_temp.check_true(
@@ -892,7 +892,7 @@ begin
   -- round changes nothing that reaches the row. The assertion is kept
   -- because it pins the figure a person sees; it does not prove that
   -- call is load-bearing, and the column type is why.
-  v_run := public.upsert_landed_cost_run(null, v_org, current_date,
+  v_run := public.upsert_landed_cost_run(null, v_org, pg_temp.today(),
     jsonb_build_array(jsonb_build_object('bill', v_bill)),
     jsonb_build_array(jsonb_build_object(
       'description', 'Ocean freight', 'amount', 100.0/3, 'basis', 'quantity')),
@@ -917,7 +917,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'bill', 'BILL-K2', current_date, v_sup, 'MYR', 1, 'draft')
+  values (v_org, 'bill', 'BILL-K2', pg_temp.today(), v_sup, 'MYR', 1, 'draft')
   returning id into v_bill2;
   insert into public.purchase_document_lines
     (org_id, document_id, line_no, line_type, item_id, description,
@@ -926,7 +926,7 @@ begin
           10.00, v_wh);
   perform public.post_purchase_document(v_bill2);
 
-  v_run2 := public.upsert_landed_cost_run(v_run, v_org, current_date,
+  v_run2 := public.upsert_landed_cost_run(v_run, v_org, pg_temp.today(),
     jsonb_build_array(jsonb_build_object('bill', v_bill2)),
     jsonb_build_array(
       jsonb_build_object('description', 'Ocean freight', 'amount', 60),

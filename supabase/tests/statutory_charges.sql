@@ -36,7 +36,7 @@ begin
   values (v_org, 'property_nonstrata', true, now())
   on conflict (org_id, module_code) do update set is_enabled = true;
   perform public.create_fiscal_year(v_org,
-    date_trunc('year', current_date)::date);
+    date_trunc('year', pg_temp.today())::date);
   return v_org;
 end $$;
 

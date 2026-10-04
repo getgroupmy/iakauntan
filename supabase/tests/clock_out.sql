@@ -77,7 +77,7 @@ begin
   insert into public.employees
     (org_id, employee_no, user_id, full_name, hire_date, employment_status)
   values (v_org, 'E1', v_user, 'Fixture Employee',
-          current_date - 30, 'active')
+          pg_temp.today() - 30, 'active')
   returning id into v_emp;
 
   -- Nine to five with an hour off: 480 minutes of shift, 420 scheduled.
@@ -90,7 +90,7 @@ begin
   returning id into v_shift;
   insert into public.employee_shifts
     (org_id, employee_id, shift_id, effective_from)
-  values (v_org, v_emp, v_shift, current_date - 30);
+  values (v_org, v_emp, v_shift, pg_temp.today() - 30);
 
   -- ==================================================================
   -- An ordinary long day
@@ -222,7 +222,7 @@ begin
     (j ->> 'overtime_minutes')::integer, 120);
   insert into public.employee_shifts
     (org_id, employee_id, shift_id, effective_from)
-  values (v_org, v_emp, v_shift, current_date - 30);
+  values (v_org, v_emp, v_shift, pg_temp.today() - 30);
 
   -- ==================================================================
   -- What it refuses

@@ -28,7 +28,7 @@ returns uuid language plpgsql as $$
 declare v_org uuid := pg_temp.test_org(p_name);
 begin
   perform public.create_fiscal_year(
-    v_org, date_trunc('year', current_date)::date);
+    v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'C', 'Pembeli Sdn Bhd', 'customer'),
          (v_org, 'S', 'Penjual Sdn Bhd', 'supplier');
@@ -47,7 +47,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
      currency, exchange_rate)
-  values (p_org, 'invoice', p_no, current_date, current_date,
+  values (p_org, 'invoice', p_no, pg_temp.today(), pg_temp.today(),
           (select id from public.contacts where org_id = p_org and code = 'C'),
           'draft', 'MYR', 1)
   returning id into v_id;
@@ -66,7 +66,7 @@ returns uuid language sql as $$
   insert into public.receipts
     (org_id, receipt_no, receipt_date, contact_id, bank_account_id,
      currency, exchange_rate, amount, unapplied_amount)
-  values (p_org, p_no, current_date,
+  values (p_org, p_no, pg_temp.today(),
           (select id from public.contacts where org_id = p_org and code = 'C'),
           (select id from public.bank_accounts where org_id = p_org limit 1),
           'MYR', 1, p_amt, p_amt)
@@ -93,7 +93,7 @@ begin
   -- The measured defect, in one line.
   begin
     perform public.allocate_with_discount(v_rcp, v_inv, 5000, null,
-                                          current_date);
+                                          pg_temp.today());
     v_took := true;
   exception when others then
     get stacked diagnostics v_msg = message_text;
@@ -115,7 +115,7 @@ begin
   -- A part payment is untouched by this. It is the ordinary case and
   -- the one a guard written carelessly would break.
   v_alloc := public.allocate_with_discount(v_rcp, v_inv, 400, null,
-                                           current_date);
+                                           pg_temp.today());
   perform pg_temp.check_eq('a part payment goes through',
     (select balance_amount from public.sales_documents where id = v_inv),
     600::numeric);
@@ -125,7 +125,7 @@ begin
 
   -- Exactly the balance, to the sen, is settlement and not overpayment.
   perform public.allocate_with_discount(v_rcp, v_inv, 600, null,
-                                        current_date);
+                                        pg_temp.today());
   perform pg_temp.check_eq('and the rest of it settles the invoice',
     (select balance_amount from public.sales_documents where id = v_inv),
     0::numeric);
@@ -136,7 +136,7 @@ begin
   -- One sen more than nothing.
   begin
     perform public.allocate_with_discount(v_rcp, v_inv, 0.01, null,
-                                          current_date);
+                                          pg_temp.today());
     v_took := true;
   exception when sqlstate '23514' then v_took := false;
   end;
@@ -172,11 +172,11 @@ begin
   -- allocation is within its own document; what is wrong is that the
   -- money was only ever RM1,000.
   v_rcp := pg_temp.oa_receipt(v_org, 'RCP-2', 1000);
-  perform public.allocate_with_discount(v_rcp, v_a, 800, null, current_date);
+  perform public.allocate_with_discount(v_rcp, v_a, 800, null, pg_temp.today());
 
   begin
     perform public.allocate_with_discount(v_rcp, v_b, 800, null,
-                                          current_date);
+                                          pg_temp.today());
     v_took := true;
   exception when others then
     get stacked diagnostics v_msg = message_text;
@@ -197,7 +197,7 @@ begin
 
   -- Which is the answer to an overpayment: it sits there, on the
   -- receipt, until somebody decides what it is.
-  perform public.allocate_with_discount(v_rcp, v_b, 200, null, current_date);
+  perform public.allocate_with_discount(v_rcp, v_b, 200, null, pg_temp.today());
   perform pg_temp.check_eq('what is left of it can still be applied',
     (select unapplied_amount from public.receipts where id = v_rcp),
     0::numeric);
@@ -270,7 +270,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, status, currency,
      exchange_rate)
-  values (v_org, 'bill', 'BILL-1', current_date,
+  values (v_org, 'bill', 'BILL-1', pg_temp.today(),
           (select id from public.contacts where org_id = v_org and code = 'S'),
           'draft', 'MYR', 1)
   returning id into v_bill;
@@ -283,7 +283,7 @@ begin
   insert into public.purchase_payments
     (org_id, payment_no, payment_date, contact_id, bank_account_id,
      currency, exchange_rate, amount, unapplied_amount)
-  values (v_org, 'PAY-1', current_date,
+  values (v_org, 'PAY-1', pg_temp.today(),
           (select id from public.contacts where org_id = v_org and code = 'S'),
           (select id from public.bank_accounts where org_id = v_org limit 1),
           'MYR', 1, 900, 900)
@@ -291,7 +291,7 @@ begin
 
   begin
     perform public.allocate_payment_with_discount(v_pay, v_bill, 900, null,
-                                                  current_date);
+                                                  pg_temp.today());
     v_took := true;
   exception when others then
     get stacked diagnostics v_msg = message_text;
@@ -307,7 +307,7 @@ begin
     400::numeric);
 
   perform public.allocate_payment_with_discount(v_pay, v_bill, 400, null,
-                                                current_date);
+                                                pg_temp.today());
   perform pg_temp.check_eq('paying it exactly settles it',
     (select balance_amount from public.purchase_documents where id = v_bill),
     0::numeric);

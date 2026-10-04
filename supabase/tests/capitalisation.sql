@@ -35,7 +35,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status)
-  values (p_org, 'bill', p_no, current_date, p_supplier, 'MYR', 1, 'draft')
+  values (p_org, 'bill', p_no, pg_temp.today(), p_supplier, 'MYR', 1, 'draft')
   returning id into doc_id;
   insert into public.purchase_document_lines
     (org_id, document_id, line_no, line_type, description, quantity,
@@ -61,7 +61,7 @@ declare
   v_said  text;
 begin
   perform public.create_fiscal_year(v_org,
-    date_trunc('year', current_date)::date);
+    date_trunc('year', pg_temp.today())::date);
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'S-1', 'Jentera Sdn Bhd', 'supplier') returning id into v_sup;
 
@@ -85,7 +85,7 @@ begin
   perform pg_temp.check_eq('in the account it was debited to',
     v_row.asset_account_id, v_plant);
   perform pg_temp.check_eq('the acquisition date is the bill''s',
-    v_row.acquisition_date::text, current_date::text);
+    v_row.acquisition_date::text, pg_temp.today()::text);
   perform pg_temp.check_eq('the supplier is the bill''s supplier',
     v_row.supplier_id, v_sup);
   perform pg_temp.check_eq('and the bill is named',
@@ -148,7 +148,7 @@ declare
   v_said   text;
 begin
   perform public.create_fiscal_year(v_org,
-    date_trunc('year', current_date)::date);
+    date_trunc('year', pg_temp.today())::date);
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'S-1', 'Jentera Sdn Bhd', 'supplier') returning id into v_sup;
 
@@ -236,7 +236,7 @@ declare
   r        record;
 begin
   perform public.create_fiscal_year(v_org,
-    date_trunc('year', current_date)::date);
+    date_trunc('year', pg_temp.today())::date);
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'S-1', 'Jentera Sdn Bhd', 'supplier') returning id into v_sup;
 
@@ -280,7 +280,7 @@ begin
   -- bought by then is outstanding.
   perform pg_temp.check_eq('and the date is honoured',
     (select count(*) from public.report_uncapitalised_purchases(
-       v_org, current_date - 1)), 0);
+       v_org, pg_temp.today() - 1)), 0);
 
   -- A deleted asset puts its line back on the list, because a register
   -- entry that was removed did not happen.
@@ -320,7 +320,7 @@ declare
   v_said  text;
 begin
   perform public.create_fiscal_year(v_org,
-    date_trunc('year', current_date)::date);
+    date_trunc('year', pg_temp.today())::date);
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'S-1', 'Jentera Sdn Bhd', 'supplier') returning id into v_sup;
   select id into v_plant from public.accounts

@@ -85,8 +85,8 @@ begin
   insert into public.sales_documents (org_id, doc_type, doc_no, contact_id,
     doc_date, due_date, payment_term_id,
     subtotal, tax_amount, total_amount, base_total_amount, status)
-  values (v_a, 'invoice', 'INV-IC-1', v_cust, current_date,
-          current_date + 30, v_terms,
+  values (v_a, 'invoice', 'INV-IC-1', v_cust, pg_temp.today(),
+          pg_temp.today() + 30, v_terms,
           10000, 800, 10800, 10800, 'posted')
   returning id into v_inv;
 
@@ -105,7 +105,7 @@ begin
   values (v_a, 'C-OUT', 'An outsider', 'customer') returning id into v_other;
   insert into public.sales_documents (org_id, doc_type, doc_no, contact_id,
     doc_date, subtotal, tax_amount, total_amount, base_total_amount, status)
-  values (v_a, 'invoice', 'INV-OUT-1', v_other, current_date,
+  values (v_a, 'invoice', 'INV-OUT-1', v_other, pg_temp.today(),
           5000, 0, 5000, 5000, 'posted');
 
   -- ---------------------------------------------------------------
@@ -153,7 +153,7 @@ begin
   perform pg_temp.check_eq(
     'and the date it falls due, which the ageing buckets on',
     (select due_date::text from public.purchase_documents where id = v_bill),
-    (current_date + 30)::text);
+    (pg_temp.today() + 30)::text);
   perform pg_temp.check_eq(
     'and the terms it was raised on, not only the date they produce',
     (select payment_term_id from public.purchase_documents where id = v_bill),
@@ -237,11 +237,11 @@ begin
   -- registering B properly from a date thirty days out sets up the same
   -- "dated before its own registration" case the direct update did.
   perform public.set_sst_registration(
-    v_b, true, current_date + 30, 'W10-1808-31000002', 'ST8');
+    v_b, true, pg_temp.today() + 30, 'W10-1808-31000002', 'ST8');
 
   insert into public.purchase_documents (org_id, doc_type, doc_no, doc_date,
     contact_id, subtotal, tax_amount, total_amount, base_total_amount, status)
-  values (v_b, 'bill', 'BILL-TAXED', current_date, v_sup,
+  values (v_b, 'bill', 'BILL-TAXED', pg_temp.today(), v_sup,
           1000, 80, 1080, 1080, 'draft');
   perform pg_temp.check_true(
     'a company can record a supplier''s tax whatever its own registration '
@@ -253,7 +253,7 @@ begin
   begin
     insert into public.sales_documents (org_id, doc_type, doc_no, contact_id,
       doc_date, subtotal, tax_amount, total_amount, base_total_amount, status)
-    values (v_b, 'invoice', 'SALE-TAXED', v_sup, current_date,
+    values (v_b, 'invoice', 'SALE-TAXED', v_sup, pg_temp.today(),
             1000, 80, 1080, 1080, 'draft');
   exception when others then v_refused := true;
   end;

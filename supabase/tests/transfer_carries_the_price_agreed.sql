@@ -52,7 +52,7 @@ declare
   c        record;
 begin
   v_org := pg_temp.test_org('Sebut Harga Tujuh Belas Sdn Bhd');
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
 
   insert into public.tax_codes
     (org_id, code, name, tax_type_code, rate, applies_to,
@@ -80,7 +80,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, valid_until, contact_id, currency,
      exchange_rate, status, shipping_amount, discount_amount, branch_id)
-  values (v_org, 'quotation', 'QT-1', current_date, current_date + 30,
+  values (v_org, 'quotation', 'QT-1', pg_temp.today(), pg_temp.today() + 30,
           v_cust, 'MYR', 1, 'draft', 50.00, 100.00, v_branch)
   returning id into v_q;
   insert into public.sales_document_lines
@@ -114,7 +114,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, valid_until, contact_id, currency,
      exchange_rate, status, shipping_amount, discount_amount)
-  values (v_org, 'quotation', 'QT-2', current_date, current_date + 30,
+  values (v_org, 'quotation', 'QT-2', pg_temp.today(), pg_temp.today() + 30,
           v_cust, 'MYR', 1, 'draft', 50.00, 100.00)
   returning id into v_q;
   insert into public.sales_document_lines
@@ -156,7 +156,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status, shipping_amount, discount_amount, branch_id)
-  values (v_org, 'purchase_order', 'PO-1', current_date, current_date + 30,
+  values (v_org, 'purchase_order', 'PO-1', pg_temp.today(), pg_temp.today() + 30,
           v_supp, 'MYR', 1, 'draft', 30.00, 20.00, v_branch)
   returning id into v_po;
   insert into public.purchase_document_lines
@@ -184,7 +184,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, valid_until, contact_id, currency,
      exchange_rate, status, shipping_amount)
-  values (v_org, 'quotation', 'QT-3', current_date, current_date + 30,
+  values (v_org, 'quotation', 'QT-3', pg_temp.today(), pg_temp.today() + 30,
           v_cust, 'MYR', 1, 'draft', 40.00)
   returning id into v_q;
   insert into public.sales_document_lines

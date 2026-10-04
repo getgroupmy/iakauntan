@@ -50,7 +50,7 @@ begin
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, subtotal, total_amount, balance_amount, status)
   values (p_org, 'invoice', 'INV-' || substr(gen_random_uuid()::text, 1, 8),
-          current_date, current_date + 30, p_buyer, 'MYR', 1,
+          pg_temp.today(), pg_temp.today() + 30, p_buyer, 'MYR', 1,
           100, 100, 100, 'draft')
   returning id into v_doc;
   insert into public.sales_document_lines
@@ -81,7 +81,7 @@ declare
   v_row    record;
   v_line   record;
 begin
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
 
   -- ------------------------------------------------------------------
   -- A company filled in, with no two fields alike
@@ -158,7 +158,7 @@ begin
   -- right refusal and the reason this goes through the function rather
   -- than through the update above.
   perform public.set_sst_registration(
-    v_org, true, current_date - 400, 'W10-1808-31000001', 'ST6');
+    v_org, true, pg_temp.today() - 400, 'W10-1808-31000001', 'ST6');
 
   -- An item carrying its own classification and unit, and one carrying
   -- neither, so the two ends of every fallback are reachable.
@@ -183,8 +183,8 @@ begin
      exchange_rate, subtotal, discount_amount, tax_amount,
      shipping_amount, service_charge_amount, rounding_amount,
      total_amount, balance_amount, status)
-  values (v_org, 'invoice', 'INV-SHAPES-1', current_date - 40,
-          current_date - 10, v_buyer, 'USD', 4.25,
+  values (v_org, 'invoice', 'INV-SHAPES-1', pg_temp.today() - 40,
+          pg_temp.today() - 10, v_buyer, 'USD', 4.25,
           400.00, 25.00, 22.50, 30.00, 15.00, 0.03,
           442.53, 442.53, 'draft')
   returning id into v_doc;
@@ -283,7 +283,7 @@ begin
   -- The header, which is money and a date
   -- ------------------------------------------------------------------
   perform pg_temp.check_eq('the document''s own date is filed, not today''s',
-    v_row.issue_date::text, (current_date - 40)::text);
+    v_row.issue_date::text, (pg_temp.today() - 40)::text);
   perform pg_temp.check_eq('the currency is the document''s',
     v_row.currency, 'USD');
   perform pg_temp.check_eq('and so is the rate it was booked at',
@@ -397,7 +397,7 @@ begin
    where id = v_ein;
   -- A correction is a change to what was sold, not a figure typed onto
   -- the header: the document's totals are computed from its lines.
-  update public.sales_documents set doc_date = current_date - 20
+  update public.sales_documents set doc_date = pg_temp.today() - 20
    where id = v_doc;
   update public.sales_document_lines set quantity = 4 where id = v_l2;
   -- And a price that lands the total on a different sen, so the
@@ -421,7 +421,7 @@ begin
   perform pg_temp.check_true('and last time''s code and message gone',
     v_row.error_code is null and v_row.error_message is null);
   perform pg_temp.check_eq('the corrected date is what is refiled',
-    v_row.issue_date::text, (current_date - 20)::text);
+    v_row.issue_date::text, (pg_temp.today() - 20)::text);
   perform pg_temp.check_eq('and the corrected amount before tax',
     v_row.total_excl_tax,
     (select subtotal from public.sales_documents where id = v_doc));
@@ -473,7 +473,7 @@ begin
      total_excl_tax, total_incl_tax, total_discount, total_tax,
      total_charges, rounding_amount, payable_amount, status)
   values (v_next, 'sales_documents', v_doc, '01', '1.0',
-          'THEIRS-1', current_date, 'MYR', 1,
+          'THEIRS-1', pg_temp.today(), 'MYR', 1,
           'Sebelah', 'C9999999999', '{}'::jsonb,
           'Sesiapa', 'EI00000000010', '{}'::jsonb,
           10, 10, 0, 0, 0, 0, 10, 'valid');
@@ -495,7 +495,7 @@ begin
      total_excl_tax, total_incl_tax, total_discount, total_tax,
      total_charges, rounding_amount, payable_amount, status)
   values (v_org, 'sales_documents', v_doc, '02', '1.0',
-          'CN-1', current_date, 'MYR', 1,
+          'CN-1', pg_temp.today(), 'MYR', 1,
           'Penghantar', 'C2222222222', '{}'::jsonb,
           'Pembeli', 'C5555555555', '{}'::jsonb,
           10, 10, 0, 0, 0, 0, 10, 'valid');

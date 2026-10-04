@@ -29,7 +29,7 @@ begin
   insert into public.employees (org_id, employee_no, user_id, full_name,
                                 hire_date, employment_status)
   values (v_org, 'EMP-T001', v_user, 'Fixture Employee',
-          current_date - 30, 'active')
+          pg_temp.today() - 30, 'active')
   returning id into v_emp;
 
   -- The punch itself. Before the fix this raised 42804 here.

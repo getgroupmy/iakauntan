@@ -40,7 +40,7 @@ declare
   v_n      numeric;
 begin
   v_org := pg_temp.test_org('Dapur Impian Sdn Bhd');
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['sales','purchases','accounting']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
@@ -67,7 +67,7 @@ begin
   --
   -- Ten thousand up front for a kitchen that does not exist yet.
   v_dep := public.create_deposit(
-    v_org, 'customer', v_cust, current_date, 10000, v_bank, '02', 'CHQ 44',
+    v_org, 'customer', v_cust, pg_temp.today(), 10000, v_bank, '02', 'CHQ 44',
     'Half up front');
 
   select n.gl_entry_id into v_entry from public.deposit_notes n where n.id = v_dep;
@@ -105,7 +105,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'invoice', 'INV-1', current_date, current_date, v_cust,
+  values (v_org, 'invoice', 'INV-1', pg_temp.today(), pg_temp.today(), v_cust,
           'MYR', 1, 'draft')
   returning id into v_inv;
   insert into public.sales_document_lines
@@ -140,7 +140,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'invoice', 'INV-2', current_date, current_date, v_cust,
+  values (v_org, 'invoice', 'INV-2', pg_temp.today(), pg_temp.today(), v_cust,
           'MYR', 1, 'draft')
   returning id into v_inv2;
   insert into public.sales_document_lines
@@ -184,7 +184,7 @@ begin
   -- 4. Kept rather than given back
   -- ------------------------------------------------------------------
   v_dep2 := public.create_deposit(
-    v_org, 'customer', v_cust, current_date, 500, v_bank, null, null, null);
+    v_org, 'customer', v_cust, pg_temp.today(), 500, v_bank, null, null, null);
   v_entry := public.settle_deposit(
     v_dep2, 'forfeit', 500, 'She cancelled inside the fortnight');
   perform pg_temp.check_eq('a forfeited deposit is income',
@@ -200,7 +200,7 @@ begin
 
   begin
     perform public.settle_deposit(
-      public.create_deposit(v_org, 'customer', v_cust, current_date, 100,
+      public.create_deposit(v_org, 'customer', v_cust, pg_temp.today(), 100,
                             v_bank, null, null, null),
       'forfeit', 100, '  ');
     perform pg_temp.check_true('a deposit can be kept for no reason', false);
@@ -214,7 +214,7 @@ begin
   -- 5. The other direction: money we paid a supplier
   -- ------------------------------------------------------------------
   v_dep2 := public.create_deposit(
-    v_org, 'supplier', v_sup, current_date, 2000, v_bank, null, null,
+    v_org, 'supplier', v_sup, pg_temp.today(), 2000, v_bank, null, null,
     'Before he books the container');
   select n.gl_entry_id into v_entry from public.deposit_notes n where n.id = v_dep2;
 
@@ -229,7 +229,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'bill', 'BILL-1', current_date, v_sup, 'MYR', 1, 'draft')
+  values (v_org, 'bill', 'BILL-1', pg_temp.today(), v_sup, 'MYR', 1, 'draft')
   returning id into v_bill;
   insert into public.purchase_document_lines
     (org_id, document_id, line_no, line_type, item_id, description,
@@ -252,7 +252,7 @@ begin
 
   -- A deposit we pay and lose is our loss, not our income.
   v_dep2 := public.create_deposit(
-    v_org, 'supplier', v_sup, current_date, 300, v_bank, null, null, null);
+    v_org, 'supplier', v_sup, pg_temp.today(), 300, v_bank, null, null, null);
   v_entry := public.settle_deposit(
     v_dep2, 'forfeit', 300, 'He went under owing it');
   perform pg_temp.check_eq('a deposit we lose is an expense',
@@ -267,7 +267,7 @@ begin
   -- 6. What it refuses
   -- ------------------------------------------------------------------
   v_dep2 := public.create_deposit(
-    v_org, 'customer', v_cust, current_date, 100, v_bank, null, null, null);
+    v_org, 'customer', v_cust, pg_temp.today(), 100, v_bank, null, null, null);
 
   begin
     perform public.apply_deposit(v_dep2, v_inv, 100);
@@ -302,7 +302,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'invoice', 'INV-9', current_date, current_date, v_sup,
+  values (v_org, 'invoice', 'INV-9', pg_temp.today(), pg_temp.today(), v_sup,
           'MYR', 1, 'draft')
   returning id into v_inv2;
   insert into public.sales_document_lines
@@ -385,7 +385,7 @@ begin
   perform pg_temp.allow_many_companies();
   v_org := pg_temp.test_org('Deposit Batal Sdn Bhd');
   perform pg_temp.allow_many_companies();
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
 
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'C-001', 'Puan Siti', 'customer') returning id into v_cust;
@@ -395,13 +395,13 @@ begin
     v_org, 'Current account', 'current', 'MYR', 0, 0, '512345678999');
 
   -- Money in from a customer, money out to a supplier.
-  v_in := public.create_deposit(v_org, 'customer', v_cust, current_date,
+  v_in := public.create_deposit(v_org, 'customer', v_cust, pg_temp.today(),
                                 10000, v_bank, '02', 'CHQ 45', 'Up front');
   perform pg_temp.check_eq('ten thousand in leaves ten thousand in the bank',
     (select b.current_balance from public.bank_accounts b where b.id = v_bank),
     10000::numeric);
 
-  v_out := public.create_deposit(v_org, 'supplier', v_supp, current_date,
+  v_out := public.create_deposit(v_org, 'supplier', v_supp, pg_temp.today(),
                                  3000, v_bank, '02', 'CHQ 46', 'Deposit paid');
   perform pg_temp.check_eq('and three thousand out leaves seven',
     (select b.current_balance from public.bank_accounts b where b.id = v_bank),
@@ -465,9 +465,9 @@ begin
   -- supplier is a purchases one. A company that holds one module and
   -- not the other is the only fixture that can tell the two apart --
   -- with both switched on, the question never gets asked twice.
-  v_in  := public.create_deposit(v_org, 'customer', v_cust, current_date,
+  v_in  := public.create_deposit(v_org, 'customer', v_cust, pg_temp.today(),
                                  500, v_bank, '02', 'CHQ 47', null);
-  v_out := public.create_deposit(v_org, 'supplier', v_supp, current_date,
+  v_out := public.create_deposit(v_org, 'supplier', v_supp, pg_temp.today(),
                                  400, v_bank, '02', 'CHQ 48', null);
   update public.org_modules set is_enabled = false
    where org_id = v_org and module_code = 'purchases';
@@ -515,7 +515,7 @@ declare
   v_dep   uuid; v_depv uuid; v_deps uuid;
   v_inv   uuid; v_inv_usd uuid; v_inv_gone uuid; v_inv_other uuid;
   v_bill  uuid; v_entry uuid;
-  v_when  date := current_date - 10;
+  v_when  date := pg_temp.today() - 10;
   v_msg   text;
 begin
   perform pg_temp.sign_in_as(v_owner);
@@ -523,8 +523,8 @@ begin
   v_org := pg_temp.test_org('Wang Muka Sdn Bhd');
   perform pg_temp.allow_many_companies();
   perform public.create_fiscal_year(v_org,
-    (date_trunc('year', current_date) - interval '1 year')::date);
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+    (date_trunc('year', pg_temp.today()) - interval '1 year')::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['sales','purchases','accounting']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
@@ -563,13 +563,13 @@ begin
     v_org, 'Current account', 'current', 'MYR', 0, 0, '598765432101');
 
   v_dep := public.create_deposit(
-    v_org, 'customer', v_cust, current_date - 20, 5000, v_bank, '02',
+    v_org, 'customer', v_cust, pg_temp.today() - 20, 5000, v_bank, '02',
     'CHQ 90', 'Up front');
 
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'invoice', 'INV-W', current_date - 15, current_date, v_cust,
+  values (v_org, 'invoice', 'INV-W', pg_temp.today() - 15, pg_temp.today(), v_cust,
           'MYR', 1, 'draft')
   returning id into v_inv;
   insert into public.sales_document_lines
@@ -622,7 +622,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'invoice', 'INV-USD', current_date - 15, current_date,
+  values (v_org, 'invoice', 'INV-USD', pg_temp.today() - 15, pg_temp.today(),
           v_cust, 'USD', 4.5, 'draft')
   returning id into v_inv_usd;
   insert into public.sales_document_lines
@@ -643,7 +643,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'invoice', 'INV-GONE', current_date - 15, current_date,
+  values (v_org, 'invoice', 'INV-GONE', pg_temp.today() - 15, pg_temp.today(),
           v_cust, 'MYR', 1, 'draft')
   returning id into v_inv_gone;
   insert into public.sales_document_lines
@@ -664,7 +664,7 @@ begin
   -- who is signed in.
   v_org2 := pg_temp.test_org('Syarikat Jiran Sdn Bhd');
   perform pg_temp.sign_in_as(v_owner);
-  perform public.create_fiscal_year(v_org2, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org2, date_trunc('year', pg_temp.today())::date);
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org2, 'CUST', 'Their customer', 'customer') returning id into v_cust2;
   insert into public.items
@@ -674,7 +674,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org2, 'invoice', 'INV-THEIRS', current_date - 15, current_date,
+  values (v_org2, 'invoice', 'INV-THEIRS', pg_temp.today() - 15, pg_temp.today(),
           v_cust2, 'MYR', 1, 'draft')
   returning id into v_inv_other;
   insert into public.sales_document_lines
@@ -695,7 +695,7 @@ begin
   -- Deposits it will not draw on
   -- ------------------------------------------------------------------
   v_depv := public.create_deposit(
-    v_org, 'customer', v_cust, current_date - 20, 500, v_bank, '02',
+    v_org, 'customer', v_cust, pg_temp.today() - 20, 500, v_bank, '02',
     'CHQ 91', 'Returned');
   perform public.void_deposit(v_depv, 'Cheque bounced');
   begin
@@ -748,7 +748,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'bill', 'BILL-W', current_date - 15, v_sup, 'MYR', 1, 'draft')
+  values (v_org, 'bill', 'BILL-W', pg_temp.today() - 15, v_sup, 'MYR', 1, 'draft')
   returning id into v_bill;
   insert into public.purchase_document_lines
     (org_id, document_id, line_no, line_type, item_id, description,
@@ -757,7 +757,7 @@ begin
   perform public.post_purchase_document(v_bill);
 
   v_deps := public.create_deposit(
-    v_org, 'supplier', v_sup, current_date - 20, 2000, v_bank, '02',
+    v_org, 'supplier', v_sup, pg_temp.today() - 20, 2000, v_bank, '02',
     'CHQ 92', 'Paid up front');
   v_entry := public.apply_deposit(v_deps, v_bill, 1200, v_when);
 
@@ -803,7 +803,7 @@ declare
   v_bank_a uuid; v_bank_b uuid; v_bank_theirs uuid;
   v_acct_a uuid; v_acct_b uuid;
   v_dep   uuid; v_depv uuid; v_entry uuid;
-  v_when  date := current_date - 5;
+  v_when  date := pg_temp.today() - 5;
   v_msg   text;
 begin
   perform pg_temp.sign_in_as(v_owner);
@@ -811,8 +811,8 @@ begin
   v_org := pg_temp.test_org('Selesai Deposit Sdn Bhd');
   perform pg_temp.allow_many_companies();
   perform public.create_fiscal_year(v_org,
-    (date_trunc('year', current_date) - interval '1 year')::date);
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+    (date_trunc('year', pg_temp.today()) - interval '1 year')::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['sales','purchases','accounting']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
@@ -835,7 +835,7 @@ begin
   v_acct_b := pg_temp.bank_gl(v_bank_b);
 
   v_dep := public.create_deposit(
-    v_org, 'customer', v_cust, current_date - 20, 4000, v_bank_a, '02',
+    v_org, 'customer', v_cust, pg_temp.today() - 20, 4000, v_bank_a, '02',
     'CHQ 70', 'Booking');
 
   -- ------------------------------------------------------------------
@@ -906,7 +906,7 @@ begin
     4000::numeric);
 
   v_depv := public.create_deposit(
-    v_org, 'customer', v_cust, current_date - 20, 300, v_bank_a, '02',
+    v_org, 'customer', v_cust, pg_temp.today() - 20, 300, v_bank_a, '02',
     'CHQ 71', 'Second booking');
   perform public.void_deposit(v_depv, 'Keyed twice');
   begin
@@ -970,7 +970,7 @@ begin
   -- ------------------------------------------------------------------
   begin
     perform public.create_deposit(
-      v_org, 'customer', v_cust, current_date - 20, 700, v_bank_theirs,
+      v_org, 'customer', v_cust, pg_temp.today() - 20, 700, v_bank_theirs,
       '02', 'CHQ 99', 'Into their bank');
     raise exception 'FAIL banked a deposit into another company''s account';
   exception when sqlstate '42501' then
@@ -1023,7 +1023,7 @@ declare
   v_theirs uuid;
   v_dep   uuid;
   v_msg   text;
-  v_when  date := current_date - 9;
+  v_when  date := pg_temp.today() - 9;
   v_t     text;
 begin
   perform pg_temp.sign_in_as(v_owner);
@@ -1037,9 +1037,9 @@ begin
   -- first nine days of January -- so both are created rather than
   -- reasoning about which.
   perform public.create_fiscal_year(v_org,
-    (date_trunc('year', current_date) - interval '1 year')::date);
+    (date_trunc('year', pg_temp.today()) - interval '1 year')::date);
   perform public.create_fiscal_year(v_org,
-    date_trunc('year', current_date)::date);
+    date_trunc('year', pg_temp.today())::date);
 
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'C-1', 'Pelanggan', 'customer') returning id into v_cust;
@@ -1158,17 +1158,17 @@ begin
   perform pg_temp.sign_in_as(v_owner);
   v_org := pg_temp.test_org('Luput Sdn Bhd');
   perform public.create_fiscal_year(v_org,
-                                    date_trunc('year', current_date)::date);
+                                    date_trunc('year', pg_temp.today())::date);
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'S-1', 'Kilang Rahsia', 'supplier') returning id into v_sup;
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'C-1', 'A customer', 'customer') returning id into v_cust;
 
   v_dep := public.create_deposit(v_org, 'supplier', v_sup,
-                                 current_date - 5, 700,
+                                 pg_temp.today() - 5, 700,
                                  pg_temp.a_bank_account(v_org));
   v_cdep := public.create_deposit(v_org, 'customer', v_cust,
-                                  current_date - 5, 900,
+                                  pg_temp.today() - 5, 900,
                                   pg_temp.a_bank_account(v_org));
   -- Something to read back. `settle_deposit` files a `deposit_events`
   -- row carrying the reason somebody typed, which is the part of this

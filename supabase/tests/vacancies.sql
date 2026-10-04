@@ -81,7 +81,7 @@ begin
     (org_id, requisition_no, title, headcount, requirements,
      target_start_date)
   values (v_org, 'REQ-1', 'Account Executive', 2,
-          'SPM, two years in a similar role', current_date + 60)
+          'SPM, two years in a similar role', pg_temp.today() + 60)
   returning id into v_r;
   perform pg_temp.check_eq('a draft needs nobody yet',
     (select status::text from public.job_requisitions where id = v_r),
@@ -92,7 +92,7 @@ begin
     'SPM, two years in a similar role');
   perform pg_temp.check_eq('and when the role is wanted from',
     (select target_start_date from public.job_requisitions where id = v_r)::text,
-    (current_date + 60)::text);
+    (pg_temp.today() + 60)::text);
 
   -- Opening it without an owner is refused, by the function and by the
   -- trigger behind it.

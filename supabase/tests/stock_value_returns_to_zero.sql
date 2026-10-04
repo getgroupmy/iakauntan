@@ -47,7 +47,7 @@ begin
     (org_id, item_id, warehouse_id, movement_type, movement_date,
      quantity, unit_cost, movement_no)
   values (p_org, p_item, p_wh, p_type::app.stock_movement_type,
-          current_date, p_qty, p_cost, p_no);
+          pg_temp.today(), p_qty, p_cost, p_no);
 end $$;
 
 do $$
@@ -59,7 +59,7 @@ declare
   v_sum  numeric;
 begin
   v_org := pg_temp.test_org('Kos Purata Sdn Bhd');
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.warehouses (org_id, code, name)
   values (v_org, 'MAIN', 'Store') returning id into v_wh;
   insert into public.items

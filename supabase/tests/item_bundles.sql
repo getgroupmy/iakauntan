@@ -44,7 +44,7 @@ declare
   v_n      numeric;
 begin
   v_org := pg_temp.test_org('Hadiah Raya Sdn Bhd');
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['inventory','sales','purchases']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
@@ -81,7 +81,7 @@ begin
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'bill', 'BILL-1', current_date, v_sup, 'MYR', 1, 'draft')
+  values (v_org, 'bill', 'BILL-1', pg_temp.today(), v_sup, 'MYR', 1, 'draft')
   returning id into v_bill;
   insert into public.purchase_document_lines
     (org_id, document_id, line_no, line_type, item_id, description,
@@ -122,7 +122,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'invoice', 'INV-1', current_date, current_date, v_cust,
+  values (v_org, 'invoice', 'INV-1', pg_temp.today(), pg_temp.today(), v_cust,
           'MYR', 1, 'draft')
   returning id into v_inv;
   insert into public.sales_document_lines
@@ -165,7 +165,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status, original_invoice_id)
-  values (v_org, 'credit_note', 'CN-1', current_date, current_date, v_cust,
+  values (v_org, 'credit_note', 'CN-1', pg_temp.today(), pg_temp.today(), v_cust,
           'MYR', 1, 'draft', v_inv)
   returning id into v_cn;
   insert into public.sales_document_lines
@@ -194,8 +194,8 @@ begin
   -- tracked part inside a bundle raises and the whole invoice fails.
   update public.items set tracking = 'batch' where id = v_tin;
   insert into public.stock_lots (org_id, item_id, lot_ref, kind, expiry_date)
-  values (v_org, v_tin, 'OLD', 'batch', current_date + 30),
-         (v_org, v_tin, 'NEW', 'batch', current_date + 300);
+  values (v_org, v_tin, 'OLD', 'batch', pg_temp.today() + 30),
+         (v_org, v_tin, 'NEW', 'batch', pg_temp.today() + 300);
   insert into public.stock_movement_lots (org_id, movement_id, lot_id, quantity)
   select v_org, sm.id, l.id, 90
     from public.stock_movements sm
@@ -205,7 +205,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'invoice', 'INV-2', current_date, current_date, v_cust,
+  values (v_org, 'invoice', 'INV-2', pg_temp.today(), pg_temp.today(), v_cust,
           'MYR', 1, 'draft')
   returning id into v_inv;
   insert into public.sales_document_lines

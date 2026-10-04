@@ -88,7 +88,7 @@ begin
     (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
      subtotal, total_amount, balance_amount, status,
      contact_person_id, shipping_address_id)
-  values (v_org, 'invoice', 'INV-1', current_date, v_contact, 'MYR', 1,
+  values (v_org, 'invoice', 'INV-1', pg_temp.today(), v_contact, 'MYR', 1,
           100, 100, 100, 'draft', v_ravi, v_warehouse);
 
   perform pg_temp.check_true('an invoice can name a person and an address',

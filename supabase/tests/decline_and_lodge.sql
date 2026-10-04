@@ -59,7 +59,7 @@ begin
 
   v_doc := public.corp_generate_document(v_e, 'sec_particulars');
   v_req := public.corp_request_signatures(v_doc, array[v_a, v_b],
-             array['Director', 'Director'], current_date + 7, null);
+             array['Director', 'Director'], pg_temp.today() + 7, null);
   select id into v_sig_a from public.corp_signatures
    where request_id = v_req and person_id = v_a;
   select id into v_sig_b from public.corp_signatures

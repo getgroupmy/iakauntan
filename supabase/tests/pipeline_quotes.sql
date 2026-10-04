@@ -201,7 +201,7 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'quotation', 'QT-1', current_date, v_cust, 'MYR', 1, 'draft')
+  values (v_org, 'quotation', 'QT-1', pg_temp.today(), v_cust, 'MYR', 1, 'draft')
   returning id into v_quote;
   insert into public.sales_document_lines
     (org_id, document_id, line_no, description, quantity, unit_price)
@@ -212,13 +212,13 @@ begin
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'quotation', 'QT-2', current_date, v_other, 'MYR', 1,
+  values (v_org, 'quotation', 'QT-2', pg_temp.today(), v_other, 'MYR', 1,
           'draft')
   returning id into v_theirs;
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
      exchange_rate, status)
-  values (v_org, 'invoice', 'INV-1', current_date, v_cust, 'MYR', 1, 'draft')
+  values (v_org, 'invoice', 'INV-1', pg_temp.today(), v_cust, 'MYR', 1, 'draft')
   returning id into v_inv;
 
   begin

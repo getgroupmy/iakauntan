@@ -63,7 +63,7 @@ declare
   v_extra  uuid;
 begin
   v_org := pg_temp.test_org('Warung Resipi Sdn Bhd');
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['pos','inventory']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
@@ -305,12 +305,12 @@ begin
     (org_id, movement_no, movement_date, movement_type, item_id,
      warehouse_id, quantity, unit_cost)
   values
-    (v_org, 'OB-1', current_date, 'opening_balance', v_rice,   v_wh, 10,   4.00),
-    (v_org, 'OB-2', current_date, 'opening_balance', v_milk,   v_wh, 2,    6.00),
-    (v_org, 'OB-3', current_date, 'opening_balance', v_egg,    v_wh, 30,   0.50),
-    (v_org, 'OB-4', current_date, 'opening_balance', v_chilli, v_wh, 1,   20.00),
-    (v_org, 'OB-5', current_date, 'opening_balance', v_tin,    v_wh, 100,  3.00),
-    (v_org, 'OB-6', current_date, 'opening_balance', v_paste,  v_wh, 1,   30.00);
+    (v_org, 'OB-1', pg_temp.today(), 'opening_balance', v_rice,   v_wh, 10,   4.00),
+    (v_org, 'OB-2', pg_temp.today(), 'opening_balance', v_milk,   v_wh, 2,    6.00),
+    (v_org, 'OB-3', pg_temp.today(), 'opening_balance', v_egg,    v_wh, 30,   0.50),
+    (v_org, 'OB-4', pg_temp.today(), 'opening_balance', v_chilli, v_wh, 1,   20.00),
+    (v_org, 'OB-5', pg_temp.today(), 'opening_balance', v_tin,    v_wh, 100,  3.00),
+    (v_org, 'OB-6', pg_temp.today(), 'opening_balance', v_paste,  v_wh, 1,   30.00);
 
   -- 10kg of rice at 0.18 is 55 plates; 2L of santan at 0.04 is 50;
   -- 30 eggs is 30; 1kg of chilli at 0.012 is 83. The eggs are the wall.
@@ -470,7 +470,7 @@ begin
   insert into public.stock_movements
     (org_id, movement_no, movement_date, movement_type, item_id,
      warehouse_id, quantity, unit_cost)
-  values (v_org, 'ADJ-1', current_date, 'adjustment_out', v_egg, v_wh, -24, 0);
+  values (v_org, 'ADJ-1', pg_temp.today(), 'adjustment_out', v_egg, v_wh, -24, 0);
 
   perform pg_temp.check_eq('two eggs left is two plates',
     (select p.portions from public.pos_item_portions(v_outlet) p
@@ -551,7 +551,7 @@ begin
   insert into public.stock_movements
     (org_id, movement_no, movement_date, movement_type, item_id,
      warehouse_id, quantity, unit_cost)
-  values (v_org, 'ADJ-2', current_date, 'adjustment_out', v_egg, v_wh, -2, 0);
+  values (v_org, 'ADJ-2', pg_temp.today(), 'adjustment_out', v_egg, v_wh, -2, 0);
 
   select * into v_r from public.pos_menu(v_outlet) m where m.item_id = v_nasi;
   perform pg_temp.check_true('and greys out when the kitchen runs out',

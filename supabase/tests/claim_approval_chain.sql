@@ -37,7 +37,7 @@ begin
   insert into public.expense_claims
     (org_id, claim_no, employee_id, claim_date, title, status, total_amount)
   values (p_org, 'CLM-' || substr(gen_random_uuid()::text, 1, 8), p_employee,
-          current_date, 'Trip', 'submitted', p_amount)
+          pg_temp.today(), 'Trip', 'submitted', p_amount)
   returning id into v_id;
   return v_id;
 end; $$;
@@ -60,7 +60,7 @@ begin
 
   insert into public.employees
     (org_id, employee_no, full_name, user_id, hire_date)
-  values (v_org, 'E-BOSS', 'Boss', v_boss_user, current_date)
+  values (v_org, 'E-BOSS', 'Boss', v_boss_user, pg_temp.today())
   returning id into v_boss;
 
   insert into public.departments (org_id, code, name, head_employee_id)
@@ -69,7 +69,7 @@ begin
   insert into public.employees
     (org_id, employee_no, full_name, user_id, hire_date, manager_id,
      department_id)
-  values (v_org, 'E-STAFF', 'Staff', v_staff_user, current_date, v_boss, v_dept)
+  values (v_org, 'E-STAFF', 'Staff', v_staff_user, pg_temp.today(), v_boss, v_dept)
   returning id into v_staff;
 
   v_claim := pg_temp.claim(v_org, v_staff, 500);
@@ -148,7 +148,7 @@ begin
   values (v_org, v_user, 'employee') on conflict do nothing;
   insert into public.employees
     (org_id, employee_no, full_name, user_id, hire_date)
-  values (v_org, 'E-1', 'Nobody''s report', v_user, current_date)
+  values (v_org, 'E-1', 'Nobody''s report', v_user, pg_temp.today())
   returning id into v_staff;
 
   v_claim := pg_temp.claim(v_org, v_staff, 500);
@@ -216,7 +216,7 @@ begin
   values (v_org, v_user, 'employee') on conflict do nothing;
   insert into public.employees
     (org_id, employee_no, full_name, user_id, hire_date)
-  values (v_org, 'E-ORPHAN', 'Nobody above them', v_user, current_date)
+  values (v_org, 'E-ORPHAN', 'Nobody above them', v_user, pg_temp.today())
   returning id into v_orphan;
 
   -- Still below the 200 threshold set above.
@@ -309,7 +309,7 @@ begin
 
   insert into public.employees
     (org_id, employee_no, full_name, user_id, hire_date)
-  values (v_org, 'E-BOSS', 'Boss', v_boss_user, current_date)
+  values (v_org, 'E-BOSS', 'Boss', v_boss_user, pg_temp.today())
   returning id into v_boss;
 
   insert into public.departments (org_id, code, name, head_employee_id)
@@ -318,17 +318,17 @@ begin
   insert into public.employees
     (org_id, employee_no, full_name, user_id, hire_date, manager_id,
      department_id)
-  values (v_org, 'E-STAFF', 'Staff', v_staff_user, current_date, v_boss, v_dept)
+  values (v_org, 'E-STAFF', 'Staff', v_staff_user, pg_temp.today(), v_boss, v_dept)
   returning id into v_staff;
 
   -- Two claims, both starting at the manager.
   insert into public.expense_claims
     (org_id, claim_no, employee_id, claim_date, title, status, total_amount)
-  values (v_org, 'CLM-FIRST', v_staff, current_date, 'Trip', 'submitted', 500)
+  values (v_org, 'CLM-FIRST', v_staff, pg_temp.today(), 'Trip', 'submitted', 500)
   returning id into v_first;
   insert into public.expense_claims
     (org_id, claim_no, employee_id, claim_date, title, status, total_amount)
-  values (v_org, 'CLM-SECOND', v_staff, current_date, 'Taxi', 'submitted', 800)
+  values (v_org, 'CLM-SECOND', v_staff, pg_temp.today(), 'Taxi', 'submitted', 800)
   returning id into v_second;
 
   perform pg_temp.sign_in_as(v_boss_user);

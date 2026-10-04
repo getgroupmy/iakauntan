@@ -60,7 +60,7 @@ begin
     (org_id, doc_type, doc_no, doc_date, valid_until, contact_id,
      contact_person_id, shipping_address_id, currency, exchange_rate,
      status)
-  values (p_org, 'quotation', p_no, current_date, current_date + 30,
+  values (p_org, 'quotation', p_no, pg_temp.today(), pg_temp.today() + 30,
           p_contact, p_person, p_address, 'MYR', 1, 'draft')
   returning id into v_q;
   insert into public.sales_document_lines
@@ -129,7 +129,7 @@ declare
 begin
   perform pg_temp.sign_in_as(pg_temp.test_user());
   v_org := pg_temp.test_org('Sebut Harga Bakal Sdn Bhd');
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
 
   insert into public.items
     (org_id, code, name, item_type, track_inventory, unit_price)
@@ -264,7 +264,7 @@ begin
   perform pg_temp.sign_in_as(pg_temp.test_user());
   v_org1 := pg_temp.test_org('Syarikat Satu Sdn Bhd');
   v_org2 := pg_temp.test_org('Syarikat Dua Sdn Bhd');
-  perform public.create_fiscal_year(v_org1, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org1, date_trunc('year', pg_temp.today())::date);
 
   insert into public.items
     (org_id, code, name, item_type, track_inventory, unit_price)
@@ -292,7 +292,7 @@ declare
 begin
   perform pg_temp.sign_in_as(pg_temp.test_user());
   v_org := pg_temp.test_org('Pelanggan Sedia Ada Sdn Bhd');
-  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
 
   insert into public.items
     (org_id, code, name, item_type, track_inventory, unit_price)
