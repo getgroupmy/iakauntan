@@ -33,10 +33,11 @@ it has to be committed.
 
 Not a hypothetical, and not one slip. In a single session on
 2026-09-28, five separate entries in this file described work as
-outstanding that had already been done, and the 1 October session
-found two more — including one that had cost an earlier session in
-this same container the use of every SQL assertion it could have run
-locally:
+outstanding that had already been done, the 1 October session found two
+more — including one that had cost an earlier session in this same
+container the use of every SQL assertion it could have run locally — and
+the 4 October session found **four more**, one of which this very table
+had already disproved:
 
 | This file said | Actually |
 | --- | --- |
@@ -47,9 +48,19 @@ locally:
 | Statement lines are not turned into `bank_transactions` | `importBankTransactions`, wired |
 | No `bank_transactions` row ever reaches `gl_lines` | `postBankTransaction` and the "Post this line" dialog do exactly that |
 | CI is the only place the SQL assertions run | `supabase/tests/run_locally.sh` runs all 382 of them in this container; it uses `initdb`, not Docker |
+| `app.post_receipt_internal` still has the 1120 fallback, on purpose | `0731` replaced it: it RESOLVES an account, writes it onto the receipt, and refuses only when the company has no bank account at all |
+| All thirteen `pos_tender_types` rows have a null bank account | 13 of 13 carry a settlement account (`0732`), measured in production |
+| There is no screen for editing a tender type | `app/lib/src/features/pos/tenders_screen.dart`, on `upsert_pos_tender_type` |
+| No `bank_transactions` row ever reaches `gl_lines` — **stated again further down this file, three rows below its own correction** | `post_bank_transaction` makes it a journal and puts `matter_id` on the non-bank leg; the "Post this line" dialog is the picker |
 
 Each cost a round of reading to disprove, and one of them — the matter
-picker — nearly cost building something twice.
+picker — nearly cost building something twice. The 1120 fallback cost
+more than a round: a decision was put to the user as though it were open,
+and approval to close it was given for work `0731` had already done.
+**A correction recorded in this table does not delete the claim it
+corrects**, which is why the fourth row above was still being stated as
+fact nine hundred lines further down. When you disprove something here,
+go and mark the place it was said.
 
 **The cause is structural, not carelessness.** An entry is written when
 the work is deferred and is never revisited when the work is done,
@@ -4543,6 +4554,17 @@ ever reaches `gl_lines`, so there is no line whose `matter_id` a
 picker there would set. The matter arrives with the receipt or
 payment the line is matched to, which `0691`/`0692` put on the
 document.
+
+> **STALE — corrected 4 October, and this one contradicted the
+> correction table at the top of this file, which had already recorded
+> it.** `post_bank_transaction` makes a bank line into a journal
+> (`p_source => 'bank_transaction'`) and passes `matter_id` onto the
+> lines — deliberately NOT onto the bank's own leg, which its header
+> explains. So a `bank_transactions` row does reach `gl_lines`, and it
+> does carry a matter. `postBankTransaction` in `repository.dart` takes
+> `matterId`, and the "Post this line" dialog in
+> `reconciliation_screen.dart` is the picker this paragraph says there
+> would be no line for.
 
 ~~The paragraph above was true when it was written and is NOT true
 now.~~ `Repo.postBankTransaction` and the "Post this line" dialog
