@@ -1308,9 +1308,15 @@ jobs:
       # comments is a body of work rather than a commit, and a gate
       # that failed until all of them existed would be switched off
       # within the week. `0569`, `0570` and `0571` took it from 278.
+      # The self-test guards the RATCHET rather than the count: that the
+      # budget cannot be raised to make a red build green, that ground
+      # gained must be ratcheted down, and that a database the gate
+      # cannot ask returns 2 rather than reporting a clean surface --
+      # which reads exactly like nothing to find.
       - name: Check no new write goes undocumented
         run: |
           DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
+          python3 scripts/check_undocumented_writes_test.py
           python3 scripts/check_undocumented_writes.py "$DB"
 
       # `0690` added a second `transfer_between_matters` beside the one

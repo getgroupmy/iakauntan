@@ -458,6 +458,41 @@ Two things that make the CI step safe, both measured rather than assumed:
     runner images, so the step tries four and the gate exits 2 with its
     own message if none exists, rather than passing quietly.
 
+### A self-test for the ratchet that reached the bottom
+
+`check_undocumented_writes.py` holds `BUDGET = 0` after `0569`–`0599`
+wrote two hundred odd `comment on function`. It had no self-test, and a
+ratchet at zero has three ways to stop working, none of which looks like
+a failure:
+
+  * the budget gets **raised** to make a red build green — the one thing
+    its own comment forbids;
+  * it stops being able to **ask the database** and reports nothing found,
+    which reads exactly like nothing to find;
+  * the **query drifts** and looks at fewer functions than it claims.
+
+So `main()` is split into `run(db)` over an `undocumented(db)` helper, and
+`undocumented` returning None now returns **2, not 0** — a gate that
+cannot reach the schema must not report a clean surface. 13 assertions;
+ten mutants with a no-op control, all ten dead, including "the budget is
+RAISED", "ground gained is not ratcheted down" and "a database it cannot
+ask reports a clean surface".
+
+**A mutant found the query assertions weak, in the same shape as
+yesterday's `assertIn` lesson.** The test asserted that `pg_depend` and
+`deptype = 'e'` appear in the query, to prove extension-owned functions
+are excluded. A mutant that changed
+
+    and not exists (select 1 from pg_depend dp ...)
+
+to `and true or exists (...)` kept **every word the test looked for** and
+survived. Naming the tables a clause mentions says nothing about what it
+does with them, so the assertion is now on the NEGATION —
+`not exists ( select 1 from pg_depend` — and on the absence of
+`true or exists`. The query assertions also read only the non-comment
+part of each line, because `QUERY` explains itself in `--` lines
+containing the very words being matched.
+
 ## `0740`: client money has one door — and the claim I had to withdraw
 
 **The other door into the database.** The write-idempotency census covered

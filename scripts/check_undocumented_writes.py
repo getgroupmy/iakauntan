@@ -221,19 +221,33 @@ select p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')'
 """
 
 
+def undocumented(db: str) -> list[str] | None:
+    """The writes with no comment, or None if the database could not be
+    asked. Separated from the verdict so
+    `check_undocumented_writes_test.py` can feed the verdict a list and
+    exercise the ratchet in both directions without a cluster."""
+    out = subprocess.run(['psql', db, '-tAc', QUERY],
+                         capture_output=True, text=True)
+    if out.returncode != 0:
+        print(out.stderr.strip(), file=sys.stderr)
+        return None
+    return [ln for ln in out.stdout.splitlines() if ln.strip()]
+
+
 def main() -> int:
     if len(sys.argv) < 2:
         print('usage: check_undocumented_writes.py <database-url>',
               file=sys.stderr)
         return 2
+    return run(sys.argv[1])
 
-    out = subprocess.run(['psql', sys.argv[1], '-tAc', QUERY],
-                         capture_output=True, text=True)
-    if out.returncode != 0:
-        print(out.stderr.strip(), file=sys.stderr)
+
+def run(db: str) -> int:
+    names = undocumented(db)
+    if names is None:
+        # A gate that cannot ask the database must not report a clean
+        # surface. 2, not 0.
         return 2
-
-    names = [ln for ln in out.stdout.splitlines() if ln.strip()]
     n = len(names)
 
     if n > BUDGET:
