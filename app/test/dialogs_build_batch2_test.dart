@@ -484,24 +484,66 @@ void main() {
   });
 
   group('documents', () {
-    testWidgets('the activity dialog opens', (tester) async {
+    // `document_activity` (0495) returns
+    //
+    //     at, kind, recipient, status, detail, note
+    //
+    // and the fixture sent `id, kind, to_address, subject, created_at,
+    // status`. Two of six landed. So the row drew "Emailed" with a "sent"
+    // badge and NOTHING else: no address, no detail, no note, and no
+    // timestamp -- `_ActivityTile` reads `entry['at']`, not `created_at`.
+    // Which is every part of the line a person is reading it for.
+    testWidgets('the activity dialog opens, in the shape 0495 returns',
+        (tester) async {
       await opened(
         tester,
         [
           repoProvider.overrideWithValue(repo),
           documentActivityProvider.overrideWith((_, __) async => const [
                 {
-                  'id': 'ac1',
+                  'at': '2026-09-01T02:00:00Z',
                   'kind': 'email',
-                  'to_address': 'accounts@sinar-teknologi-maju.example.com',
-                  'subject': long,
-                  'created_at': '2026-09-01T02:00:00Z',
+                  'recipient': 'akaun@sinar.com.my',
                   'status': 'sent',
+                  'detail': 'sent now · PDF attached',
+                  'note': 'delivered to the provider',
+                },
+                // A second kind, because `ActivityLine.from` switches on
+                // it and one kind proves one arm.
+                {
+                  'at': '2026-09-02T02:00:00Z',
+                  'kind': 'share link',
+                  'recipient': 'pelanggan@sinar.com.my',
+                  'status': 'opened',
+                  'detail': 'opened twice',
+                  'note': null,
                 },
               ]),
         ],
         (context) => showActivityDialog(context, 'd1', 'INV-0001'),
       );
+      expect(tester.takeException(), isNull);
+
+      // The labels `ActivityLine.from` builds from `kind`.
+      expect(find.text('Emailed'), findsOneWidget);
+      expect(find.text('Link shared'), findsOneWidget);
+      // `status`, which is the badge.
+      expect(find.text('sent'), findsOneWidget);
+      expect(find.text('opened'), findsOneWidget);
+      // `recipient` and `detail` and `note`, none of which the old
+      // fixture supplied under a name anything read.
+      expect(find.text('akaun@sinar.com.my'), findsOneWidget);
+      expect(find.text('sent now · PDF attached'), findsOneWidget);
+      expect(find.text('delivered to the provider'), findsOneWidget);
+      expect(find.text('opened twice'), findsOneWidget);
+
+      // `at`, which `_ActivityTile` reads and the old fixture supplied as
+      // `created_at`. Feeding it is what found the overflow: the
+      // timestamp used to sit in the outer Row as an unflexed `Text`, and
+      // with it present the label, the badge and the detail had about 60
+      // logical pixels between them. 110 and 187 pixels over, at 412
+      // wide, on a dialog nothing had ever drawn with a timestamp in it.
+      expect(find.textContaining('2026'), findsNWidgets(2));
       expect(tester.takeException(), isNull);
     });
 
@@ -515,7 +557,18 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('and the share dialog', (tester) async {
+    // `token` and `views` were the fixture's words. `document_share_links`
+    // (0094) has `token_hash` and `open_count`, and the query is a bare
+    // `.select()`, so a real row carries every column in that table. With
+    // `sent_to_email` and `open_count` absent the row read
+    //
+    //     No address recorded
+    //     issued — · until 31 Dec 2026 · never opened
+    //
+    // which is the opposite of a link that was emailed and opened three
+    // times, and `views: 3` sat in the fixture saying so to nobody.
+    testWidgets('and the share dialog, in the shape the table holds',
+        (tester) async {
       await opened(
         tester,
         [
@@ -523,15 +576,47 @@ void main() {
           documentShareLinksProvider.overrideWith((_, __) async => const [
                 {
                   'id': 'sl1',
-                  'token': 'abcdef0123456789abcdef0123456789',
+                  'token_hash': 'abcdef0123456789abcdef0123456789',
                   'expires_at': '2026-12-31T00:00:00Z',
-                  'views': 3,
+                  'sent_to_email': 'akaun@sinar.com.my',
+                  'created_at': '2026-09-01T02:00:00Z',
+                  'open_count': 3,
+                  'last_opened_at': '2026-09-28T04:00:00Z',
+                  'revoked_at': null,
+                },
+                // Revoked, and never opened: the other end of both
+                // branches the row draws.
+                {
+                  'id': 'sl2',
+                  'token_hash': '0123456789abcdef0123456789abcdef',
+                  'expires_at': '2026-12-31T00:00:00Z',
+                  'sent_to_email': 'lama@sinar.com.my',
+                  'created_at': '2026-08-01T02:00:00Z',
+                  'open_count': 0,
+                  'revoked_at': '2026-08-15T02:00:00Z',
                 },
               ]),
         ],
         (context) => showShareDialog(context, 'd1', 'INV-0001'),
       );
       expect(tester.takeException(), isNull);
+
+      // `sent_to_email`, which the old fixture never supplied.
+      expect(find.text('akaun@sinar.com.my'), findsOneWidget);
+      expect(find.text('lama@sinar.com.my'), findsOneWidget);
+      expect(find.text('No address recorded'), findsNothing);
+
+      // `open_count` and `last_opened_at`. The old fixture's `views: 3`
+      // left this at "never opened".
+      expect(find.textContaining('opened 3 times, last '), findsOneWidget);
+      expect(find.textContaining('never opened'), findsOneWidget);
+
+      // `revoked_at` decides the chip, and it is the one thing that stops
+      // somebody trusting a link that no longer works. `StatusChip` draws
+      // its status through `Fmt.label`, which capitalises -- so the text
+      // on screen is `Active`, not the `active` the widget was handed.
+      expect(find.text('Active'), findsOneWidget);
+      expect(find.text('Revoked'), findsOneWidget);
     });
 
     testWidgets('and the recurring template dialog', (tester) async {
@@ -1258,7 +1343,18 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('sharing a ticket', (tester) async {
+    // Two things were wrong here and the second is the bigger one.
+    //
+    // The link fixture said `token` and carried neither `open_count` nor
+    // `reply_count` nor `sent_to_email`, so `describeTicketLink` fell to
+    // its "Not opened yet" arm and the row had no subtitle.
+    //
+    // And the TICKET had no `requester_contact_id`, which is what
+    // `shareBlockedBecause` reads first -- so the dialog this test opened
+    // was in its REFUSING state the whole time, explaining that a staff
+    // ticket is not shared. It exercised the branch it was not about, and
+    // asserted nothing either way.
+    testWidgets('sharing a ticket that can be shared', (tester) async {
       await opened(
         tester,
         [
@@ -1266,15 +1362,62 @@ void main() {
           ticketShareLinksProvider.overrideWith((_, __) async => const [
                 {
                   'id': 'tsl1',
-                  'token': 'abcdef0123456789abcdef0123456789',
+                  'token_hash': 'abcdef0123456789abcdef0123456789',
                   'expires_at': '2026-12-31T00:00:00Z',
+                  'sent_to_email': 'pelanggan@sinar.com.my',
+                  'open_count': 4,
+                  'reply_count': 2,
+                  'revoked_at': null,
                 },
               ]),
         ],
-        (context) => showTicketShareDialog(
-            context, const {'id': 't1', 'ticket_no': 'TK-0001'}),
+        (context) => showTicketShareDialog(context, const {
+          'id': 't1',
+          'ticket_no': 'TK-0001',
+          'status': 'open',
+          // The one thing that makes a link worth offering: a requester
+          // with no login of their own.
+          'requester_contact_id': 'c1',
+        }),
       );
       expect(tester.takeException(), isNull);
+
+      expect(find.text('Share TK-0001'), findsOneWidget);
+      // Not the refusal, which is where the old fixture left it.
+      expect(find.textContaining('raised by a member of staff'),
+          findsNothing);
+
+      // `open_count` and `reply_count`, neither of which the old fixture
+      // supplied -- so the row said "Not opened yet".
+      expect(find.textContaining('opened 4 times · 2 replies'),
+          findsOneWidget);
+      expect(find.textContaining('Not opened yet'), findsNothing);
+      // `sent_to_email`, which decides whether there is a subtitle at all.
+      expect(find.text('pelanggan@sinar.com.my'), findsOneWidget);
+    });
+
+    // And the branch the old test was accidentally in, on purpose this
+    // time. Worth pinning: the sentence is the whole reason the button
+    // explains itself instead of failing at the server.
+    testWidgets('and one raised by staff says why it is not shared',
+        (tester) async {
+      await opened(
+        tester,
+        [
+          repoProvider.overrideWithValue(repo),
+          ticketShareLinksProvider
+              .overrideWith((_, __) async => const <Map<String, dynamic>>[]),
+        ],
+        (context) => showTicketShareDialog(context, const {
+          'id': 't2',
+          'ticket_no': 'TK-0002',
+          'status': 'open',
+          'requester_contact_id': null,
+        }),
+      );
+      expect(tester.takeException(), isNull);
+      expect(find.textContaining('A link is for a requester with no login'),
+          findsOneWidget);
     });
 
     testWidgets('one time entry', (tester) async {

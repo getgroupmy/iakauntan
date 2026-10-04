@@ -426,8 +426,15 @@ class _ActivityTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(children: [
-                  Text(line.label,
-                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                  // `Flexible`, not a bare `Text`. check_narrow_rows.py's
+                  // own doctrine: a Row can shrink only to the width of
+                  // its INFLEXIBLE children, and if those alone do not fit
+                  // it overflows exactly as before.
+                  Flexible(
+                    child: Text(line.label,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                  ),
                   const SizedBox(width: Space.sm),
                   // Not StatusChip: its palette is keyed to document
                   // statuses, and half of these words ('opened',
@@ -467,12 +474,29 @@ class _ActivityTile extends StatelessWidget {
                           .textTheme
                           .bodySmall
                           ?.copyWith(color: Theme.of(context).hintColor)),
+                // UNDER the line, not at the right edge of it. It sat in
+                // the outer Row as an unflexed `Text`, and on a phone the
+                // dialog's content is about 284 logical pixels: the icon
+                // and the timestamp together took enough of that to leave
+                // the label, the badge and the detail 60 pixels between
+                // them, and the row overflowed by 110 and 187 pixels in a
+                // test at 412 wide.
+                //
+                // It never showed before because the fixture that opened
+                // this dialog supplied no `at` at all -- `_ActivityTile`
+                // reads `entry['at']` and `document_activity` returns it,
+                // but the test sent `created_at`. With no timestamp there
+                // was no trailing text, the row fitted, and the test
+                // passed over a layout nobody had seen.
+                if (at != null)
+                  Text(Fmt.dateTime(at),
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: Theme.of(context).hintColor)),
               ],
             ),
           ),
-          if (at != null)
-            Text(Fmt.dateTime(at),
-                style: Theme.of(context).textTheme.bodySmall),
         ],
       ),
     );

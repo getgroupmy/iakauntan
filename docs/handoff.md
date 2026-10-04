@@ -9966,3 +9966,94 @@ there is none. Mutant: not passing the contact finds no `+60 12-345 6789`.
 
 Seven of the fourteen are done. `dialogs_build_batch2_test.dart` is 54
 tests now, up from 50.
+
+## A fixture of the wrong shape was hiding a real overflow
+
+The share dialog, the ticket share dialog and the activity dialog, and the
+third one turned out to be hiding a layout defect rather than merely
+failing to draw one.
+
+### `showShareDialog` said "No address recorded · never opened"
+
+`document_share_links` (0094) has `token_hash` and `open_count`; the
+fixture said `token` and `views`, and the query is a bare `.select()` so a
+real row carries every column in the table. With `sent_to_email` and
+`open_count` absent the row read **"No address recorded"** and **"never
+opened"** — the opposite of a link that was emailed and opened three times,
+with `views: 3` sitting in the fixture saying so to nobody. Two rows now,
+one active and one revoked, asserting the address, `opened 3 times, last
+…`, and both chips.
+
+`StatusChip` draws its status through `Fmt.label`, which capitalises — the
+text on screen is **`Active`**, not the `active` the widget is handed.
+
+### `showTicketShareDialog` was testing the refusal
+
+Two things were wrong and the second is the bigger one. The link fixture
+said `token` and carried no `open_count`, `reply_count` or
+`sent_to_email`, so `describeTicketLink` fell to its "Not opened yet" arm.
+
+And the **ticket** had no `requester_contact_id`, which is the first thing
+`shareBlockedBecause` reads — so the dialog this test opened was in its
+**refusing** state throughout, explaining that a staff ticket is not
+shared. It exercised the branch it was not about and asserted nothing
+either way. Two tests now, one for each branch. Mutant: removing
+`requester_contact_id` puts it back in the refusal, and the assertion
+catches it.
+
+### `showActivityDialog`: 110 and 187 pixels over, at 412 wide
+
+`document_activity` (0495) returns `at, kind, recipient, status, detail,
+note`. The fixture sent `id, kind, to_address, subject, created_at,
+status` — **two of six landed.** So the row drew "Emailed" with a "sent"
+badge and nothing else: no address, no detail, no note, no timestamp.
+
+Fed the real shape, the test failed — with **two `RenderFlex ...
+OVERFLOWING` exceptions, by 110 and 187 pixels**, from
+`email_dialog.dart:428`.
+
+The cause, measured rather than guessed. `_ActivityTile`'s outer Row was
+
+```dart
+Row(children: [
+  Padding(child: Icon(...)),            // 18
+  const SizedBox(width: Space.sm),      // 8
+  Expanded(child: Column(...)),         // the label, badge, detail, …
+  if (at != null)
+    Text(Fmt.dateTime(at), ...),        // UNFLEXED
+])
+```
+
+On a phone the dialog's content is about **284** logical pixels — 412 less
+the dialog's 40-a-side inset and 24-a-side content padding. The timestamp
+took enough of that to leave the `Expanded` **59.6**, which the exception
+states outright: `constraints: BoxConstraints(0.0<=w<=59.6, …)`. The inner
+Row's inflexible children — the label at 151 and the badge at 67, with two
+8-pixel gaps — need 234.
+
+This is `check_narrow_rows.py`'s own doctrine, in its own words: *"An
+`Expanded` is not a get-out… it can shrink only down to the width of its
+INFLEXIBLE children, and if those alone do not fit it overflows exactly as
+before."* That gate did not catch it because its subject is `ListTile`'s
+`trailing:` and `title:`, and `_ActivityTile` is a hand-built
+`Padding(Row(...))`.
+
+**And it had never shown, because the fixture had no `at`.** No timestamp,
+no trailing text, the row fitted, and the test passed over a layout nobody
+had ever drawn. The wrong shape was not merely failing to verify the
+dialog — it was concealing a defect in it.
+
+Fixed: the timestamp moves **under** the line, beside the recipient and
+the note, and the label is `Flexible` as belt and braces per the doctrine
+above. No exception at 412 after it, and `activity_entry_test.dart`,
+`send_now_outcome_test.dart` and the whole batch file still pass.
+
+Honest caveat, the one widget-tests.md insists on: the test font draws
+every glyph at a full em, so `Fmt.dateTime` measures wider in a test than
+in Plus Jakarta Sans and 110/187 overstates the real-device figure. At real
+metrics the row comes to roughly 284 of 284 with **nothing** left for the
+detail — so what shipped was a line that silently dropped its detail and
+would overflow on a larger system font. A latent fragility made
+unbreakable, which is what the doc says to treat these as.
+
+Ten of the fourteen done. The file is 55 tests.
