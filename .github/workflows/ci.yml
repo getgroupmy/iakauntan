@@ -110,7 +110,41 @@ jobs:
         run: python3 scripts/check_passkey_association.py
 
       - run: flutter analyze --fatal-infos --fatal-warnings
-      - run: flutter test
+
+      # `- run: flutter test` was this step for 2251 runs, and a bare
+      # `flutter test` answers only one of the two questions worth
+      # asking. It exits 0 when every test it FOUND passed. It also
+      # exits 0 when it found fewer than yesterday, and says so only in
+      # a number nothing reads: the `+N` at the head of its last line.
+      #
+      # A test stops registering without failing in several ordinary
+      # ways -- a block moved inside an `if` that is false, left after
+      # an early `return`, nested in a group whose body throws before
+      # reaching it, or in a file renamed out of the `*_test.dart` glob
+      # -- and the suite runs the rest, prints "All tests passed!", and
+      # goes green over a smaller suite. That is the same hole
+      # `supabase/tests/assertion_floor` and
+      # `supabase/functions/_local_check/deno_test_floor` were cut to
+      # close, and it is closed here the same way: count what ran, and
+      # compare it to a number that lives in one file.
+      #
+      # `--file-reporter json:` rather than scraping the console. The
+      # reporter emits one `testDone` event per test carrying a `hidden`
+      # flag, and `hidden` is what separates a real test from the
+      # `loading <path>` pseudo-test every suite contributes -- counting
+      # those would make the number RISE when a file with no tests in it
+      # is added. It writes the file alongside the normal expanded
+      # output, so a failure still reads the way it always did.
+      #
+      # Two lines, no pipe. Under `bash -e` the first failing line ends
+      # the step, and `flutter test | python3 ...` would hand the shell
+      # Python's status -- the `pipefail` trap that made a failing psql
+      # assertion read as a pass.
+      - name: Run the Dart tests, and count them
+        run: |
+          flutter test --file-reporter "json:$RUNNER_TEMP/flutter_tests.json"
+          python3 ../scripts/check_flutter_test_count.py \
+            "$RUNNER_TEMP/flutter_tests.json"
 
       # The workbook writer, read back by parsers that know nothing
       # about how it was written. `core/xlsx.dart` builds `.xlsx` by
@@ -2866,7 +2900,63 @@ jobs:
       # native worker binary, and a silently different version of it is
       # not something to discover in a call.
       - run: npm ci
-      - run: npm test
+
+      # `- run: npm test` was the whole step, and the package script is
+      # `node --test test/*.test.js`. Probed on node v22.22.2: over a
+      # glob that matches NOTHING that prints
+      #
+      #     1..0
+      #     # tests 0
+      #     # fail 0
+      #
+      # and EXITS 0. So emptying server/sfu/test/, renaming the files
+      # out of `*.test.js`, or moving the directory takes all 33
+      # assertions about the call server's protocol and token handling
+      # with it and this job goes green. A file that still exists but
+      # defines no tests reads as `# tests 1`, because node counts the
+      # file when it holds nothing.
+      #
+      # The fourth floor on the same pattern as
+      # `supabase/tests/assertion_floor`,
+      # `supabase/functions/_local_check/deno_test_floor` and
+      # `app/test/flutter_test_floor`. The reporter is pinned in the
+      # package script rather than here: node chooses `tap` off a
+      # terminal and `spec` on one, and `spec` spells the summary
+      # differently, so the count would depend on what stdout is
+      # attached to.
+      #
+      # Captured, NOT piped. This runs under `bash -e` with no
+      # `pipefail`, so `npm test | grep` would hand the shell grep's
+      # status and a FAILING TEST WOULD READ AS A PASS.
+      - name: Run the call server's tests, and count them
+        run: |
+          floor="$(grep -Ex '[0-9]+' test/node_test_floor || true)"
+          if ! printf '%s' "$floor" | grep -Exq '[0-9]+'; then
+            echo "::error::server/sfu/test/node_test_floor holds no bare" \
+                 "integer, so there is no floor to compare against." >&2
+            exit 1
+          fi
+
+          out="$(npm test 2>&1)" || {
+            printf '%s\n' "$out"
+            echo "::error::the call server's tests failed" >&2
+            exit 1
+          }
+          printf '%s\n' "$out" | tail -12
+
+          ran="$(printf '%s\n' "$out" \
+                   | grep -oE '^# tests [0-9]+' | grep -oE '[0-9]+' \
+                   | tail -1)"
+          ran="${ran:-0}"
+          echo "call server tests that ran: $ran (floor: $floor)"
+          if [ "$ran" -lt "$floor" ]; then
+            echo "::error::$ran call server test(s) ran and the floor is" \
+                 "$floor. node --test exits 0 over a glob that matches" \
+                 "nothing and over a file that defines no tests. Find the" \
+                 "tests that went missing; do not lower the floor to" \
+                 "match them." >&2
+            exit 1
+          fi
 
   # -------------------------------------------------------------------
   # The migrations

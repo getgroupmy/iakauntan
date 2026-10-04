@@ -22,6 +22,8 @@ import contextlib
 import importlib.util
 import io
 import pathlib
+import shutil
+import tempfile
 import unittest
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -37,6 +39,7 @@ def shipped() -> dict[str, str]:
     found = {g: "reported" for g in csl.gates()}
     found.update({g: "needs_argument" for g in csl.NEEDS_A_DATABASE})
     found.update({g: "crashed" for g in csl.NEEDS_A_FILE})
+    found.update({g: "needs_argument" for g in csl.NEEDS_AN_ARGUMENT})
     found.update({g: "passed_over_nothing" for g in csl.PASSES_OVER_NOTHING})
     return found
 
@@ -62,6 +65,7 @@ class TheShippedState(Harness):
         nothing -- which is this gate's own failure mode."""
         found = shipped()
         buckets = (len(csl.NEEDS_A_DATABASE) + len(csl.NEEDS_A_FILE)
+                   + len(csl.NEEDS_AN_ARGUMENT)
                    + len(csl.PASSES_OVER_NOTHING))
         self.assertEqual(len(found) - buckets,
                          sum(1 for v in found.values() if v == "reported"))
@@ -244,12 +248,114 @@ class TheRatchetBothWays(Harness):
 
     def test_every_gate_is_in_some_bucket_now_that_the_backlog_is_empty(self):
         """With the ratchet at zero, every gate is either excused or must
-        report. A gate in no bucket would be checked by nothing."""
-        excused = set(csl.NEEDS_A_DATABASE) | set(csl.NEEDS_A_FILE)
-        for gate in csl.gates():
+        report. A gate in no bucket would be checked by nothing.
+
+        The previous version of this asserted `gate in excused or gate
+        not in PASSES_OVER_NOTHING`, and PASSES_OVER_NOTHING is EMPTY --
+        so the right-hand side was true of every gate and the assertion
+        held whatever the left-hand side said. A vacuous test in the file
+        whose whole subject is vacuous success.
+        """
+        excused = (set(csl.NEEDS_A_DATABASE) | set(csl.NEEDS_A_FILE)
+                   | set(csl.NEEDS_AN_ARGUMENT))
+        verdicts = csl.verdicts(
+            csl.skeleton_tree(pathlib.Path(self.tree())),
+            [g for g in csl.gates() if g not in excused])
+        for gate, verdict in sorted(verdicts.items()):
             with self.subTest(gate):
-                self.assertTrue(gate in excused
-                                or gate not in csl.PASSES_OVER_NOTHING)
+                self.assertEqual(
+                    verdict, "reported",
+                    "%s is in no bucket and did not report over an empty "
+                    "tree" % gate)
+
+    def tree(self) -> str:
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        return tmp
+
+
+class TheCountInTheSentence(Harness):
+    """`counted` was `len(found) - len(excused) - len(backlog)`:
+    arithmetic, not a tally. So a gate that exited 2 on a `usage:` line
+    and is in no bucket was counted among those that "report a problem
+    over an empty source tree" -- the one thing this gate's docstring
+    says must never count as looking. check_flutter_test_count was the
+    first gate to fall in, and the sentence said 46 of 64.
+    """
+
+    def test_an_unexcused_usage_line_is_refused(self):
+        found = shipped()
+        found["check_or_filters"] = "needs_argument"
+        code, said = self.gate(found)
+        self.assertEqual(code, 1)
+        self.assertIn("check_or_filters", said)
+        self.assertIn("Non-zero for the wrong reason", said)
+        self.assertIn("NEEDS_AN_ARGUMENT", said)
+
+    def test_an_unexcused_crash_is_refused_too(self):
+        found = shipped()
+        found["check_or_filters"] = "crashed"
+        code, said = self.gate(found)
+        self.assertEqual(code, 1)
+        self.assertIn("NEEDS_A_FILE", said)
+
+    def test_the_printed_count_is_a_tally_of_verdicts(self):
+        # Fed a map where one unexcused gate reports and all the others
+        # are excused, the sentence must say 1 -- not "everything that is
+        # not excused".
+        found = {g: "needs_argument" for g in csl.NEEDS_A_DATABASE}
+        found.update({g: "crashed" for g in csl.NEEDS_A_FILE})
+        found.update({g: "needs_argument" for g in csl.NEEDS_AN_ARGUMENT})
+        found["check_or_filters"] = "reported"
+        code, said = self.gate(found)
+        self.assertEqual(code, 0, said)
+        self.assertIn("1 of %d gates report" % len(found), said)
+
+    def test_the_sentence_counts_the_argument_bucket_as_its_own(self):
+        code, said = self.gate(shipped())
+        self.assertEqual(code, 0, said)
+        self.assertIn("%d exit on a missing argument"
+                      % len(csl.NEEDS_AN_ARGUMENT), said)
+
+    def test_every_argument_excuse_names_what_it_wants(self):
+        self.assertTrue(csl.NEEDS_AN_ARGUMENT)
+        for gate, what in csl.NEEDS_AN_ARGUMENT.items():
+            with self.subTest(gate):
+                self.assertIn(gate, set(csl.gates()), gate)
+                self.assertGreater(len(what), 20, gate)
+
+    def test_an_argument_excuse_for_a_gate_that_reports_is_flagged(self):
+        found = shipped()
+        gate = sorted(csl.NEEDS_AN_ARGUMENT)[0]
+        found[gate] = "reported"
+        code, said = self.gate(found)
+        self.assertEqual(code, 1)
+        self.assertIn("stale", said)
+
+    def test_an_argument_excuse_for_a_gate_that_passes_is_flagged_harder(self):
+        found = shipped()
+        gate = sorted(csl.NEEDS_AN_ARGUMENT)[0]
+        found[gate] = "passed_over_nothing"
+        code, said = self.gate(found)
+        self.assertEqual(code, 1)
+        self.assertIn("the gate is not looking", said)
+
+    def test_an_argument_excuse_for_a_deleted_gate_is_flagged(self):
+        # The map is built BEFORE the excuse is added, so `check_gone_away`
+        # is absent from it -- which is what a deleted gate looks like.
+        # Built after, `shipped()` derives an entry FROM the excuse and
+        # the gate agrees with itself; the first version of this test did
+        # that and passed over the branch it names.
+        found = shipped()
+        saved = csl.NEEDS_AN_ARGUMENT
+        csl.NEEDS_AN_ARGUMENT = dict(saved, check_gone_away="a path")
+        try:
+            code, said = self.gate(found)
+        finally:
+            csl.NEEDS_AN_ARGUMENT = saved
+        self.assertEqual(code, 1)
+        self.assertIn("check_gone_away", said)
+        self.assertIn("NEEDS_AN_ARGUMENT", said)
 
 
 if __name__ == "__main__":

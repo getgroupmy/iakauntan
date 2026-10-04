@@ -70,6 +70,31 @@ DENO_STEP = "Count the edge tests that ran"
 FUNCTIONS_DIR = ROOT / "supabase" / "functions"
 WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 
+#: The THIRD floor, and the one that went uncounted longest. Line 113 of
+#: ci.yml was a bare `- run: flutter test` for 2251 runs. `flutter test`
+#: exits 0 over a suite that shrank, and prints the only number that
+#: would have said so inside a progress line.
+#:
+#: Unlike the other two this floor has ONE reader --
+#: `scripts/check_flutter_test_count.py` -- because there is no local
+#: Dart runner script to keep in step with CI. So what this asserts is
+#: that the reader reads the file rather than carrying a default, and
+#: that CI still writes the report the reader counts.
+DART_FLOOR_FILE = ROOT / "app" / "test" / "flutter_test_floor"
+DART_READER = ROOT / "scripts" / "check_flutter_test_count.py"
+DART_STEP = "Run the Dart tests, and count them"
+
+#: The FOURTH floor, and the easiest one to lose entirely. The sfu job's
+#: whole step was `- run: npm test`, and the package script is
+#: `node --test test/*.test.js`. Probed on node v22.22.2: over a glob
+#: that matches NOTHING that prints `# tests 0` and EXITS 0, so emptying
+#: or renaming server/sfu/test/ takes every assertion about the call
+#: server's protocol and token handling with it and the job goes green.
+#: Also one reader -- the CI step.
+NODE_FLOOR_FILE = ROOT / "server" / "sfu" / "test" / "node_test_floor"
+NODE_PACKAGE = ROOT / "server" / "sfu" / "package.json"
+NODE_STEP = "Run the call server's tests, and count them"
+
 #: What psql prints for `raise notice 'ok   <label>'`, and therefore what
 #: both runners must count. Two spaces after NOTICE:, one after ok.
 PATTERN = "NOTICE:  ok "
@@ -190,7 +215,79 @@ def problems(floor_text: str | None = None, runner: str | None = None,
             "than a renamed notice.")
 
     out += deno_problems()
+    out += dart_problems()
+    out += node_problems()
     out += functions_dir_problems()
+    return out
+
+
+def node_problems(floor_text: str | None = None,
+                  package: str | None = None,
+                  workflow: str | None = None) -> list[str]:
+    """The same questions of the call server's floor.
+
+    One it has that the others do not: the count is read out of the TAP
+    reporter's `# tests N` line, and node picks its reporter by whether
+    stdout is a terminal -- `tap` off one, `spec` on one, and `spec`
+    spells that line differently. A count that depends on what stdout is
+    attached to is a count that changes when the runner does, so the
+    reporter is PINNED in the package script and that is asserted here.
+    """
+    out: list[str] = []
+    if floor_text is None and not NODE_FLOOR_FILE.exists():
+        return ["%s does not exist. It is where the call server's number "
+                "lives." % NODE_FLOOR_FILE.relative_to(ROOT)]
+    floor_text = (NODE_FLOOR_FILE.read_text() if floor_text is None
+                  else floor_text)
+    value = floor_value(floor_text)
+    if value is None:
+        out.append(
+            "server/sfu/test/node_test_floor must hold exactly one bare "
+            "integer on a line of its own; the step anchors on "
+            "`^[0-9]+$` and a malformed file reads as the EMPTY STRING.")
+    elif int(value) <= 0:
+        out.append("the call server's floor is %s, which passes a suite "
+                   "where every test stopped registering." % value)
+
+    package = NODE_PACKAGE.read_text() if package is None else package
+    if "--test-reporter=tap" not in package:
+        out.append(
+            "server/sfu/package.json's test script does not pin "
+            "`--test-reporter=tap`. node chooses `tap` when stdout is not "
+            "a terminal and `spec` when it is, and `spec` writes the "
+            "summary the step counts as `i tests N` instead of "
+            "`# tests N`. The count would then be zero on a runner that "
+            "allocates a tty, which is a floor failing for a reason that "
+            "has nothing to do with the tests.")
+
+    step = ci_step(WORKFLOW.read_text() if workflow is None else workflow,
+                   NODE_STEP)
+    code = re.sub(r"(?<!\$)#[^\n]*", "", step)
+    if not step:
+        out.append(
+            'ci.yml has no step named "%s". This gate finds the call '
+            "server's counting step by that name." % NODE_STEP)
+    else:
+        if "node_test_floor" not in step:
+            out.append('"%s" does not read '
+                       "server/sfu/test/node_test_floor." % NODE_STEP)
+        if not re.search(r'"\$ran"\s+-lt\s+"\$floor"', step):
+            out.append('"%s" reads the floor but never compares the count '
+                       "against it. Printing a number nobody checks is "
+                       "not a floor." % NODE_STEP)
+        if re.search(r"npm test[^\n|]*\|(?!\|)", code):
+            out.append(
+                '"%s" PIPES `npm test`. Under `bash -e` with no '
+                "`pipefail` the shell takes the right-hand side's status "
+                "and a failing test reads as a pass." % NODE_STEP)
+        if "npm test" not in code:
+            out.append('"%s" does not run `npm test`.' % NODE_STEP)
+
+    whole = WORKFLOW.read_text() if workflow is None else workflow
+    if "\n      - run: npm test\n" in whole:
+        out.append(
+            "ci.yml still has a bare `- run: npm test`. That is the "
+            "uncounted run this floor exists to replace.")
     return out
 
 
@@ -318,6 +415,106 @@ def deno_problems(floor_text: str | None = None,
     return out
 
 
+def dart_problems(floor_text: str | None = None,
+                  reader: str | None = None,
+                  workflow: str | None = None) -> list[str]:
+    """The same questions of the Dart-test floor.
+
+    Two differ. There is no second runner to drift from, so the
+    "one definition" question becomes whether the single reader carries
+    a DEFAULT -- a fallback integer in the reader is the second copy,
+    just spelled in Python. And the floor is useless unless CI still
+    writes the json report the reader counts, so the step is checked for
+    `--file-reporter` as well as for the reader's name.
+    """
+    out: list[str] = []
+    if floor_text is None and not DART_FLOOR_FILE.exists():
+        return ["%s does not exist. It is where the Dart-test number "
+                "lives." % DART_FLOOR_FILE.relative_to(ROOT)]
+    floor_text = (DART_FLOOR_FILE.read_text() if floor_text is None
+                  else floor_text)
+    value = floor_value(floor_text)
+    if value is None:
+        out.append(
+            "app/test/flutter_test_floor must hold exactly one bare "
+            "integer on a line of its own. Its reader takes the first "
+            "digits-only line and refuses when there is none, and two "
+            "bare integers in that file is two floors.")
+    elif int(value) <= 0:
+        out.append("the Dart-test floor is %s, which passes a suite where "
+                   "every test stopped registering." % value)
+
+    reader = DART_READER.read_text() if reader is None else reader
+    if "flutter_test_floor" not in reader:
+        out.append(
+            "check_flutter_test_count.py does not name "
+            "app/test/flutter_test_floor. The number has one definition "
+            "or it drifts the first time it is raised.")
+    # A default is the second copy, just spelled in Python. `floor_from`
+    # returning None and `main` exiting 2 is the arrangement; `or 4000`
+    # would make the malformed-file path pass in silence.
+    #
+    # `[ \t]*` and NOT `\s*`. The reader's correct shape is
+    #
+    #     floor = floor_from()
+    #     if floor is None:
+    #
+    # and `\s*` crosses the newline, so the first version of this read
+    # the right arrangement as a fallback and reported it. It was the
+    # gate's own first run that said so. A fallback is on the SAME line
+    # as the call -- `or 4000`, or a ternary's `if`.
+    if re.search(r"floor_from\([^)]*\)[ \t]*(or|if)\b", reader):
+        out.append(
+            "check_flutter_test_count.py falls back to a value when the "
+            "floor file cannot be read. An unreadable floor is a reason "
+            "to refuse, not a reason to invent a number.")
+
+    step = ci_step(WORKFLOW.read_text() if workflow is None else workflow,
+                   DART_STEP)
+    # Comments stripped for the same reason as above: this step's prose
+    # quotes the bare `- run: flutter test` it replaced and the piped
+    # form it must not use.
+    code = re.sub(r"(?<!\$)#[^\n]*", "", step)
+    if not step:
+        out.append(
+            'ci.yml has no step named "%s". This gate finds the Dart '
+            "counting step by that name; renaming it without updating "
+            "this makes the gate check nothing." % DART_STEP)
+    else:
+        if "--file-reporter" not in code:
+            out.append(
+                '"%s" does not pass `--file-reporter json:<path>`, so no '
+                "report is written and the counter has nothing to count."
+                % DART_STEP)
+        if "check_flutter_test_count.py" not in code:
+            out.append('"%s" does not run '
+                       "scripts/check_flutter_test_count.py, so the "
+                       "report is written and never read." % DART_STEP)
+        if re.search(r"flutter test[^\n|]*\|(?!\|)", code):
+            out.append(
+                '"%s" PIPES `flutter test`. Under `bash -e` with no '
+                "`pipefail` the shell takes the right-hand side's status "
+                "and a failing suite reads as a pass." % DART_STEP)
+        # The floor is read by the script, from the file. A number on the
+        # command line would be a second definition in the one place
+        # nobody greps.
+        if re.search(r"check_flutter_test_count\.py[^\n]*\s[0-9]+\s*$",
+                     code, re.MULTILINE):
+            out.append(
+                '"%s" passes a number to check_flutter_test_count.py. '
+                "The floor lives in app/test/flutter_test_floor and the "
+                "script reads it; an argument is a second copy."
+                % DART_STEP)
+
+    whole = WORKFLOW.read_text() if workflow is None else workflow
+    if "\n      - run: flutter test\n" in whole:
+        out.append(
+            "ci.yml still has a bare `- run: flutter test`. That is the "
+            "uncounted run this floor exists to replace; leaving one in "
+            "place means a shrinking suite is still green somewhere.")
+    return out
+
+
 def run() -> int:
     found = problems()
     if found:
@@ -328,6 +525,11 @@ def run() -> int:
     value = floor_value(FLOOR_FILE.read_text())
     print("the assertion floor is %s, defined once and read by both "
           "run_locally.sh and ci.yml." % value)
+    print("the edge-test floor is %s, the Dart-test floor is %s and the "
+          "call server's is %s, each defined once."
+          % (floor_value(DENO_FLOOR_FILE.read_text()),
+             floor_value(DART_FLOOR_FILE.read_text()),
+             floor_value(NODE_FLOOR_FILE.read_text())))
     return 0
 
 

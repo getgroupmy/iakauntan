@@ -1,0 +1,55 @@
+6638
+
+The number of Dart tests `flutter test` runs in app/. One definition,
+read by `scripts/check_flutter_test_count.py` and by nothing else; CI's
+step "Run the Dart tests, and count them" writes the json report and
+hands it to that script, which reads this file itself.
+
+Measured twice, twelve minutes a run, both times the same.
+
+## Why there is a floor at all
+
+`flutter test` exits 0 when every test it FOUND passed. It also exits 0
+when it found fewer than it did yesterday, and the only number that
+would have said so is the `+N` at the head of its last line, which
+nothing read: line 113 of ci.yml was a bare `- run: flutter test` for
+2251 runs.
+
+A test stops registering without failing in several ordinary ways -- a
+block moved inside an `if` that is false, left after an early `return`,
+nested in a group whose body throws before the block is reached, or in a
+file renamed out of the `*_test.dart` glob. The suite then runs the
+rest, prints "All tests passed!", and goes green over a smaller suite.
+
+## Why it is one MORE than flutter prints
+
+flutter's last line reads
+
+    +6637 ~1: All tests passed!
+
+`+` counts passes and `~` counts skips, separately. This gate counts
+non-hidden `testDone` events, which is both: 6637 + 1.
+
+`hidden` is the reporter's own flag for everything that is not a test
+somebody wrote. Counting it would make this number RISE when a file with
+no tests in it is added, which is the opposite of what it is for. The
+report holds 465 hidden events and this number holds none of them:
+
+  * 457 `loading <path>` pseudo-tests, one per test file, which is
+    exactly `find app/test -name '*_test.dart' | wc -l`;
+  * 8 more -- four `(setUpAll)` and four `(tearDownAll)`. They are
+    reported as tests, pass, and assert nothing, and the flag is the
+    only thing that tells them apart. 465 was the measured number; 457
+    was the one I expected, and the eight are why.
+
+The one skip is `app/test/xlsx_sample_test.dart`, a fixture generator
+that happens to be a test, and it is named in `SKIPPABLE` with the
+reason. Any other skip fails the gate: a skipped test is counted,
+reports success, and asserts nothing, so a floor on its own would be
+cleared by skipping every test in the suite.
+
+## Raising and lowering it
+
+Raise it freely, in the commit that adds the tests. Lower it only with
+the deleted tests named in the commit message -- a floor lowered to
+match a number nobody explained is the hole back.

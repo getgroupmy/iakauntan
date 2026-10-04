@@ -267,6 +267,200 @@ class TheEdgeTestFloor(unittest.TestCase):
                          "503")
 
 
+REAL_DART_STEP = caf.ci_step(caf.WORKFLOW.read_text(), caf.DART_STEP)
+
+
+class TheDartTestFloor(unittest.TestCase):
+    """The third floor. Line 113 of ci.yml was a bare
+    `- run: flutter test` for 2251 runs: it exits 0 over a suite that
+    shrank, and the only number that would have said so is inside a
+    progress line nothing reads.
+    """
+
+    def feed(self, step=None, **kw):
+        step = REAL_DART_STEP if step is None else step
+        return caf.dart_problems(
+            workflow="      - name: %s\n        run: |\n%s" % (
+                caf.DART_STEP,
+                "\n".join("          " + l for l in step.splitlines())),
+            **kw)
+
+    def test_the_plumbing_is_sound_as_shipped(self):
+        self.assertEqual(caf.dart_problems(), [])
+
+    def test_a_piped_flutter_test_is_flagged(self):
+        out = self.feed(REAL_DART_STEP.replace(
+            'flutter test --file-reporter "json:$RUNNER_TEMP'
+            '/flutter_tests.json"',
+            'flutter test --file-reporter json:/tmp/r.json | tee /tmp/o'))
+        self.assertIn("PIPES", said(out))
+
+    def test_the_prose_around_the_step_is_not_read_as_code(self):
+        # Two different pieces of prose, in two different places, and
+        # finding that out is why this test is worded the way it is.
+        #
+        # The comments explaining this step sit ABOVE its `- name:` line,
+        # so they are in the workflow but NOT in the slice `ci_step`
+        # returns -- `assertIn("- run: flutter test", REAL_DART_STEP)`
+        # failed on exactly that. They quote both the bare
+        # `- run: flutter test` they replaced and the piped form they
+        # forbid, and `dart_problems` must not report either.
+        whole = caf.WORKFLOW.read_text()
+        self.assertIn("# `- run: flutter test` was this step", whole)
+        self.assertIn("flutter test | python3", whole)
+        self.assertEqual(caf.dart_problems(), [])
+
+        # And `ci_step`'s slice runs to the NEXT `- name:`, so it carries
+        # the comment block introducing the step after this one -- which
+        # happens to say "the script itself runs `flutter test` from
+        # `app`". That is prose inside the slice, which is what the
+        # comment stripping in `dart_problems` is for.
+        self.assertIn("runs\n      # `flutter test` from `app`",
+                      REAL_DART_STEP)
+        self.assertEqual(self.feed(), [])
+
+    def test_a_step_that_writes_no_report_is_flagged(self):
+        out = self.feed(
+            REAL_DART_STEP.replace("--file-reporter", "--reporter"))
+        self.assertIn("--file-reporter", said(out))
+
+    def test_a_step_that_never_reads_the_report_is_flagged(self):
+        out = self.feed(REAL_DART_STEP.replace(
+            "python3 ../scripts/check_flutter_test_count.py",
+            "true # was: the counter"))
+        self.assertIn("written and never read", said(out))
+
+    def test_a_floor_passed_as_an_argument_is_a_second_copy(self):
+        out = self.feed(
+            'flutter test --file-reporter json:/tmp/r.json\n'
+            'python3 ../scripts/check_flutter_test_count.py /tmp/r.json 6638')
+        self.assertIn("second copy", said(out))
+
+    def test_a_renamed_step_is_reported_rather_than_skipped(self):
+        out = caf.dart_problems(workflow="      - name: Something else\n")
+        self.assertIn("has no step named", said(out))
+
+    def test_a_surviving_bare_flutter_test_run_is_flagged(self):
+        out = caf.dart_problems(
+            workflow=caf.WORKFLOW.read_text()
+            + "\n      - run: flutter test\n")
+        self.assertIn("uncounted run", said(out))
+
+    def test_the_live_workflow_has_no_bare_flutter_test_run(self):
+        self.assertNotIn("\n      - run: flutter test\n",
+                         caf.WORKFLOW.read_text())
+
+    def test_a_reader_with_a_fallback_floor_is_flagged(self):
+        out = caf.dart_problems(reader="floor = floor_from() or 4000\n")
+        self.assertIn("invent a number", said(out))
+
+    def test_a_reader_that_does_not_name_the_file_is_flagged(self):
+        out = caf.dart_problems(reader="floor = 6638\n")
+        self.assertIn("one definition", said(out))
+
+    def test_a_malformed_floor_file_is_reported(self):
+        out = caf.dart_problems(floor_text="# prose only\n")
+        self.assertIn("exactly one bare integer", said(out))
+
+    def test_two_numbers_in_the_floor_file_is_two_floors(self):
+        out = caf.dart_problems(floor_text="6638\n6000\n")
+        self.assertIn("exactly one bare integer", said(out))
+
+    def test_a_zero_floor_is_reported(self):
+        out = caf.dart_problems(floor_text="0\n")
+        self.assertIn("every test stopped registering", said(out))
+
+    def test_the_reader_exists_and_is_the_one_named(self):
+        self.assertTrue(caf.DART_READER.is_file(), caf.DART_READER)
+        self.assertIn("flutter_test_floor", caf.DART_READER.read_text())
+
+
+REAL_NODE_STEP = caf.ci_step(caf.WORKFLOW.read_text(), caf.NODE_STEP)
+
+
+class TheCallServersFloor(unittest.TestCase):
+    """The fourth floor, and the one with the most to lose. The sfu job's
+    whole step was `- run: npm test`, and the package script is
+    `node --test test/*.test.js`. Probed on node v22.22.2: over a glob
+    that matches NOTHING it prints `# tests 0` and EXITS 0 -- so
+    emptying or renaming server/sfu/test/ takes all 33 assertions about
+    the call server's protocol and token handling with it and the job
+    stays green. Proved by moving the two files to `*.spec.js` and
+    running the extracted step: 0 ran, exit 1.
+    """
+
+    def feed(self, step=None, **kw):
+        step = REAL_NODE_STEP if step is None else step
+        return caf.node_problems(
+            workflow="      - name: %s\n        run: |\n%s" % (
+                caf.NODE_STEP,
+                "\n".join("          " + l for l in step.splitlines())),
+            **kw)
+
+    def test_the_plumbing_is_sound_as_shipped(self):
+        self.assertEqual(caf.node_problems(), [])
+
+    def test_a_piped_npm_test_is_flagged(self):
+        out = self.feed(REAL_NODE_STEP.replace(
+            'out="$(npm test 2>&1)" || {', 'npm test | tee /tmp/o || {'))
+        self.assertIn("PIPES", said(out))
+
+    def test_the_steps_own_comments_are_not_read_as_faults(self):
+        # Its prose quotes the bare `- run: npm test` it replaced and the
+        # piped form it forbids.
+        whole = caf.WORKFLOW.read_text()
+        self.assertIn("# `- run: npm test` was the whole step", whole)
+        self.assertIn("`npm test | grep`", whole)
+        self.assertEqual(caf.node_problems(), [])
+
+    def test_a_step_that_only_prints_the_count_is_flagged(self):
+        out = self.feed(REAL_NODE_STEP.replace(
+            'if [ "$ran" -lt "$floor" ]; then', 'if false; then'))
+        self.assertIn("never compares", said(out))
+
+    def test_a_step_that_stops_running_the_tests_is_flagged(self):
+        out = self.feed(REAL_NODE_STEP.replace("npm test", "true"))
+        self.assertIn("does not run `npm test`", said(out))
+
+    def test_a_renamed_step_is_reported_rather_than_skipped(self):
+        out = caf.node_problems(workflow="      - name: Something else\n")
+        self.assertIn("has no step named", said(out))
+
+    def test_a_surviving_bare_npm_test_run_is_flagged(self):
+        out = caf.node_problems(
+            workflow=caf.WORKFLOW.read_text() + "\n      - run: npm test\n")
+        self.assertIn("uncounted run", said(out))
+
+    def test_the_live_workflow_has_no_bare_npm_test_run(self):
+        self.assertNotIn("\n      - run: npm test\n",
+                         caf.WORKFLOW.read_text())
+
+    def test_an_unpinned_reporter_is_flagged(self):
+        # node picks `tap` off a terminal and `spec` on one, and `spec`
+        # spells the summary `i tests 33` rather than `# tests 33`. The
+        # count would read zero on a runner that allocates a tty.
+        out = caf.node_problems(
+            package='{"scripts": {"test": "node --test test/*.test.js"}}')
+        self.assertIn("--test-reporter=tap", said(out))
+
+    def test_the_real_package_pins_it(self):
+        self.assertIn("--test-reporter=tap", caf.NODE_PACKAGE.read_text())
+
+    def test_a_malformed_floor_file_is_reported(self):
+        out = caf.node_problems(floor_text="# prose only\n")
+        self.assertIn("exactly one bare integer", said(out))
+
+    def test_a_zero_floor_is_reported(self):
+        out = caf.node_problems(floor_text="0\n")
+        self.assertIn("every test stopped registering", said(out))
+
+    def test_the_floor_is_the_measured_number(self):
+        """33: 23 in protocol.test.js and 10 in token.test.js, subtests
+        inside a describe included and the four suites not counted."""
+        self.assertEqual(caf.floor_value(caf.NODE_FLOOR_FILE.read_text()),
+                         "33")
+
+
 class NothingLooseUnderFunctions(unittest.TestCase):
     """`supabase start` walks `supabase/functions/` and reaches for
     `<entry>/index.ts` for every entry. A directory without one is

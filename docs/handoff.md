@@ -9177,3 +9177,144 @@ above each verified against a fed mutant.
   a file only CI can run, and `jsr.io` is unreachable from some machines
   this gets worked on. My pattern did not know the idiom. Fifth time
   today.
+
+## The same question of the other two runners: `flutter test` and `npm test`
+
+Two more layers of the day's question — *what does this check do when it
+has nothing to look at?* — and both answered badly.
+
+### `flutter test`: 6,638 tests behind a step that read nothing
+
+Line 113 of `ci.yml` was
+
+    - run: flutter test
+
+for 2,251 runs. `flutter test` exits 0 when every test it FOUND passed.
+It also exits 0 when it found fewer than yesterday, and the only number
+that would say so is the `+N` at the head of its last progress line.
+
+**Proved with a mutant, not reasoned about.** `contact_code_test.dart`
+has three tests; `if (DateTime.now().year > 1) return;` above the third
+is a test left after an early return. It compiles, the analyser is
+silent, and:
+
+    before:  00:00 +3: All tests passed!   flutter exit 0
+    after:   00:00 +2: All tests passed!   flutter exit 0
+
+The gate over the same two reports: `3 Dart tests ran (floor 3)` exit 0,
+then `2 Dart tests ran; the floor is 3` exit 1.
+
+#### The number is 6,638 and it is not the number flutter prints
+
+Measured twice, twelve minutes a run, both `+6637 ~1`. `+` counts passes
+and `~` counts skips **separately**, so the suite is 6,638.
+
+The gate counts non-hidden `testDone` events out of
+`--file-reporter json:`, never the console line. The report holds **465**
+hidden events and none are counted:
+
+* 457 `loading <path>` pseudo-tests, one per test file — exactly
+  `find app/test -name '*_test.dart' | wc -l`;
+* **8 more: four `(setUpAll)` and four `(tearDownAll)`.** They are
+  reported as tests, they pass, they assert nothing, and the `hidden`
+  flag is the only thing that separates them. 457 was the number I
+  expected; 465 was the number there.
+
+Counting hidden events would make the floor RISE when a file with no
+tests in it is added, which is backwards.
+
+#### One skip, and it is legitimate
+
+`app/test/xlsx_sample_test.dart` calls `markTestSkipped` when
+`XLSX_SAMPLE_OUT` is unset. It is a **fixture generator that happens to
+be a test** — the only runner here that can compile code importing
+`package:flutter` is `flutter test` — and `scripts/check_xlsx.py` sets
+the variable, after which the same test writes the workbook the Python
+gate reads back. It is counted either way, so the floor does not move.
+
+Named in `SKIPPABLE`, keyed `test/<file>: <name>` and not by name alone:
+test names here are group prefixes joined with a space and several repeat
+across files, so a name-only key would cover a different test later.
+
+#### The bug in my own gate that ten green assertions hid
+
+    def floor_from(path: str = FLOOR_FILE) -> int | None:
+
+A default argument is bound **when the function is defined**. The
+self-test patches `gate.FLOOR_FILE` to a temporary file, and
+`floor_from()` ignored it — every floor assertion was made against the
+real file. They all passed for as long as the real floor file did not
+exist, because `floor_from()` returned None, `main` exited 2, and the
+tests expecting a refusal got one for the wrong reason. **Writing the
+real floor turned ten of them red at once.** `floor_from` now takes the
+path with no default, and `inspect.signature` asserts it stays that way.
+
+A fed parameter the callee can ignore is not a fed parameter.
+
+### `npm test`: the whole suite can vanish and the job is green
+
+The sfu job's step was `- run: npm test`, and the package script is
+`node --test test/*.test.js`. Probed on **node v22.22.2**, in that shell:
+
+| what | prints | exits |
+|---|---|---|
+| the real two files | `# tests 33` | 0 |
+| a file that defines no tests | `# tests 1` (node counts the FILE) | 0 |
+| **a glob that matches nothing** | `# tests 0` | **0** |
+
+So emptying `server/sfu/test/`, renaming the files out of `*.test.js`, or
+moving the directory takes all 33 assertions about the call server's
+protocol and token handling with it and the job goes green. Proved by
+moving both files to `*.spec.js` and running the extracted step: `0 call
+server tests ran and the floor is 33`, exit 1.
+
+**The reporter is pinned.** node chooses `tap` when stdout is not a
+terminal and `spec` when it is, and `spec` writes the same line as
+`i tests 33`. A count that depends on what stdout is attached to is a
+count that changes when the runner does, so `--test-reporter=tap` is in
+the package script, and `node_problems()` asserts it is.
+
+33 = 23 in `protocol.test.js` + 10 in `token.test.js`, subtests inside a
+`describe` included and the four suites not counted.
+
+### Four floors now, all defined once
+
+| suite | floor | file | readers |
+|---|---|---|---|
+| SQL assertions | 14,330 | `supabase/tests/assertion_floor` | `run_locally.sh`, ci.yml |
+| edge tests | 503 | `supabase/functions/_local_check/deno_test_floor` | `check_locally.sh`, ci.yml |
+| Dart tests | 6,638 | `app/test/flutter_test_floor` | `check_flutter_test_count.py` |
+| call server | 33 | `server/sfu/test/node_test_floor` | ci.yml |
+
+`check_assertion_floor.py` asserts the plumbing of all four — 68
+assertions in its own test file now — and `ci.yml` has neither a bare
+`- run: flutter test` nor a bare `- run: npm test` left.
+
+### And the sentence that counted wrong
+
+`check_sweeps_look.py` said *"46 of 64 gates report a problem over an
+empty source tree"*. The number was
+
+    counted = len(found) - len(excused) - len(PASSES_OVER_NOTHING)
+
+**arithmetic, not a tally.** `check_flutter_test_count` takes a report
+path, exits 2 on a `usage:` line over an empty tree, is in no bucket —
+and was counted among the 46 that "report a problem", which is the one
+thing that gate's own docstring says must never count as looking. It was
+the first gate to fall in; the hole had been latent since the ratchet
+reached zero.
+
+Two fixes: `counted` is now a tally of verdicts, and **any unexcused gate
+whose verdict is not `reported` is refused** — `needs_argument` and
+`crashed` included, where before only `passed_over_nothing` and `timeout`
+were. A third bucket, `NEEDS_AN_ARGUMENT`, names what the argument is and
+fails both ways like the other two. 45 of 64 now, and the 45 is counted
+rather than computed.
+
+One more vacuous assertion fell out of the same reading:
+`test_every_gate_is_in_some_bucket_now_that_the_backlog_is_empty`
+asserted `gate in excused or gate not in PASSES_OVER_NOTHING` — and
+`PASSES_OVER_NOTHING` is **empty**, so the right-hand side was true of
+every gate and the left-hand side was never reached. A vacuous test in
+the file whose entire subject is vacuous success. It now drives the real
+gates over a real empty tree and requires `reported` from each.

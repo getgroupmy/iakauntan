@@ -78,6 +78,17 @@ check_rpc_grants check_stable_writers check_undocumented_writes
 check_write_doors
 """.split()
 
+#: Takes a path on the command line that an empty tree cannot supply --
+#: not a source tree to sweep but an ARTEFACT produced by the step
+#: before it. Same shape as NEEDS_A_DATABASE: it exits 2 on a `usage:`
+#: line, which is non-zero for the wrong reason, and the entry names
+#: what it wants so a gate that changes shape is read rather than
+#: assumed.
+NEEDS_AN_ARGUMENT = {
+    "check_flutter_test_count":
+        "the json report `flutter test --file-reporter` writes",
+}
+
 #: Opens ONE named file rather than globbing a tree, so an empty skeleton
 #: makes it raise FileNotFoundError. That raise IS its positive control:
 #: the file is either there or the gate stops. Each entry names the file,
@@ -188,7 +199,8 @@ def run(found: dict[str, str] | None = None) -> int:
         with tempfile.TemporaryDirectory() as tmp:
             found = verdicts(skeleton_tree(pathlib.Path(tmp)))
 
-    excused = set(NEEDS_A_DATABASE) | set(NEEDS_A_FILE)
+    excused = (set(NEEDS_A_DATABASE) | set(NEEDS_A_FILE)
+               | set(NEEDS_AN_ARGUMENT))
     problems = []
 
     for gate, verdict in sorted(found.items()):
@@ -208,6 +220,22 @@ def run(found: dict[str, str] | None = None) -> int:
             problems.append(
                 "%s did not finish in %ds over an empty tree, so nothing "
                 "is known about it either way." % (gate, TIMEOUT))
+        # The hole the summary line hid. `counted` was
+        # len(found) - len(excused), ARITHMETIC rather than a tally, so a
+        # gate that exited 2 on a `usage:` line was counted among those
+        # that "report a problem over an empty source tree" -- which is
+        # the one thing this gate's own docstring says must never count
+        # as looking. check_flutter_test_count was the first gate to fall
+        # in, and the sentence happily said 46 of 64.
+        if verdict not in ("reported", "passed_over_nothing", "timeout"):
+            problems.append(
+                "%s neither reported a problem over an empty tree nor is "
+                "excused for a named reason: it %s. Non-zero for the "
+                "wrong reason is not looking. Either it takes an argument "
+                "an empty tree cannot supply -- say so in "
+                "NEEDS_AN_ARGUMENT or NEEDS_A_DATABASE -- or it reads one "
+                "named file, which belongs in NEEDS_A_FILE, or it has a "
+                "bug." % (gate, verdict.replace("_", " ")))
 
     for gate in sorted(PASSES_OVER_NOTHING):
         got = found.get(gate)
@@ -228,12 +256,17 @@ def run(found: dict[str, str] | None = None) -> int:
              for g in NEEDS_A_DATABASE]
             + [(g, "crashed",
                 "raises FileNotFoundError for %s" % NEEDS_A_FILE[g])
-               for g in NEEDS_A_FILE]):
+               for g in NEEDS_A_FILE]
+            + [(g, "needs_argument",
+                "exits with a `usage:` line because it takes %s"
+                % NEEDS_AN_ARGUMENT[g])
+               for g in NEEDS_AN_ARGUMENT]):
         got = found.get(gate)
         if got is None:
             problems.append(
                 "%s is excused here but is not a gate any more. Drop it "
-                "from NEEDS_A_DATABASE or NEEDS_A_FILE." % gate)
+                "from NEEDS_A_DATABASE, NEEDS_A_FILE or "
+                "NEEDS_AN_ARGUMENT." % gate)
         elif got == "passed_over_nothing":
             problems.append(
                 "%s is excused on the grounds that it %s, and it PASSED "
@@ -252,13 +285,20 @@ def run(found: dict[str, str] | None = None) -> int:
             print("  %s\n" % problem, file=sys.stderr)
         return 1
 
-    counted = len(found) - len(excused) - len(PASSES_OVER_NOTHING)
+    # TALLIED, not subtracted. The previous version computed this as
+    # len(found) - len(excused) - len(PASSES_OVER_NOTHING), which is a
+    # sentence about arithmetic rather than about verdicts: it would say
+    # "46 of 64 gates report a problem" with one of the 46 having exited
+    # 2 on a usage line. Printing a count is not checking one, and the
+    # count printed here was the one not checked.
+    counted = sum(1 for g, v in found.items()
+                  if g not in excused and v == "reported")
     print("%d of %d gates report a problem over an empty source tree, as "
           "they must. %d exit on a missing database URL, %d raise on a "
-          "missing named file, and %d still pass over nothing -- a ratchet "
-          "that may only fall."
+          "missing named file, %d exit on a missing argument, and %d "
+          "still pass over nothing -- a ratchet that may only fall."
           % (counted, len(found), len(NEEDS_A_DATABASE), len(NEEDS_A_FILE),
-             len(PASSES_OVER_NOTHING)))
+             len(NEEDS_AN_ARGUMENT), len(PASSES_OVER_NOTHING)))
     return 0
 
 

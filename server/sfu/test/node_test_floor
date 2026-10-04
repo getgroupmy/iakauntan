@@ -1,0 +1,46 @@
+33
+
+The number of tests `npm test` runs in server/sfu. One definition, read
+by the CI step "Run the call server's tests, and count them" and by
+nothing else.
+
+Measured: `node --test --test-reporter=tap test/*.test.js` reports
+`# tests 33`, which is 23 in protocol.test.js plus 10 in token.test.js,
+subtests inside a `describe` included and the four suites not counted.
+
+## Why there is a floor at all
+
+`- run: npm test` was the whole step. The package script is
+
+    node --test test/*.test.js
+
+and on node v22.22.2, over a glob that matches NOTHING, that prints
+
+    1..0
+    # tests 0
+    # pass 0
+    # fail 0
+
+and EXITS 0. So emptying `server/sfu/test/`, renaming the files out of
+`*.test.js`, or moving the directory takes all 33 assertions about the
+call server's protocol and token handling with it, and the job goes
+green. Not a hypothetical: it was probed, in that shell, before this
+file was written.
+
+A file that still exists but defines no tests is reported as `# tests 1`
+-- node counts the file itself when it holds nothing. So two emptied
+files read as 2, not 0, which is still a long way under this floor.
+
+## Why the reporter is pinned
+
+The step reads `# tests N`, which is the TAP reporter's summary. node
+chooses `tap` when stdout is not a terminal and `spec` when it is, and
+`spec` spells the same line `i tests 33`. A count that depends on
+whether something is a terminal is a count that changes when the runner
+does, so `--test-reporter=tap` is in the package script rather than
+left to the default. It is why `npm test` prints TAP by hand as well.
+
+## Raising and lowering it
+
+Raise it freely, in the commit that adds the tests. Lower it only with
+the deleted tests named in the commit message.
