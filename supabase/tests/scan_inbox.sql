@@ -104,42 +104,36 @@ begin
 
   select posted_table into v_table from public.scan_inbox(v_org)
    where attachment_id = v_att;
-  if v_table is not null then
-    raise exception 'a scan nobody posted claims to have become %', v_table;
-  end if;
+  perform pg_temp.check_true(
+    'a scan nobody posted claims no destination', v_table is null);
 
   -- It is still in the list. A reading that produced nothing is the
   -- most interesting row in an inbox, not one to hide.
   select count(*) into v_n from public.scan_inbox(v_org)
    where attachment_id = v_att;
-  if v_n <> 1 then
-    raise exception 'an unposted scan is not in the inbox';
-  end if;
+  perform pg_temp.check_eq('an unposted scan is in the inbox', v_n, 1);
 
   -- -----------------------------------------------------------------
   -- 2. Recorded from the attachment, and resolved to a number
   -- -----------------------------------------------------------------
   v_scan := public.record_scan_posting(v_org, v_att);
-  if v_scan is null then
-    raise exception 'nothing was written on the scan';
-  end if;
+  perform pg_temp.check_true(
+    'the posting was written on the scan', v_scan is not null);
 
   select posted_table, posted_label into v_table, v_label
     from public.scan_inbox(v_org) where attachment_id = v_att;
-  if v_table is distinct from 'purchase_documents' then
-    raise exception 'the scan landed in % rather than purchase_documents',
-      v_table;
-  end if;
-  if v_label is distinct from 'PB-1041' then
-    raise exception 'the inbox says % rather than PB-1041', v_label;
-  end if;
+  perform pg_temp.check_eq(
+    'the scan landed in the table the file is filed against',
+    v_table, 'purchase_documents');
+  perform pg_temp.check_eq(
+    'the inbox resolves it to a number a person recognises',
+    v_label, 'PB-1041');
 
   -- The date too, because "which one was it" is a number and a day.
   select posted_date into v_label from public.scan_inbox(v_org)
    where attachment_id = v_att;
-  if v_label is null then
-    raise exception 'the inbox gave no date for a posted bill';
-  end if;
+  perform pg_temp.check_true(
+    'the inbox gives the day as well as the number', v_label is not null);
 
   -- -----------------------------------------------------------------
   -- 3. It follows the FILE, not a caller's opinion
@@ -162,10 +156,9 @@ begin
 
   select posted_label into v_label from public.scan_inbox(v_org)
    where attachment_id = v_att;
-  if v_label is distinct from 'PB-2000' then
-    raise exception
-      'the inbox says % after the file moved to PB-2000', v_label;
-  end if;
+  perform pg_temp.check_eq(
+    'the inbox follows the file when the picture is refiled',
+    v_label, 'PB-2000');
 
   -- And the inbox points at where the file IS. `0697`.
   --
@@ -178,12 +171,9 @@ begin
   -- the rows a person would want to open.
   select storage_path into v_label from public.scan_inbox(v_org)
    where attachment_id = v_att;
-  if v_label is distinct from
-     v_org || '/purchase_documents/' || v_gone || '/receipt.jpg' then
-    raise exception
-      'the inbox points at % rather than where the file was moved to',
-      v_label;
-  end if;
+  perform pg_temp.check_eq(
+    'the inbox points at where the file was moved to', v_label,
+    v_org || '/purchase_documents/' || v_gone || '/receipt.jpg');
 
   -- -----------------------------------------------------------------
   -- 4. A document deleted afterwards
@@ -197,15 +187,13 @@ begin
 
   select count(*) into v_n from public.scan_inbox(v_org)
    where scan_id = v_scan;
-  if v_n <> 1 then
-    raise exception 'the scan vanished when its bill was deleted';
-  end if;
+  perform pg_temp.check_eq(
+    'the scan survives its bill being deleted', v_n, 1);
 
   select posted_label into v_label from public.scan_inbox(v_org)
    where scan_id = v_scan;
-  if v_label is not null then
-    raise exception 'a deleted bill still labels the scan as %', v_label;
-  end if;
+  perform pg_temp.check_true(
+    'a deleted bill no longer labels the scan', v_label is null);
 
   -- Still nameable, and still openable at the last key anybody knew.
   -- The attachment is gone, so both the name and the live path are
@@ -214,29 +202,24 @@ begin
   -- not a swap. `0697`.
   select storage_path into v_label from public.scan_inbox(v_org)
    where scan_id = v_scan;
-  if v_label is distinct from
-     v_org || '/purchase_documents/' || v_bill || '/receipt.jpg' then
-    raise exception
-      'an orphaned scan points at % rather than at its own path',
-      v_label;
-  end if;
+  perform pg_temp.check_eq(
+    'an orphaned scan falls back to the path it was read under', v_label,
+    v_org || '/purchase_documents/' || v_bill || '/receipt.jpg');
 
   -- Still nameable. The attachment is gone, so `file_name` is null and
   -- the object's own path is what is left of it.
   select file_name into v_label from public.scan_inbox(v_org)
    where scan_id = v_scan;
-  if v_label is distinct from 'receipt.jpg' then
-    raise exception
-      'an orphaned scan is named % rather than receipt.jpg', v_label;
-  end if;
+  perform pg_temp.check_eq(
+    'an orphaned scan is still named', v_label, 'receipt.jpg');
 
   -- And it still says it became a purchase document, which is the
   -- only remaining trace of where the paper went.
   select posted_table into v_table from public.scan_inbox(v_org)
    where scan_id = v_scan;
-  if v_table is distinct from 'purchase_documents' then
-    raise exception 'an orphaned scan forgot its destination';
-  end if;
+  perform pg_temp.check_eq(
+    'an orphaned scan remembers where the paper went',
+    v_table, 'purchase_documents');
 
   -- -----------------------------------------------------------------
   -- 5. The explicit table, for the one thing that becomes many rows
@@ -248,20 +231,21 @@ begin
 
   select posted_table, posted_label into v_table, v_label
     from public.scan_inbox(v_org) where attachment_id = v_att2;
-  if v_table is distinct from 'bank_transactions' then
-    raise exception 'the statement landed in %', v_table;
-  end if;
-  if v_label is distinct from 'Statement lines' then
-    raise exception 'a statement is labelled %', v_label;
-  end if;
+  perform pg_temp.check_eq(
+    'an explicit table is what a statement lands in',
+    v_table, 'bank_transactions');
+  perform pg_temp.check_eq(
+    'a statement is labelled for a person', v_label, 'Statement lines');
 
   -- And a table nothing scans into is refused, or the column fills up
   -- with whatever a caller typed.
   begin
     perform public.record_scan_posting(v_org, v_att2, 'payroll_runs', v_bill);
-    raise exception 'a posting was recorded into payroll_runs';
+    raise exception 'a posting was recorded into payroll_runs'
+      using errcode = 'P0004';
   exception
-    when sqlstate 'P0002' then null;
+    when sqlstate 'P0002' then
+      raise notice 'ok   a table nothing scans into is refused';
   end;
 
   -- An explicit table with no record id names nothing.
@@ -274,13 +258,16 @@ begin
   begin
     perform public.record_scan_posting(
       v_org, v_att2, 'bank_transactions', null);
-    raise exception 'a posting was recorded with no record';
+    raise exception 'a posting was recorded with no record'
+      using errcode = 'P0004';
   exception
     when sqlstate '23514' then
       if sqlerrm not like '%needs the record it posted to%' then
         raise exception
-          'the constraint refused it rather than the guard: %', sqlerrm;
+          'the constraint refused it rather than the guard: %', sqlerrm
+          using errcode = 'P0004';
       end if;
+      raise notice 'ok   the GUARD refuses an explicit table with no record';
   end;
 
   -- -----------------------------------------------------------------
@@ -288,13 +275,9 @@ begin
   -- -----------------------------------------------------------------
   select count(*) into v_n
     from public.scan_inbox(v_org, 100, 'unposted');
-  if v_n <> 0 then
-    raise exception '% scans read as unposted, wanted 0', v_n;
-  end if;
+  perform pg_temp.check_eq('scans reading as unposted', v_n, 0);
   select count(*) into v_n from public.scan_inbox(v_org, 100, 'posted');
-  if v_n <> 2 then
-    raise exception '% scans read as posted, wanted 2', v_n;
-  end if;
+  perform pg_temp.check_eq('scans reading as posted', v_n, 2);
 
   -- -----------------------------------------------------------------
   -- 7. The reference a failed scan was given
@@ -314,25 +297,24 @@ begin
 
   select log_ref into v_label from public.scan_inbox(v_org)
    where scan_id = v_scan;
-  if v_label is distinct from 'ocr.failed-7f3a' then
-    raise exception 'the inbox gave the reference as %', v_label;
-  end if;
+  perform pg_temp.check_eq(
+    'the reference a failed scan was given reaches the inbox',
+    v_label, 'ocr.failed-7f3a');
 
   -- And a scan that did not fail has none, rather than an empty string
   -- somebody would try to quote.
   select log_ref into v_label from public.scan_inbox(v_org)
    where attachment_id = v_att2;
-  if v_label is not null then
-    raise exception 'a scan that worked carries the reference %', v_label;
-  end if;
+  perform pg_temp.check_true(
+    'a scan that worked carries no reference to quote', v_label is null);
 
   -- The file name, because that is what the list shows first and it
   -- lives on the attachment rather than on the scan.
   select file_name into v_label from public.scan_inbox(v_org)
    where attachment_id = v_att2;
-  if v_label is distinct from 'statement.jpg' then
-    raise exception 'the inbox names the file %', v_label;
-  end if;
+  perform pg_temp.check_eq(
+    'the inbox names the file, off the attachment',
+    v_label, 'statement.jpg');
 
   raise notice 'scan inbox: every sheet says what it became';
 end $$;
@@ -363,9 +345,7 @@ begin
   perform pg_temp.a_scan(v_theirs, 'purchase_documents', v_bill, 'x.jpg');
 
   select count(*) into v_n from public.scan_inbox(v_theirs);
-  if v_n <> 1 then
-    raise exception 'the owner cannot see their own scan';
-  end if;
+  perform pg_temp.check_eq('the owner sees their own scan', v_n, 1);
 
   -- Now as somebody who is not in that company at all. `test_user()`
   -- is MEMOIZED -- it answers with the one fixture account every time
@@ -374,9 +354,8 @@ begin
   -- one that makes a second person.
   perform pg_temp.sign_in_as(pg_temp.another_user('stranger@iakauntan.test'));
   select count(*) into v_n from public.scan_inbox(v_theirs);
-  if v_n <> 0 then
-    raise exception 'a stranger read % of another company''s scans', v_n;
-  end if;
+  perform pg_temp.check_eq(
+    'a stranger sees none of another company''s scans', v_n, 0);
 
   raise notice 'scan inbox: a stranger sees none of it';
 end $$;

@@ -30,9 +30,8 @@ begin
      and table_name = 'attachments'
      and column_name = 'content_sha256';
 
-  if v_nullable is null then
-    raise exception 'attachments.content_sha256 does not exist';
-  end if;
+  perform pg_temp.check_true(
+    'attachments.content_sha256 exists', v_nullable is not null);
 
   -- NOT a mistake and not a TODO. Every row uploaded before `0711` has
   -- no hash and cannot be given one without downloading the object back
@@ -40,9 +39,9 @@ begin
   -- existing rows or force a backfill that reads the whole bucket --
   -- and the column exists to help with uploads that have not happened
   -- yet, not to describe the ones that have.
-  if v_nullable <> 'YES' then
-    raise exception 'content_sha256 must stay nullable, got %', v_nullable;
-  end if;
+  perform pg_temp.check_eq(
+    'content_sha256 stays nullable, for the rows that predate 0711',
+    v_nullable, 'YES');
 end $$;
 
 -- ---------------------------------------------------------------------
@@ -59,21 +58,19 @@ begin
   -- two files that never match each other, and nothing anywhere would
   -- report it.
   select repeat('a', 64) ~ '^[0-9a-f]{64}$' into v_ok;
-  if not v_ok then
-    raise exception 'a real digest does not satisfy the shape';
-  end if;
+  perform pg_temp.check_true('a real digest satisfies the shape', v_ok);
 
-  if repeat('A', 64) ~ '^[0-9a-f]{64}$' then
-    raise exception 'an UPPERCASE digest satisfies the shape, and must not';
-  end if;
+  perform pg_temp.check_true(
+    'an UPPERCASE digest does not satisfy the shape',
+    not (repeat('A', 64) ~ '^[0-9a-f]{64}$'));
 
-  if repeat('a', 63) ~ '^[0-9a-f]{64}$' then
-    raise exception 'a TRUNCATED digest satisfies the shape, and must not';
-  end if;
+  perform pg_temp.check_true(
+    'a TRUNCATED digest does not satisfy the shape',
+    not (repeat('a', 63) ~ '^[0-9a-f]{64}$'));
 
-  if 'not-a-digest' ~ '^[0-9a-f]{64}$' then
-    raise exception 'arbitrary text satisfies the shape, and must not';
-  end if;
+  perform pg_temp.check_true(
+    'arbitrary text does not satisfy the shape',
+    not ('not-a-digest' ~ '^[0-9a-f]{64}$'));
 end $$;
 
 -- ---------------------------------------------------------------------
@@ -87,15 +84,12 @@ begin
     from pg_constraint
    where conname = 'attachments_content_sha256_shape';
 
-  if v_def is null then
-    raise exception 'the shape constraint is not on attachments';
-  end if;
-  if v_def !~ '0-9a-f' then
-    raise exception 'the shape constraint does not check hex, got %', v_def;
-  end if;
-  if v_def !~ '64' then
-    raise exception 'the shape constraint does not check length, got %', v_def;
-  end if;
+  perform pg_temp.check_true(
+    'the shape constraint is on attachments', v_def is not null);
+  perform pg_temp.check_true(
+    'the shape constraint checks hex', v_def ~ '0-9a-f');
+  perform pg_temp.check_true(
+    'the shape constraint checks length', v_def ~ '64');
 end $$;
 
 -- ---------------------------------------------------------------------
@@ -110,17 +104,17 @@ begin
    where schemaname = 'public'
      and indexname = 'attachments_org_content_sha256_idx';
 
-  if v_def is null then
-    raise exception 'the lookup index does not exist';
-  end if;
+  perform pg_temp.check_true(
+    'the lookup index exists', v_def is not null);
 
   -- ORG FIRST. Two companies on this platform uploading the same public
   -- form are not duplicates of each other, and one org must never be
   -- told a file "already exists" on the strength of a row it is not
   -- allowed to see.
-  if v_def !~ 'org_id' then
-    raise exception 'the index is not scoped to the org, got %', v_def;
-  end if;
+  perform pg_temp.check_true(
+    'the index is scoped to the org, so one company is never told a file '
+    'already exists on the strength of a row it may not see',
+    v_def ~ 'org_id');
 
   -- NOT UNIQUE, deliberately. A unique index would make the database
   -- REFUSE the second upload -- and somebody re-uploads a file when the
@@ -128,15 +122,15 @@ begin
   -- they are entitled to do on their own document. The index is for
   -- looking up so the app can say "this is already here" and let the
   -- person decide.
-  if v_def ~* 'unique' then
-    raise exception 'the index is UNIQUE, which would refuse a re-upload';
-  end if;
+  perform pg_temp.check_true(
+    'the index is NOT unique, so a re-upload is not refused',
+    v_def !~* 'unique');
 
   -- Partial, so the mostly-null column does not cost mostly-wasted
   -- pages.
-  if v_def !~ 'content_sha256 IS NOT NULL' then
-    raise exception 'the index is not partial, got %', v_def;
-  end if;
+  perform pg_temp.check_true(
+    'the index is partial on the mostly-null column',
+    v_def ~ 'content_sha256 IS NOT NULL');
 end $$;
 
 rollback;

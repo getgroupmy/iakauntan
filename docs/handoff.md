@@ -8126,14 +8126,23 @@ in the pattern. **A detector's own output is a claim that needs checking
 before it is reported**, which is the only reason the 149 never reached
 anybody as a finding.
 
-### The ratchet on the remaining four
+### The ratchet, which reached zero the same session
 
 `scripts/check_counted_assertions.py` fails on a file that prints
-nothing when it passes, holding the four left — `attachment_content_hash`,
+nothing when it passes. It shipped holding four — `attachment_content_hash`,
 `scan_inbox`, `search_path`, `tenant_foreign_keys` — as a reviewed list
-with a reason each. It fails **both ways**: on a fifth such file, and on
-an entry whose file now prints, because an excuse nobody prunes is not
-evidence.
+with a reason each, and **those four were converted immediately
+afterwards, so `UNCOUNTED` is now `{}`**. It fails **both ways**: on a
+new such file, and on an entry whose file now prints, because an excuse
+nobody prunes is not evidence.
+
+A reviewed list at zero has one failure mode the four-entry version did
+not: **an empty collection agrees with every per-entry assertion**, which
+is a trap this session hit once already. So the self-test asserts the
+zero state as both halves — no silent file in the suite AND an empty
+`UNCOUNTED` — names all five converted files with the tick count each
+must keep, and proves the finder still finds by feeding it a silent file
+at the same moment the real suite is clean.
 
 It does **not** prove a file with a countable source actually runs it: a
 `check_eq` inside a helper nobody calls reads as countable here and
@@ -8156,12 +8165,55 @@ one more gets written, that loop is worth promoting to
 runs and pass `-B`, or two same-sized mutants in one mtime second share a
 `.pyc` and the second is reported as surviving code it never ran.
 
-### Next, if this is picked up
+### ~~Next, if this is picked up~~ — DONE, same session
 
-Convert the remaining four the same way: one file at a time, mutating
-every converted condition, raising `ASSERTION_FLOOR` by the measured
-delta, and letting `UNCOUNTED` fall. `tenant_foreign_keys.sql` is the
-largest (48 raise sites, 2 of them inside a `when others` handler rather
-than an `if` — those two are the refusal-marker shape and should keep it,
-gaining `using errcode = 'P0004'` and a tick in the handler, not a
-conversion).
+The paragraph that stood here said the remaining four were the next
+thing to pick up. They were converted immediately afterwards and the
+ratchet is at **zero**. Left marked rather than deleted, because a
+handoff that silently rewrites its own open items teaches a reader to
+distrust the ones still open.
+
+| file | ticks | how |
+|---|---|---|
+| `matter_on_a_document.sql` | +19 | `check_eq` / `check_true` |
+| `scan_inbox.sql` | +24 | same, plus two refusal markers that KEEP their shape and tick in the handler |
+| `attachment_content_hash.sql` | +13 | `check_true` on the catalog shapes |
+| `tenant_foreign_keys.sql` | +14 | probe counters became **exact** `check_eq`, not `< 29` floors |
+| `search_path.sql` | +3 | plain `raise notice 'ok …'` — see below |
+
+**14,257 → 14,276 → 14,330.** Each step predicted before the run and
+measured after. That is the actual check: a conversion landing on a
+different total than its own arithmetic has changed something it did not
+mean to.
+
+**67 mutants, 67 killed, controls clean on every file.** 18 + 22 + 13 +
+12 on the converted checks, 3 on `scan_inbox`'s refusal-marker handlers,
+2 on `search_path`'s census floors.
+
+Two of those sweeps need a note, because I read their output wrongly
+first. Mutating `scan_inbox`'s two handlers to catch the wrong sqlstate
+printed `SURVIVED` under my own harness — and both were kills. With the
+handler no longer catching, the **product's** exception escapes
+("Nothing scans into payroll_runs"), not my marker, so the message I had
+told the harness to look for was the wrong one. **My expectation was
+wrong, not the test.** A harness that reports a kill as a survivor is the
+safe direction to be wrong in, which is the only reason this cost
+minutes.
+
+### Two decisions inside that work worth keeping
+
+**`search_path.sql` was deliberately NOT converted to the helpers.** It
+has no transaction and does not include `_helpers.sql`; it is a read-only
+catalog query, and `_helpers.sql`'s fixtures write to `auth.users` when
+called, with no rollback to undo a mistake. Adding both a transaction and
+an include to gain a helper risks more than it buys. A notice after an
+untouched `if` cannot change what is asserted.
+
+**`tenant_foreign_keys.sql`'s probe counters went from floors to exact
+counts.** It ran 3 probes against `v_tried < 3` and 29 against
+`v_tried < 29` — zero slack today, but a floor is the wrong shape here:
+when a probe stops being reached, `v_tried` and `v_refused` fall
+TOGETHER, so `v_refused <> v_tried` stays false and only the floor
+notices. `check_eq(…, v_tried, 29)` fails in the file and names it.
+Adding a probe now means raising that number, and the friction is the
+point.

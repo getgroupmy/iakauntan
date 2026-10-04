@@ -102,11 +102,24 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # exception still fails the file, but a SKIPPED assertion in one of them
 # would not move this number.
 #
-# Five files were in that state. `matter_on_a_document.sql` is now
-# converted to `pg_temp.check_eq` / `check_true`, the idiom the other 378
-# use, which was worth +19 here; `check_counted_assertions.py` holds the
-# remaining four as a ratchet that may only fall. The conversion is not
-# cosmetic in two ways beyond the count:
+# Five files were in that state. ALL FIVE are now converted, and
+# `check_counted_assertions.py` holds that at a ratchet of ZERO:
+#
+#   matter_on_a_document.sql     +19
+#   scan_inbox.sql               +24
+#   attachment_content_hash.sql  +13
+#   tenant_foreign_keys.sql      +14   its probe counters became EXACT
+#                                      check_eq rather than `< 29`
+#                                      floors, so a probe that stops
+#                                      being reached fails in the file
+#   search_path.sql               +3   plain `raise notice 'ok ...'`:
+#                                      that file has no transaction and
+#                                      does not include _helpers.sql, so
+#                                      adding both to a read-only
+#                                      catalog test to gain a helper is
+#                                      a worse trade than a notice
+#
+# The conversion is not cosmetic in two ways beyond the count:
 #
 #   * the bare form raises P0001, which `when others` CATCHES. The
 #     helpers raise P0004, which it does not -- the whole reason
@@ -115,8 +128,10 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 #     in all 383 files), so this is latent rather than live, and latent
 #     is where it should stay.
 #   * every converted assertion was then MUTATED -- expected value
-#     perturbed one site at a time, 18 of them, with a no-op control --
-#     and all 18 failed as they should. Converting a condition by hand is
+#     perturbed one site at a time, with a no-op control on each file --
+#     and all of them failed as they should: 18 + 22 + 13 + 12 checks,
+#     plus 3 on the refusal-marker handlers and 2 on the search_path
+#     floors. 67 killed, 0 survived. Converting a condition by hand is
 #     exactly where an inversion hides, and a green suite would not have
 #     shown one.
 #
@@ -125,9 +140,13 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # 14,257 on 4 October, measured twice on the same cluster to check the
 # number is reproducible before an exact floor was set on it. It is higher
 # than the 13,994 assertion SITES a static count finds, because a helper
-# inside a loop runs more than once. 14,276 after the conversion above:
-# predicted 14,257 + 19 before the run, and that is what it came to, which
-# is the check that nothing else moved at the same time.
+# inside a loop runs more than once.
+#
+# 14,276 after the first file, predicted as 14,257 + 19 before the run.
+# 14,330 after the other four, predicted as 14,276 + 24 + 13 + 14 + 3.
+# Predicting the number before the run is the check that nothing else
+# moved at the same time; a conversion that lands on a different total
+# than its own arithmetic has changed something it did not mean to.
 #
 # A dip here with every file still green is the thing to investigate, not
 # to paper over. If the cause turns out to be a branch that depends on
@@ -135,7 +154,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # this: `check_test_clock.py` holds both its pins at zero and
 # `utc_is_not_today.sql` asserts the schema has no session-clock defaults,
 # precisely so the suite counts the same on every day of the year.
-ASSERTION_FLOOR="${IAK_ASSERTION_FLOOR:-14276}"
+ASSERTION_FLOOR="${IAK_ASSERTION_FLOOR:-14330}"
 
 PGDATA="${IAK_PGDATA:-/var/tmp/pgdata}"
 PGSOCK="${IAK_PGSOCK:-/var/tmp}"

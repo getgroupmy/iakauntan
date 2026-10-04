@@ -128,15 +128,16 @@ begin
   -- The positive control. Two `exception when foreign_key_violation`
   -- blocks that were never entered would leave this green while
   -- asserting nothing at all.
-  if v_refused <> v_tried then
-    raise exception 'tenant_foreign_keys: % probes ran, % behaved',
-      v_tried, v_refused;
-  end if;
-  if v_tried < 3 then
-    raise exception
-      'tenant_foreign_keys ran only % probe(s); it is not testing what '
-      'it claims to', v_tried;
-  end if;
+  perform pg_temp.check_eq(
+    'bank and GL boundary: every probe that ran behaved',
+    v_refused, v_tried);
+  -- An EXACT count, not `< 3`. A floor lets a probe stop being reached
+  -- while BOTH counters fall together, which reads green over fewer
+  -- probes -- the exact shape the suite's assertion count exists to
+  -- catch. Adding a probe means raising this number, and that friction
+  -- is the point.
+  perform pg_temp.check_eq(
+    'bank and GL boundary: probes attempted', v_tried, 3);
 
   raise notice
     'tenant boundaries: 2 cross-company writes refused, 1 same-company '
@@ -758,10 +759,11 @@ begin
       'the new keys refuse a link to A''s own ticket: %', sqlerrm;
   end;
 
-  if v_refused <> v_tried or v_tried < 29 then
-    raise exception 'employee and warehouse boundary: % probes ran, % behaved',
-      v_tried, v_refused;
-  end if;
+  perform pg_temp.check_eq(
+    'employee and warehouse boundary: every probe that ran behaved',
+    v_refused, v_tried);
+  perform pg_temp.check_eq(
+    'employee and warehouse boundary: probes attempted', v_tried, 29);
 
   -- And the set is closed -- not for a list of parents, but for the
   -- schema.
@@ -830,11 +832,9 @@ begin
             'source_sales_document_id'),
            ('public.purchase_documents'::regclass,
             'payment_term_id'));
-  if v_uncovered is not null then
-    raise exception
-      'these columns name a row without saying which company''s: %',
-      v_uncovered;
-  end if;
+  perform pg_temp.check_true(
+    'no column names a row without saying which company''s: '
+    || coalesce(v_uncovered, 'none'), v_uncovered is null);
 
   -- ------------------------------------------------------------------
   -- And the class the query above cannot see
@@ -884,11 +884,9 @@ begin
                           where o3.attrelid = f2.confrelid
                             and o3.attname = 'org_id'
                             and o3.attnum > 0 and not o3.attisdropped)) >= 2;
-  if v_uncovered is not null then
-    raise exception
-      'these tables name two companies'' rows with no company of their '
-      'own to hold them together: %', v_uncovered;
-  end if;
+  perform pg_temp.check_true(
+    'no join table names two companies'' rows with no company of its own: '
+    || coalesce(v_uncovered, 'none'), v_uncovered is null);
 
   raise notice
     'the whole schema: 18 cross-company writes refused, 18 same-company '
@@ -933,19 +931,19 @@ begin
 
   begin
     delete from public.ticket_teams where id = v_team;
+    raise notice 'ok   deleting a ticket team empties rather than raises';
   exception when others then
     raise exception
       'deleting a ticket team raised instead of emptying the reference: '
       '% / %', sqlstate, sqlerrm;
   end;
 
-  if not exists (select 1 from public.ticket_categories where id = v_cat) then
-    raise exception 'deleting the team took the category with it';
-  end if;
-  if (select team_id from public.ticket_categories where id = v_cat)
-     is not null then
-    raise exception 'the category kept a team that was deleted';
-  end if;
+  perform pg_temp.check_true(
+    'deleting the team left the category standing',
+    exists (select 1 from public.ticket_categories where id = v_cat));
+  perform pg_temp.check_true(
+    'the category no longer names the team that was deleted',
+    (select team_id from public.ticket_categories where id = v_cat) is null);
 
   -- 2. The near miss, and the self-reference besides: a reporting line
   -- and a department head, both pointing at the same person.
@@ -962,23 +960,23 @@ begin
 
   begin
     delete from public.employees where id = v_boss;
+    raise notice 'ok   deleting a manager empties rather than raises';
   exception when others then
     raise exception
       'deleting a manager raised instead of emptying the reference: % / %',
       sqlstate, sqlerrm;
   end;
 
-  if not exists (select 1 from public.employees where id = v_kaki) then
-    raise exception 'deleting the manager took the subordinate with it';
-  end if;
-  if (select manager_id from public.employees where id = v_kaki)
-     is not null then
-    raise exception 'the reporting line survived the manager';
-  end if;
-  if (select head_employee_id from public.departments
-       where org_id = v_org and code = 'OPS') is not null then
-    raise exception 'the department kept a head who was deleted';
-  end if;
+  perform pg_temp.check_true(
+    'deleting the manager left the subordinate standing',
+    exists (select 1 from public.employees where id = v_kaki));
+  perform pg_temp.check_true(
+    'the reporting line did not survive the manager',
+    (select manager_id from public.employees where id = v_kaki) is null);
+  perform pg_temp.check_true(
+    'the department did not keep a head who was deleted',
+    (select head_employee_id from public.departments
+      where org_id = v_org and code = 'OPS') is null);
 
   -- The two probes reach three of the twenty. This reaches all of them,
   -- and any composite key a later migration adds: a `set null` rule
@@ -999,11 +997,9 @@ begin
              where a.attrelid = c.conrelid
                and a.attnum = any (c.confdelsetcols)
                and a.attnotnull));
-  if v_bad is not null then
-    raise exception
-      'these keys null a NOT NULL column on delete instead of the '
-      'reference: %', v_bad;
-  end if;
+  perform pg_temp.check_true(
+    'no key nulls a NOT NULL column on delete instead of the reference: '
+    || coalesce(v_bad, 'none'), v_bad is null);
 
   raise notice
     'deleting a named row: 2 references emptied, 0 rows lost, '

@@ -13,6 +13,15 @@
 -- function somebody writes, and whether that one is a definer is a
 -- one-word difference in a file this test does not read.
 --
+-- This file ticks with a plain `raise notice 'ok   ...'` after each
+-- check rather than through `pg_temp.check_*`, and that is deliberate.
+-- It has NO transaction and does not include `_helpers.sql`: it is a
+-- read-only catalog query, and `_helpers.sql`'s fixtures write to
+-- `auth.users` the moment they are called, with no rollback here to undo
+-- a mistake. Adding both a transaction and an include to a file like
+-- this, to gain a helper, risks more than it buys. An added notice
+-- cannot change what is asserted; the `if` above it is untouched.
+--
 -- Extension members are excluded — `citext` and `pg_trgm` are installed
 -- in `public` on the hosted project and their sixty-odd C functions are
 -- owned by `supabase_admin`. They are excluded by `pg_depend`, which is
@@ -58,16 +67,20 @@ begin
       'search_path test examined only % functions in public and app — '
       'it is not looking where the functions are', v_checked;
   end if;
+  raise notice 'ok   search_path examined % functions in public and app',
+    v_checked;
   if v_definer < 250 then
     raise exception
       'search_path test saw only % SECURITY DEFINER functions — '
       'the ones it exists to protect are not in the sample', v_definer;
   end if;
+  raise notice 'ok   % of them are SECURITY DEFINER', v_definer;
 
   if v_unpinned is not null then
     raise exception 'These functions do not pin search_path:%  %',
       e'\n', v_unpinned;
   end if;
+  raise notice 'ok   every function in public and app pins its search_path';
 
   raise notice 'search_path: % functions pinned, % of them SECURITY DEFINER',
     v_checked, v_definer;

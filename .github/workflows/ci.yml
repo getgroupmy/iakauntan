@@ -1495,11 +1495,11 @@ jobs:
       # A file written entirely in the other idiom -- `if <bad> then raise
       # exception '<message>'; end if;` -- says nothing on success, so a
       # skipped assertion inside it cannot move that number and the floor
-      # cannot see the file at all. Five files were in that state.
-      # `matter_on_a_document.sql` is converted (+19, and every converted
-      # condition mutated afterwards, because an inverted comparison reads
-      # green); this holds the remaining four as a ratchet that may only
-      # fall, and fails on a fifth.
+      # cannot see the file at all. Five files were in that state; all
+      # five are converted, +54 between them, and every converted
+      # condition was mutated afterwards because an inverted comparison
+      # reads green (67 mutants, 67 killed). This gate holds that at a
+      # ratchet of ZERO and fails on a sixth.
       - name: Check every assertion file says something when it passes
         run: |
           python3 scripts/check_counted_assertions_test.py

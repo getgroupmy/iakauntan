@@ -91,7 +91,7 @@ class TheRatchetBothWays(Harness):
         f = self.write("loud.sql", COUNTS)
         code, said = self.gate([f], {})
         self.assertEqual(code, 0, said)
-        self.assertIn("0 assertion file(s)", said)
+        self.assertIn("the ratchet is at zero", said)
 
 
 class ACommentIsNotAnAssertion(Harness):
@@ -141,20 +141,38 @@ class ScopeIsTheSuitesOwn(Harness):
         """Not one directory, not one file: the count CI prints is 383."""
         self.assertGreater(len(cca.assertion_files()), 300)
 
-    def test_the_real_suite_is_exactly_the_reviewed_four(self):
-        """The shipped state, asserted so a drift is a test failure rather
-        than a surprise in CI."""
-        self.assertEqual(sorted(cca.uncounted(cca.assertion_files())),
-                         sorted(cca.UNCOUNTED))
+    def test_no_assertion_file_is_silent_any_more(self):
+        """The shipped state: the ratchet is at ZERO.
 
-    def test_the_worked_example_is_no_longer_among_them(self):
-        f = cca.TESTS / "matter_on_a_document.sql"
-        self.assertGreater(cca.counted_sources(f.read_text()), 18)
-        self.assertNotIn("matter_on_a_document.sql", cca.UNCOUNTED)
+        Asserted as both halves, because either alone rots. An empty
+        `UNCOUNTED` with a silent file in the suite is a gate that fails
+        CI; a non-empty `UNCOUNTED` with no silent files is an excuse
+        nobody pruned. Neither is allowed to be the quiet one.
+        """
+        self.assertEqual(cca.uncounted(cca.assertion_files()), [])
+        self.assertEqual(cca.UNCOUNTED, {})
 
-    def test_every_reviewed_entry_gives_a_reason(self):
-        for name, why in cca.UNCOUNTED.items():
-            self.assertGreater(len(why), 40, name)
+    def test_the_five_converted_files_each_tick(self):
+        """Named rather than counted, so a regression in any one of them
+        is a failure here and not just a dip in a suite-wide number."""
+        for name, least in (("matter_on_a_document.sql", 19),
+                            ("scan_inbox.sql", 24),
+                            ("attachment_content_hash.sql", 13),
+                            ("tenant_foreign_keys.sql", 14),
+                            ("search_path.sql", 3)):
+            with self.subTest(name):
+                got = cca.counted_sources((cca.TESTS / name).read_text())
+                self.assertGreaterEqual(got, least, name)
+
+    def test_the_zero_floor_still_has_teeth(self):
+        """A floor at zero has one failure mode that looks like success:
+        it stops being able to find anything. So prove the finder still
+        finds, with a fed file, at the same moment the real suite is
+        clean."""
+        f = self.write("regressed.sql", SILENT)
+        code, said = self.gate([f], {})
+        self.assertEqual(code, 1, said)
+        self.assertIn("regressed.sql", said)
 
 
 if __name__ == "__main__":
