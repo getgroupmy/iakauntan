@@ -335,10 +335,73 @@ The ones worth looking at next, with the function they go round:
 **This is a measured list and not a verdict.** A direct write is not a
 defect by itself: it is one where the function enforces something the
 policies do not, which is a question per table and was answered here by
-reading both and then mutating. There is no ratchet on it yet, and
-inventing one before the 36 have been read would pin a number nobody has
-justified — which is the mistake `utc_is_not_today.sql` made in the other
-direction.
+reading both and then mutating.
+
+### The 36 have now been read, and the client-money case was singular
+
+Reading 36 tables by hand is how a list like that gets abandoned, so the
+question was made mechanical first: **for each both-door table, compare
+what its write POLICIES ask for against what the FUNCTIONS that write it
+demand.** Where the function asks for more, the direct door is the weaker
+one and the function's guard is optional. That is exactly the client
+money shape, and it is a catalogue query, not a reading exercise.
+
+It fires on six tables. **None of the other five is a defect**, and that
+is the finding, not a disappointment:
+
+| table | policies ask | a writer demands | why it is not `0740` |
+| --- | --- | --- | --- |
+| `expenses` | `can_write_module` | `can_post` | the insert sets `status: 'draft'` and the very next line calls `post_expense`. Drafting is not posting. |
+| `stock_adjustments` | `can_write` | `can_post` | same shape, `post_stock_adjustment` |
+| `time_entries` | `can_write` | `can_post` | recording one's own hours is a `can_write` act; both `can_post` writers act on hours already recorded — `app.bill_time_internal` marks them billed, `close_project` marks the unbilled ones unbillable |
+| `property_statutory_charges` | `can_write_module` | `can_post` | a charge DEFINITION, not a billing; `bill_statutory_charge` is the posting |
+| `accounts` | `can_post` | `can_admin` | the one `can_admin` writer is `setup_legal_module`, inserting three `is_system` accounts while ENABLING a module — a different act, not a stronger guard on the same one |
+| `tax_codes` | `can_post` | `can_admin` | `set_sst_registration`: registering a company for SST is an admin act |
+
+So `client_account_transactions` was the only one where the weaker door
+let a member skip a rule that mattered. Two things made it different:
+the function's extra demand was about the SAME act (recording a movement
+of client money), and the refusal downstream left a half-finished row
+rather than nothing.
+
+### `scripts/check_write_doors.py` — a gate that fails both ways
+
+That reasoning is worth more than the one fix, so it is encoded rather
+than written down. `REVIEWED` is a dict of table → **reason**, not a list
+of names, because a hit here means "read both sides and say which shape
+this is". The gate fails:
+
+- on a table with the gap and **no** entry — nobody can add a weaker
+  second door silently, which is what happened to client money;
+- on an entry whose gap has **closed** — an excuse nobody prunes is not
+  evidence. `0740`'s own fix makes a `client_account_transactions` entry
+  illegal, and that is asserted.
+
+It runs in CI beside the other idempotency gates, with
+`check_write_doors_test.py` (22 assertions) in front of it. Ten mutants
+were run against the gate with a no-op control; all ten killed the
+suite. **Two of them did not, at first**, and both are worth keeping:
+
+- the pattern allows whitespace between `.from('t')` and the verb
+  because **75 of the 171 direct writes break the chain across lines**.
+  Collapsing that group loses 44% of them — and a gate that sees fewer
+  doors reports a cleaner repository. Nothing covered it until a mutant
+  survived.
+- the harness itself lied once. Two mutants of the same file SIZE,
+  written within the same mtime second, **shared one `__pycache__`
+  entry**, so the second ran the first's code and was reported as
+  surviving. Mutate Python with `-B` and `PYTHONDONTWRITEBYTECODE=1`, and
+  delete `scripts/__pycache__` between runs. This is the twelfth trap in
+  `docs/widget-tests.md` wearing a different hat: a harness that cannot
+  tell two things apart reports on only one of them.
+
+**A trap worth the thirty seconds it costs:** `run_locally.sh` builds its
+cluster at `/var/tmp/pgdata` and migrates **the default `postgres`
+database** — `$PSQL` names no database. There is also a stale `iakauntan`
+database in that cluster from an earlier era, hundreds of migrations
+behind. Querying it to check whether a migration landed says the
+migration did not land. The connection string for a gate here is
+`postgresql://postgres@/postgres?host=/var/tmp&port=5599`.
 
 ## `0739`: thirty-nine defaults on the wrong clock, and a premise that was wrong
 

@@ -1471,6 +1471,27 @@ jobs:
           python3 scripts/check_overload_assertions_test.py
           python3 scripts/check_overload_assertions.py "$DB"
 
+      # The gates above all ask whether the RPC door is safe. This one
+      # asks whether there is a SECOND door that is weaker. `0740`:
+      # `client_account_transactions` -- a solicitor's client account --
+      # had an insert policy asking for `can_write` while both functions
+      # that write it demand `can_post`, and the shipped client inserted
+      # directly. A member who may write but not post could record a
+      # movement of client money; `post_client_transaction` then refused
+      # it, leaving an UNPOSTED trust row -- money shown against a
+      # client and absent from the accounts.
+      #
+      # A hit is not automatically a defect: draft-then-post is a normal
+      # shape, and five of the six tables this reports are that or a
+      # different operation entirely. So the gate carries a reason per
+      # entry rather than a count, and it fails BOTH ways -- on a new
+      # weaker door, and on an excuse for a gap that has since closed.
+      - name: Check no table has a weaker second write door
+        run: |
+          DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
+          python3 scripts/check_write_doors_test.py
+          python3 scripts/check_write_doors.py "$DB"
+
       # -----------------------------------------------------------------
       # An edge function holding the service role is outside RLS
       # entirely, so every policy in the schema and the whole of
