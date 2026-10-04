@@ -493,6 +493,36 @@ does with them, so the assertion is now on the NEGATION —
 part of each line, because `QUERY` explains itself in `--` lines
 containing the very words being matched.
 
+### `check_currency_decimals`: two regexes, and an empty map agrees with everything
+
+`Fmt.money` is pure and called from four hundred places, so it carries a
+`const` map of the ISO 4217 exceptions instead of awaiting a lookup. The
+gate compares that map against the `ref_currencies` seed in `0011`. A
+mismatch is a figure written wrongly on an invoice that goes to somebody.
+
+**Both halves are regexes over files this repository writes, and that is
+the whole risk: a parse that stops matching returns an empty map, and an
+empty map agrees with everything.** The gate already knew this on the
+seed side — it aborts with "the column order probably changed, and this
+check has been passing by reading an empty list" rather than compare
+nothing. That guard had no test.
+
+`dart_map()` and `seeded()` now take optional text, and the verdict is a
+separate `compare(theirs, ours)`, so the test states a disagreement
+directly instead of building two files to imply one. 14 assertions; ten
+mutants with a no-op control, all ten dead — including "the seed's
+empty-parse guard is removed", "a missing dart map is not fatal", and two
+that quietly narrow a regex (`[A-Z]{3}` → `[A-Z]{4}`, and a decimals
+column that only ever matches `2`).
+
+One assertion states the limit out loud rather than hiding it:
+`compare({}, {})` returns 0, because the comparison **cannot** tell
+agreement from a parse that found nothing. That is not a defect in
+`compare` — it is why the parsers abort and why there is a floor on the
+real files (`len(seeded()) > 10`, every real Dart entry a real exception).
+Every other assertion in the file is about fixtures and would pass on a
+day both parsers had stopped working.
+
 ## `0740`: client money has one door — and the claim I had to withdraw
 
 **The other door into the database.** The write-idempotency census covered

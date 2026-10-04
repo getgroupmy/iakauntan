@@ -27,8 +27,11 @@ DART = ROOT / "app/lib/src/core/format.dart"
 SEED = ROOT / "supabase/migrations/0011_seed_reference.sql"
 
 
-def dart_map() -> dict[str, int]:
-    text = DART.read_text()
+def dart_map(text: str | None = None) -> dict[str, int]:
+    """The const map in `format.dart`. Takes the text so
+    `check_currency_decimals_test.py` can feed it a fixture rather than
+    reimplementing the parse, which is the half most likely to drift."""
+    text = DART.read_text() if text is None else text
     block = re.search(
         r"currencyDecimalsBy\s*=\s*<String,\s*int>\{(.*?)\};", text, re.S)
     if not block:
@@ -40,8 +43,10 @@ def dart_map() -> dict[str, int]:
     }
 
 
-def seeded() -> dict[str, int]:
-    text = SEED.read_text()
+def seeded(text: str | None = None) -> dict[str, int]:
+    """The `ref_currencies` seed in `0011`. Takes the text for the same
+    reason as `dart_map`."""
+    text = SEED.read_text() if text is None else text
     block = re.search(
         r"insert into public\.ref_currencies\s*\([^)]*\)\s*values(.*?);",
         text, re.S)
@@ -59,8 +64,12 @@ def seeded() -> dict[str, int]:
 
 
 def main() -> int:
-    theirs = seeded()
-    ours = dart_map()
+    return compare(seeded(), dart_map())
+
+
+def compare(theirs: dict[str, int], ours: dict[str, int]) -> int:
+    """The verdict, over two parsed maps. Separated so the test can state
+    a disagreement directly instead of building two files to imply one."""
     expected = {c: d for c, d in theirs.items() if d != 2}
 
     problems: list[str] = []

@@ -1405,8 +1405,18 @@ jobs:
       # a pure function called from four hundred places with nothing to
       # await a lookup on. A copy that drifts from the seed is a figure
       # written wrongly on an invoice that goes to somebody.
+      #
+      # The self-test is in front of it because BOTH halves are regexes
+      # over files this repository writes, and a parse that stops matching
+      # returns an empty map -- which agrees with everything. The gate
+      # already aborts rather than compare nothing on the seed side; the
+      # self-test keeps that guard honest and puts a floor under the real
+      # files, so a day on which both parsers broke cannot read as a day
+      # on which the two copies agreed.
       - name: Check the app's currency decimals match the seed
-        run: python3 scripts/check_currency_decimals.py
+        run: |
+          python3 scripts/check_currency_decimals_test.py
+          python3 scripts/check_currency_decimals.py
 
       # Money is `numeric` everywhere in this schema, and until `0722`
       # that was true by convention and enforced by nothing. A
