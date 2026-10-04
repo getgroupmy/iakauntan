@@ -10057,3 +10057,44 @@ would overflow on a larger system font. A latent fragility made
 unbreakable, which is what the doc says to treat these as.
 
 Ten of the fourteen done. The file is 55 tests.
+
+### Three more: a settlement showing RM 0.00, a goal weighted 0%, a Round 0
+
+**`showSettlementDetail`** said `total`, and `Repo.settlement` returns the
+receipt row itself whose money column is **`amount`** — so the figure
+beside the receipt number read **RM 0.00** while the fixture said 100.
+`contacts` (an embed, `contacts(name, …)`), `receipt_date` and
+`unapplied_amount` were absent too, so the header had a blank name and no
+date and the one sentence about money left on account could not appear. Now
+1,200 taken, 800 set against INV-0007 through the `sales_documents` embed,
+and 400 still on account, each asserted.
+
+**`showAppraisalGoals`** said `weight` and the dialog reads
+**`weight_percent`** — in two places, the row's subtitle and the running
+total. So every goal read "0%", the total read "0%", and the dialog sat on
+its *"Short of 100% — some of the rating is unaccounted for"* warning while
+the fixture said 25. Two goals now at 60 and 40, asserting the subtitle
+whole (`60% · Delivery · target 12 filings · actual 11 filings`), both
+ratings side by side (`4 / 3` and `— / —` where one is not in yet), the
+total at 100% and **neither** warning; plus a second test at 70% that
+asserts the warning, because the warning is what the dialog is for.
+
+**`showInterviews`** said `stage`, `interviewer_name` and `notes`. The
+dialog reads `round_no`, `mode`, `score`, `outcome`, `feedback` — and the
+interviewer as an **embed**, `round['employees']['full_name']`, not a flat
+column. So every row read **"Round 0"** with a date and nothing else. Two
+rounds now, one held and one not, asserting the round numbers, the mode
+through `Fmt.label`, the interviewer out of the embed, the score, the
+outcome chip and the feedback line.
+
+Two more formatter facts the code settled against my expectation:
+
+* **`Fmt.label` capitalises EVERY word**, splitting on `_` — so
+  `in_person` is `In Person`, not `In person`.
+* **`Fmt.qty`** is what the weights go through, and 60 renders `60%`.
+
+Every one of the three has both mutants killed: the old key name back, and
+one further column dropped.
+
+Thirteen of the fourteen done. The file is 56 tests, up from 50 when this
+started.

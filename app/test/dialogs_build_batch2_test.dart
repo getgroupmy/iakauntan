@@ -637,7 +637,15 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('and one settlement in detail', (tester) async {
+    // `total` was the fixture's word and `Repo.settlement` returns the
+    // receipt row itself, whose money column is `amount` -- so the figure
+    // beside the receipt number read RM 0.00 while the fixture said 100.
+    // `contacts` (an embed, `contacts(name, …)`), `receipt_date` and
+    // `unapplied_amount` were all absent too, so the header had a blank
+    // name and no date, and the one sentence about money left on account
+    // could not appear.
+    testWidgets('and one settlement in detail, in the shape it is read',
+        (tester) async {
       await opened(
         tester,
         [
@@ -645,13 +653,45 @@ void main() {
           settlementProvider.overrideWith((_, __) async => const {
                 'id': 'r1',
                 'receipt_no': 'RCPT-0001',
-                'total': 100.0,
-                'allocations': <Map<String, dynamic>>[],
+                'receipt_date': '2026-09-18',
+                'amount': 1200.0,
+                'unapplied_amount': 400.0,
+                'currency': 'MYR',
+                'contacts': {'name': 'Kedai Runcit Aman', 'code': 'C-0007'},
+                'allocations': <Map<String, dynamic>>[
+                  {
+                    'amount': 800.0,
+                    'discount_amount': 0,
+                    'sales_documents': {
+                      'doc_no': 'INV-0007',
+                      'doc_type': 'invoice',
+                      'doc_date': '2026-09-01',
+                      'total_amount': 800.0,
+                    },
+                  },
+                ],
               }),
         ],
         (context) => showSettlementDetail(context, id: 'r1', isSales: true),
       );
       expect(tester.takeException(), isNull);
+
+      expect(find.text('RCPT-0001'), findsOneWidget);
+      // The embed, read as `(s['contacts'] as Map?)?['name']`.
+      expect(find.text('Kedai Runcit Aman'), findsOneWidget);
+      // `amount`, not `total`.
+      expect(find.textContaining('1,200.00'), findsWidgets);
+      // The allocation, through `_doc(a)?['doc_no']`.
+      expect(find.text('INV-0007'), findsOneWidget);
+      expect(find.text('RM 800.00'), findsOneWidget);
+      expect(find.textContaining('the whole amount is on account'),
+          findsNothing);
+      // And `unapplied_amount`, which is the sentence somebody needs:
+      // money taken that is not against anything yet.
+      expect(
+        find.textContaining('RM 400.00 is still on account'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('and the receipt e-mail dialog', (tester) async {
@@ -732,7 +772,14 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('and the appraisal goals dialog', (tester) async {
+    // `weight` was the fixture's word and the dialog reads
+    // `weight_percent` -- in two places, the row's subtitle and the
+    // running total. So every goal read "0%", the total read "0%", and the
+    // dialog sat on its "Short of 100%" warning while the fixture said 25.
+    // `target`, `actual`, `category`, `self_rating` and `manager_rating`
+    // were all absent, which is the rest of what a goal row says.
+    testWidgets('and the appraisal goals dialog, with weights that add up',
+        (tester) async {
       await opened(
         tester,
         [
@@ -742,17 +789,72 @@ void main() {
                   'id': 'g1',
                   'title': long,
                   'description': long,
-                  'weight': 25,
-                  'status': 'open',
+                  'category': 'Delivery',
+                  'weight_percent': 60,
+                  'target': '12 filings',
+                  'actual': '11 filings',
+                  'self_rating': 4,
+                  'manager_rating': 3,
+                  'sort_order': 1,
+                },
+                {
+                  'id': 'g2',
+                  'title': 'Answer every client within a day',
+                  'weight_percent': 40,
+                  'sort_order': 2,
                 },
               ]),
         ],
         (context) => showAppraisalGoals(context, 'a1', 'Aisyah'),
       );
       expect(tester.takeException(), isNull);
+
+      // The subtitle, which is `weight_percent` and then whatever else the
+      // goal records.
+      expect(find.text('60% · Delivery · target 12 filings · actual '
+          '11 filings'), findsOneWidget);
+      // The second goal records none of those, so it is the bare weight.
+      expect(find.text('40%'), findsOneWidget);
+
+      // Both ratings side by side -- the gap between them is the
+      // conversation -- and an em dash where a rating is not in yet.
+      expect(find.text('4 / 3'), findsOneWidget);
+      expect(find.text('— / —'), findsOneWidget);
+
+      // And the total, which adds up: no warning either way.
+      expect(find.text('Total weight'), findsOneWidget);
+      expect(find.text('100%'), findsOneWidget);
+      expect(find.textContaining('Short of 100%'), findsNothing);
+      expect(find.textContaining('Over 100%'), findsNothing);
     });
 
-    testWidgets('and the interviews dialog', (tester) async {
+    // And the warning, which is the thing the dialog is for: a rating
+    // whose parts do not account for the whole job.
+    testWidgets('and it says so when the weights do not reach 100',
+        (tester) async {
+      await opened(
+        tester,
+        [
+          repoProvider.overrideWithValue(repo),
+          appraisalGoalsProvider.overrideWith((_, __) async => const [
+                {'id': 'g1', 'title': 'One thing', 'weight_percent': 70},
+              ]),
+        ],
+        (context) => showAppraisalGoals(context, 'a1', 'Aisyah'),
+      );
+      expect(tester.takeException(), isNull);
+      expect(find.text('70%'), findsNWidgets(2));
+      expect(find.textContaining('Short of 100%'), findsOneWidget);
+    });
+
+    // `stage`, `interviewer_name` and `notes` were the fixture's words.
+    // The dialog reads `round_no`, `mode`, `score`, `outcome`, `feedback`
+    // and the interviewer as an EMBED -- `round['employees']` with a
+    // `full_name` inside it, not a flat name column. So the row read
+    // "Round 0" with a date and nothing else: no mode, no interviewer, no
+    // score, no outcome chip and no feedback, which is every part of it.
+    testWidgets('and the interviews dialog, in the shape it is read',
+        (tester) async {
       await opened(
         tester,
         [
@@ -761,16 +863,51 @@ void main() {
           interviewsProvider.overrideWith((_, __) async => const [
                 {
                   'id': 'iv1',
+                  'round_no': 1,
                   'scheduled_at': '2026-10-01T02:00:00Z',
-                  'stage': 'first',
-                  'interviewer_name': long,
-                  'notes': long,
+                  'mode': 'in_person',
+                  'duration_minutes': 45,
+                  'employees': {'full_name': long},
+                  'score': 4,
+                  'outcome': 'passed',
+                  'feedback': 'Knows the statutory deadlines cold.',
+                },
+                // A round not held yet: no outcome, no score, no feedback,
+                // and nothing scheduled either.
+                {
+                  'id': 'iv2',
+                  'round_no': 2,
+                  'scheduled_at': null,
+                  'mode': 'video',
                 },
               ]),
         ],
         (context) => showInterviews(context, 'ap1', 'Aisyah'),
       );
       expect(tester.takeException(), isNull);
+
+      // `round_no`, which the old fixture never supplied -- every row read
+      // "Round 0".
+      expect(find.text('Round 1'), findsOneWidget);
+      expect(find.text('Round 2'), findsOneWidget);
+      expect(find.text('Round 0'), findsNothing);
+
+      // `mode` through `Fmt.label`, the interviewer out of the embed, and
+      // `score`.
+      // `Fmt.label` splits on `_` and capitalises EVERY word, so
+      // `in_person` is `In Person` -- not `In person`, which is what I
+      // wrote first.
+      expect(find.textContaining('In Person · with $long · scored 4/5'),
+          findsOneWidget);
+      // `outcome` is the chip, and `Fmt.label` capitalises it.
+      expect(find.text('Passed'), findsOneWidget);
+      // `feedback`, which is the third line.
+      expect(find.text('Knows the statutory deadlines cold.'),
+          findsOneWidget);
+
+      // And the round with nothing in it yet says so rather than showing
+      // a date it does not have.
+      expect(find.textContaining('not scheduled · Video'), findsOneWidget);
     });
 
     // `due_days` was the fixture's word and the dialog reads
