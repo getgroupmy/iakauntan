@@ -2088,6 +2088,24 @@ jobs:
       # twice that, so a normal run is nowhere near it and a wedged
       # connection does not sit here indefinitely.
       #
+      # RAISED TO 15. Run 2257 measured it again, and the hosted dump has
+      # more than doubled since that first reading:
+      #
+      #     real  0m40.628s   /tmp/schema-local.sql    124,488 lines
+      #     real  6m 5.966s   /tmp/schema-hosted.sql   124,676 lines
+      #
+      # 6m48s of an eight-minute budget is 85 per cent of it, and the
+      # schema only grows -- these migrations append and never shrink. The
+      # next growth spurt would start timing the step out, which fails the
+      # build through the "could not be read" path below: correct, loud,
+      # and about nothing to do with drift. Fifteen is the same "a little
+      # over twice the measurement" the paragraph above reasoned with,
+      # applied to the number as it is now rather than as it was.
+      #
+      # The job's own 30-minute budget is untouched and does not need to
+      # move: the whole SQL job took 14.8 minutes in that run, so even a
+      # dump using all fifteen leaves it inside half an hour.
+      #
       # A budget at all because nothing in this workflow had one, which
       # means GitHub's default applied — **six hours** — to every job in
       # it. See the `timeout-minutes` on the jobs themselves.
@@ -2102,7 +2120,7 @@ jobs:
         id: dump
         if: steps.level.outputs.ready == 'true'
         continue-on-error: true
-        timeout-minutes: 8
+        timeout-minutes: 15
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}

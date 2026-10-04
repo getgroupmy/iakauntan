@@ -9861,3 +9861,55 @@ evidence rather than on a guess.
 (109 is the current count of statements the hosted project has in a
 different spelling — same code, so not drift. Worth watching: a number
 climbing there means more is being applied by hand.)
+
+### `showCompose` drew `From null@iakauntan.com`
+
+Third of the fifteen. The fixture supplied `address`; `my_mailboxes`
+(migration 0560) returns `setof public.org_mailboxes`, which has no such
+column — it has `local_part`, and `mailboxAddress` builds the address from
+it:
+
+```dart
+String mailboxAddress(Map<String, dynamic> mailbox, String domain) =>
+    '${mailbox['local_part']}@$domain';
+```
+
+So the test drew **`From null@iakauntan.com`** and asserted that nothing
+threw. `is_personal` was absent too, which is what `mailboxKind` reads to
+say "Yours" rather than "Shared with the company" — the one distinction
+the picker exists to carry.
+
+Two tests now. One mailbox, so the address is *stated*: asserts
+`From hello@iakauntan.com` and that nothing contains `null@`. Two
+mailboxes, which is a branch a single mailbox cannot reach: the picker is
+opened — a widget test cannot read a `SearchablePicker`'s displayed value,
+and `expense_from_scan_test.dart` already knows that — and both addresses
+and both sublabels are asserted.
+
+Mutants: dropping `local_part` finds no `From hello@iakauntan.com`;
+dropping `is_personal: true` from the personal mailbox finds no "Yours".
+
+One mutant was **equivalent, not killed**, and saying so matters:
+removing `'is_personal': false` from the shared mailbox changes nothing,
+because `mailboxKind` reads `mailbox['is_personal'] == true` and absent is
+as untrue as false. The flag that the assertion actually distinguishes is
+the `true` one, and that is the mutant that was run.
+
+### The hosted dump has more than doubled, and its budget is 85 per cent spent
+
+Noticed while reading run 2257 for a different number:
+
+    real  0m40.628s   /tmp/schema-local.sql    124,488 lines
+    real  6m 5.966s   /tmp/schema-hosted.sql   124,676 lines
+
+The step's budget is eight minutes and its comment reasons from a first
+measurement of **2m40s** — "eight minutes is a little over twice that". It
+is 6m6s now, so 6m48s of eight minutes is **85 per cent**, and this schema
+only grows: these migrations append and never shrink. The next spurt starts
+timing the step out, which fails the build through the "could not be read"
+path — correct, loud, and about nothing to do with drift.
+
+Raised to **15**, which is the same reasoning applied to the number as it
+is rather than as it was. The job's own 30-minute budget is untouched and
+does not need to move: the whole SQL job took **14.8 minutes** in that run,
+so even a dump using all fifteen leaves it inside half an hour.

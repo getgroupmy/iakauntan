@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:iakauntan/src/core/providers.dart';
 import 'package:iakauntan/src/core/theme.dart';
+import 'package:iakauntan/src/core/searchable_picker.dart';
 import 'package:iakauntan/src/data/repository.dart';
 import 'package:iakauntan/src/data/models.dart';
 import 'package:iakauntan/src/data/ocr_repository.dart';
@@ -1202,20 +1203,73 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('composing a mail', (tester) async {
+    // `address` was the fixture's word. `my_mailboxes` (0560) returns
+    // `setof public.org_mailboxes`, which has no such column -- it has
+    // `local_part`, and `mailboxAddress` builds the address from it:
+    //
+    //     '${mailbox['local_part']}@$domain'
+    //
+    // So this test drew `From null@iakauntan.com` and asserted that
+    // nothing threw. `is_personal` was absent too, which is what
+    // `mailboxKind` reads to say "Yours" rather than "Shared with the
+    // company" -- the one distinction the picker exists to carry.
+    testWidgets('composing a mail, from the one address there is',
+        (tester) async {
       await openedWithRef(
         tester,
         [
           repoProvider.overrideWithValue(repo),
           orgIdProvider.overrideWithValue('o1'),
           myMailboxesProvider.overrideWith((_) async => const [
-                {'id': 'mb1', 'address': 'hello@sinar.iakauntan.com'},
+                {'id': 'mb1', 'local_part': 'hello', 'is_personal': true},
               ]),
           mailDomainProvider.overrideWith((_) async => 'iakauntan.com'),
         ],
         (context, ref) => showCompose(context, ref),
       );
       expect(tester.takeException(), isNull);
+      // One address, so it is stated rather than offered.
+      expect(find.text('From hello@iakauntan.com'), findsOneWidget);
+      expect(find.textContaining('null@'), findsNothing);
+    });
+
+    // Two, which is the branch a single mailbox cannot reach: the picker,
+    // with `mailboxKind` saying which of them colleagues can read.
+    testWidgets('and from a choice of two, saying which is shared',
+        (tester) async {
+      await openedWithRef(
+        tester,
+        [
+          repoProvider.overrideWithValue(repo),
+          orgIdProvider.overrideWithValue('o1'),
+          myMailboxesProvider.overrideWith((_) async => const [
+                {'id': 'mb1', 'local_part': 'aminah', 'is_personal': true},
+                {'id': 'mb2', 'local_part': 'accounts', 'is_personal': false},
+              ]),
+          mailDomainProvider.overrideWith((_) async => 'iakauntan.com'),
+        ],
+        (context, ref) => showCompose(context, ref),
+      );
+      expect(tester.takeException(), isNull);
+
+      // Two addresses, so the picker is offered rather than the single
+      // address stated. A widget test cannot read a `SearchablePicker`'s
+      // displayed value, so it is opened -- which is where the labels and
+      // the sublabels live, and `mailboxKind` is the sublabel.
+      expect(find.byType(SearchablePicker<String>), findsOneWidget);
+      await tester.tap(find.descendant(
+        of: find.byType(SearchablePicker<String>),
+        matching: find.byType(TextFormField),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('aminah@iakauntan.com'), findsWidgets);
+      expect(find.textContaining('accounts@iakauntan.com'), findsWidgets);
+      // The distinction the picker exists to carry, and the one the old
+      // fixture could not draw at all: `is_personal`.
+      expect(find.text('Yours'), findsOneWidget);
+      expect(find.text('Shared with the company'), findsOneWidget);
+      expect(find.textContaining('null@'), findsNothing);
     });
 
     testWidgets('and the figures a tax computation is built on',
