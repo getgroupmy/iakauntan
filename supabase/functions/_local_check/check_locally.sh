@@ -157,9 +157,9 @@ fi
 # An unreadable file leaves this EMPTY, which would make the comparison
 # vacuously true, so it is checked: "could not look" is not "looked and
 # found nothing".
-floor=$(grep -Ex "[0-9]+" supabase/functions/deno_test_floor || true)
+floor=$(grep -Ex "[0-9]+" supabase/functions/_local_check/deno_test_floor || true)
 if ! printf '%s' "$floor" | grep -Exq '[0-9]+'; then
-  echo "supabase/functions/deno_test_floor holds no bare integer;" >&2
+  echo "supabase/functions/_local_check/deno_test_floor holds no bare integer;" >&2
   echo "refusing to run with no floor at all." >&2
   exit 2
 fi

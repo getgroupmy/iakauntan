@@ -49,10 +49,25 @@ RUNNER = ROOT / "supabase" / "tests" / "run_locally.sh"
 #: "ok | 0 passed | 0 failed" and exits 0, so a `Deno.test` block that
 #: stopped registering takes its assertions with it and all 40 of CI's
 #: per-file steps stay green.
-DENO_FLOOR_FILE = ROOT / "supabase" / "functions" / "deno_test_floor"
+DENO_FLOOR_FILE = (ROOT / "supabase" / "functions" / "_local_check"
+                   / "deno_test_floor")
 DENO_RUNNER = (ROOT / "supabase" / "functions" / "_local_check"
                / "check_locally.sh")
 DENO_STEP = "Count the edge tests that ran"
+
+#: `supabase start` walks `supabase/functions/` and, for every entry it
+#: finds, reaches for `<entry>/index.ts`. A DIRECTORY with no index.ts is
+#: skipped quietly -- `_shared` and `_local_check` have always been
+#: there. A plain FILE is not: the stat returns "not a directory", the
+#: CLI does not expect that, and it dies with
+#:
+#:     BadResource: FileSystem.access (.../deno_test_floor/index.ts)
+#:
+#: naming a path that does not exist and a function nobody wrote. The
+#: edge-test floor was committed there and took `supabase start` down on
+#: the next run -- the SQL assertion job, which is the one job whose red
+#: is this project's real failure signal.
+FUNCTIONS_DIR = ROOT / "supabase" / "functions"
 WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 
 #: What psql prints for `raise notice 'ok   <label>'`, and therefore what
@@ -175,7 +190,38 @@ def problems(floor_text: str | None = None, runner: str | None = None,
             "than a renamed notice.")
 
     out += deno_problems()
+    out += functions_dir_problems()
     return out
+
+
+def functions_dir_problems(entries: list[str] | None = None) -> list[str]:
+    """Nothing but directories sits directly under supabase/functions/.
+
+    Not a question about floors, and here because this is the gate that
+    would have caught it: the file it exists to protect was put in the
+    one directory where a loose file breaks the local stack. The rule is
+    the general one rather than "do not put the floor there", because the
+    next loose file will be a README or a `.gitkeep` and will fail
+    identically -- with a message naming neither.
+    """
+    if entries is None:
+        if not FUNCTIONS_DIR.is_dir():
+            return ["%s is not a directory." % FUNCTIONS_DIR.relative_to(ROOT)]
+        loose = sorted(p.name for p in FUNCTIONS_DIR.iterdir()
+                       if not p.is_dir())
+    else:
+        loose = sorted(entries)
+    if not loose:
+        return []
+    return [
+        "supabase/functions/ holds %s directly: %s. `supabase start` "
+        "reaches for `<entry>/index.ts` for every entry it finds there. "
+        "A directory without one is skipped quietly; a FILE makes the "
+        "stat fail with `BadResource: FileSystem.access` naming a path "
+        "nobody wrote, and the local stack never comes up -- which takes "
+        "the SQL assertion job down with it. Put it in a subdirectory; "
+        "`_local_check/` is where the edge-test floor ended up."
+        % ("a file" if len(loose) == 1 else "files", ", ".join(loose))]
 
 
 def deno_problems(floor_text: str | None = None,
@@ -198,8 +244,9 @@ def deno_problems(floor_text: str | None = None,
     value = floor_value(floor_text)
     if value is None:
         out.append(
-            "supabase/functions/deno_test_floor must hold exactly one bare "
-            "integer on a line of its own; both readers anchor on "
+            "supabase/functions/_local_check/deno_test_floor must hold "
+            "exactly one bare integer on a line of its own; both "
+            "readers anchor on "
             "`^[0-9]+$` and a malformed file reads as the EMPTY STRING.")
     elif int(value) <= 0:
         out.append("the edge-test floor is %s, which passes a suite where "
@@ -209,8 +256,9 @@ def deno_problems(floor_text: str | None = None,
     if "deno_test_floor" not in runner:
         out.append(
             "check_locally.sh does not read "
-            "supabase/functions/deno_test_floor. The number has one "
-            "definition or it drifts the first time it is raised.")
+            "supabase/functions/_local_check/deno_test_floor. The "
+            "number has one definition or it drifts the first time it "
+            "is raised.")
 
     step = ci_step(WORKFLOW.read_text() if workflow is None else workflow,
                    DENO_STEP)
@@ -244,7 +292,8 @@ def deno_problems(floor_text: str | None = None,
     else:
         if "deno_test_floor" not in step:
             out.append('"%s" does not read '
-                       "supabase/functions/deno_test_floor." % DENO_STEP)
+                       "supabase/functions/_local_check/deno_test_floor."
+                       % DENO_STEP)
         if not re.search(r'"\$ran"\s+-lt\s+"\$floor"', step):
             out.append('"%s" reads the floor but never compares the count '
                        "against it." % DENO_STEP)

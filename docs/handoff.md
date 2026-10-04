@@ -9083,14 +9083,44 @@ and was not.)
 
 ### The floor
 
-`supabase/functions/deno_test_floor`, read by the new CI step **Count the
-edge tests that ran** and by `check_locally.sh`. **503**, measured.
+~~`supabase/functions/deno_test_floor`~~
+`supabase/functions/_local_check/deno_test_floor`, read by the new CI
+step **Count the edge tests that ran** and by `check_locally.sh`.
+**503**, measured. Moved, and the move is the next section — the first
+spelling took `supabase start` down.
 
 Proved five ways, by extracting the step out of `ci.yml` and running it:
 the real list exits 0 at 503; a floor above the count exits 1; a floor
 file with no integer exits 1; and — the case it exists for — **a
 `Deno.test` block guarded off with `if (false)` drops the count to 502
 and fails**, where all 40 per-file steps stay green.
+
+### A file in supabase/functions/ breaks `supabase start`
+
+Run **2251** went red on the commit that added the floor, and not on
+anything about deno. `Statutory engine and ledger rules` failed at
+**Start the throwaway local stack**, four attempts across two
+registries, every one of them:
+
+    BadResource: FileSystem.access
+      (/home/runner/work/iakauntan/iakauntan/supabase/functions/deno_test_floor/index.ts)
+
+A path that does not exist, naming a function nobody wrote. The CLI
+walks `supabase/functions/` and reaches for `<entry>/index.ts` for every
+entry it finds. A **directory** without one is skipped quietly —
+`_shared` and `_local_check` have been there all along. A plain **file**
+is not: the stat returns "not a directory", which the CLI does not
+expect, and `supabase start` dies before the database is up. So the
+commit that closed the edge-test hole took down the one job whose red is
+this project's real failure signal, and the message pointed at neither.
+
+Moved to `supabase/functions/_local_check/`, beside its reader. The
+general rule is now asserted — `functions_dir_problems()` in
+`check_assertion_floor.py` refuses **anything but a directory** directly
+under `supabase/functions/`, because the next loose file will be a
+`README` or a `.gitkeep` and will fail the same way. Proved on the real
+tree, not only on a fed list: `touch supabase/functions/__probe` makes
+the gate exit 1 naming it, and removing it exits 0.
 
 ### 503, not 467, and that mattered
 

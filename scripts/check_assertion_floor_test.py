@@ -240,6 +240,18 @@ class TheEdgeTestFloor(unittest.TestCase):
         self.assertIn("deno_test_floor", caf.DENO_RUNNER.read_text())
         self.assertIn("deno_test_floor", REAL_DENO_STEP)
 
+    def test_both_runners_read_it_where_it_actually_IS(self):
+        # It moved. The first version of this floor sat at
+        # `supabase/functions/deno_test_floor` and broke `supabase
+        # start`; a substring assertion on the basename would not have
+        # noticed either the move or a stale path left behind.
+        self.assertTrue(caf.DENO_FLOOR_FILE.is_file(), caf.DENO_FLOOR_FILE)
+        where = str(caf.DENO_FLOOR_FILE.relative_to(caf.ROOT))
+        self.assertEqual(where,
+                         "supabase/functions/_local_check/deno_test_floor")
+        self.assertIn(where, caf.DENO_RUNNER.read_text())
+        self.assertIn(where, REAL_DENO_STEP)
+
     def test_a_malformed_floor_file_is_reported(self):
         out = caf.deno_problems(floor_text="# prose only\n")
         self.assertIn("exactly one bare integer", deno_said(out))
@@ -253,6 +265,55 @@ class TheEdgeTestFloor(unittest.TestCase):
         three outside it."""
         self.assertEqual(caf.floor_value(caf.DENO_FLOOR_FILE.read_text()),
                          "503")
+
+
+class NothingLooseUnderFunctions(unittest.TestCase):
+    """`supabase start` walks `supabase/functions/` and reaches for
+    `<entry>/index.ts` for every entry. A directory without one is
+    skipped; a FILE is not -- the stat fails with
+
+        BadResource: FileSystem.access (.../deno_test_floor/index.ts)
+
+    and the local stack never comes up, which takes the SQL assertion
+    job with it. Run 2251 went red that way, on the commit that added
+    the edge-test floor, and the message named a path that does not
+    exist and a function nobody wrote.
+    """
+
+    def test_the_tree_is_clean_as_shipped(self):
+        self.assertEqual(caf.functions_dir_problems(), [])
+
+    def test_a_loose_file_is_refused(self):
+        out = caf.functions_dir_problems(["deno_test_floor"])
+        self.assertEqual(len(out), 1)
+        self.assertIn("deno_test_floor", out[0])
+        self.assertIn("BadResource", out[0])
+        self.assertIn("a file", out[0])
+
+    def test_several_are_listed_and_the_sentence_still_reads(self):
+        out = caf.functions_dir_problems(["README.md", ".gitkeep"])
+        self.assertIn("holds files directly", out[0])
+        self.assertIn(".gitkeep, README.md", out[0])
+
+    def test_the_remedy_names_where_to_put_it_instead(self):
+        out = caf.functions_dir_problems(["x"])
+        self.assertIn("_local_check/", out[0])
+
+    def test_the_real_directory_holds_only_directories(self):
+        # The same fact from the data rather than the exit code: an
+        # assertion on `functions_dir_problems() == []` passes if the
+        # function ever learns to return nothing.
+        loose = sorted(p.name for p in caf.FUNCTIONS_DIR.iterdir()
+                       if not p.is_dir())
+        self.assertEqual(loose, [])
+        self.assertGreater(len(list(caf.FUNCTIONS_DIR.iterdir())), 15)
+
+    def test_it_is_wired_into_the_gate_and_not_merely_defined(self):
+        # A checker nothing calls is a checker that passes everything.
+        # Fed a tree with a loose file through `problems()` is the only
+        # way to see that; so instead, assert the live call site.
+        source = pathlib.Path(caf.__file__).read_text()
+        self.assertIn("out += functions_dir_problems()", source)
 
 
 if __name__ == "__main__":

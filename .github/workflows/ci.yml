@@ -2600,7 +2600,7 @@ jobs:
       # -- deleted, commented out, or inside a condition that is never
       # true -- takes its assertions with it and every step above stays
       # green. This is the hole the SQL suite had, and the floor is the
-      # same answer; see supabase/functions/deno_test_floor.
+      # same answer; see supabase/functions/_local_check/deno_test_floor.
       #
       # One combined invocation, which costs about 16 seconds. It uses the
       # UNION of the flags, so it is deliberately weaker on permissions
@@ -2609,10 +2609,12 @@ jobs:
       # is a claim those steps make and this one cannot.
       - name: Count the edge tests that ran
         run: |
-          floor="$(grep -Ex '[0-9]+' supabase/functions/deno_test_floor || true)"
+          floor="$(grep -Ex '[0-9]+' \
+            supabase/functions/_local_check/deno_test_floor || true)"
           if ! printf '%s' "$floor" | grep -Exq '[0-9]+'; then
-            echo "::error::supabase/functions/deno_test_floor holds no bare" \
-                 "integer, so there is no floor to compare against." >&2
+            echo "::error::supabase/functions/_local_check/deno_test_floor" \
+                 "holds no bare integer, so there is no floor to" \
+                 "compare against." >&2
             exit 1
           fi
 
