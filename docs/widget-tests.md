@@ -646,3 +646,98 @@ the field; it does not replace the pump. Every screen that comes off
 the `check_screens_built.py` backlog should come off it at phone width
 for exactly this reason — two of the last three defects found that way
 were overflows neither gate saw.
+
+## Five more, from the 4 October sweep
+
+**A bulk edit of a test file can DELETE tests, and the suite stays
+green.** This is the worst one in the document, because the signal is
+not a weak assertion — it is an assertion that is no longer there.
+
+Rewriting thirty-four test bodies in one file meant finding each
+`testWidgets(` and splicing. The locator was
+
+```python
+start = src.rindex('testWidgets(', 0, i + 1)   # WRONG
+```
+
+`str.rindex(sub, 0, i + 1)` searches a window that ends ONE CHARACTER
+into the match at `i`, so `'testWidgets('` cannot fit in it and the
+call returns the PREVIOUS match. Each of three edits therefore began at
+the top of the preceding test and swallowed it whole. Three tests
+vanished — `and says so plainly when nothing on file is like it`, `one
+forecast line`, `assigning a table` — and `flutter test` printed "All
+tests passed!" after every one of them, because deleting a test removes
+its failures too.
+
+Two things catch it, and both are cheap:
+
+```bash
+diff <(git show HEAD:app/test/<file> | grep -o "testWidgets('[^']*'" | sort) \
+     <(grep -o "testWidgets('[^']*'" app/test/<file> | sort)
+```
+
+and a FLOOR on the number of tests that ran, which is what
+`scripts/check_flutter_test_count.py` is for. Note that a floor only
+helps if it is raised in the same commit as the tests: the floor stood
+at 6638 while the real count was 6644, so six tests could have gone
+without CI noticing. A floor that trails the count is a floor with room
+in it.
+
+**`find.byType(T).first` can read the HARNESS, not the screen.** The
+`opened` helper in `dialogs_build_batch2_test.dart` draws its own
+always-enabled `FilledButton` to open the dialog under test, and it is
+first in the tree. So
+
+```dart
+bool savable() => tester.widget<FilledButton>(
+    find.byType(FilledButton).first).onPressed != null;
+```
+
+returned true before and after the thing it was testing, and the
+assertion passed in both directions. Anchor from the label upwards
+instead:
+
+```dart
+find.ancestor(of: find.text('Add'), matching: find.byType(FilledButton))
+```
+
+**A tap on a second `SearchablePicker` DISMISSES the first.** Each
+picker's state holds `final _tapGroup = Object();` and wraps both the
+field and its overlay in a `TapRegion` with that group id, with
+`onTapOutside: (_) => _dismiss()`. A tap on picker B is genuinely
+outside picker A's group, so A closes — which is right for a person and
+surprising in a test that means to open two in a row. Send Escape
+first, then `tester.ensureVisible` before tapping: eleven fields do not
+fit 900 logical pixels, and `find` locates a scroll-view child that
+`tap` cannot hit.
+
+**`Fmt.dateTime` formats `value.toLocal()`.** `format.dart:179` is
+`_dateTime.format(value.toLocal())`, so a hard-coded clock time in an
+assertion passes only where the machine is +08. CI and the cloud
+containers are UTC, so `find.text('01/09/2026 10:00')` on a fixture
+built at 10:00 Malaysian time finds `01/09/2026 02:00`. Assert the
+date, or build the fixture in UTC and expect the shifted time, or
+compare against `Fmt.dateTime(...)` itself.
+
+**`findsNothing` on a literal cannot be killed by mutating that
+literal, and 21.6% of the suite is such an assertion.** Garble the
+string an assertion expects to be MISSING and it is still missing, so
+the mutant survives by construction and says nothing about the test.
+Across 182 files there are 3,041 assertions on a literal string:
+2,254 `findsOneWidget`, 658 `findsNothing`, 87 `findsWidgets`, 33
+`findsNWidgets`, 9 `findsOne`. A mutation sweep must exclude the 658
+explicitly rather than report them as survivors — otherwise a fifth of
+the suite reads as untested when it is merely unreachable by that
+method.
+
+Nor can a script decide whether such an assertion is sound by looking
+for its string in `app/lib`, which two detectors tried. The set of
+strings this app can render is not computable from its literals: prose
+is wrapped across adjacent literals the compiler joins, values are
+interpolated or formatted at runtime (`'in 0 days'` is in no literal
+anywhere), and `RailHeading` and the report headers `toUpperCase()`
+what they are given. The sharpest refutation is `tax_details_test.dart`,
+which asserts `'Sabah'` is absent precisely BECAUSE the screen must not
+carry its own copy of LHDN's state codes — there, the string's absence
+from `app/lib` is the property under test. `docs/handoff.md` part ten
+has the full account.
