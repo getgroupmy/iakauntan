@@ -9641,3 +9641,53 @@ against the constant — which prose cannot satisfy however it is worded.
 That is the whole reason to parse rather than grep, and the gate's own
 test pins it: a docstring, a comment and a string literal all naming the
 flag, none of them answering to it.
+
+## The drift check can switch itself off, silently and for ever
+
+The comparison above only runs when `steps.level.outputs.ready == 'true'`,
+and that is decided by parsing `supabase migration list --linked`:
+
+```sh
+pending="$(sed 's/│/|/g' /tmp/level.txt \
+           | awk -F'|' 'NF>=3 && $1 ~ /[0-9]/ && $2 !~ /[0-9]/ {print $1}' ...)"
+if [ -n "$pending" ]; then echo "ready=false" ...; exit 0; fi
+```
+
+The gate is right to exist — this job runs *before* `migrate`, so on any
+commit that adds a migration the hosted project is legitimately one behind
+and every object that migration creates would read as drift. A schema
+behind by a known migration is a queue, not drift.
+
+But the parse has two directions and only one of them is safe.
+
+* **A parse that sees NOTHING** yields an empty `pending`, which reads as
+  level, and the job goes on to dump and compare. Erring toward comparing
+  is the right way round and needs no guard.
+* **A parse that sees too much** sets `ready=false`, skips the comparison,
+  and leaves the build **green** with a line in the step summary that
+  nobody reads on a green build. A format change in the CLI's table — a
+  column added, the box-drawing characters changed, a header reworded —
+  would switch the drift check off and say so nowhere anybody looks.
+
+So the step now refuses a `pending` count above **20**: this job runs
+before `migrate`, so the queue is whatever one push added, and a hundred
+"pending" migrations is not a queue but an awk reading the whole table as
+unapplied. It also prints what it could see — `migration list: N row(s)
+parsed, M pending, F migration file(s) on disk` — **without gating on it**,
+deliberately: nothing outside CI can run `migration list --linked`, so the
+only honest source for that number is a run that reports it. Floor it in a
+later commit from the measurement, the way the SQL floor was.
+
+Proved by extracting the parse out of `ci.yml` and running it against four
+fixtures of the table:
+
+| fixture | verdict |
+|---|---|
+| 820 applied, 0 pending | `ready=true`, exit 0 |
+| 820 applied, 3 pending (a real queue) | `ready=false`, exit 0 |
+| every row reads pending (the broken parse) | **exit 1**, naming the cause |
+| no data rows at all (an error message) | `ready=true` — on to comparing |
+
+The third is the one that matters: before this, that case set
+`ready=false` and the most consequential check in the workflow stopped
+running with nothing going red.

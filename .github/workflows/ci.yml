@@ -2026,6 +2026,48 @@ jobs:
           pending="$(sed 's/│/|/g' /tmp/level.txt \
                      | awk -F'|' 'NF>=3 && $1 ~ /[0-9]/ && $2 !~ /[0-9]/ {print $1}' \
                      | tr -d ' ' | tr '\n' ' ')"
+
+          # How much of that table the parse could see at all, printed so
+          # a later commit can floor it from a measurement rather than a
+          # guess. It is NOT gated yet, deliberately: nothing here can run
+          # `migration list --linked` outside CI, so the only honest
+          # source for the number is a run that reports it.
+          rows="$(sed 's/│/|/g' /tmp/level.txt \
+                  | awk -F'|' 'NF>=3 && $1 ~ /[0-9]/' | wc -l | tr -d ' ')"
+          files="$(ls supabase/migrations/*.sql 2>/dev/null | wc -l \
+                   | tr -d ' ')"
+          pend_n="$(printf '%s' "$pending" | wc -w | tr -d ' ')"
+          echo "migration list: $rows row(s) parsed, $pend_n pending," \
+               "$files migration file(s) on disk"
+
+          # The one direction of this parse that fails SILENTLY AND FOR
+          # EVER. `ready=false` skips the drift comparison and the build
+          # stays green with a line in the step summary that nobody reads
+          # on a green build -- so a format change that makes this awk
+          # emit spurious rows switches the whole drift check off and says
+          # so nowhere anybody looks.
+          #
+          # The other direction is safe and needs no guard: a parse that
+          # sees NOTHING yields an empty `pending`, which reads as level
+          # and goes on to dump and compare. Erring toward comparing is
+          # the right way round.
+          #
+          # 20 because this job runs before `migrate`, so the queue is
+          # whatever one push added -- a handful at the very most. A
+          # hundred "pending" migrations is not a queue, it is a parse
+          # reading the whole table as unapplied.
+          if [ "$pend_n" -gt 20 ]; then
+            echo "::error::the migration list parse produced $pend_n" \
+                 "pending migration(s) out of $rows row(s). This job runs" \
+                 "before migrate, so the queue is whatever one push" \
+                 "added; a number this size means the awk no longer" \
+                 "matches what \`supabase migration list --linked\`" \
+                 "prints. Read the format before trusting the verdict --" \
+                 "a false 'behind' switches the drift comparison off" \
+                 "silently and for ever." >&2
+            exit 1
+          fi
+
           if [ -n "$pending" ]; then
             echo "ready=false" >> "$GITHUB_OUTPUT"
             {
