@@ -8966,7 +8966,48 @@ is right to: with `arAgingProvider` in its default state the card draws
 13** — opening it with nothing in it, so the window size never gets a
 chance to matter.
 
-### I could not land the test, and that is worth being exact about
+### ~~I could not land the test~~ — LANDED, and the row is sound
+
+The section below stood for an hour and is left marked rather than
+rewritten, because what it got wrong is the useful part.
+
+**The card is not on the Overview.** `ModuleDashboardPane` returns
+`_Books` for the single code `accounting`, and the Overview never builds
+it — which is why overriding `dashboardProvider` and pumping the Overview
+gave a header and zero `Card`s. The path is: `modules: {'accounting'}`,
+`labels` supplied (without them `codes` is empty and there is no picker
+to tap at all), `panels: ['receivables']`, then `show(tester,
+'Accounting')`.
+
+**The row holds.** `module_surface_test.dart` now pumps it at **412 and
+360** — both widths the rest of the suite uses, 360 being where
+`timesheet_screen_test` and `document_list_screen_test` end their loops —
+with a 43-character company name, a six-figure sum and a three-digit
+overdue count. No overflow at either width.
+
+**And the test catches one.** Lengthening the second line in the product
+to `'263 days late and under formal demand'` fails it with
+`trailing: RenderFlex … OVERFLOWING` out of `RenderFlex._computeSizes`.
+So this is not a test that passes because nothing can fail it.
+
+Two mistakes of mine inside that, both the same shape:
+
+* The test first failed on **its own expectation** rather than on an
+  overflow, because the fixture never reached the widget. That is the
+  difference between a defect found and a harness that missed, and it is
+  why the earlier version of this section claimed nothing.
+* Verifying the forced overflow, I grepped the output for **"overflowed"**
+  when Flutter's word is **"OVERFLOWING"**, and read a killed mutant as a
+  survivor. Fourth time today that a non-match was my pattern rather than
+  an absence — and the one time it mattered most, since it would have
+  recorded a sound test as a useless one.
+
+A Dart detail worth keeping: `show()` is a LOCAL function in that file,
+so a test placed above its declaration fails to compile with "Local
+variable 'show' can't be referenced before it is declared". The new block
+sits after it.
+
+### The original note, kept for the reasoning
 
 `module_surface_test.dart` has a `dashboard(...)` harness and an
 `onADesktop(tester, …)` helper — with no phone counterpart, which is part
@@ -8988,10 +9029,11 @@ is the worst honest case: a long Malaysian company name, a six-figure
 sum, and a three-digit overdue count, so the second line is the wider of
 the two.
 
-Until then: **the row is unproven in both directions.** It may well be
-fine — the title carries `maxLines: 1` with ellipsis, so the title side
-cannot overflow, and a `ListTile` subtitle wraps. The honest statement is
-that nothing has measured it, not that it is broken.
+~~Until then: the row is unproven in both directions.~~ **Measured
+now, and sound.** The guess in that sentence was right for the right
+reason — the title carries `maxLines: 1` with ellipsis so the title side
+cannot overflow — but a guess that happens to be right is still not a
+measurement, which is the whole argument of this file.
 
 ### Two negatives from the same doc, recorded so they are not re-tried
 

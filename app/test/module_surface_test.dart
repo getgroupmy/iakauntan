@@ -66,6 +66,7 @@ void main() {
     required Map<String, dynamic> figures,
     Map<String, ({String name, String group})>? labels,
     List<String>? panels,
+    List<Map<String, dynamic>>? aging,
   }) => ProviderScope(
     overrides: [
       currentUserProvider.overrideWithValue(null),
@@ -86,6 +87,16 @@ void main() {
         userPreferencesProvider.overrideWith(
           (_) async => UserPreferences(dashboardCards: panels),
         ),
+      // `_Books` -- the accounting module's own dashboard, not the
+      // Overview -- watches `dashboardProvider`, and the receivables card
+      // inside it watches `arAgingProvider`. Nothing in the suite fed
+      // either, so the card's ROW BODY had never been built.
+      if (aging != null) ...[
+        dashboardProvider.overrideWith(
+          (_) async => DashboardSummary(const {}),
+        ),
+        arAgingProvider.overrideWith((_) async => aging),
+      ],
     ],
     child: MaterialApp(
       theme: AppTheme.light(),
@@ -124,6 +135,81 @@ void main() {
       find.descendant(of: find.byType(ListTile), matching: find.text(named)),
     );
     await tester.pumpAndSettle();
+  }
+
+  /// The same screen on a phone.
+  ///
+  /// There was no counterpart to `onADesktop`, which is part of how the
+  /// row below went unmeasured. No assertion is needed for the layout
+  /// itself: a `RenderFlex` overflow is a test failure in Flutter.
+  Future<void> onAPhone(
+    WidgetTester tester,
+    Widget widget, {
+    double width = 412,
+  }) async {
+    tester.view.physicalSize = Size(width, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(widget);
+    await tester.pumpAndSettle();
+  }
+
+  /// `docs/widget-tests.md` on `check_narrow_rows.py`: it measures a
+  /// trailing `Column` by its `Money` alone, so a wider second line
+  /// contributes nothing to the estimate. Two overflows shipped through
+  /// that hole -- `matters_screen` by 37 pixels and payroll's `_RunTile`
+  /// by 55 -- and both were found by pumping at phone width.
+  ///
+  /// `_ReceivablesCard` has the same shape: a `Money` with
+  /// `'<n> days late'` under it, and at three digits the second line is
+  /// the wider of the two. Nothing fed `arAgingProvider` in any test, so
+  /// the row body had never been built -- not narrow, not wide.
+  /// `check_screens_built.py` counted the screen as constructed, because
+  /// it is: with the provider in its default state the card draws no
+  /// rows. That is this document's trap 11 hiding its trap 13.
+  ///
+  /// It is on the ACCOUNTING module's dashboard, not the Overview, which
+  /// is the part that took longest to find: `ModuleDashboardPane` returns
+  /// `_Books` for that one code, and the Overview never builds it.
+  ///
+  /// The data is the worst honest case: a long Malaysian company name, a
+  /// six-figure sum, and a three-digit overdue count.
+  ///
+  /// Both widths the rest of this suite uses for a phone. 360 is the
+  /// narrower of the two and the one `timesheet_screen_test` and
+  /// `document_list_screen_test` end their loops on, so a row that holds
+  /// at 412 and not at 360 is a row that fails on a smaller handset.
+  for (final width in [412.0, 360.0]) {
+    testWidgets(
+        'a receivable with a long name and a late count fits a '
+        '${width.toInt()}px phone', (tester) async {
+    await onAPhone(
+      tester,
+      width: width,
+      dashboard(
+        modules: const {'accounting'},
+        figures: const {},
+        labels: const {'accounting': (name: 'Accounting', group: 'Books')},
+        panels: const ['receivables'],
+        aging: const [
+          {
+            'contact_name': 'Perbadanan Pembangunan Infrastruktur Sdn Bhd',
+            'doc_no': 'INV-2026-004219',
+            'due_date': '2026-01-14',
+            'outstanding': 128450.75,
+            'currency': 'MYR',
+            'days_overdue': 263,
+          },
+        ],
+      ),
+    );
+
+    await show(tester, 'Accounting');
+
+    // The row drew. Without this the test would pass over a card that
+    // rendered nothing, which is how the row went unbuilt for so long.
+    expect(find.textContaining('263 days late'), findsOneWidget);
+    });
   }
 
   testWidgets('a service desk company is not shown the ledger', (tester) async {
