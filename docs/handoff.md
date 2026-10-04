@@ -11123,3 +11123,52 @@ If a run died without restoring — a container restart will do it — the
 recovery is `git checkout -- app/test/<file>`, or the harness's own backup at
 `$TMPDIR/<file>.orig`, which is byte-identical to HEAD. Check before
 assuming a mutant is a real edit: `git diff` names the mutation.
+
+### The same file, the other half: 0 of 20
+
+The `findsNothing` sites in the same file were then mutated the same way,
+with the same harness, in the same hour. **Twenty mutants applied, zero
+killed, control survived, restore verified.**
+
+```
+passed (survived): 23      # baseline + 20 mutants + control + restored
+FAILED (killed):   0
+```
+
+Set beside 65 of 65 on the present-expecting half, that is the blind spot
+as a measurement rather than an argument:
+
+| sites in till_screen_test.dart | mutants | killed |
+|---|---|---|
+| expect a string to be PRESENT | 65 | **65** |
+| expect a string to be ABSENT | 20 | **0** |
+
+Garbling a string an assertion expects to be missing leaves it missing, so
+the test cannot notice. Those twenty assertions are not weak — several are
+among the sharpest in the file — they are simply outside what this method
+can measure. Tree-wide that is 658 of 3,041 literal assertions, 21.6%. A
+sweep that reported them as survivors would be reporting a fifth of the
+suite as untested on the strength of its own blind spot.
+
+A twenty-first mutant was NOT RUN: `pattern not found`, because its spec was
+generated while the previous run held the file mutated. The harness said so
+under **NOT RUN -- these were never applied, so nothing above says anything
+about them** and exited 1, which is exactly why it refuses to be quiet about
+an unapplied mutant. The generator now reads HEAD; see the note in
+`docs/widget-tests.md`.
+
+### What was NOT done, and what is ready to go
+
+`withholding_screen_test.dart` (21 mutants) and
+`reconciliation_screen_test.dart` (34) were prepared as second and third
+data points and then deliberately NOT run: each costs about twenty minutes
+during which a test file sits mutated on disk, and the stop hook objects to
+that every time the session pauses. The specs are generated and verified
+free of contamination (0 of 22 and 0 of 35), so either is one command:
+
+```
+python3 scripts/mutate.py test/<file> test/<file> <spec>.py
+```
+
+Regenerate with `gen_string_mutants.py <test file> <out.py> [--absent]`.
+One at a time, never two — they share one `.dart_tool`.
