@@ -1,0 +1,161 @@
+#!/usr/bin/env python3
+"""Self-test for check_counted_assertions.py.
+
+The gate is a reviewed list with a staleness check, so it has to fail
+BOTH ways: a new file that prints nothing on success, and an entry whose
+file now prints. A list that only fails one way rots in the other
+direction and nobody finds out.
+
+The sharpest assertions here are about `strip_comments`. A gate that
+looks for `pg_temp.check_eq` in raw text is satisfied by a COMMENT
+naming it, and this repository has now had six separate defects of
+exactly that shape — `assertIn("name", source)` matched a comment,
+`corp_repository.dart` contains `repository.dart`,
+`pg_get_functiondef(...) like '%1120%'` matched a comment and cost a
+wrong recommendation. So the comment case is not an edge case here. It
+is the failure mode.
+"""
+
+from __future__ import annotations
+
+import contextlib
+import importlib.util
+import io
+import pathlib
+import unittest
+
+HERE = pathlib.Path(__file__).resolve().parent
+SPEC = importlib.util.spec_from_file_location(
+    "cca", HERE / "check_counted_assertions.py")
+cca = importlib.util.module_from_spec(SPEC)
+assert SPEC.loader is not None
+SPEC.loader.exec_module(cca)
+
+
+class Harness(unittest.TestCase):
+
+    def gate(self, files, reviewed):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = cca.run(files, reviewed)
+        return code, out.getvalue() + err.getvalue()
+
+    def write(self, name, body):
+        d = pathlib.Path(self.enterContext(  # noqa: SIM115
+            __import__("tempfile").TemporaryDirectory()))
+        f = d / name
+        f.write_text(body)
+        return f
+
+
+COUNTS = "perform pg_temp.check_true('it holds', true);\n"
+SILENT = "if 1 = 2 then\n  raise exception 'it does not hold';\nend if;\n"
+
+
+class TheRatchetBothWays(Harness):
+
+    def test_a_silent_file_that_is_reviewed_passes(self):
+        f = self.write("silent.sql", SILENT)
+        code, said = self.gate([f], {"silent.sql": "a reason"})
+        self.assertEqual(code, 0, said)
+        self.assertIn("1 assertion file(s) print nothing", said)
+
+    def test_a_new_silent_file_fails_and_names_itself(self):
+        f = self.write("fresh.sql", SILENT)
+        code, said = self.gate([f], {})
+        self.assertEqual(code, 1, said)
+        self.assertIn("fresh.sql", said)
+        self.assertIn("prints nothing when it passes", said)
+
+    def test_the_failure_says_what_to_do_about_it(self):
+        """A gate that names a problem and no remedy gets worked around."""
+        f = self.write("fresh.sql", SILENT)
+        _, said = self.gate([f], {})
+        self.assertIn("_helpers.sql", said)
+        self.assertIn("mutate", said)
+
+    def test_an_entry_whose_file_now_prints_fails(self):
+        f = self.write("converted.sql", SILENT + COUNTS)
+        code, said = self.gate([f], {"converted.sql": "a stale reason"})
+        self.assertEqual(code, 1, said)
+        self.assertIn("now prints on success", said)
+        self.assertIn("nobody prunes", said)
+
+    def test_an_entry_for_a_deleted_file_fails_differently(self):
+        """Renamed and 'converted' are different repairs, so different text."""
+        code, said = self.gate([], {"gone.sql": "a reason"})
+        self.assertEqual(code, 1, said)
+        self.assertIn("not an assertion file any more", said)
+
+    def test_a_counted_file_is_not_in_the_list_at_all(self):
+        f = self.write("loud.sql", COUNTS)
+        code, said = self.gate([f], {})
+        self.assertEqual(code, 0, said)
+        self.assertIn("0 assertion file(s)", said)
+
+
+class ACommentIsNotAnAssertion(Harness):
+
+    def test_a_commented_out_helper_call_does_not_count(self):
+        sql = "-- perform pg_temp.check_eq('once upon a time', 1, 1);\n" + SILENT
+        self.assertEqual(cca.counted_sources(sql), 0)
+
+    def test_a_comment_merely_naming_the_helper_does_not_count(self):
+        sql = "-- assert this with pg_temp.check_true one day\n" + SILENT
+        self.assertEqual(cca.counted_sources(sql), 0)
+
+    def test_a_double_dash_inside_a_string_does_not_eat_the_line(self):
+        """The strip must not swallow real code after a literal's `--`."""
+        sql = ("raise notice 'a -- b';\n"
+               "perform pg_temp.check_true('still here', true);\n")
+        self.assertEqual(cca.counted_sources(sql), 1)
+
+    def test_a_definition_is_not_a_use(self):
+        """A file defining its own helper has not thereby asserted."""
+        sql = ("create or replace function pg_temp.check_mine(p text)\n"
+               "returns void language plpgsql as $$ begin end; $$;\n")
+        self.assertEqual(cca.counted_sources(sql), 0)
+
+    def test_a_hand_written_ok_notice_counts(self):
+        """The refusal-marker shape ticks in its handler, not via a helper."""
+        sql = "exception when foreign_key_violation then\n" \
+              "  raise notice 'ok   it was refused';\n"
+        self.assertEqual(cca.counted_sources(sql), 1)
+
+    def test_a_notice_that_is_not_an_ok_does_not_count(self):
+        """`run_locally.sh` greps `NOTICE:  ok `, so a banner is not one."""
+        sql = "raise notice 'matter on a document: the paths carry it';\n"
+        self.assertEqual(cca.counted_sources(sql), 0)
+
+
+class ScopeIsTheSuitesOwn(Harness):
+
+    def test_the_underscore_includes_are_not_assertion_files(self):
+        """`_helpers.sql` defines the helpers; it asserts nothing itself,
+        and ci.yml excludes it with `grep -cv '/_'`."""
+        names = {f.name for f in cca.assertion_files()}
+        self.assertNotIn("_helpers.sql", names)
+        self.assertNotIn("_local_stack.sql", names)
+
+    def test_it_looks_at_the_whole_suite(self):
+        """Not one directory, not one file: the count CI prints is 383."""
+        self.assertGreater(len(cca.assertion_files()), 300)
+
+    def test_the_real_suite_is_exactly_the_reviewed_four(self):
+        """The shipped state, asserted so a drift is a test failure rather
+        than a surprise in CI."""
+        self.assertEqual(sorted(cca.uncounted(cca.assertion_files())),
+                         sorted(cca.UNCOUNTED))
+
+    def test_the_worked_example_is_no_longer_among_them(self):
+        f = cca.TESTS / "matter_on_a_document.sql"
+        self.assertGreater(cca.counted_sources(f.read_text()), 18)
+        self.assertNotIn("matter_on_a_document.sql", cca.UNCOUNTED)
+
+    def test_every_reviewed_entry_gives_a_reason(self):
+        for name, why in cca.UNCOUNTED.items():
+            self.assertGreater(len(why), 40, name)
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

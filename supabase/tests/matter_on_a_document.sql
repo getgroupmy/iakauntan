@@ -34,6 +34,41 @@
 -- taking `org_id` down with it.
 --
 -- Nothing is written; the file rolls back.
+--
+-- ## Why this file asserts through the helpers
+--
+-- It used to be written entirely as
+--
+--   if <the bad thing> then
+--     raise exception '<what went wrong>';
+--   end if;
+--
+-- which asserts perfectly well and says NOTHING on success. The floor in
+-- `run_locally.sh` counts assertions that actually ran, off the
+-- `NOTICE:  ok ` lines psql prints, and that count is the suite's only
+-- guard against an assertion quietly stopping being reached. This file
+-- was invisible to it: 22 inserts over 7 fixtures and not one catalog
+-- read, so every assertion here depends on a fixture, which is exactly
+-- the kind that can stop being reached without anything going red.
+--
+-- Converted to `check_eq` / `check_true`, the idiom the other 378 files
+-- use, for +19 on the count. Two things came with it:
+--
+--   * the bare form raises P0001, which `when others` CATCHES; the
+--     helpers raise P0004, which it does not. Nothing here is wrapped in
+--     a `when others` today, so that was latent, and latent is where it
+--     should stay.
+--   * every converted condition was MUTATED afterwards -- expected value
+--     perturbed one site at a time, 18 of them, with a no-op control, all
+--     18 failing as they should. Converting a comparison by hand is
+--     where an inversion hides, and a green suite would not show one.
+--
+-- The one bare raise left is the marker at the foot of this file, where
+-- the assertion is "this insert must be REFUSED". That shape is right,
+-- and it now carries P0004 and ticks in its handler.
+--
+-- Four files still read the old way; `check_counted_assertions.py` holds
+-- them as a ratchet that may only fall.
 -- =====================================================================
 \set ON_ERROR_STOP on
 
@@ -142,19 +177,15 @@ begin
 
   select matter_id into v_got from pg_temp.posted_matters(v_doc)
    where code = '4100';
-  if v_got is distinct from v_m1 then
-    raise exception 'the fee did not reach the matter: got %, wanted %',
-      v_got, v_m1;
-  end if;
+  perform pg_temp.check_eq('the fee reached the matter', v_got, v_m1);
 
   -- The receivable is the client's debt to the firm, not the file's
   -- earnings. Both carrying the matter would double the fee on the
   -- matter's own trial balance -- and it would still balance.
   select count(*) into v_n from pg_temp.posted_matters(v_doc)
    where code = '1210' and matter_id is not null;
-  if v_n <> 0 then
-    raise exception 'the receivable leg carried a matter';
-  end if;
+  perform pg_temp.check_eq(
+    'the receivable leg carries no matter', v_n, 0);
 
   -- Output tax is owed to the Customs Department by the firm.
   --
@@ -166,14 +197,12 @@ begin
   -- first sweep this file was written for.
   select count(*) into v_n from pg_temp.posted_matters(v_doc)
    where code = '2130';
-  if v_n <> 1 then
-    raise exception 'the fee note posted % output tax legs, wanted 1', v_n;
-  end if;
+  perform pg_temp.check_eq(
+    'the fee note posted its output tax leg', v_n, 1);
   select count(*) into v_n from pg_temp.posted_matters(v_doc)
    where code = '2130' and matter_id is not null;
-  if v_n <> 0 then
-    raise exception 'the output tax leg carried a matter';
-  end if;
+  perform pg_temp.check_eq(
+    'the output tax leg carries no matter', v_n, 0);
 
   -- And once it is posted the matter stops moving. `0691` adds it to
   -- `0402`'s frozen list because the journal is now built from it:
@@ -190,9 +219,9 @@ begin
     when insufficient_privilege then
       v_deleted := false;
   end;
-  if v_deleted then
-    raise exception 'a posted invoice line was moved to another matter';
-  end if;
+  perform pg_temp.check_true(
+    'a posted invoice line cannot be moved to another matter',
+    not v_deleted);
 
   -- -----------------------------------------------------------------
   -- 2. A disbursement bought for a matter
@@ -201,22 +230,19 @@ begin
 
   select matter_id into v_got from pg_temp.posted_matters(v_doc)
    where code = '5100';
-  if v_got is distinct from v_m1 then
-    raise exception 'the disbursement did not reach the matter: got %', v_got;
-  end if;
+  perform pg_temp.check_eq(
+    'the disbursement reached the matter', v_got, v_m1);
 
   -- Both present, for the reason above: a missing leg would make the
   -- assertion below pass by having nothing to check.
   select count(*) into v_n from pg_temp.posted_matters(v_doc)
    where code in ('2110', '1410');
-  if v_n <> 2 then
-    raise exception 'the bill posted % of the payable and input tax legs', v_n;
-  end if;
+  perform pg_temp.check_eq(
+    'the bill posted both the payable and the input tax leg', v_n, 2);
   select count(*) into v_n from pg_temp.posted_matters(v_doc)
    where code in ('2110', '1410') and matter_id is not null;
-  if v_n <> 0 then
-    raise exception 'the payable or input tax leg carried a matter';
-  end if;
+  perform pg_temp.check_eq(
+    'neither the payable nor the input tax leg carries a matter', v_n, 0);
 
   -- -----------------------------------------------------------------
   -- 3. The firm's own costs stay the firm's
@@ -225,9 +251,8 @@ begin
 
   select count(*) into v_n from pg_temp.posted_matters(v_doc)
    where matter_id is not null;
-  if v_n <> 0 then
-    raise exception 'a bill with no matter put % lines on one', v_n;
-  end if;
+  perform pg_temp.check_eq(
+    'a bill with no matter puts no line on one', v_n, 0);
 
   -- -----------------------------------------------------------------
   -- 4. One document, two matters, kept apart
@@ -248,14 +273,12 @@ begin
 
   select count(*) into v_n from pg_temp.posted_matters(v_doc)
    where code = '4100' and matter_id = v_m1;
-  if v_n <> 1 then
-    raise exception 'M-1 got % revenue lines off the shared note', v_n;
-  end if;
+  perform pg_temp.check_eq(
+    'M-1 got its one revenue line off the shared note', v_n, 1);
   select count(*) into v_n from pg_temp.posted_matters(v_doc)
    where code = '4100' and matter_id = v_m2;
-  if v_n <> 1 then
-    raise exception 'M-2 got % revenue lines off the shared note', v_n;
-  end if;
+  perform pg_temp.check_eq(
+    'M-2 got its one revenue line off the shared note', v_n, 1);
 
   -- -----------------------------------------------------------------
   -- 4b. The matter the document knew all along
@@ -281,11 +304,9 @@ begin
 
   select matter_id into v_got from pg_temp.posted_matters(v_doc)
    where code = '4100';
-  if v_got is distinct from v_m1 then
-    raise exception
-      'a fee note raised on a matter posted with % on its revenue line',
-      v_got;
-  end if;
+  perform pg_temp.check_eq(
+    'a fee note raised on a matter carries it to the revenue line',
+    v_got, v_m1);
 
   -- And the line still wins where it has one, or a note covering two
   -- files would collapse onto whichever matter the header named.
@@ -305,9 +326,9 @@ begin
 
   select matter_id into v_got from pg_temp.posted_matters(v_doc)
    where code = '4100';
-  if v_got is distinct from v_m2 then
-    raise exception 'the header beat the line: got % rather than M-2', v_got;
-  end if;
+  perform pg_temp.check_eq(
+    'the line beats the header where it has a matter of its own',
+    v_got, v_m2);
 
   -- -----------------------------------------------------------------
   -- 5. The report this was all for
@@ -320,17 +341,15 @@ begin
     from public.report_matter_trial_balance(
            v_org, v_m1, date '1900-01-01', date '2999-12-31')
    where code = '4100';
-  if v_fees <> 1500.00 then
-    raise exception 'M-1''s fees came to % rather than 1500', v_fees;
-  end if;
+  perform pg_temp.check_eq(
+    'M-1''s fees on the matter trial balance', v_fees, 1500.00);
 
   select coalesce(sum(debit - credit), 0) into v_fees
     from public.report_matter_trial_balance(
            v_org, v_m1, date '1900-01-01', date '2999-12-31')
    where code = '5100';
-  if v_fees <> 50.00 then
-    raise exception 'M-1''s disbursements came to % rather than 50', v_fees;
-  end if;
+  perform pg_temp.check_eq(
+    'M-1''s disbursements on the matter trial balance', v_fees, 50.00);
 
   -- -----------------------------------------------------------------
   -- 6. Deleting the matter detaches a draft line and keeps the org
@@ -364,14 +383,12 @@ begin
 
   select count(*) into v_n from public.sales_document_lines
    where document_id = v_doc and org_id = v_org;
-  if v_n <> 1 then
-    raise exception 'deleting a matter took the draft line with it';
-  end if;
+  perform pg_temp.check_eq(
+    'deleting a matter leaves the draft line, with its org_id', v_n, 1);
   select count(*) into v_n from public.sales_document_lines
    where document_id = v_doc and matter_id is not null;
-  if v_n <> 0 then
-    raise exception 'deleting M-3 left the matter on the draft line';
-  end if;
+  perform pg_temp.check_eq(
+    'deleting M-3 detached it from the draft line', v_n, 0);
 
   -- And a matter a posted invoice was billed to cannot be deleted at
   -- all. Detaching it would leave the ledger saying one thing and the
@@ -387,9 +404,8 @@ begin
     when insufficient_privilege then
       v_deleted := false;
   end;
-  if v_deleted then
-    raise exception 'a matter with posted fees on it was deleted';
-  end if;
+  perform pg_temp.check_true(
+    'a matter with posted fees on it cannot be deleted', not v_deleted);
 
   raise notice 'matter on a document: the posting paths carry it';
 end $$;
@@ -434,9 +450,11 @@ begin
       (org_id, document_id, line_no, description, quantity, unit_price,
        line_subtotal, line_total, matter_id)
     values (v_mine, v_doc, 1, 'Fees', 1, 10.00, 10.00, 10.00, v_their_m);
-    raise exception 'another firm''s matter went onto my invoice line';
+    raise exception 'another firm''s matter went onto my invoice line'
+      using errcode = 'P0004';
   exception
-    when foreign_key_violation then null;
+    when foreign_key_violation then
+      raise notice 'ok   another firm''s matter cannot go onto my line';
   end;
 
   raise notice 'matter on a document: a matter belongs to one firm';

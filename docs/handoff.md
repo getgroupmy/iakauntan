@@ -8039,3 +8039,129 @@ believes.
 only the third was caused by the fix before it. Worth being precise
 about which is which rather than reading a run of red as one problem
 resisting three attempts.
+
+## The assertion count had a hole in it, and the hole was five files
+
+`run_locally.sh` holds a floor under the number of assertions that
+**actually ran** — counted off the `NOTICE:  ok ` lines psql prints,
+raised from 0 to a measured **14,257** and now **14,276**. It is the
+suite's only guard against an assertion that quietly stops being
+reached: a fixture moves, a branch is never entered, and 383 files still
+report green over fewer checks than yesterday. 383 files passing is not
+the same claim as 14,276 assertions holding.
+
+Five files contributed **nothing** to it, because they were written
+entirely in the other idiom:
+
+```sql
+if <the bad thing> then
+  raise exception '<what went wrong>';
+end if;
+```
+
+That asserts perfectly well and says nothing on success. So a skipped
+assertion in one of those five could not move the number, and the floor
+could not see the file at all.
+
+### I was wrong about whether it mattered
+
+The first thing I did was look for a reason not to bother, hypothesising
+the five were schema-shape files where a skipped assertion is low risk.
+**They are not.** `matter_on_a_document.sql` has 22 inserts over 7
+fixtures and **zero** catalog reads; `scan_inbox.sql` has 8 inserts over
+7 fixtures and zero; `tenant_foreign_keys.sql` has 71 inserts. Every
+assertion in them depends on a fixture, which is precisely the kind that
+stops being reached without anything going red. The hypothesis was
+checked before it was acted on, and it failed.
+
+### What was converted, and what was proved about it
+
+`matter_on_a_document.sql`, 19 sites, to `check_eq` / `check_true` — the
+idiom the other 378 files use. +19, predicted before the run and
+measured after, which is the check that nothing else moved at the same
+time.
+
+Converting a condition by hand is where an **inversion** hides, and a
+green suite does not show one: `if v_n <> 0` becoming
+`check_eq(label, v_n, 1)` passes nothing and still reads green if the
+value happens to be 1. So every converted assertion was then mutated —
+expected value perturbed one site at a time, 18 of them, with a no-op
+control — and **all 18 failed as they should**. That sweep is the actual
+evidence the conversion is sound. The suite passing is not.
+
+### A second finding, which turned out to be nothing — recorded anyway
+
+The bare form raises **P0001**, which `when others` CATCHES. The helpers
+raise **P0004**, which it does not, and `_helpers.sql` devotes a long
+header comment to why that matters: the suite's refusal-marker shape is
+
+```sql
+begin
+  perform <the thing that must be refused>;
+  raise exception 'FAIL: it was not refused';
+exception when others then ...
+end;
+```
+
+and with P0001 the marker is eaten by the handler immediately below it,
+so the test passes BECAUSE it failed. That is a real defect this project
+has already paid for once, in `create_contra`.
+
+I swept all 383 files for it. **Zero** bare raises sit under a
+`when others then null` arm — the shape where the assertion cannot fail
+at all. 137 sit under a `when others` arm that does
+`get stacked diagnostics` and matches the message, which is the
+documented-fragile shape, not a dead one: the marker's own message does
+not match the `like` pattern, so `check_true` raises P0004 and escapes.
+So: latent, not live, and latent is where it should stay.
+
+**The first version of that sweep reported 149 and was wrong.** It
+walked back from a `when others` line to the nearest enclosing `begin`
+without resolving nesting, so it attributed every `raise` in between to
+a distant handler — `platform_console.sql`'s handlers are
+`when sqlstate '42501'`, not `when others`. This is the seventh
+appearance this session of *matching text is not checking meaning*, and
+the first where the fault was in how the text was attributed rather than
+in the pattern. **A detector's own output is a claim that needs checking
+before it is reported**, which is the only reason the 149 never reached
+anybody as a finding.
+
+### The ratchet on the remaining four
+
+`scripts/check_counted_assertions.py` fails on a file that prints
+nothing when it passes, holding the four left — `attachment_content_hash`,
+`scan_inbox`, `search_path`, `tenant_foreign_keys` — as a reviewed list
+with a reason each. It fails **both ways**: on a fifth such file, and on
+an entry whose file now prints, because an excuse nobody prunes is not
+evidence.
+
+It does **not** prove a file with a countable source actually runs it: a
+`check_eq` inside a helper nobody calls reads as countable here and
+contributes nothing at runtime. The runtime floor catches that. Two
+mechanisms, neither sufficient alone, and the docstring says so rather
+than implying the gate is stronger than it is.
+
+The gate's own self-test has 17 assertions and was mutated with 9
+mutants plus a control: all 9 killed. The sharpest assertions are about
+`strip_comments`, because a gate that greps raw text for
+`pg_temp.check_eq` is satisfied by a **comment** naming it — which is the
+same defect as the `1120` one that cost a wrong recommendation to the
+user earlier this session.
+
+**No Python mutation harness exists in this repository.** `mutate.py` is
+hardwired to `flutter test` under `app/`, and `mutate_sql.py` is for SQL;
+the Python gates' mutation sweeps have all been ad-hoc inline loops. If
+one more gets written, that loop is worth promoting to
+`scripts/mutate_py.py` — and it must clear `scripts/__pycache__` between
+runs and pass `-B`, or two same-sized mutants in one mtime second share a
+`.pyc` and the second is reported as surviving code it never ran.
+
+### Next, if this is picked up
+
+Convert the remaining four the same way: one file at a time, mutating
+every converted condition, raising `ASSERTION_FLOOR` by the measured
+delta, and letting `UNCOUNTED` fall. `tenant_foreign_keys.sql` is the
+largest (48 raise sites, 2 of them inside a `when others` handler rather
+than an `if` — those two are the refusal-marker shape and should keep it,
+gaining `using errcode = 'P0004'` and a tick in the handler, not a
+conversion).

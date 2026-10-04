@@ -97,20 +97,37 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # WHAT THIS DOES NOT COUNT, and it is a real gap rather than a rounding
 # error: the suite has a SECOND assertion idiom -- a bare
 # `raise exception '<message>'` inside a `do $$ ... if not ... then` block,
-# which says nothing at all on success. Five files use only that form
-# (`tenant_foreign_keys.sql`, `matter_on_a_document.sql`, `scan_inbox.sql`,
-# `search_path.sql`, `attachment_content_hash.sql`) and are invisible to
-# this count. They are not invisible to the suite -- an exception still
-# fails the file -- but a SKIPPED assertion in one of them would not move
-# this number. Closing that would mean giving the bare form a success
-# notice too, which is a change to 383 files and a separate piece of work.
+# which says nothing at all on success. A file written entirely that way
+# is invisible to this count: not invisible to the suite, because an
+# exception still fails the file, but a SKIPPED assertion in one of them
+# would not move this number.
+#
+# Five files were in that state. `matter_on_a_document.sql` is now
+# converted to `pg_temp.check_eq` / `check_true`, the idiom the other 378
+# use, which was worth +19 here; `check_counted_assertions.py` holds the
+# remaining four as a ratchet that may only fall. The conversion is not
+# cosmetic in two ways beyond the count:
+#
+#   * the bare form raises P0001, which `when others` CATCHES. The
+#     helpers raise P0004, which it does not -- the whole reason
+#     `_helpers.sql` uses it. No assertion is being swallowed today
+#     (checked: zero `when others then null` arms over a refusal marker
+#     in all 383 files), so this is latent rather than live, and latent
+#     is where it should stay.
+#   * every converted assertion was then MUTATED -- expected value
+#     perturbed one site at a time, 18 of them, with a no-op control --
+#     and all 18 failed as they should. Converting a condition by hand is
+#     exactly where an inversion hides, and a green suite would not have
+#     shown one.
 #
 # Raise it when the number goes up. Lower it only on purpose, saying why.
 #
 # 14,257 on 4 October, measured twice on the same cluster to check the
 # number is reproducible before an exact floor was set on it. It is higher
 # than the 13,994 assertion SITES a static count finds, because a helper
-# inside a loop runs more than once.
+# inside a loop runs more than once. 14,276 after the conversion above:
+# predicted 14,257 + 19 before the run, and that is what it came to, which
+# is the check that nothing else moved at the same time.
 #
 # A dip here with every file still green is the thing to investigate, not
 # to paper over. If the cause turns out to be a branch that depends on
@@ -118,7 +135,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # this: `check_test_clock.py` holds both its pins at zero and
 # `utc_is_not_today.sql` asserts the schema has no session-clock defaults,
 # precisely so the suite counts the same on every day of the year.
-ASSERTION_FLOOR="${IAK_ASSERTION_FLOOR:-14257}"
+ASSERTION_FLOOR="${IAK_ASSERTION_FLOOR:-14276}"
 
 PGDATA="${IAK_PGDATA:-/var/tmp/pgdata}"
 PGSOCK="${IAK_PGSOCK:-/var/tmp}"

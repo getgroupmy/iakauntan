@@ -1486,6 +1486,25 @@ jobs:
       - name: Check the client surface is still the whole client
         run: python3 scripts/client_surfaces_test.py
 
+      # `run_locally.sh` holds a floor under the number of assertions that
+      # actually RAN, counted off the `NOTICE:  ok ` lines psql prints. It
+      # is the suite's only guard against an assertion that quietly stops
+      # being reached -- a fixture moves, a branch is never entered, and
+      # 383 files still report green over fewer checks than yesterday.
+      #
+      # A file written entirely in the other idiom -- `if <bad> then raise
+      # exception '<message>'; end if;` -- says nothing on success, so a
+      # skipped assertion inside it cannot move that number and the floor
+      # cannot see the file at all. Five files were in that state.
+      # `matter_on_a_document.sql` is converted (+19, and every converted
+      # condition mutated afterwards, because an inverted comparison reads
+      # green); this holds the remaining four as a ratchet that may only
+      # fall, and fails on a fifth.
+      - name: Check every assertion file says something when it passes
+        run: |
+          python3 scripts/check_counted_assertions_test.py
+          python3 scripts/check_counted_assertions.py
+
       - name: Check every client-reachable write is accounted for
         run: |
           DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
