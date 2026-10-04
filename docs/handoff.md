@@ -10822,3 +10822,87 @@ in ONE file, mutate the strings they assert, and see how many survive. That
 measures assertion strength instead of guessing at it from shape. The
 tooling is already there — `scripts/mutate.py` works against a test file as
 its own source, which is how the two-factor QR claims were measured.
+
+## 4 October, part nine: a detector that reported a clean tree because it could not fire
+
+The question from part eight's own write-up was whether assertion STRENGTH
+can be measured from shape. A second frame was tried and it failed in a way
+worth recording more than the answer.
+
+### The frame
+
+An assertion on a label the WIDGET owns cannot catch a wrong-shape fixture:
+nothing it checks depends on the data. So — how many test bodies assert
+only the widget's own words? Measured by taking every literal
+`find.text`/`textContaining` argument in a body and asking whether it also
+appears verbatim somewhere in `app/lib`.
+
+Across `app/test`: **3,494** literal text assertions, of which **2,160**
+name words that are in `app/lib` and **1,334** name something the fixture
+supplied.
+
+### IT REPORTED 0 AND IT WAS BROKEN
+
+The per-body classification came back "0 bodies whose every literal
+assertion is the widget's own words", which reads like a clean bill of
+health. It was a dead detector.
+
+`check_thin_assertions.bodies()` yields the BLANKED body — every string
+literal turned to spaces, which is what makes brace matching safe — and the
+classifier fed that to a string-literal regex. No literal could ever match,
+so every body fell out of the sweep at `if not lits: continue` and the
+count was structurally zero.
+
+**What caught it was writing the two controls afterwards**: a synthetic
+body that IS blind, and the same body with one fixture-derived assertion
+added. Both came back empty, which is impossible if the detector works. The
+controls now run FIRST and the script exits 2 if either is wrong, because a
+sweep whose detector cannot fire reports a clean tree — the same shape as
+`mutate.py` refusing to report without a CONTROL mutant, and the same shape
+as the five floors.
+
+### Fixed, it finds 649 — and they are all fine
+
+Raw slices matched by offset instead of blanked ones: **649 bodies**. Then
+read their NAMES:
+
+  * and an empty inbox says so rather than showing nothing
+  * a period with no assets says that rather than showing nil
+  * nothing read yet says so
+  * says which brightness it is showing
+  * an untouched reason is null, not an empty string
+
+These are EMPTY-STATE and BRANCH tests. The widget's own sentence is
+precisely the claim, because the thing under test is which sentence got
+drawn. Asserting fixture data there would be asserting the wrong thing.
+
+### Sharpened once more, and inflated again
+
+Narrowed to bodies whose literals are all generic chrome — Save, Cancel,
+Close, Done — gives **8 of the 649**. The first one read,
+`call_screen_test.dart`'s "and saying no leaves everybody on it", uses
+`find.text('Cancel')` as a TAP TARGET; its actual assertion is
+`expect(find.byKey(ValueKey('call-hang-up')), findsOneWidget, reason:
+'still on the call')`. The classifier counted literals anywhere in the body
+rather than only inside `expect(...)`, so 8 is inflated too.
+
+### The conclusion, and it bounds today's approach
+
+**Assertion strength is not inferable from the shape of an assertion.** It
+depends on what the test's subject is, and that lives in the test's name and
+intent rather than in its syntax. Two independent frames were tried —
+`findsWidgets` on a loose fragment, and asserting only the widget's own
+words — and both concluded NO GATE, each after its first hits turned out to
+be correct code.
+
+Three gates were built today and all three work because they measure
+something structural: a body with no assertion at all, a count of tests
+that ran, a parse that saw no rows. The fourth one does not exist because
+the thing it would measure is a judgement. Worth knowing before the next
+session reaches for one.
+
+The one method that does measure strength is still mutation, and it is
+per-site rather than per-sweep: `mutate.py` works against a test file as its
+own source, which is how the two-factor QR claims and the intercompany tax
+pair were settled. That is the tool for the 585 `textContaining` +
+`findsOneWidget` sites if anybody wants the number.
