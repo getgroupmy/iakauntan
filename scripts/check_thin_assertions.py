@@ -79,11 +79,17 @@ CEILING_FILE = os.path.join(ROOT, "app", "test", "thin_assertion_ceiling")
 #: reporter calls them and what `check_flutter_test_count.py` already
 #: keys its skips by.
 #:
-#: The overflow ones are not a loophole and they were proved rather than
-#: argued: an unflexed wide `Row` put inside `NewOrganizationDialog` made
-#: `the new-company dialog fits` FAIL, with a comment-only control
+#: The overflow ones are not a loophole and the mechanism was proved rather
+#: than argued, TWICE in two different widgets: an unflexed wide `Row` put
+#: inside `NewOrganizationDialog` made `the new-company dialog fits` FAIL,
+#: and taking the `Expanded` off `SectionHeader`'s title made `and the
+#: header reports no overflow` FAIL, each with a comment-only control
 #: surviving the same run. A `RenderFlex` overflow becomes the pending
 #: exception, so that one line is the whole of the check and it bites.
+#:
+#: The remaining `platform_people_test.dart` entries share that mechanism,
+#: that file and that helper, so they are argued from two measurements
+#: rather than from none.
 ALLOWED: dict[str, str] = {
     'test/asset_register_test.dart: '
     'the register totals do not overflow a phone':
@@ -112,12 +118,22 @@ ALLOWED: dict[str, str] = {
     'test/section_header_action_test.dart: '
     'and the header reports no overflow':
         'an overflow test, and the name says so',
+    # NOT RenderFlex tests, which is what these two were first described
+    # as here. They are QR CAPACITY tests: `qr_flutter` THROWS rather than
+    # drawing a half code when the data does not fit at the chosen error
+    # correction level, and `takeException` is what collects that. Measured
+    # -- a label of 4,000 characters makes the test fail, so the mechanism
+    # is real; 400 and level H both still fit, so the claim has a great
+    # deal of headroom and the test's own comment about the 40-character
+    # case "pushing a fixed-capacity code over" is wrong.
     'test/two_factor_test.dart: '
     'and renders without throwing at the size it is drawn':
-        'an overflow test, and the name says so',
+        'a QR capacity test: `qr_flutter` throws rather than drawing a '
+        'half code, so not throwing IS the claim that the URI fits at '
+        'level M',
     'test/two_factor_test.dart: a long account name still fits':
-        'an overflow test on the authenticator label, which is built from '
-        'an e-mail address and has no length limit',
+        'a QR capacity test on the authenticator label, which is built '
+        'from an e-mail address and has no length limit',
     'test/entity_types_for_companies_test.dart: '
     'and the dialog opens before the list has arrived':
         'the whole claim is that opening it against an empty list does '

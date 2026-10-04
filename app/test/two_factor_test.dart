@@ -75,8 +75,15 @@ void main() {
     });
 
     testWidgets('a long account name still fits', (tester) async {
-      // The email goes in the label, and some of them are long. This
-      // is the case that would push a fixed-capacity code over.
+      // The email goes in the label, and some of them are long.
+      //
+      // IT IS NOT NEAR THE BOUNDARY, and the first version of this comment
+      // said it was. Measured with `scripts/mutate.py` against this file
+      // as its own source: raising the correction level to H still fits,
+      // and so does a label ten times longer. A label of 4,000 characters
+      // does NOT -- the test fails, which is how the mechanism was proved
+      // real. So this is a regression test on a realistic long label, not
+      // a capacity boundary.
       final long =
           'otpauth://totp/iAkauntan:'
           '${'a' * 40}%40averylongcompanydomainname.example.com'

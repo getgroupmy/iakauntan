@@ -10727,3 +10727,43 @@ then assert whole joined subtitles rather than `textContaining` on one
 clause, read `onPressed` directly wherever a disabled button is the point,
 tap open anything offstage, and mutation-prove a sample per batch with a
 comment-only control.
+
+## 4 October, part seven: proving the excuses, and a comment that was wrong
+
+The gate's `ALLOWED` list excuses thirteen test bodies whose only check is
+`expect(tester.takeException(), isNull)`. Twelve were described as overflow
+tests on the strength of ONE measurement. Writing an excuse list and then
+asserting its contents is the same shape as everything else this file
+complains about, so three more measurements were taken.
+
+**`SectionHeader` — proved.** Taking the `Expanded` off the title column
+makes `and the header reports no overflow` FAIL, with a comment-only
+control surviving the same run. So the mechanism — a `RenderFlex` overflow
+becomes the test's pending exception and `takeException()` collects it — is
+now measured in two different widgets rather than one. The remaining
+`platform_people_test.dart` entries share that mechanism, that file and
+that helper, so they are argued from two measurements rather than none.
+
+**The two `two_factor_test.dart` entries are NOT RenderFlex tests at all,**
+which is what this gate first called them. They are QR CAPACITY tests:
+`qr_flutter` throws rather than drawing a half code when the data does not
+fit at the chosen error-correction level, so not throwing is the claim that
+the URI fits. The reasons in `ALLOWED` now say that.
+
+**And one of them carried a comment that was wrong.** `a long account name
+still fits` said its 40-character label "is the case that would push a
+fixed-capacity code over". Measured, with `mutate.py` run against the test
+file as its own source — which is the right tool here because the claim
+lives in the test's own parameters:
+
+| mutant | verdict |
+|---|---|
+| level M → H | **survived** — it still fits at the highest correction level |
+| label 40 → 400 characters | **survived** — a ~500-character URI is well inside version 40 |
+| label 40 → 4,000 characters | **killed** — the test fails |
+
+So the mechanism is real and the test is a regression test on a realistic
+long label, NOT a capacity boundary. The comment says so now.
+
+Three of the thirteen excuses are measured; the other ten rest on two
+measured mechanisms in the same files. That is the honest state of it.
