@@ -33,6 +33,7 @@ it does.
 The same default is in the JS client that the edge functions use, so
 both trees are read.
 """
+import os
 import re
 import sys
 from pathlib import Path
@@ -57,13 +58,27 @@ SUFFIXES = ('.dart', '.ts', '.js')
 CALL = re.compile(r"\.order\(([^)]*)\)")
 OPENED = re.compile(r"\.order\(")
 
+#: A floor under how many `.order(` sites must have been EXAMINED, and
+#: a refusal to skip a tree that is not there.
+#:
+#: Both halves were holes. `if not tree.exists(): continue` turned a
+#: moved tree into silence, and with no floor the gate passed over an
+#: empty one. 219 sites today across the two trees; floored well below.
+LEAST = int(os.environ.get('IAK_LEAST_SITES', '100'))
+
 
 def offenders():
-    """(path, line number, the call) for every order with no direction."""
+    """(offenders, unreadable, sites examined, trees that are not there)."""
     out = []
     unreadable = []
+    seen = 0
+    absent = []
     for tree in TREES:
         if not tree.exists():
+            # Reported, not skipped. A moved tree means this gate is no
+            # longer reading it, and silence there looks exactly like a
+            # tree with no faults in it.
+            absent.append(tree)
             continue
         for path in sorted(tree.rglob('*')):
             if path.suffix not in SUFFIXES:
@@ -73,17 +88,36 @@ def offenders():
                 # A comment explaining the rule is not a call.
                 code = line.split('//', 1)[0]
                 calls = CALL.findall(code)
-                if len(calls) != len(OPENED.findall(code)):
+                opened = OPENED.findall(code)
+                seen += len(opened)
+                if len(calls) != len(opened):
                     unreadable.append((rel, n, line.strip()))
                     continue
                 for args in calls:
                     if 'ascending' not in args:
                         out.append((rel, n, f'.order({args})'))
-    return out, unreadable
+    return out, unreadable, seen, absent
 
 
 def main():
-    out, unreadable = offenders()
+    out, unreadable, seen, absent = offenders()
+
+    if absent:
+        print(
+            'These trees are not there, so this gate has not read them:\n'
+            + ''.join('  * %s\n' % t for t in absent)
+            + '\nThat is not a defect in the code -- point TREES at where '
+            'they live now. Until then any ordering in them is unchecked, '
+            'and this gate used to pass in exactly this situation.',
+            file=sys.stderr)
+        return 2
+    if seen < LEAST:
+        print(
+            f'This sweep examined {seen} `.order(` site(s), and there were '
+            f'{LEAST} or more when it was written. A sweep with nothing to '
+            f'look at reports exactly what correct code reports.',
+            file=sys.stderr)
+        return 2
 
     for rel, n, line in unreadable:
         print(f'FAIL: {rel}:{n} has an `.order(` this check cannot read.')
@@ -104,7 +138,8 @@ def main():
     if out or unreadable:
         return 1
 
-    print('every ordering says which direction it means')
+    print(f'every ordering says which direction it means '
+          f'({seen} `.order(` sites examined)')
     return 0
 
 

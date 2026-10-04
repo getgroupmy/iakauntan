@@ -8669,26 +8669,77 @@ first and my ad-hoc count did not. **Write down the number the gate
 reports, never the one a re-implementation produces.** Three times in one
 session is a rule, not bad luck.
 
-### The six still on the ratchet
+### The ratchet reached zero: all nineteen are done
 
 `check_capture_is_kept`, `check_date_arguments`, `check_initstate_ref`,
 `check_loading_spinners`, `check_narrow_rows`, `check_order_direction` —
-six, each with a note in `check_sweeps_look.py` saying what it would have
-to count.
+the last six. **44 of 62 gates now fail over an empty source tree; 10
+exit on a missing database URL, 8 raise on a missing named file, and 0
+pass over nothing.**
 
-`check_date_arguments`, `check_initstate_ref`, `check_narrow_rows` and
-`check_order_direction` are all zero-expected gates, so they want the
-floor-plus-canary shape above rather than a floor on matches.
-`check_capture_is_kept` is the odd one: it reads two NAMED files and
-still passed over an empty tree, which means it handles them missing
-rather than raising — worth reading before assuming it fits any of these
-patterns.
+I was wrong in the note above about what these six needed: I said four
+were zero-expected and wanted the floor-plus-canary shape. They are
+zero-expected, but their patterns match **every site**, compliant or not
+— 500 `Fmt.*` calls, 113 `initState` bodies, 36 `loading:` arms, 217
+`.order(` sites, 521 ListTile constructions — so a plain census floor
+works. The canary is only needed when the pattern matches **offenders
+only**, which was `check_current_org` and `check_token_rotators`. Four
+shapes, not two, and they are written out at the head of
+`PASSES_OVER_NOTHING` so the next gate gets the right one:
 
-### A note on my own verification, three times over
+| shape | floor on | examples |
+|---|---|---|
+| census — "N sites, all compliant" | N | captcha_tokens, edge_cors, dialogs_built, money_is_numeric |
+| zero-expected, pattern matches all sites | sites examined | date_arguments, initstate_ref, loading_spinners, narrow_rows, order_direction, + the six given site floors earlier |
+| zero-expected, pattern matches offenders only | what it READ, **plus a canary** | current_org, token_rotators |
+| reads NAMED files, skipped them when absent | remove the `exists()` escape | capture_is_kept, order_direction |
 
-I read `$?` after a pipe and got the pipe's status rather than the
-command's **three separate times today**, once while writing the commit
-message that explains the trap. It is in `docs/handoff.md` already, it is
-in CI's own comments, and I still did it. The habit that actually works is
-`cmd >/dev/null 2>&1; echo $?` with nothing between — not knowing about
-the problem.
+### Two gates were turning absence into success, not just lacking a floor
+
+`check_capture_is_kept` had **two** `exists()` escapes: `offenders()`
+returns `[]` for a missing `scan_flow.dart`, and its canary was guarded
+by `asked.exists() and ...`. Over a tree with neither file it printed
+"ok a capture is kept until somebody asks for it to go".
+
+Its test said that was deliberate — *"Renamed or moved. That is not this
+gate's business to guess at, and inventing a failure would block the
+rename."* That argument is right, and it is about `offenders()` not
+inventing a **finding**. It is a different question from whether `main()`
+may print a tick: refusing to claim the rule holds is not the same as
+claiming it is broken. So `offenders()` is untouched — its test still
+passes unchanged — and `main()` now exits 2 saying *this is NOT a defect
+in the app, the file moved, point FLOW and ASKED at it*.
+
+`check_order_direction` had the same shape in `if not tree.exists():
+continue`. A moved tree now reports rather than skipping.
+
+### The empty-list trap, for the third time in one session
+
+With `PASSES_OVER_NOTHING` empty, two of the meta-gate's tests indexed
+`sorted(PASSES_OVER_NOTHING)[0]` and raised `IndexError` — and **that is
+the right direction to break in.** They failed loudly rather than passing
+over nothing, which is the defect the whole gate is about. Both are now
+driven from a **fed** entry, with a control asserting the same fed entry
+passes when it behaves as the list says — otherwise they would be killed
+by the feeding rather than by what they assert. Two more per-entry
+assertions had gone vacuous and are now exercised against the fed entry
+too.
+
+### Harnesses patched, and why that keeps happening
+
+Six self-test harnesses needed `LEAST = 0` (or an `IAK_LEAST_SITES`
+override) because every one of them drives its gate over a fixture of
+one or two files, which is below every floor by design. That is not an
+inconvenience of the floors; it is the floors being claims about
+`app/lib` rather than about a temporary directory. Two harnesses also
+captured **stdout only**, so a floor message on stderr was invisible —
+and an `assertNotIn` against an uncaptured stream passes for the wrong
+reason.
+
+### My probe disagreed with a gate FIVE times
+
+431 vs 430 `actions:` lists, 10 vs 8 GoTrue calls, 5 vs 2 canary
+references, 502 vs 500 `Fmt.*` calls, 219 vs 217 `.order(` sites. Every
+time the gate strips comments or doc comments first and my ad-hoc count
+did not. **Write down the number the gate reports.** Five times is not
+bad luck.

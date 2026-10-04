@@ -74,6 +74,33 @@ def main(root: pathlib.Path | None = None) -> int:
     # tree it built, rather than reimplementing this in the test and
     # asserting against its own copy.
     root = root or pathlib.Path(__file__).resolve().parent.parent
+
+    # Neither half of this gate can run if its file is not there, and
+    # BOTH used to skip quietly: `offenders()` returns [] for a missing
+    # FLOW, and the canary below was guarded by `asked.exists() and ...`.
+    # So over a tree with neither file the gate printed "ok a capture is
+    # kept until somebody asks for it to go" -- a property it had not
+    # looked at.
+    #
+    # `offenders()` is deliberately left alone. Its own test says a
+    # missing flow file is not a FINDING, because the file may have been
+    # renamed and inventing a defect would block the rename. That is
+    # right, and it is a different question from whether `main()` may
+    # report a tick: refusing to claim the rule holds is not the same as
+    # claiming it is broken. The message below says which.
+    missing = [rel for rel in (FLOW, ASKED) if not (root / rel).exists()]
+    if missing:
+        print(
+            "This gate cannot see the files it watches, so it has checked "
+            "nothing:\n\n"
+            + "".join("  * %s\n" % rel for rel in missing)
+            + "\nThat is NOT a defect in the app -- most likely the file "
+            "moved or was renamed. Point FLOW and ASKED at where it lives "
+            "now. Until then the rule this gate exists to hold is "
+            "unenforced, and it used to say `ok` in exactly this "
+            "situation.", file=sys.stderr)
+        return 2
+
     found = offenders(root)
 
     if not found:
@@ -81,7 +108,7 @@ def main(root: pathlib.Path | None = None) -> int:
         # The other half: the deliberate one has to still be there, or
         # the rule has become "a file can never be removed", which is
         # not what was asked for either.
-        if asked.exists() and not CALL.search(asked.read_text()):
+        if not CALL.search(asked.read_text()):
             print('Nothing offers to remove a capture any more.')
             print()
             print(f'`{ASKED}` no longer calls `deleteAttachmentById`. The')

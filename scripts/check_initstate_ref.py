@@ -49,6 +49,17 @@ ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 APP = os.path.join(ROOT, "app", "lib")
 
 INIT = re.compile(r"\n  void initState\(\)\s*\{")
+#: A floor under how many initState() bodies the sweep must have EXAMINED.
+#:
+#: This gate expects to find no offenders, so a clean codebase
+#: and a blind sweep give the same answer -- it passed over an
+#: empty tree. The floor is on SITES examined, which is the
+#: number that distinguishes them.
+#:
+#: 113 today under app/lib. Set well below that: it guards against the sweep going
+#: blind, not against a site being added or removed.
+LEAST = int(os.environ.get("IAK_LEAST_SITES", "60"))
+
 CALL = re.compile(r"^\s*(_\w+)\s*\(([^)]*)\)\s*;", re.M)
 
 
@@ -86,6 +97,7 @@ def method_body(src: str, name: str) -> str:
 
 def main() -> int:
     bad = []
+    seen = 0
     for root, _, files in os.walk(APP):
         for name in sorted(files):
             if not name.endswith(".dart"):
@@ -93,6 +105,7 @@ def main() -> int:
             path = os.path.join(root, name)
             src = open(path).read()
             for m in INIT.finditer(src):
+                seen += 1
                 end = src.find("\n  }\n", m.end())
                 body = src[m.end() : end if end != -1 else len(src)]
                 now = immediate(body)
@@ -103,6 +116,16 @@ def main() -> int:
                     line = src[: m.start()].count("\n") + 2
                     rel = os.path.relpath(path, ROOT)
                     bad.append(f"{rel}:{line}")
+
+    if seen < LEAST:
+        print(
+            f'This sweep examined {seen} initState() body/bodies, and there were {LEAST} '
+            f'or more when it was written. Either it is not reading '
+            f'the source tree or the pattern no longer matches how '
+            f'the code is written -- and a sweep with nothing to '
+            f'look at reports exactly what clean code reports.',
+            file=sys.stderr)
+        return 2
 
     if bad:
         print("ref.invalidate runs inside initState:")
@@ -121,7 +144,8 @@ def main() -> int:
         print("reporting it.")
         return 1
 
-    print("no initState invalidates a provider")
+    print(f"no initState invalidates a provider "
+          f"({seen} initState bodies examined)")
     return 0
 
 

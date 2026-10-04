@@ -169,19 +169,42 @@ class TheRatchetBothWays(Harness):
         self.assertIn("something has to compare it", said)
         self.assertIn("sites matched rather than files read", said)
 
-    def test_an_entry_that_now_reports_must_be_pruned(self):
+    def entry(self, verdict):
+        """A FED backlog entry, since the real list is now empty.
+
+        These two indexed into `PASSES_OVER_NOTHING[0]` and raised
+        IndexError the moment the ratchet reached zero -- which is the
+        right direction to break in: they failed loudly instead of
+        passing over nothing, which is the defect this whole gate is
+        about.
+        """
+        real = csl.PASSES_OVER_NOTHING
+        csl.PASSES_OVER_NOTHING = {"check_routes": "a reason long enough "
+                                   "to say what this one would need"}
+        self.addCleanup(lambda: setattr(csl, "PASSES_OVER_NOTHING", real))
         found = shipped()
-        found[sorted(csl.PASSES_OVER_NOTHING)[0]] = "reported"
-        code, said = self.gate(found)
+        if verdict is None:
+            found.pop("check_routes", None)
+        else:
+            found["check_routes"] = verdict
+        return found
+
+    def test_an_entry_that_now_reports_must_be_pruned(self):
+        code, said = self.gate(self.entry("reported"))
         self.assertEqual(code, 1, said)
         self.assertIn("let the ratchet fall", said)
 
     def test_an_entry_for_a_deleted_gate_is_flagged(self):
-        found = shipped()
-        del found[sorted(csl.PASSES_OVER_NOTHING)[0]]
-        code, said = self.gate(found)
+        code, said = self.gate(self.entry(None))
         self.assertEqual(code, 1, said)
         self.assertIn("not a gate any more", said)
+
+    def test_a_fed_entry_that_still_passes_is_accepted(self):
+        """The control for the two above: the same fed entry, behaving as
+        the list says, must pass -- or they would be killed by the
+        feeding rather than by what they assert."""
+        code, said = self.gate(self.entry("passed_over_nothing"))
+        self.assertEqual(code, 0, said)
 
     def test_a_timeout_is_reported_rather_than_assumed_either_way(self):
         found = shipped()
@@ -190,15 +213,43 @@ class TheRatchetBothWays(Harness):
         self.assertEqual(code, 1, said)
         self.assertIn("nothing is known about it either way", said)
 
-    def test_every_backlog_entry_says_what_it_needs(self):
-        for gate, why in csl.PASSES_OVER_NOTHING.items():
-            with self.subTest(gate):
-                self.assertGreater(len(why), 40, gate)
+    def test_the_backlog_is_empty_as_shipped(self):
+        """The ratchet reached the bottom: all nineteen are done.
 
-    def test_the_backlog_is_only_gates_that_exist(self):
-        names = set(csl.gates())
-        for gate in csl.PASSES_OVER_NOTHING:
-            self.assertIn(gate, names, gate)
+        Asserted explicitly, because an empty collection satisfies every
+        per-entry assertion below it -- the trap this repository hit
+        earlier the same day with `check_counted_assertions`. So the
+        zero state is a claim of its own, and the per-entry properties
+        below are exercised against a FED entry rather than against a
+        real one that may not exist.
+        """
+        self.assertEqual(csl.PASSES_OVER_NOTHING, {})
+
+    def test_the_per_entry_properties_still_hold_if_it_is_refilled(self):
+        """Driven with a fed entry, so these do not go vacuous now that
+        the real list is empty."""
+        real = csl.PASSES_OVER_NOTHING
+        try:
+            csl.PASSES_OVER_NOTHING = {"check_routes": "a reason long "
+                                       "enough to say what it would need"}
+            found = shipped()
+            found["check_routes"] = "passed_over_nothing"
+            code, said = self.gate(found)
+            self.assertEqual(code, 0, said)
+            for gate, why in csl.PASSES_OVER_NOTHING.items():
+                self.assertGreater(len(why), 40, gate)
+                self.assertIn(gate, set(csl.gates()), gate)
+        finally:
+            csl.PASSES_OVER_NOTHING = real
+
+    def test_every_gate_is_in_some_bucket_now_that_the_backlog_is_empty(self):
+        """With the ratchet at zero, every gate is either excused or must
+        report. A gate in no bucket would be checked by nothing."""
+        excused = set(csl.NEEDS_A_DATABASE) | set(csl.NEEDS_A_FILE)
+        for gate in csl.gates():
+            with self.subTest(gate):
+                self.assertTrue(gate in excused
+                                or gate not in csl.PASSES_OVER_NOTHING)
 
 
 if __name__ == "__main__":

@@ -40,8 +40,14 @@ def run_on(files: dict[str, str], exempt: dict[str, str] | None = None):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(body)
         saved_lib, saved_exempt = gate.LIB, gate.EXEMPT
+        saved_least = gate.LEAST
         gate.LIB = root
         gate.EXEMPT = {} if exempt is None else exempt
+        # The gate holds a floor under how many `loading:` arms it must
+        # have EXAMINED, so an empty app/lib cannot report a tick. Every
+        # fixture here has one or two arms, below that floor by design:
+        # the floor is a claim about app/lib, not about a temp directory.
+        gate.LEAST = 0
         try:
             out = io.StringIO()
             with contextlib.redirect_stdout(out):
@@ -49,6 +55,7 @@ def run_on(files: dict[str, str], exempt: dict[str, str] | None = None):
             return code, out.getvalue()
         finally:
             gate.LIB, gate.EXEMPT = saved_lib, saved_exempt
+            gate.LEAST = saved_least
 
 
 SPIN = 'CircularProgressIndicator'

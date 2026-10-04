@@ -45,6 +45,7 @@ because a list of what is missing that nobody revisits is how
 `docs/gaps-against-autocount.md` came to be wrong about four of its own
 entries.
 """
+import os
 import re
 import sys
 from pathlib import Path
@@ -56,6 +57,15 @@ LIB = ROOT / 'app' / 'lib'
 EXEMPT: dict[str, str] = {}
 
 SPINNER = 'CircularProgressIndicator'
+
+#: A floor under how many `loading:` arms must have been EXAMINED.
+#:
+#: This gate expects no offenders outside EXEMPT, so a clean codebase
+#: and a blind sweep read the same -- it passed over an empty tree,
+#: reporting '0 exemption(s)' and a tick. The arms it reads are only
+#: those in files that mention the spinner at all, which is why the
+#: number is smaller than a count of every `loading:` in app/lib.
+LEAST = int(os.environ.get('IAK_LEAST_SITES', '12'))
 
 
 def blanked(src: str) -> str:
@@ -134,16 +144,26 @@ def main() -> int:
     offenders: list[tuple[str, int]] = []
     seen_files: set[str] = set()
 
+    seen = 0
     for path in sorted(LIB.rglob('*.dart')):
         src = path.read_text()
         if SPINNER not in src:
             continue
         rel = str(path.relative_to(LIB))
         for line, arm in loading_arms(src):
+            seen += 1
             if SPINNER in arm:
                 seen_files.add(rel)
                 if rel not in EXEMPT:
                     offenders.append((rel, line))
+
+    if seen < LEAST:
+        print(
+            f'This sweep examined {seen} `loading:` arm(s) in files that '
+            f'mention {SPINNER}, and there were {LEAST} or more when it '
+            f'was written. A sweep with nothing to look at reports '
+            f'exactly what clean code reports.', file=sys.stderr)
+        return 2
 
     problems = []
     for rel, line in offenders:

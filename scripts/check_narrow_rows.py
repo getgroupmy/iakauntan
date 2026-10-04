@@ -80,6 +80,17 @@ APP = os.path.join(ROOT, 'app', 'lib')
 # before the title sees any. 360 is the narrowest Android in common use;
 # the horizontal padding is this app's `Space.lg` on each side.
 PHONE = 360
+#: A floor under how many ListTile constructions the sweep must have EXAMINED.
+#:
+#: This gate expects to find no offenders, so a clean codebase
+#: and a blind sweep give the same answer -- it passed over an
+#: empty tree. The floor is on SITES examined, which is the
+#: number that distinguishes them.
+#:
+#: 521 today under app/lib. Set well below that: it guards against the sweep going
+#: blind, not against a site being added or removed.
+LEAST = int(os.environ.get("IAK_LEAST_SITES", "250"))
+
 TILE_PADDING = 48
 
 # What is left for the title and subtitle after the trailing. Below
@@ -615,6 +626,7 @@ def scan(path: str, source: str) -> list[str]:
 
 def main() -> int:
     problems = []
+    seen = 0
     for root, _, files in os.walk(APP):
         for f in files:
             if not f.endswith('.dart'):
@@ -622,8 +634,19 @@ def main() -> int:
             path = os.path.join(root, f)
             with open(path) as fh:
                 source = fh.read()
+            seen += len(TILE.findall(source))
             problems += scan(path, source)
             problems += scan_titles(path, source)
+
+    if seen < LEAST:
+        print(
+            f'This sweep examined {seen} ListTile construction(s), and there were {LEAST} '
+            f'or more when it was written. Either it is not reading '
+            f'the source tree or the pattern no longer matches how '
+            f'the code is written -- and a sweep with nothing to '
+            f'look at reports exactly what clean code reports.',
+            file=sys.stderr)
+        return 2
 
     if problems:
         print('Rows that cannot fit on a phone:\n')
@@ -632,7 +655,8 @@ def main() -> int:
         print(f'\n{len(problems)} row(s). See the header of this script.')
         return 1
 
-    print('Every list row leaves room for its own words, at both ends.')
+    print(f'Every list row leaves room for its own words, at both ends. '
+          f'({seen} ListTile constructions examined.)')
     return 0
 
 

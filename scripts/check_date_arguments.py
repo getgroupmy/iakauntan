@@ -47,6 +47,13 @@ LIB = os.path.join(ROOT, 'app', 'lib')
 # than a regex, because `Fmt.dateTime(DateTime.tryParse('$x'))` has two.
 CALL = re.compile(r'\bFmt\.(date|dateTime|longDate|time)\s*\(')
 
+#: A floor under how many Fmt.* call sites must have been EXAMINED.
+#:
+#: This gate expects no offenders, so a clean codebase and a blind
+#: sweep read the same -- it passed over an empty tree. 502 call sites
+#: today under app/lib; floored well below.
+LEAST = int(os.environ.get('IAK_LEAST_SITES', '250'))
+
 # The argument is a map read BY STRING KEY, and nothing else: it ends
 # with `['...']`. That is the shape a JSON row is read with.
 #
@@ -102,8 +109,9 @@ def argument_of(source: str, open_paren: int) -> str:
     return ''
 
 
-def offenders(root: str = LIB) -> list[str]:
+def offenders(root: str = LIB) -> tuple[list[str], int]:
     found: list[str] = []
+    seen = 0
     for dirpath, _dirs, files in os.walk(root):
         for name in sorted(files):
             if not name.endswith('.dart'):
@@ -112,6 +120,7 @@ def offenders(root: str = LIB) -> list[str]:
             with open(path, encoding='utf-8') as fh:
                 source = strip_comments(fh.read())
             for m in CALL.finditer(source):
+                seen += 1
                 arg = argument_of(source, m.end() - 1).strip()
                 if not arg or any(s in arg for s in SAFE):
                     continue
@@ -124,16 +133,24 @@ def offenders(root: str = LIB) -> list[str]:
                     f'timestamptz arrives as a JSON string and this throws '
                     f'at build, which a release web build draws as a plain '
                     f'grey rectangle. Wrap it in DateTime.tryParse.')
-    return found
+    return found, seen
 
 
 def main() -> int:
-    bad = offenders()
+    bad, seen = offenders()
+    if seen < LEAST:
+        print(
+            f'This sweep examined {seen} Fmt.* call site(s) under '
+            f'{LIB}, and there were {LEAST} or more when it was '
+            f'written. A sweep with nothing to look at reports exactly '
+            f'what clean code reports.', file=sys.stderr)
+        return 2
     if bad:
         for b in bad:
             print(f'::error::{b}')
         return 1
-    print('every date formatter is handed a date, not a row value')
+    print(f'every date formatter is handed a date, not a row value '
+          f'({seen} call sites examined)')
     return 0
 
 

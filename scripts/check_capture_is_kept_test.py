@@ -27,11 +27,18 @@ def tree(flow: str, sheet: str = 'await repo.deleteAttachmentById(id);'):
 
 
 def run(root: pathlib.Path) -> tuple[str, int]:
-    """The real `main`, over a built tree, with its output captured."""
-    buf = io.StringIO()
-    with contextlib.redirect_stdout(buf):
+    """The real `main`, over a built tree, with BOTH streams captured.
+
+    Both, because the "cannot see the files" message goes to stderr
+    where a failure belongs, and a harness that captures only stdout
+    makes an assertion about it vacuous in the dangerous direction: an
+    `assertIn` on the empty string fails loudly, but an `assertNotIn`
+    passes for the wrong reason.
+    """
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
         code = gate.main(root)
-    return buf.getvalue(), code
+    return out.getvalue() + err.getvalue(), code
 
 
 class TheGate(unittest.TestCase):
@@ -82,6 +89,40 @@ class TheGate(unittest.TestCase):
         out, code = run(tree('return;\n'))
         self.assertEqual(code, 0)
         self.assertIn('ok ', out)
+
+    def test_main_refuses_to_tick_when_it_cannot_see_the_files(self):
+        # The distinction `offenders()` above does NOT make, and should
+        # not: a missing flow file is not a FINDING, because the file may
+        # have been renamed and inventing a defect would block the
+        # rename. But `main()` printing "ok a capture is kept until
+        # somebody asks for it to go" over a tree with neither file is a
+        # claim about something it never read. Both halves used to skip
+        # quietly -- `offenders()` returns [] and the canary was guarded
+        # by `asked.exists() and ...`.
+        root = pathlib.Path(tempfile.mkdtemp())
+        out, code = run(root)
+        self.assertEqual(code, 2, out)
+        self.assertIn('checked nothing', out)
+        self.assertIn(gate.FLOW, out)
+        self.assertIn(gate.ASKED, out)
+
+    def test_it_says_that_is_not_a_defect_in_the_app(self):
+        # A red build with no explanation gets the gate deleted. This one
+        # has to say "the file moved" and not imply the rule was broken.
+        root = pathlib.Path(tempfile.mkdtemp())
+        out, _ = run(root)
+        self.assertIn('NOT a defect in the app', out)
+        self.assertIn('FLOW and ASKED', out)
+
+    def test_one_missing_file_is_enough(self):
+        """Either half alone being unreadable leaves the rule unenforced."""
+        for drop in (gate.FLOW, gate.ASKED):
+            with self.subTest(drop):
+                root = tree('return;\n')
+                (root / drop).unlink()
+                out, code = run(root)
+                self.assertEqual(code, 2, out)
+                self.assertIn(drop, out)
 
     def test_the_fault_makes_main_fail_and_name_the_line(self):
         out, code = run(tree('await repo.deleteAttachmentById(a);\n'))

@@ -95,25 +95,33 @@ NEEDS_A_FILE = {
     "check_spa_fallback": "deploy/vercel-output-config.json",
 }
 
-#: Gates that still pass over nothing. A RATCHET: it may only fall.
+#: Gates that still pass over nothing. A RATCHET, and it has reached the
+#: bottom: all nineteen are done, so this is EMPTY and every gate must
+#: now fail over an empty source tree or be excused above with a reason.
 #:
-#: Each note says what the gate would have to count and compare for the
-#: entry to go. They are not all the same size of job -- some need a
-#: floor on files globbed, some on sites matched, and three print a
-#: number already and need only to check it.
+#: An entry here is still honoured, so a gate that genuinely cannot be
+#: driven can be parked with a note. But a floor at zero is the only kind
+#: nobody has to remember to lower.
+#:
+#: Four shapes came out of closing it, and which one a gate needs depends
+#: on what it reports:
+#:
+#:   * a CENSUS gate reports "N sites, all compliant" -- floor N.
+#:     check_captcha_tokens, check_edge_cors, check_dialogs_built,
+#:     check_money_is_numeric.
+#:   * a ZERO-EXPECTED gate whose pattern matches every site, compliant
+#:     or not -- floor the sites examined. check_date_arguments,
+#:     check_initstate_ref, check_loading_spinners, check_narrow_rows,
+#:     check_order_direction, and the six given site floors earlier.
+#:   * a ZERO-EXPECTED gate whose pattern matches ONLY offenders -- a
+#:     floor on matches would demand that offenders exist, so floor what
+#:     it READ and add a CANARY: a place the pattern must still match.
+#:     check_current_org (the declaration in providers.dart),
+#:     check_token_rotators (the legitimate rotations off the draw path).
+#:   * a gate reading NAMED FILES that skipped them when absent -- remove
+#:     the `exists()` escape and say "could not look" rather than tick.
+#:     check_capture_is_kept, check_order_direction.
 PASSES_OVER_NOTHING: dict[str, str] = {
-    "check_capture_is_kept":
-        "no count at all; needs a floor on whatever it globs",
-    "check_date_arguments":
-        "no count; needs a floor on the date-formatter call sites",
-    "check_initstate_ref":
-        "no count; needs a floor on the initState bodies examined",
-    "check_loading_spinners":
-        "no count of `loading:` arms examined, only of exemptions",
-    "check_narrow_rows":
-        "no count; needs a floor on the list rows examined",
-    "check_order_direction":
-        "no count; needs a floor on the orderings examined",
 }
 
 
