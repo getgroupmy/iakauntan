@@ -1449,6 +1449,20 @@ jobs:
           DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
           python3 scripts/check_idempotent_calls.py "$DB"
 
+      # Three gates below ask what the CLIENT can reach, and all three
+      # used to pin that to `repository.dart`. It holds 576 of the 597
+      # named RPC calls and 144 of the 169 direct writes, so each of them
+      # looked thorough and reported a clean sweep over an incomplete
+      # denominator: 16 writing functions were never censused, seven of
+      # them corporate secretarial, and four tables are written from
+      # SCREENS rather than any repository. `client_surfaces.py` is now
+      # the one definition, globbing `app/lib`, and this self-test asserts
+      # the SCOPE -- that it is more than one file and more than one
+      # directory -- because a narrowed scope does not look like a
+      # failure from the outside.
+      - name: Check the client surface is still the whole client
+        run: python3 scripts/client_surfaces_test.py
+
       - name: Check every client-reachable write is accounted for
         run: |
           DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"

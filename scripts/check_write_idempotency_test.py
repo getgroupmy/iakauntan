@@ -61,7 +61,8 @@ class FindingCallSites(unittest.TestCase):
         nowhere near the 192 a line-based scan reported, and a floor does
         not need editing every time a function is added.
         """
-        found = gate.client_calls(gate.CLIENT.read_text())
+        found = gate.client_calls(
+            "\n".join(f.read_text() for f in gate.CLIENTS))
         self.assertGreater(len(found), 400)
 
 
@@ -201,7 +202,7 @@ class TheRatchet(unittest.TestCase):
             gate.DEFS_SQL: [f'public.{n}\x01{b}' for n, b in defs.items()],
         }
         real_psql, real_backlog, real_client = (
-            gate.psql, gate.BACKLOG, gate.CLIENT)
+            gate.psql, gate.BACKLOG, gate.CLIENTS)
         real_verdicts = dict(gate.VERDICTS)
         gate.VERDICTS.clear()
         gate.VERDICTS.update(verdicts or {})
@@ -210,13 +211,13 @@ class TheRatchet(unittest.TestCase):
         path.write_text(client)
         gate.psql = lambda db, sql: answers[sql]
         gate.BACKLOG = backlog
-        gate.CLIENT = path
+        gate.CLIENTS = [path]
         out, err = io.StringIO(), io.StringIO()
         try:
             with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
                 code = gate.run("db")
         finally:
-            gate.psql, gate.BACKLOG, gate.CLIENT = (
+            gate.psql, gate.BACKLOG, gate.CLIENTS = (
                 real_psql, real_backlog, real_client)
             gate.VERDICTS.clear()
             gate.VERDICTS.update(real_verdicts)

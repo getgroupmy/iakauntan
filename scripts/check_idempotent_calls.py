@@ -54,7 +54,14 @@ import subprocess
 import sys
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
-CLIENT = REPO / "app" / "lib" / "src" / "data" / "repository.dart"
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import client_surfaces  # noqa: E402  (after the path insert, by necessity)
+
+#: EVERY client surface, derived rather than pinned to one file -- see
+#: `client_surfaces.py` for what reading `repository.dart` alone hid from
+#: three gates at once.
+CLIENTS = client_surfaces.dart_files(REPO)
 
 # Every public function taking an idempotency key, with the parameters a
 # caller has to name to select it. Asked of the database rather than
@@ -148,14 +155,30 @@ def main() -> int:
               "not apply.", file=sys.stderr)
         return 1
 
-    text = CLIENT.read_text()
     problems: list[str] = []
 
-    once = call_sites(text, "callRpcOnce")
-    for fn, keys, line in once:
+    def sites(wrapper: str) -> list[tuple[str, set[str], int, str]]:
+        """Every call site across every surface, each carrying its file.
+
+        A gate that reports `repository.dart:412` for a call in
+        `corp_repository.dart` sends the reader to the wrong line of the
+        wrong file, which is worse than reporting no line at all.
+        """
+        out = []
+        for f in CLIENTS:
+            body = f.read_text()
+            if wrapper not in body:
+                continue
+            for fn, keys, line in call_sites(body, wrapper):
+                out.append((fn, keys, line, f.name))
+        return out
+
+    once = sites("callRpcOnce")
+    plain = sites("callRpc")
+    for fn, keys, line, where in once:
         if fn not in protected:
             problems.append(
-                f"{CLIENT.name}:{line}: callRpcOnce('{fn}') but '{fn}' has "
+                f"{where}:{line}: callRpcOnce('{fn}') but '{fn}' has "
                 f"no idempotency-key overload. PostgREST cannot resolve a "
                 f"body carrying p_idempotency_key against it."
             )
@@ -166,7 +189,7 @@ def main() -> int:
         missing = sorted(wanted - keys)
         if missing:
             problems.append(
-                f"{CLIENT.name}:{line}: callRpcOnce('{fn}') does not name "
+                f"{where}:{line}: callRpcOnce('{fn}') does not name "
                 f"{', '.join(missing)}. The wrapper has no defaults, so "
                 f"this resolves to the unprotected overload — silently, "
                 f"and with a plausible answer."
@@ -175,27 +198,27 @@ def main() -> int:
     # An idempotency key that is not called p_idempotency_key: the
     # function resumes its own earlier work when given one, and does not
     # when given null.
-    for fn, keys, line in call_sites(text, "callRpc"):
+    for fn, keys, line, where in plain:
         wanted = BY_OTHER_NAME.get(fn)
         if wanted and wanted not in keys:
             problems.append(
-                f"{CLIENT.name}:{line}: callRpc('{fn}') does not send "
+                f"{where}:{line}: callRpc('{fn}') does not send "
                 f"{wanted}, which IS this function's idempotency key — it "
                 f"returns the row it already made when given one. Without "
                 f"it a retry makes a second."
             )
     for fn in sorted(BY_OTHER_NAME):
-        if not any(name == fn for name, _, _ in call_sites(text, "callRpc")):
+        if not any(name == fn for name, _, _, _ in plain):
             problems.append(
-                f"'{fn}' is in BY_OTHER_NAME but {CLIENT.name} no longer "
-                f"calls it. Drop the entry."
+                f"'{fn}' is in BY_OTHER_NAME but no client surface calls it "
+                f"any more. Drop the entry."
             )
 
-    protected_called_once = {fn for fn, _, _ in once}
-    for fn, _, line in call_sites(text, "callRpc"):
+    protected_called_once = {fn for fn, _, _, _ in once}
+    for fn, _, line, where in plain:
         if fn in protected and fn in protected_called_once:
             problems.append(
-                f"{CLIENT.name}:{line}: '{fn}' is reached through plain "
+                f"{where}:{line}: '{fn}' is reached through plain "
                 f"callRpc as well as callRpcOnce. One path, or the "
                 f"protection is whichever route the caller happened to "
                 f"take."

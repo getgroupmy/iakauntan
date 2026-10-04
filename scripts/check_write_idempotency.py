@@ -12,7 +12,7 @@ confirm on every run.
 ## What it asks
 
 Of the `public` VOLATILE functions `authenticated` may execute, only
-those `repository.dart` actually calls can be retried by a client, so
+those the CLIENT actually calls can be retried by a client, so
 those are the population. Each one is then one of:
 
   * **key** — it has a `p_idempotency_key` overload. Checked in the
@@ -68,7 +68,16 @@ import subprocess
 import sys
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
-CLIENT = REPO / "app" / "lib" / "src" / "data" / "repository.dart"
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import client_surfaces  # noqa: E402  (after the path insert, by necessity)
+
+#: EVERY client surface, derived. This was `repository.dart` alone, which
+#: is 576 of the 597 named RPC calls — so the census reported "340
+#: client-reachable writes, 0 undecided" while 16 writing functions it had
+#: never read sat outside that one file, seven of them corporate
+#: secretarial. The real population is 355. See `client_surfaces.py`.
+CLIENTS = client_surfaces.dart_files(REPO)
 
 # The undecided count as measured. It may fall; it may not rise.
 BACKLOG = 0
@@ -91,6 +100,23 @@ BACKLOG = 0
 # `natural` and `repeats` are prose and cannot be, so they are few and
 # each names what was read.
 VERDICTS: dict[str, str] = {
+    # The sixteen the census could not see, because it read one file.
+    # Thirteen needed no judgement: ten insert nothing, three guard or
+    # replace every row. These three are corporate secretarial, each
+    # opening an SSM filing as its last act -- so a repeat would file the
+    # same change twice -- and each ALREADY refuses one, by state, in
+    # words that cite why. The defect was the census's reach, not these.
+    # The quoted text must be CONTIGUOUS in the body. This refusal is
+    # built from two adjacent string literals, so "Amending one is an
+    # alteration under s.36" spans the join and is not there to find --
+    # the staleness check caught that on the first run, which is the
+    # check doing its job rather than being in the way.
+    "adopt_constitution":
+        "state:alteration under s.36, not a fresh adoption",
+    "change_company_name":
+        "state:That is already its name",
+    "change_registered_office":
+        "state:That is already the registered office",
     # 0738. The last eighteen, every one measured by calling twice.
     #
     # Six refused by a unique index. `start_membership` and
@@ -459,7 +485,7 @@ def run(db: str) -> int:
     """The gate itself, taking the database rather than reading `argv`.
 
     Separated so `check_write_idempotency_test.py` can swap `psql`,
-    `CLIENT` and `BACKLOG` and exercise the classification and the
+    `CLIENTS` and `BACKLOG` and exercise the classification and the
     ratchet themselves rather than a copy of them. A gate whose test
     reimplements its logic asserts that the copy works.
     """
@@ -472,7 +498,7 @@ def run(db: str) -> int:
         full, _, body = line.partition("\x01")
         defs.setdefault(full.split(".", 1)[1], []).append(body)
 
-    called = client_calls(CLIENT.read_text())
+    called = client_calls("\n".join(f.read_text() for f in CLIENTS))
     population = sorted(volatile & called)
 
     problems: list[str] = []

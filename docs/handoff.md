@@ -256,12 +256,99 @@ extension at all. The engine now says which case a real call is in.
 
 **Do not start task #11, the MIA headless scraper.**
 
+## Three gates, one file — and the denominator nobody checked
+
+Found by asking whether the gate written the day before could see
+everything it claimed to. It could not, and neither could the two beside
+it.
+
+`check_write_doors.py`, `check_write_idempotency.py` and
+`check_idempotent_calls.py` each had their own copy of this line:
+
+```python
+CLIENT = REPO / "app" / "lib" / "src" / "data" / "repository.dart"
+```
+
+That file holds **576 of the 597** named RPC calls and **144 of the 169**
+direct writes. So all three looked thorough, and all three reported clean
+sweeps — `BACKLOG = 0`, "every one is reviewed", "36 protected calls name
+every parameter" — over a denominator none of them had checked. **Eleven
+Dart files touch the database; they were reading one.**
+
+### What was outside
+
+**16 writing functions were never in the census**, reached from
+`ai_repository.dart`, `corp_repository.dart`,
+`custom_fields_repository.dart` and `ocr_repository.dart`. Seven are
+corporate secretarial. The population was 339, not 340, and is really
+**355**.
+
+Classified by the gate's own logic, thirteen needed no judgement — ten
+insert nothing (`corp_mark_lodged`, `verify_person_identity`,
+`record_scan_posting`, …), three guard or replace every row
+(`set_ai_credentials`, `set_ai_settings`, `upsert_custom_field`). Three
+were undecided, and all three are **SSM filings** — each ends by calling
+`corp_open_filing`, so a repeat would file the same change twice:
+
+| | refuses a repeat with |
+| --- | --- |
+| `adopt_constitution` | "alteration under s.36, not a fresh adoption" |
+| `change_company_name` | "That is already its name" |
+| `change_registered_office` | "That is already the registered office" |
+
+**All three already refused**, by state, in words that cite why — one of
+them citing the Companies Act. So nothing needed a migration and three
+verdicts were owed. That is the eighth and ninth and tenth time in this
+programme that a body looked like a defect the database was already
+refusing, and it is the reason the rule is to read before writing SQL.
+
+**14 more tables are written directly**, including every `corp_*`
+statutory register and `attachments`. Four are written from a **SCREEN**
+rather than any repository — `inbound_emails` (inbox), `organizations`
+(settings), `firm_members` (practice), `profiles` (`core/providers.dart`).
+Those four are why the scope is `app/lib` and not `app/lib/src/data`: a
+directory is a convention, and a screen writing a table breaks no
+convention loudly enough for a glob to notice.
+
+**The write-doors conclusion survived.** At full scope the same six tables
+have the gap and no others — so `0740` and the "client money was singular"
+finding stand. Right answer, wrong denominator; it was correct by luck,
+which is not a property worth keeping.
+
+### `scripts/client_surfaces.py` — one definition, and a test of the SCOPE
+
+The fix is not "read more files", because that is the fix that was
+available before and got copied into three places badly. It is one module
+all three import, globbing `app/lib`, plus
+`client_surfaces_test.py` (15 assertions) whose most important ones are
+about **scope**: more than one file, more than one directory, and
+`repository.dart` is not the only surface. A narrowed scope does not look
+like a failure from the outside — every gate downstream goes on passing
+over whatever it can still see — so the scope is the thing that has to be
+asserted. Eight mutants with a no-op control; all eight died, including
+"scope narrowed to the data directory" and "scope narrowed back to one
+file".
+
+**A test written to confirm something true found it false.** `client_text`
+joined the files with a newline and the docstring said that stopped a
+pattern matching across two of them. It does not: `DIRECT`'s middle group
+matches `\s`, so a file ending at `client.from('t')` splices onto a next
+file starting at `.insert({...})` and the gate reports a write that is in
+neither file. Files are now joined with `BOUNDARY = "\n;\n"`, since a
+semicolon cannot be matched by that group. **No spurious write was ever
+reported** — no file in this tree happens to end mid-expression, so the
+fix is prophylactic, and the module was new, so nothing shipped with it.
+Worth keeping anyway: the bug was in the sentence explaining why the bug
+could not happen.
+
 ## `0740`: client money has one door — and the claim I had to withdraw
 
 **The other door into the database.** The write-idempotency census covered
 340 writes reachable by RPC; it said in writing that writes reached
 "through `client.from(...)` rather than an RPC" were never in it. There
-are **172 of those, over 83 tables**, and 37 of the tables are also
+are **172 of those, over 83 tables**  — read from `repository.dart` only,
+and the whole-client figure is **169 over 96 tables**; see "Three gates,
+one file" — and 37 of the tables are also
 written by a real (non-demo) `SECURITY DEFINER` function — so for those
 37 the client has a sanctioned path and goes round it.
 
@@ -539,6 +626,14 @@ which `authenticated` has and `anon` does not.
 measured. **Every one of the 340 client-reachable writes in this schema is
 now accounted for**, and `check_write_idempotency.py` has `BACKLOG = 0`,
 so the next unprotected write fails CI by name.
+
+> **CORRECTED on 4 October: that denominator was wrong.** The census read
+> `repository.dart` alone, so "340" was really 339 over a population of
+> **355**. Sixteen writing functions were reached only from four other
+> repositories, seven of them corporate secretarial. Thirteen needed no
+> judgement and three wanted verdicts. `BACKLOG = 0` now holds over the
+> whole client — see "Three gates, one file" below. The ratchet was sound;
+> what it was counting was not.
 
     create_recurring_document  -> 2 live monthly schedules
     run_item_conversion        -> the stock converted twice

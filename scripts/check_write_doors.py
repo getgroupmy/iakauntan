@@ -3,11 +3,18 @@
 
     python3 scripts/check_write_doors.py "$DATABASE_URL"
 
-`repository.dart` reaches the database two ways: through an RPC, and
-through PostgREST straight onto a table — `client.from('t').insert(...)`.
-There are 171 of the second kind over 82 tables. That is not a defect:
-most are reference data where a row policy is exactly the right guard,
-and a draft that a posting function later posts is a normal shape.
+The client reaches the database two ways: through an RPC, and through
+PostgREST straight onto a table — `client.from('t').insert(...)`. There
+are 169 of the second kind over 96 tables. That is not a defect: most are
+reference data where a row policy is exactly the right guard, and a draft
+that a posting function later posts is a normal shape.
+
+**Scope comes from `scripts/client_surfaces.py`, which globs the whole of
+`app/lib`.** This gate first shipped reading `repository.dart` alone,
+which is 144 of those 169 — it reached the right answer over the wrong
+denominator. Four of the writes it could not see are in SCREENS rather
+than any repository: `inbound_emails`, `organizations`, `firm_members`
+and `profiles`.
 
 It becomes a defect when the FUNCTION that writes a table demands a
 stronger permission than the table's own write POLICIES do, because then
@@ -60,7 +67,9 @@ import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-CLIENT = ROOT / "app" / "lib" / "src" / "data" / "repository.dart"
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import client_surfaces  # noqa: E402  (after the path insert, by necessity)
 
 #: Strongest first. This is the ladder the schema's guards actually use.
 LADDER = ["can_admin", "can_post", "can_manage_hr", "can_write_module",
@@ -69,11 +78,8 @@ LADDER = ["can_admin", "can_post", "can_manage_hr", "can_write_module",
 #: Fixture seeders are not a production path.
 DEMO = re.compile(r"^app\.demo_|_teardown$|_rebuild$")
 
-DIRECT = re.compile(
-    r"\.from\('([a-z0-9_]+)'\)"
-    r"((?:\s|\.[a-zA-Z_]+\([^()]*\))*?)"
-    r"\.(insert|update|upsert|delete)\b"
-)
+#: One definition, shared with the other gates that need it.
+DIRECT = client_surfaces.DIRECT
 
 #: Each entry is a table whose functions demand more than its policies,
 #: with the reason it is not the `0740` shape. An entry that stops having
@@ -111,7 +117,7 @@ def psql(db: str, sql: str) -> str:
 
 
 def direct_writes(text: str) -> dict[str, set[str]]:
-    """Tables `repository.dart` writes without going through an RPC."""
+    """Tables the client writes without going through an RPC."""
     found: dict[str, set[str]] = collections.defaultdict(set)
     for m in DIRECT.finditer(text):
         verb = m.group(3)
@@ -185,7 +191,7 @@ def gaps(db: str, text: str) -> dict[str, tuple[set[str], set[str]]]:
 
 def run(db: str, text: str | None = None,
         reviewed: dict[str, str] | None = None) -> int:
-    text = CLIENT.read_text() if text is None else text
+    text = client_surfaces.client_text(ROOT) if text is None else text
     reviewed = REVIEWED if reviewed is None else reviewed
     found = gaps(db, text)
 
@@ -194,7 +200,7 @@ def run(db: str, text: str | None = None,
         if table not in reviewed:
             pol, fn = found[table]
             problems.append(
-                "%s is written directly by repository.dart under a policy "
+                "%s is written directly by the client under a policy "
                 "asking only for %s, while a function that writes it demands "
                 "%s. The direct door is then the weaker one and the "
                 "function's guard is optional — which is how a member who "
