@@ -9494,3 +9494,65 @@ have failed outright on the first CI run**, not subtly: the gate reads
 `--file-reporter json:`, which is the same regardless of what the console
 reporter is doing, and the number came out the same 6,638 measured twice
 on this machine.
+
+## `flutter analyze` says "No issues found!" over code it never read
+
+`- run: flutter analyze --fatal-infos --fatal-warnings` is the strictest
+line in `ci.yml` and the easiest one in the repository to switch off
+without touching it, because what it analyses is decided somewhere else:
+`app/analysis_options.yaml`.
+
+Measured, not reasoned about. A file with two hard type errors went into
+`lib/src/`:
+
+    2 issues found. (ran in 70.6s)      exit 1
+
+Then, with that file untouched:
+
+| one line added to analysis_options.yaml | analyze says | exit |
+|---|---|---|
+| `exclude: - lib/src/**` | `No issues found! (ran in 3.2s)` | **0** |
+| `errors: invalid_assignment: ignore` | `No issues found! (ran in 18.2s)` | **0** |
+
+**Seventy seconds became three** and nothing reads the duration either. A
+third line does it more quietly still: delete `include:` and every lint in
+`flutter_lints` goes with it, leaving only the type system — analyze still
+runs, still passes, enforces almost nothing.
+
+`scripts/check_analyzer_covers_the_app.py` asserts, over 1,001 `.dart`
+files under `app/lib` and `app/test`:
+
+* `include: package:flutter_lints/flutter.yaml` is still there;
+* every `exclude:` entry is one of the four non-Dart directories, each
+  named with the reason it holds no Dart — `build`, `android`, `ios`,
+  `web` — and nothing else, in **both** directions, so a dropped entry is
+  reported too (the harmless direction, and still worth reading);
+* no `exclude:` pattern **matches** a real `.dart` file under `lib` or
+  `test`. That is the check about effect rather than spelling: the clause
+  above refuses an unlisted pattern, and this one catches the case where
+  the pattern is unchanged and the tree moved under it — Dart put into
+  `app/web/`, which is excluded and reasonably so while it holds only
+  `index.html`, a manifest and a service worker;
+* no `errors:` key downgrades anything to `ignore`, `info` **or
+  `warning`** — the last because the only thing making a warning fatal is
+  a flag in another file;
+* no `rules:` entry is `false`, which is how one lint is switched off;
+* a floor of 400 analysable files, so an empty `app/` cannot read as a
+  clean configuration.
+
+30 assertions, every message fed. The glob translation has a class of its
+own, because `fnmatch` would have been one line and would have been
+wrong: it renders `*` as `.*`, so `build/*` and `build/**` would exclude
+the same thing, and telling those apart is the only reason this gate
+globs. The test pins that difference *and* pins that fnmatch gets it
+wrong, so the shortcut is not taken later.
+
+### The same `relative_to` bug, twice in an hour
+
+`OPTIONS.relative_to(ROOT)` in the unreadable-file message raises for a
+path outside `ROOT`, which is exactly how the gate's own test reaches that
+branch. It is the identical line that was written, hit and fixed in
+`check_self_tests_run.py` less than an hour earlier — and the comment left
+there about it did not stop it being written again in the next file. The
+rule worth carrying: **a path constant that a test repoints is not inside
+ROOT.** Two occurrences is a note; a third is a shared helper.
