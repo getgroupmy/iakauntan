@@ -72,6 +72,7 @@ the constraint is bounded again by the time the inner viewport sees it.
 
 from __future__ import annotations
 
+import os
 import re
 import sys
 from pathlib import Path
@@ -102,6 +103,26 @@ WRAPPERS: dict[str, tuple[str, bool]] = {
 }
 
 _LINE_COMMENT = re.compile(r'//[^\n]*')
+#: A floor under how many sites this sweep must have EXAMINED.
+#:
+#: Without it the gate cannot tell "looked and found nothing" from
+#: "could not look", and the two read identically from outside: same
+#: success line, same green build. Pointed at an empty directory this
+#: script used to pass.
+#:
+#: The floor is on sites the pattern MATCHED, not on files read, because
+#: pattern drift is the failure that actually happens -- six times in
+#: one session, in six different gates. A regex that stops matching
+#: reports a clean sweep.
+#:
+#: Measured at 387 scroll-view and wrapper constructions. Set well below that on purpose: it guards against
+#: the pattern dying, not against the count moving by one.
+#: Overridable so a self-test can drive the gate over a fixture
+#: of two files without the floor rejecting it. Named like
+#: IAK_ASSERTION_FLOOR, which does the same job for the SQL
+#: suite. Nothing in ci.yml or run_locally.sh sets it.
+LEAST = int(os.environ.get("IAK_LEAST_SITES", "200"))
+
 _BLOCK_COMMENT = re.compile(r'/\*.*?\*/', re.S)
 _STRING = re.compile(r"'(?:\\.|[^'\\\n])*'|\"(?:\\.|[^\"\\\n])*\"")
 
@@ -184,8 +205,9 @@ def bounded(head: str, axis: str) -> bool:
     return bool(re.search(rf'\b{extent}\s*\d', head))
 
 
-def findings() -> list[str]:
+def findings() -> tuple[list[str], int]:
     out: list[str] = []
+    seen = 0
     known = {**SCROLLERS, **WRAPPERS}
     names = '|'.join(sorted(known, key=len, reverse=True))
     call = re.compile(rf'\b({names})\s*\(')
@@ -195,6 +217,7 @@ def findings() -> list[str]:
         code = blank_out(source)
 
         for match in call.finditer(code):
+            seen += 1
             name = match.group(1)
             start = match.end() - 1
             end = matching(code, start)
@@ -236,11 +259,11 @@ def findings() -> list[str]:
                 )
                 break
 
-    return out
+    return out, seen
 
 
 def main() -> int:
-    problems = findings()
+    problems, seen = findings()
     if problems:
         print('Expanding viewports nested on the axis they scroll:\n')
         print('\n\n'.join(problems))
@@ -250,7 +273,17 @@ def main() -> int:
             f'offered infinity and asserts before it draws.'
         )
         return 1
-    print('No expanding viewport is nested inside a scroll view on its axis.')
+    if seen < LEAST:
+        print(
+            f'This sweep examined {seen} scroll-view construction(s), and there were {LEAST} or '
+            f'more when it was written. Either the pattern no longer '
+            f'matches how the code is written, or this is not reading '
+            f'app/lib. A sweep with nothing to look at reports exactly '
+            f'what a clean codebase reports.',
+            file=sys.stderr)
+        return 2
+    print(f'No expanding viewport is nested inside a scroll view on its axis '
+          f'({seen} scroll-view and wrapper constructions examined).')
     return 0
 
 

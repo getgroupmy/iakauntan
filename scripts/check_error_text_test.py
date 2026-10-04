@@ -30,7 +30,7 @@ import check_error_text as G  # noqa: E402
 
 
 def names(src):
-    return sorted(n for _off, n in G.offenders(src))
+    return sorted(n for _off, n in G.offenders(src)[0])
 
 
 class TheDefect(unittest.TestCase):
@@ -147,7 +147,7 @@ class TheRealTree(unittest.TestCase):
     def test_the_tree_is_clean(self):
         found = []
         for path in G.LIB.rglob('*.dart'):
-            for off, name in G.offenders(path.read_text()):
+            for off, name in G.offenders(path.read_text())[0]:
                 found.append(f'{path}:{off}:${name}')
         self.assertEqual(found, [])
 

@@ -54,6 +54,7 @@ it is cheap to be certain.
 """
 
 import pathlib
+import os
 import re
 import sys
 
@@ -70,6 +71,26 @@ BINDING = re.compile(
 
 # Sinks that are not a person. A log line may hold the whole object.
 QUIET = {'debugPrint', 'print', 'log'}
+#: A floor under how many sites this sweep must have EXAMINED.
+#:
+#: Without it the gate cannot tell "looked and found nothing" from
+#: "could not look", and the two read identically from outside: same
+#: success line, same green build. Pointed at an empty directory this
+#: script used to pass.
+#:
+#: The floor is on sites the pattern MATCHED, not on files read, because
+#: pattern drift is the failure that actually happens -- six times in
+#: one session, in six different gates. A regex that stops matching
+#: reports a clean sweep.
+#:
+#: Measured at 270 caught-error bindings. Set well below that on purpose: it guards against
+#: the pattern dying, not against the count moving by one.
+#: Overridable so a self-test can drive the gate over a fixture
+#: of two files without the floor rejecting it. Named like
+#: IAK_ASSERTION_FLOOR, which does the same job for the SQL
+#: suite. Nothing in ci.yml or run_locally.sh sets it.
+LEAST = int(os.environ.get("IAK_LEAST_SITES", "150"))
+
 
 
 def spans(src: str):
@@ -181,11 +202,17 @@ def enclosing_call(code: str, at: int) -> str:
 
 
 def offenders(src: str):
-    """(offset, name) for every bare interpolation of a caught error."""
+    """(offset, name) for every bare interpolation of a caught error.
+
+    Second return value is how many BINDINGS were examined, which is
+    what the floor in main() is a floor under.
+    """
     code = code_only(src)
     strings = [(a, b) for kind, a, b in spans(src) if kind == 'string']
     found = []
+    seen = 0
     for m in BINDING.finditer(code):
+        seen += 1
         name = next(g for g in m.groups() if g)
         end = block_end(code, m.end())
         bare = re.compile(r'\$' + re.escape(name) + r'(?![\w.])')
@@ -196,14 +223,17 @@ def offenders(src: str):
                 if enclosing_call(code, a) in QUIET:
                     continue
                 found.append((hit.start(), name))
-    return found
+    return found, seen
 
 
 def main() -> int:
     bad = []
+    seen = 0
     for path in sorted(LIB.rglob('*.dart')):
         src = path.read_text()
-        for off, name in offenders(src):
+        found, n = offenders(src)
+        seen += n
+        for off, name in found:
             line = src.count('\n', 0, off) + 1
             text = src.splitlines()[line - 1].strip()
             bad.append((path.relative_to(ROOT), line, name, text))
@@ -216,7 +246,17 @@ def main() -> int:
         print(f'\n{len(bad)} site(s).')
         return 1
 
-    print('ok every caught error is shown through errorText')
+    if seen < LEAST:
+        print(
+            f'This sweep examined {seen} caught-error binding(s), and there were {LEAST} or '
+            f'more when it was written. Either the pattern no longer '
+            f'matches how the code is written, or this is not reading '
+            f'app/lib. A sweep with nothing to look at reports exactly '
+            f'what a clean codebase reports.',
+            file=sys.stderr)
+        return 2
+    print(f'ok every caught error is shown through errorText '
+          f'({seen} catch/onError bindings examined)')
     return 0
 
 

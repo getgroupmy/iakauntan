@@ -37,6 +37,7 @@ are fine everywhere. A `file:` URI simply has an empty host. Only
 
 from __future__ import annotations
 
+import os
 import re
 import sys
 from pathlib import Path
@@ -48,6 +49,27 @@ HOME = 'src/core/safe_link.dart'
 
 #: The call, and what makes it safe on the same line or just above it.
 CALL = re.compile(r'Uri\.base\.origin')
+#: A floor under how many sites this sweep must have EXAMINED.
+#:
+#: Without it the gate cannot tell "looked and found nothing" from
+#: "could not look", and the two read identically from outside: same
+#: success line, same green build. Pointed at an empty directory this
+#: script used to pass.
+#:
+#: The floor is on sites the pattern MATCHED, not on files read, because
+#: pattern drift is the failure that actually happens -- six times in
+#: one session, in six different gates. A regex that stops matching
+#: reports a clean sweep.
+#:
+#: Measured at 6 `Uri.base.origin` call sites. Set well below that on purpose: it guards against
+#: the pattern dying, not against the count moving by one, and a gate
+#: that goes red because somebody deleted a widget gets deleted itself.
+#: Overridable so a self-test can drive the gate over a fixture
+#: of two files without the floor rejecting it. Named like
+#: IAK_ASSERTION_FLOOR, which does the same job for the SQL
+#: suite. Nothing in ci.yml or run_locally.sh sets it.
+LEAST = int(os.environ.get("IAK_LEAST_SITES", "3"))
+
 GUARD = re.compile(r'\bkIsWeb\b')
 
 #: How far above the call a `kIsWeb` still counts as guarding it.
@@ -110,12 +132,23 @@ def findings() -> list[str]:
 
 def main() -> int:
     problems = findings()
+    seen = sum(len(CALL.findall(p.read_text()))
+               for p in APP.rglob('*.dart'))
     if problems:
         print('Web-only APIs on a path a phone reaches:\n')
         print('\n\n'.join(problems))
         print(f'\n{len(problems)} of them.')
         return 1
-    print('No web-only API is called where a phone would reach it.')
+    if seen < LEAST:
+        print(
+            f'This sweep examined {seen} `Uri.base.origin` call site(s), and there were LEAST=%d or '
+            f'more when it was written. Either the pattern no longer '
+            f'matches how the code is written, or this is not reading '
+            f'app/lib. A sweep with nothing to look at reports exactly '
+            f'what a clean codebase reports.'.replace('LEAST=%d', str(LEAST)),
+            file=sys.stderr)
+        return 2
+    print(f'No web-only API is called where a phone would reach it ({seen} call sites examined).')
     return 0
 
 

@@ -9,6 +9,7 @@ the gate to find it, and writes the fix and requires it not to.
 """
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tempfile
@@ -59,10 +60,17 @@ def run(source: str) -> int:
         (copy / "check_or_filters.py").write_text(
             GATE.read_text(encoding="utf-8"), encoding="utf-8"
         )
+        # IAK_LEAST_SITES=0: the gate holds a floor under how many
+        # `.or(` sites it must have EXAMINED, so that an empty scope or
+        # a dead pattern cannot report a clean sweep. A fixture here is
+        # one file with a handful of calls, which is below that floor by
+        # design -- the floor is a claim about app/lib, not about a
+        # temporary directory.
         return subprocess.run(
             [sys.executable, str(copy / "check_or_filters.py")],
             capture_output=True,
             text=True,
+            env={**os.environ, "IAK_LEAST_SITES": "0"},
         ).returncode
 
 

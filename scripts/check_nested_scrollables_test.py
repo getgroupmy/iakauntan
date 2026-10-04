@@ -53,7 +53,10 @@ def run_on(files: dict[str, str]):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(body)
         saved = gate.APP
+        saved_least = gate.LEAST
         gate.APP = root
+        # See check_or_filters_test: the floor is about app/lib.
+        gate.LEAST = 0
         try:
             out = io.StringIO()
             with contextlib.redirect_stdout(out):
@@ -61,6 +64,7 @@ def run_on(files: dict[str, str]):
             return code, out.getvalue()
         finally:
             gate.APP = saved
+            gate.LEAST = saved_least
 
 
 class SameAxis(unittest.TestCase):

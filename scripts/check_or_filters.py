@@ -45,6 +45,7 @@ the logic tree that parses its own argument.
 """
 from __future__ import annotations
 
+import os
 import re
 import sys
 from pathlib import Path
@@ -56,12 +57,35 @@ LIB = ROOT / "app" / "lib"
 # string interpolation inside it is what matters.
 CALL = re.compile(r"\.or\(\s*(?P<body>.*?)\)\s*[;,)\]]", re.S)
 
+#: A floor under how many sites this sweep must have EXAMINED.
+#:
+#: Without it the gate cannot tell "looked and found nothing" from "could
+#: not look", and those read identically from outside: the same success
+#: line, the same green build. Pointed at an empty directory this script
+#: used to pass.
+#:
+#: The floor is on sites the pattern MATCHED, not on files read, because
+#: pattern drift is the failure that actually happens here -- six
+#: separate times in one session, in six different gates. A regex that
+#: stops matching reports a clean sweep.
+#:
+#: Measured at 8 `.or(` call sites. Set well below it on purpose: this guards against the
+#: pattern dying, not against the count moving by one, and a gate that
+#: goes red when somebody deletes a widget is a gate that gets deleted.
+#: Overridable so a self-test can drive the gate over a fixture
+#: of two files without the floor rejecting it. Named like
+#: IAK_ASSERTION_FLOOR, which does the same job for the SQL
+#: suite. Nothing in ci.yml or run_locally.sh sets it.
+LEAST = int(os.environ.get("IAK_LEAST_SITES", "4"))
 
-def offenders() -> list[str]:
+
+def offenders() -> tuple[list[str], int]:
     bad: list[str] = []
+    seen = 0
     for path in sorted(LIB.rglob("*.dart")):
         text = path.read_text(encoding="utf-8")
         for m in CALL.finditer(text):
+            seen += 1
             body = m.group("body")
             if "$" not in body:
                 continue  # a literal tree over fixed values
@@ -71,13 +95,25 @@ def offenders() -> list[str]:
             rel = path.relative_to(ROOT)
             snippet = " ".join(body.split())[:70]
             bad.append(f"  {rel}:{line}: {snippet}")
-    return bad
+    return bad, seen
 
 
 def main() -> int:
-    bad = offenders()
+    bad, seen = offenders()
+    if seen < LEAST:
+        print(
+            f"This sweep examined {seen} `.or(` call site(s), and there "
+            f"were {LEAST} or more when it was written. Either the "
+            f"pattern above no longer matches how the client builds a "
+            f"logic tree, or it is not reading app/lib. A sweep that "
+            f"finds nothing to look at reports a clean result, which is "
+            f"the same thing a safe codebase reports.",
+            file=sys.stderr)
+        return 2
     if not bad:
-        print("No PostgREST or() filter interpolates an unescaped value.")
+        print(
+            f"No PostgREST or() filter interpolates an unescaped value "
+            f"({seen} `.or(` call sites examined).")
         return 0
     print("Values interpolated raw into a PostgREST or() filter:\n")
     print("\n".join(bad))

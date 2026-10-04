@@ -30,6 +30,7 @@ assigning a DateTime to a different `_start` entirely. That one was in
 the first version's output too.
 """
 
+import os
 import re
 import sys
 from pathlib import Path
@@ -41,13 +42,36 @@ LIB = ROOT / "app" / "lib"
 # `(`, which would make it a method.
 FIELD = r"^\s*(?:late\s+)?(?:final\s+)?Future<.*?>\??\s+{name}\s*[;=]"
 ASSIGN = re.compile(r"setState\(\(\)\s*=>\s*(_\w+)\s*=")
+#: A floor under how many sites this sweep must have EXAMINED.
+#:
+#: Without it the gate cannot tell "looked and found nothing" from
+#: "could not look", and the two read identically from outside: same
+#: success line, same green build. Pointed at an empty directory this
+#: script used to pass.
+#:
+#: The floor is on sites the pattern MATCHED, not on files read, because
+#: pattern drift is the failure that actually happens -- six times in
+#: one session, in six different gates. A regex that stops matching
+#: reports a clean sweep.
+#:
+#: Measured at 1332 arrow-bodied setState assignments. Set well below that on purpose: it guards against
+#: the pattern dying, not against the count moving by one, and a gate
+#: that goes red because somebody deleted a widget gets deleted itself.
+#: Overridable so a self-test can drive the gate over a fixture
+#: of two files without the floor rejecting it. Named like
+#: IAK_ASSERTION_FLOOR, which does the same job for the SQL
+#: suite. Nothing in ci.yml or run_locally.sh sets it.
+LEAST = int(os.environ.get("IAK_LEAST_SITES", "600"))
+
 
 
 def main() -> int:
     bad = []
+    seen = 0
     for path in sorted(LIB.rglob("*.dart")):
         src = path.read_text()
         for match in ASSIGN.finditer(src):
+            seen += 1
             name = match.group(1)
             if not re.search(FIELD.format(name=re.escape(name)), src, re.M):
                 continue
@@ -68,7 +92,17 @@ def main() -> int:
         print("    });")
         return 1
 
-    print("no setState returns a Future")
+    if seen < LEAST:
+        print(
+            f'This sweep examined {seen} arrow-bodied setState assignment(s), and there were LEAST=%d or '
+            f'more when it was written. Either the pattern no longer '
+            f'matches how the code is written, or this is not reading '
+            f'app/lib. A sweep with nothing to look at reports exactly '
+            f'what a clean codebase reports.'.replace('LEAST=%d', str(LEAST)),
+            file=sys.stderr)
+        return 2
+    print(f"no setState returns a Future ({seen} arrow-bodied "
+          f"setState assignments examined)")
     return 0
 
 

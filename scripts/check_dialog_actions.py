@@ -40,6 +40,7 @@ Not checked: a `Spacer` nested inside a `Row` that is itself an action.
 That one has a Flex parent and is fine, which is why the depth matters
 rather than the mere presence of the word.
 """
+import os
 import re
 import sys
 from pathlib import Path
@@ -50,6 +51,27 @@ LIB = ROOT / 'app' / 'lib'
 # `actions: [` and `actions: <Widget>[` both occur.
 OPEN = re.compile(r'\bactions:\s*(?:<[^>]+>\s*)?\[')
 BAD = re.compile(r'\b(Spacer|Expanded)\s*\(')
+#: A floor under how many sites this sweep must have EXAMINED.
+#:
+#: Without it the gate cannot tell "looked and found nothing" from
+#: "could not look", and the two read identically from outside: same
+#: success line, same green build. Pointed at an empty directory this
+#: script used to pass.
+#:
+#: The floor is on sites the pattern MATCHED, not on files read, because
+#: pattern drift is the failure that actually happens -- six times in
+#: one session, in six different gates. A regex that stops matching
+#: reports a clean sweep.
+#:
+#: Measured at 431 `actions:` lists. Set well below that on purpose: it guards against
+#: the pattern dying, not against the count moving by one, and a gate
+#: that goes red because somebody deleted a widget gets deleted itself.
+#: Overridable so a self-test can drive the gate over a fixture
+#: of two files without the floor rejecting it. Named like
+#: IAK_ASSERTION_FLOOR, which does the same job for the SQL
+#: suite. Nothing in ci.yml or run_locally.sh sets it.
+LEAST = int(os.environ.get("IAK_LEAST_SITES", "200"))
+
 
 
 LINE_COMMENT = re.compile(r'//[^\n]*')
@@ -95,8 +117,11 @@ def offenders(src: str, path: Path):
 
 def main() -> int:
     found = []
+    seen = 0
     for path in sorted(LIB.rglob('*.dart')):
-        for line, what in offenders(path.read_text(), path):
+        text = path.read_text()
+        seen += len(OPEN.findall(without_comments(text)))
+        for line, what in offenders(text, path):
             found.append((path.relative_to(ROOT), line, what))
 
     if found:
@@ -113,7 +138,16 @@ def main() -> int:
         print('Drop it, or wrap the actions in a Row of your own.')
         return 1
 
-    print('ok   no dialog action asks for a flex its parent cannot give')
+    if seen < LEAST:
+        print(
+            f'This sweep examined {seen} `actions:` list(s), and there were LEAST=%d or '
+            f'more when it was written. Either the pattern no longer '
+            f'matches how the code is written, or this is not reading '
+            f'app/lib. A sweep with nothing to look at reports exactly '
+            f'what a clean codebase reports.'.replace('LEAST=%d', str(LEAST)),
+            file=sys.stderr)
+        return 2
+    print(f'ok   no dialog action asks for a flex its parent cannot give ({seen} `actions:` lists examined)')
     return 0
 
 

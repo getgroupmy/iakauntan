@@ -8323,3 +8323,124 @@ about before being believed. Both directions are now pinned in the
 self-test: a real pipe is caught, `|| {` is not.
 
 20 self-test assertions, 11 mutants plus a control, all 11 killed.
+
+## Six gates could not tell a clean sweep from a sweep that looked at nothing
+
+Having just found that the assertion floor was enforced nowhere, I asked
+the generalisation: **what else exists but does not run, or runs but
+checks nothing?**
+
+Two clean negative results first, both worth having:
+
+* **Every gate runs.** 62 `check_*.py` gates and 29 self-tests, all 91
+  genuinely invoked in a `run:` block in `ci.yml` — checked by parsing
+  the YAML and stripping `#` comments from the shell, because "named in
+  ci.yml" includes being named in a comment. Zero run nowhere.
+* **CI's test list is exactly the glob.** 383 entries, 383 distinct, no
+  duplicates, nothing on disk unlisted. So one floor can serve both
+  runners, which is what made the shared `assertion_floor` file safe.
+
+### The finding
+
+Of the 62 gates, **38 report what they examined and 24 do not.** A gate
+that prints "No web-only API is called where a phone would reach it" and
+nothing else cannot distinguish *looked and found nothing* from *could
+not look* — and those are the same success line and the same green build.
+
+Tested rather than assumed: each gate's scope constant was redirected at
+an empty directory and its `main()` called. **Six passed over nothing:**
+
+| gate | what it guards |
+|---|---|
+| `check_or_filters` | a user's name interpolated raw into a PostgREST `or()` — this shipped, and `SHAHARUDIN, SHAM SUNDER & PARTNERS` made every firm with a comma unsearchable |
+| `check_web_only_apis` | `Uri.base.origin` on a path a phone reaches |
+| `check_error_text` | a caught error shown as its wrapper rather than its message |
+| `check_dialog_actions` | a `Spacer` in `actions:`, which throws at layout and draws a grey rectangle |
+| `check_nested_scrollables` | an expanding viewport inside a scroll view on its own axis |
+| `check_setstate_futures` | `setState(() => _x = future)` |
+
+### The experiment had its own control, and needed it
+
+`check_files_open_in_app` has the identical structure — `LIB` at module
+level, `LIB.rglob` in `main()` — and **failed** under the same patch:
+"FAIL only 0 files read storage as bytes". That is what proves the patch
+reaches gates of this shape, rather than being ignored while the gate
+read the real files and passed for the right reason. Without it the whole
+sweep would have been unfalsifiable.
+
+And it caught a false positive. `check_passkey_association` appeared to
+pass over nothing, but it derives `ASSETLINKS = WELL_KNOWN /
+"assetlinks.json"` at module level, so patching `WELL_KNOWN` afterwards
+never reached it — and reading the code, it does fail when both files are
+missing. **Not a defect.** Seven became six by checking.
+
+### The fix, and why the floor is on sites rather than files
+
+Each of the six now counts the sites **its own pattern matched**, prints
+the number, and exits 2 below a floor. On sites, not on files read,
+because pattern drift is the failure that actually happens — six times in
+this session alone, in six different gates. A regex that stops matching
+reports a clean sweep over a real directory full of files.
+
+Proved on all six: empty scope → exit 2. And on `check_or_filters`,
+separately, with the pattern deliberately broken to match nothing → exit
+2, same message. Both failure modes, one guard.
+
+| gate | measured | floor |
+|---|---|---|
+| `check_setstate_futures` | 1332 arrow-bodied setState assignments | 600 |
+| `check_dialog_actions` | 430 `actions:` lists | 200 |
+| `check_nested_scrollables` | 387 scroll-view constructions | 200 |
+| `check_error_text` | 270 catch/onError bindings | 150 |
+| `check_or_filters` | 8 `.or(` call sites | 4 |
+| `check_web_only_apis` | 6 `Uri.base.origin` calls | 3 |
+
+Set well below the measurement on purpose. The floor guards against the
+pattern dying, not against the count moving by one: a gate that goes red
+because somebody deleted a widget is a gate that gets deleted.
+
+### Two things the work taught about its own method
+
+**My probe disagreed with the gate, and the gate was right.** I measured
+431 `actions:` lists; the gate reports 430, because it strips comments
+first and one was inside one. The number in each gate is now counted by
+the gate itself rather than by my re-implementation — a second
+implementation that disagrees is the two-definitions problem in
+miniature.
+
+**A guessed floor failed, in the safe direction.** I put 300 on
+`check_error_text` before measuring; the real figure is 270, so the gate
+went red rather than silently green. Worth preferring that direction
+deliberately: a floor guessed too high is a red build and a correction, a
+floor guessed too low is a control that never fires.
+
+### What the floors cost, and the hook they need
+
+`LEAST` is read from `IAK_LEAST_SITES`, named after `IAK_ASSERTION_FLOOR`
+which does the same job for the SQL suite. Nothing in `ci.yml` or
+`run_locally.sh` sets it.
+
+It exists because **four self-tests broke the moment the floors went in,
+and they were right to.** They drive their gate over a fixture of one or
+two files, which is below every floor by design — the floor is a claim
+about `app/lib`, not about a temporary directory. The subprocess harness
+in `check_or_filters_test.py` gets the environment variable; the
+in-process harnesses patch `gate.LEAST` beside the scope they already
+patch. `check_error_text_test.py` needed its two `offenders()` call sites
+updated as well, since that function now returns the count alongside the
+findings.
+
+### Still open
+
+**`check_dialog_actions` and `check_setstate_futures` have no self-test
+at all**, so their new floors are verified only by the empty-scope
+experiment above and not by anything that runs in CI. Of the 24 gates
+without a count, **12 could not be driven by the experiment** because
+they build their paths inside functions rather than at module level; they
+are not cleared, merely untested by this method.
+
+Both of those point at the same next piece of work: a meta-gate that
+drives every source-scanning gate at an empty scope and requires a
+non-zero exit, carrying a reviewed list of the ones it cannot drive and
+why. That covers future gates automatically, which a per-gate test does
+not. It is the generalisation this section is one instance of.
