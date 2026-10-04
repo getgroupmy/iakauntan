@@ -341,6 +341,51 @@ fix is prophylactic, and the module was new, so nothing shipped with it.
 Worth keeping anyway: the bug was in the sentence explaining why the bug
 could not happen.
 
+### Was it a class or three instances? Audited — three.
+
+Fixing three gates one at a time is the shape of work that comes back, so
+all 62 Python gates were checked for the same defect: a scope pinned
+narrower than the claim. **Eleven module-level path constants across seven
+gates.** Six are correct by construction and one was already right on the
+side that mattered:
+
+| | |
+| --- | --- |
+| `check_android_compile_sdk`, `check_web_plugin_registrant` | `app/.dart_tool/package_config.json`. There is exactly one. |
+| `check_currency_decimals` | compares two KNOWN copies — the `const` map in `format.dart` against the `ref_currencies` seed. That IS the subject; there is no third copy to miss, and the docstring scopes the claim to the two. |
+| `check_document_types` | `docTypes` in `doc_types.dart` is the one map the router builds every document address from. Declared nowhere else. |
+| `check_push_channels` | `send-push/index.ts` is the only sender, and the only file in that function naming a `channel_id`. |
+| `check_routes` | pins `router.dart` for the route TABLE — the only file containing `GoRoute(`, confirmed — and **already globs `lib/` for the call sites**. Its input side was never narrow. Four other files mention `GoRouter`, but as the type, not a declaration. |
+
+So the three write gates were the whole of it. **The difference is what the
+claim is about:** a gate whose subject is one named declaration site may
+pin it; a gate whose subject is THE CLIENT may not, because that is eleven
+files. That distinction is now mechanical —
+`NoGatePinsTheClientToOneFile` in `client_surfaces_test.py` allows a pin
+under `app/lib` only with a reason, fails on a new one, and fails on a
+reason whose pin has gone.
+
+Two things it took to make that honest, both found by running it:
+
+  * the first `ALLOWED` list named `check_push_channels`,
+    `check_android_compile_sdk` and `check_web_plugin_registrant` — none
+    of which pins anything under `app/lib`. **The staleness assertion
+    failed on its first run and said so.**
+  * the rule must tell a FILE pin from a DIRECTORY root.
+    `LIB = ROOT / 'app' / 'lib'` and
+    `AUTH = ROOT / 'app' / 'lib' / 'src' / 'features' / 'auth'` are ten
+    gates doing the right thing, and a loose pattern flagged all of them.
+    It now looks at whether the LAST segment names a file, because that is
+    the one that cannot grow.
+
+And one weakness in the new test that a mutant found: it asserted
+`"client_surfaces" in text`, which **passes on a gate that has stopped
+importing it**, because all three mention the module in a comment
+explaining this bug. A mutant swapping the import for
+`import pathlib as client_surfaces_NOT` survived. It now asserts the
+import line and an attribute use. Five mutants, no-op control, all five
+dead.
+
 ## `0740`: client money has one door — and the claim I had to withdraw
 
 **The other door into the database.** The write-idempotency census covered

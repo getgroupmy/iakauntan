@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import importlib.util
 import pathlib
+import re
 import unittest
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -62,6 +63,119 @@ class TheScopeIsWiderThanOneFile(unittest.TestCase):
         for table in ("inbound_emails", "organizations", "firm_members",
                       "profiles"):
             self.assertIn(table, tables)
+
+
+class NoGatePinsTheClientToOneFile(unittest.TestCase):
+    """The regression, as a rule rather than three repairs.
+
+    `check_write_doors`, `check_write_idempotency` and
+    `check_idempotent_calls` each had their OWN copy of
+
+        CLIENT = REPO / "app" / "lib" / "src" / "data" / "repository.dart"
+
+    and each reported a clean sweep over it while claiming something about
+    the client. A gate may legitimately pin a path under `app/lib` when
+    its subject IS that one file -- the currency map, the route table, the
+    document-type map are each declared in exactly one place. What it may
+    not do is pin a path and then claim something about the CLIENT, which
+    is eleven files.
+
+    So: an allow-list with a reason each, failing both ways. A new pin
+    fails until somebody says which kind it is, and a reason whose pin has
+    gone fails too, because an excuse nobody prunes is not evidence.
+    """
+
+    #: gate -> why pinning one file is right for it. Each of these is the
+    #: SINGLE declaration site of the thing the gate is about, and each
+    #: docstring scopes its claim to that thing rather than to the client.
+    ALLOWED = {
+        "check_currency_decimals.py":
+            "compares two KNOWN copies -- the const map in format.dart "
+            "against the ref_currencies seed -- which is the whole point; "
+            "there is no third copy to miss",
+        "check_document_types.py":
+            "`docTypes` in doc_types.dart is the one map the router builds "
+            "every document address from; it is declared nowhere else",
+        "check_routes.py":
+            "pins router.dart for the route TABLE, which is the only file "
+            "containing `GoRoute(`, and already globs lib/ for the call "
+            "sites -- the input side was never narrow",
+    }
+    # Deliberately NOT here: `check_push_channels` (pins
+    # supabase/functions/send-push/index.ts), `check_android_compile_sdk`
+    # and `check_web_plugin_registrant` (both pin app/.dart_tool/
+    # package_config.json). All three pin a single file for the same good
+    # reason, but none of them pins a path under `app/lib`, so none is in
+    # scope here -- and listing them anyway made the staleness assertion
+    # below fail on the first run, which is what it is for.
+
+    #: A module-level constant built from REPO/ROOT by path division.
+    ASSIGN = re.compile(r"^[A-Z_][A-Z_0-9]*\s*=\s*(?:REPO|ROOT)\s*/(.+)$",
+                        re.M)
+
+    @staticmethod
+    def _is_a_file_pin(rhs: str) -> bool:
+        """A FILE pin, not a directory root.
+
+        `LIB = ROOT / 'app' / 'lib'` and
+        `AUTH = ROOT / 'app' / 'lib' / 'src' / 'features' / 'auth'` are
+        directory roots that the gate then globs — the correct pattern, and
+        ten gates use it. What this looks for is a path whose LAST segment
+        names a file, because that is the one that cannot grow.
+        """
+        segments = re.findall(r"""['"]([^'"]+)['"]""", rhs)
+        if not segments:
+            return False
+        last = segments[-1]
+        # `app/lib/src/core/format.dart` may arrive as one segment.
+        return "." in last.rsplit("/", 1)[-1]
+
+    def pinned(self):
+        found = {}
+        for g in sorted(HERE.glob("check_*.py")):
+            if g.name.endswith("_test.py"):
+                continue
+            for m in self.ASSIGN.finditer(g.read_text()):
+                rhs = m.group(1)
+                joined = "".join(re.findall(r"""['"]([^'"]+)['"]""", rhs))
+                in_client = "app/lib" in joined or (
+                    "app" in rhs and "lib" in rhs)
+                if in_client and self._is_a_file_pin(rhs):
+                    found[g.name] = True
+        return found
+
+    def test_every_gate_pinning_a_client_path_is_allowed_with_a_reason(self):
+        unexplained = sorted(set(self.pinned()) - set(self.ALLOWED))
+        self.assertEqual(
+            unexplained, [],
+            "%s pin a path under app/lib. If the gate's subject IS that one "
+            "file, add it to ALLOWED here saying so. If the gate is about "
+            "THE CLIENT, it must take its scope from client_surfaces.py "
+            "instead -- that is the bug this list exists for." % unexplained)
+
+    def test_no_reason_outlives_its_pin(self):
+        stale = sorted(set(self.ALLOWED) - set(self.pinned()))
+        self.assertEqual(
+            stale, [],
+            "%s are in ALLOWED but no longer pin a client path. Drop the "
+            "entries." % stale)
+
+    def test_the_three_repaired_gates_no_longer_pin_one_file(self):
+        """Named, so the specific regression fails by name.
+
+        The import AND a use of it, not the mere presence of the string:
+        all three mention `client_surfaces.py` in a comment explaining the
+        bug, so `assertIn("client_surfaces", text)` passes on a gate that
+        has stopped importing it. A mutant that swapped the import for
+        `import pathlib as client_surfaces_NOT` survived exactly that way.
+        """
+        for gate in ("check_write_doors.py", "check_write_idempotency.py",
+                     "check_idempotent_calls.py"):
+            text = (HERE / gate).read_text()
+            self.assertRegex(text, r"(?m)^import client_surfaces\b", gate)
+            self.assertRegex(text, r"client_surfaces\.\w+\(", gate)
+            self.assertNotIn('"repository.dart"', text, gate)
+            self.assertNotIn("'repository.dart'", text, gate)
 
 
 class JoiningTheFiles(unittest.TestCase):
