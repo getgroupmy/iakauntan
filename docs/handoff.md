@@ -8630,15 +8630,59 @@ captures both.
 empty-tree run and by `check_sweeps_look` in CI, not by assertions of
 its own.
 
-### The nine still on the ratchet
+### Three more, and the distinction that matters for them
 
-`check_captcha_tokens`, `check_capture_is_kept`, `check_current_org`,
-`check_date_arguments`, `check_initstate_ref`, `check_loading_spinners`,
-`check_narrow_rows`, `check_order_direction`, `check_token_rotators` —
-nine, each with a note in `check_sweeps_look.py` saying what it would
-have to count. None of them prints a number today, so each needs a
-counter added as well as a floor; that is why the three that already
-printed one went first.
+`check_captcha_tokens` (8 GoTrue call sites, floor 5),
+`check_current_org` and `check_token_rotators`. The last two needed a
+different shape, and getting it wrong would have been easy:
+
+**A gate that expects to find NOTHING cannot be floored on its matches.**
+`check_current_org` passes when no file outside `providers.dart` reads
+`currentOrgIdProvider`; `check_token_rotators` passes when no draw path
+rotates the token. A floor on matches would demand that offenders exist.
+A clean codebase and a blind sweep give the same answer — which is why
+both passed over an empty tree.
+
+So two controls on the SWEEP rather than on its result:
+
+| gate | floor on what it read | canary |
+|---|---|---|
+| `check_current_org` | 544 .dart files walked, floor 300 | `currentOrgIdProvider` must still match inside `providers.dart`, the one file the gate deliberately skips because the provider is **declared** there |
+| `check_token_rotators` | 1,386 draw-path methods, floor 600 | `mfa.listFactors` / `auth.refreshSession` must still match **somewhere** in `app/lib` — the app does rotate the token, just not while drawing |
+
+The canary is the better half. Rename the provider and the pattern stops
+matching everywhere **at once**; the only way to notice is to check that
+it still matches where it is supposed to. Both proved: renaming the
+symbol gives exit 2 with a message that says *this is the canary, not a
+defect in the app* — where before the gate would have reported "nothing
+mistakes the switcher's selection for the current company" while matching
+nothing anywhere.
+
+That shape is worth reusing. A zero-expected gate wants a floor on what
+it read **and** a positive match somewhere it should match.
+
+### My probe disagreed with a gate three times today
+
+431 vs 430 `actions:` lists, 10 vs 8 GoTrue calls, 5 vs 2 canary
+references — every time because the gate strips comments or doc comments
+first and my ad-hoc count did not. **Write down the number the gate
+reports, never the one a re-implementation produces.** Three times in one
+session is a rule, not bad luck.
+
+### The six still on the ratchet
+
+`check_capture_is_kept`, `check_date_arguments`, `check_initstate_ref`,
+`check_loading_spinners`, `check_narrow_rows`, `check_order_direction` —
+six, each with a note in `check_sweeps_look.py` saying what it would have
+to count.
+
+`check_date_arguments`, `check_initstate_ref`, `check_narrow_rows` and
+`check_order_direction` are all zero-expected gates, so they want the
+floor-plus-canary shape above rather than a floor on matches.
+`check_capture_is_kept` is the odd one: it reads two NAMED files and
+still passed over an empty tree, which means it handles them missing
+rather than raising — worth reading before assuming it fits any of these
+patterns.
 
 ### A note on my own verification, three times over
 

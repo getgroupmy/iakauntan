@@ -102,13 +102,8 @@ NEEDS_A_FILE = {
 #: floor on files globbed, some on sites matched, and three print a
 #: number already and need only to check it.
 PASSES_OVER_NOTHING: dict[str, str] = {
-    "check_captcha_tokens":
-        "prints '0 call(s) into GoTrue' and exits 0; needs a floor on the "
-        "GoTrue call sites it found",
     "check_capture_is_kept":
         "no count at all; needs a floor on whatever it globs",
-    "check_current_org":
-        "no count; needs a floor on the switcher references examined",
     "check_date_arguments":
         "no count; needs a floor on the date-formatter call sites",
     "check_initstate_ref":
@@ -119,8 +114,6 @@ PASSES_OVER_NOTHING: dict[str, str] = {
         "no count; needs a floor on the list rows examined",
     "check_order_direction":
         "no count; needs a floor on the orderings examined",
-    "check_token_rotators":
-        "no count; needs a floor on the widgets examined",
 }
 
 

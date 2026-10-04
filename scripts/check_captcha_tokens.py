@@ -30,6 +30,7 @@ out precisely because nothing near the call site mentions it. The
 project setting is invisible from the code, so there is no version of
 "read carefully" that catches this. A list does.
 """
+import os
 import re
 import sys
 from pathlib import Path
@@ -49,6 +50,19 @@ GUARDED = (
 )
 
 CALL = re.compile(r'\.(' + '|'.join(GUARDED) + r')\s*\(')
+
+#: A floor under how many GoTrue call sites must have been FOUND.
+#:
+#: Without it the gate cannot tell "looked and found nothing" from "could
+#: not look": it passed over an empty tree, printing "ok 0 call(s) into
+#: GoTrue, every one of them carrying a captcha token". If this sweep
+#: sees none, every sign-in door in the app is unguarded as far as it
+#: knows, and it says so with a tick.
+#:
+#: 8 today under app/lib/src/features/auth -- the GATE's number, which is
+#: two fewer than a bare count of the pattern, because it skips a call
+#: inside a doc comment. Floored at 5.
+LEAST = int(os.environ.get("IAK_LEAST_SITES", "5"))
 
 
 def argument_text(src: str, start: int) -> str:
@@ -81,6 +95,16 @@ def main() -> int:
                 continue
             line = src.count('\n', 0, m.start()) + 1
             missing.append((path.relative_to(ROOT), line, m.group(1)))
+
+    if checked < LEAST:
+        print(
+            f'This sweep examined {checked} call(s) into GoTrue under '
+            f'{AUTH}, and there were {LEAST} or more when it was written. '
+            f'Either the auth feature moved or the pattern no longer '
+            f'matches how GoTrue is called -- and a sweep with no doors to '
+            f'check reports exactly what a fully guarded app reports.',
+            file=sys.stderr)
+        return 2
 
     if missing:
         print(f'FAIL: {len(missing)} call(s) into GoTrue that send no '

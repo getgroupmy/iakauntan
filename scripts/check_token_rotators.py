@@ -45,6 +45,7 @@ something, not on every frame.
 
 from __future__ import annotations
 
+import os
 import pathlib
 import re
 import sys
@@ -53,6 +54,21 @@ import sys
 # tail, so `auth.mfa.listFactors()` and `client.auth.refreshSession()`
 # are both caught however the receiver is spelled.
 ROTATORS = re.compile(r"\b(?:mfa\.listFactors|auth\.refreshSession)\s*\(")
+
+#: This gate expects to find NOTHING, so a floor on matches would demand
+#: that offenders exist. A clean codebase and a blind sweep give the same
+#: answer, and it passed over an empty tree.
+#:
+#: Two controls on the sweep itself instead:
+#:
+#:   * LEAST_DRAW_PATHS -- how many build/draw methods ON_DRAW must have
+#:     found. 1,386 today under app/lib; floored well below.
+#:   * THE CANARY -- ROTATORS must still match SOMEWHERE in app/lib. The
+#:     app does rotate the token, just not on a draw path, so if this
+#:     pattern matches nothing then either the calls were renamed or the
+#:     sweep is blind -- and both look like success. 3 sites today.
+LEAST_DRAW_PATHS = int(os.environ.get("IAK_LEAST_SITES", "600"))
+LEAST_ROTATORS = 1
 
 # Where a rotation must not happen: a method that runs because the
 # framework drew something, rather than because somebody pressed
@@ -115,14 +131,45 @@ def problems(root: pathlib.Path) -> list[str]:
     return out
 
 
+def census(root: pathlib.Path) -> tuple[int, int]:
+    """(draw-path methods found, rotator call sites found anywhere)."""
+    draws = rotators = 0
+    for path in root.rglob("*.dart"):
+        text = path.read_text()
+        draws += len(ON_DRAW.findall(text))
+        rotators += len(ROTATORS.findall(text))
+    return draws, rotators
+
+
 def main() -> int:
-    found = problems(pathlib.Path("app/lib"))
+    root = pathlib.Path("app/lib")
+    draws, rotators = census(root)
+    if draws < LEAST_DRAW_PATHS:
+        print(
+            f"This sweep found {draws} draw-path method(s) under {root}, "
+            f"and there were {LEAST_DRAW_PATHS} or more when it was "
+            f"written. A sweep with no draw paths to read reports exactly "
+            f"what a clean app reports.", file=sys.stderr)
+        return 2
+    if rotators < LEAST_ROTATORS:
+        print(
+            f"`mfa.listFactors` and `auth.refreshSession` appear nowhere "
+            f"under {root}. The app does rotate the token, just not while "
+            f"drawing, so either they were renamed -- in which case this "
+            f"pattern matches nothing and the gate is blind rather than "
+            f"satisfied -- or the sweep is not reading app/lib. This is "
+            f"the canary, not a defect in the app.", file=sys.stderr)
+        return 2
+
+    found = problems(root)
     if found:
         print(f"{len(found)} token rotation(s) on a draw path:\n")
         for p in found:
             print(f"  * {p}\n")
         return 1
-    print("No widget rotates the access token while being drawn.")
+    print(f"No widget rotates the access token while being drawn "
+          f"({draws} draw-path methods examined, {rotators} rotator "
+          f"call sites elsewhere).")
     return 0
 
 

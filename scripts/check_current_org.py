@@ -51,6 +51,28 @@ DECLARED_IN = os.path.join('app', 'lib', 'src', 'core', 'providers.dart')
 
 USE = re.compile(r'\bcurrentOrgIdProvider\b(?!\s*\.\s*notifier)')
 
+#: This gate expects to find NOTHING, which makes a floor on matches
+#: useless -- it would demand that offenders exist. A clean codebase and
+#: a blind sweep give the same answer, and it passed over an empty tree.
+#:
+#: So two controls instead, measuring the sweep rather than its result:
+#:
+#:   * LEAST_FILES -- how many .dart files the walk must have visited.
+#:     544 today under app/lib; floored well below.
+#:   * THE CANARY -- `USE` must still match inside providers.dart, the one
+#:     file this gate deliberately skips because the provider is DECLARED
+#:     there. If `currentOrgIdProvider` is ever renamed, the pattern stops
+#:     matching everywhere at once, and the only way to notice is to check
+#:     that it still matches where it is supposed to. 2 matches today --
+#:     the GATE's number. A bare count of the pattern over that file says
+#:     5, because three of them are in comments and the gate strips those
+#:     first. The number a gate reports is the one to write down; a probe
+#:     that re-implements the sweep has disagreed three times today.
+#: LEAST_IN_DECLARATION stays at 1: the canary is "does it match at all",
+#: not "does it match twice".
+LEAST_FILES = int(os.environ.get('IAK_LEAST_SITES', '300'))
+LEAST_IN_DECLARATION = 1
+
 
 def strip_comments(source: str) -> str:
     """Blank out `//` comments, keeping line numbers.
@@ -64,6 +86,23 @@ def strip_comments(source: str) -> str:
     for line in source.split('\n'):
         out.append('' if line.lstrip().startswith('//') else line)
     return '\n'.join(out)
+
+
+def sweep_census(root: str = LIB) -> tuple[int, int]:
+    """(.dart files the walk visits, matches inside the declaring file).
+
+    The second number is the canary: the pattern must still match where
+    the provider is DECLARED, or a rename has made the gate blind rather
+    than satisfied.
+    """
+    visited = 0
+    for dirpath, _dirs, files in os.walk(root):
+        visited += sum(1 for n in files if n.endswith('.dart'))
+    declared = os.path.join(ROOT, DECLARED_IN)
+    if not os.path.isfile(declared):
+        return visited, 0
+    with open(declared, encoding='utf-8') as fh:
+        return visited, len(USE.findall(strip_comments(fh.read())))
 
 
 def offenders(root: str = LIB) -> list[str]:
@@ -91,12 +130,31 @@ def offenders(root: str = LIB) -> list[str]:
 
 
 def main() -> int:
+    visited, canary = sweep_census()
+    if visited < LEAST_FILES:
+        print(
+            f'This sweep visited {visited} .dart file(s) under {LIB}, and '
+            f'there were {LEAST_FILES} or more when it was written. A '
+            f'sweep that reads nothing reports exactly what a clean '
+            f'codebase reports.', file=sys.stderr)
+        return 2
+    if canary < LEAST_IN_DECLARATION:
+        print(
+            f'`currentOrgIdProvider` does not appear in {DECLARED_IN}, '
+            f'where it is declared. Either it was renamed -- in which '
+            f'case this pattern now matches nothing anywhere and the gate '
+            f'is blind rather than satisfied -- or the file moved. This is '
+            f'the canary, not a defect in the app.', file=sys.stderr)
+        return 2
+
     bad = offenders()
     if bad:
         for b in bad:
             print(f'::error::{b}')
         return 1
-    print('nothing mistakes the switcher\'s selection for the current company')
+    print(f'nothing mistakes the switcher\'s selection for the current '
+          f'company ({visited} dart files read, {canary} declaration '
+          f'reference(s) as the canary)')
     return 0
 
 
