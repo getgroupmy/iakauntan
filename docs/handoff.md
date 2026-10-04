@@ -11157,18 +11157,42 @@ about them** and exited 1, which is exactly why it refuses to be quiet about
 an unapplied mutant. The generator now reads HEAD; see the note in
 `docs/widget-tests.md`.
 
-### What was NOT done, and what is ready to go
+### Three files, 120 mutants, 120 killed
 
-`withholding_screen_test.dart` (21 mutants) and
-`reconciliation_screen_test.dart` (34) were prepared as second and third
-data points and then deliberately NOT run: each costs about twenty minutes
-during which a test file sits mutated on disk, and the stop hook objects to
-that every time the session pauses. The specs are generated and verified
-free of contamination (0 of 22 and 0 of 35), so either is one command:
+The other two were then run, and the answer did not change:
 
-```
-python3 scripts/mutate.py test/<file> test/<file> <spec>.py
-```
+| file | mutants | killed | control |
+|---|---|---|---|
+| `till_screen_test.dart` | 65 | **65** | survived |
+| `withholding_screen_test.dart` | 21 | **21** | survived |
+| `reconciliation_screen_test.dart` | 34 | **34** | survived in BOTH halves |
 
-Regenerate with `gen_string_mutants.py <test file> <out.py> [--absent]`.
-One at a time, never two — they share one `.dart_tool`.
+**120 of 120.** Not one present-expecting literal assertion in three
+unrelated screens — a till, a withholding-tax register, a bank
+reconciliation — passes when the string it names is wrong. That is 5.0% of
+the 2,383 such sites in `app/test`, measured rather than assumed, and the
+three files were chosen for different characters rather than for looking
+promising: a long screen test, a statutory register, and the screen whose
+arithmetic is the fiddliest in the app.
+
+The reconciliation file was split into two 17-mutant halves, and **each half
+carries the control**. A half without one proves nothing about itself, which
+is the same argument the harness makes by refusing a run that has no control
+at all.
+
+### Run them in the FOREGROUND
+
+The operational lesson, and it is cheap. `mutate.py` holds its file mutated
+for a whole run, so a BACKGROUND run leaves the working tree dirty across
+every pause — and the stop hook then asks, correctly by its own lights, for
+a deliberately broken assertion to be committed and pushed to what is also
+the default branch. It asked four times during the 4 October runs.
+
+A foreground run cannot produce that state: the turn does not end until the
+harness has restored the file and verified the restore. 24 runs fit in one
+window comfortably; 38 do not, which is why 34 mutants became two halves.
+Split on the mutant list, give each half the control, and the tree is clean
+at every point a hook could look at it.
+
+One at a time, never two — they share one `.dart_tool`, and a spurious
+failure from contention reads as a KILLED mutant.
