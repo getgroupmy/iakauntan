@@ -610,6 +610,40 @@ The fix, when you hit it, is to extend the pattern by one line until it
 is unique — not to mutate every match, which is a different and weaker
 experiment.
 
+### And if you GENERATE the patterns, generate them from HEAD
+
+Extending a pattern by one line until it is unique is mechanical, so it
+is tempting to automate — 15 of the 65 mutants in the 4 October
+`till_screen_test.dart` run needed a second line. The generator must
+read the file **as committed**, not as it sits on disk:
+
+```python
+out = subprocess.run(['git', 'show', 'HEAD:app/' + rel], ...)
+```
+
+Because `mutate.py` holds its file mutated for the WHOLE length of a
+run, a spec generated while one is in flight bakes the live mutant into
+its own patterns. One pattern in `till_absent.py` extended backwards
+onto the line the running job had just changed and came out as
+
+```python
+"    expect(find.text('POS-0010 ~gone~'), findsOneWidget);\n"
+"    expect(find.text('Take payment'), findsNothing"
+```
+
+which matches nothing once the file is restored, so the mutant arrived
+as `HARNESS ERROR: pattern not found`. That is the harness doing its
+job — but **a spec file outlives the run that contaminated it**, and
+regenerating it to fix the problem, while the NEXT run was in flight,
+reproduced it exactly. Reading HEAD breaks the loop, and printing a
+note when disk and HEAD differ makes the situation legible instead of
+silent.
+
+The same reason says never run two mutation jobs at once, even on
+different files: both drive `flutter test` over one `.dart_tool`, and a
+spurious failure from contention reads as a killed mutant — an
+inflated score, in the direction nobody checks.
+
 ## `check_narrow_rows.py` measures two things as zero, and it is not fixable in the estimate
 
 That script exists because three overflows shipped, and it catches the
