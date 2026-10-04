@@ -11041,3 +11041,85 @@ Both detectors are in the session scratchpad rather than `scripts/`,
 deliberately: a detector whose every hit is correct code is not a gate, and
 committing it would invite the next session to run it and start "fixing"
 sound tests.
+
+## 4 October, part eleven: the measurement that does work, and what it costs
+
+Parts eight to ten tried four times to judge an assertion by its shape and
+found no gate each time. This is the method that does work, run properly for
+the first time: garble the string an assertion looks for, and see whether the
+test notices.
+
+### till_screen_test.dart: 65 of 65
+
+Every `expect(find.text('X'), findsOneWidget)` and
+`expect(find.textContaining('X'), findsNWidgets(n))` in the file was turned
+into one mutant that appends ` ~gone~` to X. A correct assertion must then
+FAIL, so a survivor is an assertion that cannot fail.
+
+```
+baseline: passed
+...
+CONTROL -- a comment line that changes nothing    passed
+restored: passed
+
+every mutant killed, control survived.
+```
+
+**65 mutants, 65 killed, control survived.** Not one assertion in that file
+passes when the string it names is wrong. That is the first direct
+measurement of assertion strength in this repository rather than an
+inference from syntax, and it is the evidence the thin-assertion gate's
+premise needed: the assertions left standing after the ceiling reached zero
+are real.
+
+Two design points, because both were nearly got wrong:
+
+- **Only `expect(find.text(...), ...)` sites were mutated, never a bare
+  `find.text(...)`.** A `find.text('Cancel')` that feeds `tester.tap` is a
+  TAP TARGET, not an assertion; garbling it makes the tap throw and the test
+  fail, which would read as a killed mutant and inflate the score.
+  `call_screen_test.dart`'s "and saying no leaves everybody on it" is exactly
+  that shape — its real assertion is on `ValueKey('call-hang-up')`.
+- **The patterns were made unique by extending BACKWARDS A WHOLE LINE AT A
+  TIME until the file contained the text once**, not by hand. `mutate.py`
+  refuses a pattern matching two places, and 15 of the 65 needed a second
+  line. Automating that refusal away would have aimed 15 mutants at the
+  wrong site.
+
+### What it costs, and why that settles the sweep question
+
+68 `flutter test` runs — baseline, 65 mutants, the control, the restore
+check — took **21m45s**, about 19 seconds each. There are **2,383**
+present-expecting literal assertions in `app/test`. At that rate a tree-wide
+sweep is **12.2 hours serially**, and that is before the 658 `findsNothing`
+sites, which no string mutation can reach at all.
+
+So mutation is a per-file instrument, not a gate and not a sweep — the same
+conclusion parts eight to ten reached from the other direction. Pointing it
+at one file costs twenty minutes and answers the question exactly; pointing
+it at the repository costs a working day and answers it no better.
+`scratchpad/gen_string_mutants.py <test file> <out.py> [--absent]` generates
+the spec for any file, and it is in the scratchpad rather than `scripts/`
+because nothing should run it on a schedule.
+
+### If a test file reads as modified and nobody edited it
+
+A mutation run holds its file MUTATED ON DISK for its whole length —
+`mutate.py` writes the mutant, runs the suite, and restores in a `finally`.
+So `git status` showing one test file modified, with a diff like
+
+```
+-      expect(find.text('Nothing to sell yet'), findsOneWidget);
++      expect(find.text('Nothing to sell yet ~gone~'), findsOneWidget);
+```
+
+is a run in progress, not work to commit. **Do not commit it** — the default
+branch is this branch, so that would push a knowingly-false test. The stop
+hook asked three times during the 4 October runs and was refused each time,
+which was right: there were zero unpushed commits throughout, so nothing was
+at risk.
+
+If a run died without restoring — a container restart will do it — the
+recovery is `git checkout -- app/test/<file>`, or the harness's own backup at
+`$TMPDIR/<file>.orig`, which is byte-identical to HEAD. Check before
+assuming a mutant is a real edit: `git diff` names the mutation.
