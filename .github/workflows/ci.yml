@@ -1616,6 +1616,41 @@ jobs:
           python3 scripts/check_assertion_floor_test.py
           python3 scripts/check_assertion_floor.py
 
+      # The Dart-test counter's own assertions. The gate itself cannot run
+      # in this job -- it reads the json report that
+      # `flutter test --file-reporter` writes, and there is no Flutter
+      # here -- so "Run the Dart tests, and count them" in the app job
+      # runs the gate and this step runs its self-test.
+      #
+      # 27 assertions, and most of them are about what must NOT be
+      # counted: the `loading <path>` pseudo-test every suite
+      # contributes, `(setUpAll)` and `(tearDownAll)`, a `testStart` with
+      # no `testDone`, and a line of the report that is not JSON.
+      # Counting high is the dangerous direction, because it clears its
+      # own floor for ever.
+      - name: Check the Dart-test counter counts what it says
+        run: python3 scripts/check_flutter_test_count_test.py
+
+      # And that every one of those self-tests is run by something.
+      #
+      # The 37 `*_test.py` files under scripts/ are what makes the gates
+      # believable, and they are run as a HAND-KEPT LIST of `python3`
+      # lines in this file. A hand-kept list goes stale silently, and this
+      # one did on the commit that added the newest gate:
+      # check_flutter_test_count_test.py was written, passed locally, and
+      # was named nowhere here. 36 of 37 ran and nothing said which one
+      # did not -- which is the same reason the SQL file list has a
+      # completeness step and the deploy job reads the functions directory
+      # instead of a list.
+      #
+      # Comments stripped before matching: this file is full of prose
+      # naming scripts, and a grep over the raw text counts a mention in a
+      # comment as "run".
+      - name: Check every self-test is run by CI
+        run: |
+          python3 scripts/check_self_tests_run_test.py
+          python3 scripts/check_self_tests_run.py
+
       # Every sweep in scripts/ has a failure mode that is invisible from
       # outside: the glob returns nothing, or the pattern stops matching,
       # and the gate prints its success line over an empty result.

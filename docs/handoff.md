@@ -9318,3 +9318,179 @@ asserted `gate in excused or gate not in PASSES_OVER_NOTHING` — and
 every gate and the left-hand side was never reached. A vacuous test in
 the file whose entire subject is vacuous success. It now drives the real
 gates over a real empty tree and requires `reported` from each.
+
+## The tests run — do they assert? Both suites surveyed, both clean
+
+The floors above answer *did they run*. The next question is *did they
+assert*, because a test block with no assertion is counted, passes, and
+proves nothing — and a floor cannot tell it from a real one.
+
+Surveyed by brace-matching each test's own body, following one level into
+helpers defined in the same file, and treating a helper that **throws**
+as an assertion helper as well as one that calls `assert*`/`expect`.
+
+| suite | blocks found | with no assertion |
+|---|---|---|
+| `app/test` (Dart) | 6,340 | **1** |
+| the 40 deno files | **503** | **1** |
+
+Both survivors are legitimate and were read, not assumed:
+
+* **`app/test/xlsx_sample_test.dart`** asserts nothing by design. It is a
+  fixture generator that happens to be a test, and the assertions about
+  what it writes live in `scripts/check_xlsx.py`, which reads the
+  workbook back with `zipfile`, `xml.etree` and `openpyxl` — three
+  parsers that know nothing about how it was written.
+* **`supabase/functions/_shared/context_test.ts:167`**, "posting is
+  owner, admin and accountant", calls `requirePostingRole` for each of
+  three roles and asserts **that it does not throw**. That is a real
+  assertion expressed without an assert call, and its control is the very
+  next test: `assertThrows` for viewer, clerk, cashier and the empty
+  role, checking the status and that the message names the role back.
+
+**503 found by brace-matching is the same 503 the floor counts from
+`N passed`** — two methods that share no code agreeing on the number.
+
+### Three bugs in the surveys, all found by reading what they printed
+
+The first run of the Dart survey reported **15** candidates and the first
+run of the deno one reported **2**. Every one was the detector's fault:
+
+1. **Expression-bodied callbacks.** `test('x', () => expect(y, z));` has
+   no braces, so a scan for the body's `{` found the *next* block's and
+   read three one-line tests as assertion-free. This is the same
+   expression-body blindness `check_dialogs_built` once had, and whose
+   test file says so in as many words.
+2. **A brace inside a string.** Dart interpolation (`'... wide:
+   ${at.wide}'`) and JS template literals put `{` inside the test's NAME.
+   Brace-matching from there yields `{at.wide}` as the "body" — six tests
+   full of `expect` calls reported as having none. Fixed by blanking
+   string literals length-preservingly before scanning for structure,
+   while still reading assertions out of the ORIGINAL text. Correcting it
+   also raised the Dart block count from 6,323 to 6,340: a mis-matched
+   body had been swallowing the seventeen tests that followed it.
+3. **A helper that throws instead of asserting.**
+   `platform-users/rules_test.ts` defines `function ok(condition, what) {
+   if (!condition) throw new Error(what); }` and uses nothing else. The
+   helper-following step looked for `assert*` in the helper's body and
+   found none. An assertion is **something that can fail**, which is the
+   rule now.
+
+Both surveys were given a positive control before their result was
+believed — a temporary file holding an assertion-free test, one asserting
+directly, one asserting through a throwing helper, and one with
+interpolation in its name. Each caught exactly the two that assert
+nothing and cleared the two that do. `6,340 - 1` and `503 - 1` are
+measurements, not the silence of a scan that stopped looking.
+
+Neither survey is a gate. They answered a question and the answer was
+clean; a gate over a backlog of zero would only be a file to maintain.
+
+### And the third suite: 32 SQL assertions that cannot fail, all 32 right
+
+The SQL suite's version of the question is different, because every
+`pg_temp.check_*` call is an assertion by construction. What can go wrong
+is an assertion that compares a thing to itself, or one handed a literal
+truth — it ticks, it is counted, and it cannot fail.
+
+Surveyed by brace-matching every `pg_temp.check_*` call across the 385
+files, splitting its arguments at top-level commas with single-quoted
+strings tracked, and looking for `check_true(label, true)`,
+`check_eq(label, X, X)` and `check_true(label, X = X)`.
+
+**12,880 call sites**, of which **32** cannot fail on their own reading.
+Every one was opened and read, and every one is correct. Four idioms:
+
+* **24 are the raise-expected pair.** `begin <the thing that must be
+  refused>; check_true('FAIL ...', false); exception when
+  insufficient_privilege then check_true('...', true); end`. If the
+  statement succeeds the `false` arm fails the test; the `true` arm is
+  the tick for the refusal arriving. One of these
+  (`gateway_payments.sql:148`) labels its two arms differently, which is
+  why a pairing rule keyed on the label alone left it over.
+* **5 are aggregate-and-raise.** A `select string_agg(...) into v_bad` of
+  everything wrong, then `if v_bad is not null then raise exception ...
+  end if;` — and the `check_true(..., true)` after it is the tick that
+  the `if` passed, exactly as `search_path.sql` ticks with a bare
+  `raise notice 'ok ...'`. The assertion is the `if`; the helper call is
+  the receipt.
+* **2 call a function with side effects twice and compare.**
+  `check_true('ensure_default_warehouse returns the same store',
+  ensure_default_warehouse(v_org) = ensure_default_warehouse(v_org))`.
+  Textually a thing compared to itself; in SQL two separate invocations,
+  and that they agree is the whole definition of idempotent.
+* **2 belong to `the_helpers_fail_loudly.sql`**: "a passing check_true
+  does not raise" and "a passing check_eq does not raise". That file's
+  other assertions prove the helpers raise when they should, and these
+  two are the only thing standing between them and helpers that raise no
+  matter what. Its own comment says so.
+
+The sharpest of them is `sst_return_declares_what_was_charged.sql:228`,
+which raises a sentinel inside the `begin` arm and then **re-raises it
+from the handler** if that is the exception that arrived — so the handler
+cannot absorb its own marker and tick anyway. That is the trap this whole
+survey was looking for, already shut.
+
+#### 12,880 call sites, 14,330 counted assertions
+
+Not a contradiction. Many checks sit inside `for` loops and tick once per
+row, there are 737 bare `raise notice 'ok ...'` ticks, and two files
+(`expense_total.sql`, `view_security.sql`) tick that way without calling
+a helper at all — which is why `check_counted_assertions.py` counts the
+NOTICE lines rather than the call sites, and why the floor is on what
+psql printed rather than on what the files say.
+
+## 36 of 37 self-tests were run by CI, and the odd one out was the newest
+
+The commit above added `scripts/check_flutter_test_count_test.py`, 27
+assertions, passing locally — and **named it nowhere in `ci.yml`**. The
+37 `*_test.py` files under `scripts/` are what makes the gates
+believable, and they are run as a hand-kept list of `python3` lines. A
+hand-kept list goes stale silently, and this one did on the very commit
+that was about checks that cannot fail.
+
+Found by asking the question of the gates themselves rather than by
+noticing: `comm -23 <(ls scripts/check_*_test.py) <(grep -o
+'check_[a-z_]*_test\.py' ci.yml)` — one line out, and it was mine.
+
+`scripts/check_self_tests_run.py` now asserts it, both directions:
+
+* a `*_test.py` on disk that no `python3` line in `ci.yml` runs;
+* a name in `ci.yml` with no file behind it — a rename that moved one
+  end only. **Both fired on the real tree while this was being written**:
+  the first named `check_flutter_test_count_test.py`, and the second
+  named `check_self_tests_run_test.py` in the window between wiring the
+  step and writing the file.
+
+Comments are stripped before matching, because `ci.yml` is full of prose
+naming scripts — this gate among them — and a grep over the raw text
+counts a mention in a comment as "run". Whole-line comments only: a step
+that runs the thing and then says why on the same line is still running
+it, and there is an assertion for each.
+
+It has a floor (25, against 38 today) so an empty `scripts/` cannot read
+as a clean sweep, and it refuses rather than passes when `ci.yml` or
+`scripts/` cannot be read at all. 20 assertions, every message fed.
+
+The joke is deliberate and load-bearing: `check_self_tests_run_test.py`
+is itself one of the files its subject checks for, so if it ever stops
+being run its own gate says so.
+
+## Both new floors transferred to CI exactly
+
+Run 2253, `58fc5110`:
+
+    call server tests that ran: 33 (floor: 33)
+    6638 Dart tests ran (floor 6638)
+
+And the Dart one carries a vindication of the design. CI's `flutter test`
+does not use the expanded reporter at all — under GitHub Actions it picks
+the **github** reporter, which ends with
+
+    🎉 6637 tests passed, 1 skipped.
+
+There is no `+6637 ~1` anywhere in that log. **Scraping the console would
+have failed outright on the first CI run**, not subtly: the gate reads
+`--file-reporter json:`, which is the same regardless of what the console
+reporter is doing, and the number came out the same 6,638 measured twice
+on this machine.
