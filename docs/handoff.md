@@ -117,13 +117,13 @@ finish without printing.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | `0738`, which takes the write-idempotency census to **ZERO**: eight wrappers, eighteen verdicts, and `BACKLOG = 0` in the gate. It is the eighth tranche and the seventh migration of 3 October. Before it, in order: `685a3156` (the call stage laid out to fit the window), `6ad94e5c`, `6d34af57` (**`0733`**), `56337d8b`, `b0682f0b`, `39c4bc0f`, `ecefa7a9` (**`0734`**), `981de134` (**`0735`**), `ff3b4698` (**`0736`**), `846bd339`, `383e505d` (the UTC-vs-KL clock fix — see its own section), `979c1c3a` (**`0737`**) and `4f8badd1`. Before 3 October, the 2 October session: `0729` through `0732` |
+| Head at time of writing | `0739`, which takes **thirty-nine date defaults off the session's clock** — every report, four money writes, the exchange rate and the nightly jobs were a day out for eight hours of every Malaysian day, and six of the thirty-nine were reachable from the shipped client. Found by running the swept suite under `PGTZ='Etc/GMT+12'`, not by reading. Before it `5bfc3141` put the whole TEST suite on the product's clock (940 sites, both pins to zero), and before that `0733`–`0738` took the write-idempotency census from 137 to 0 |
 | CI | **green through run 2217 (`3890007e`, `0738`)**; 2204 to 2217 are all green except **2213**, which is worth remembering: `846bd339` changed one markdown file and turned the deploy branch red, because `idempotency.sql` carried a UTC-minus-KL date subtraction that goes wrong for eight hours a day and 16:10 UTC was inside them — a red run whose cause was in neither the commit nor any migration. 2215 applied `0737`, 2217 applied `0738`. Run **2213 FAILED** and is worth remembering: `846bd339` changed one markdown file and turned the branch red, because `idempotency.sql` carried a UTC-minus-KL date subtraction that goes wrong for eight hours a day and 16:10 UTC was inside them — a red run whose cause was in neither the commit nor any migration. 2204 to 2212 are all green — 2204 (`685a3156`), 2205, 2206 (**`0733` applied**), 2207, 2208, 2209, 2210 (**`0734` applied**), 2211 (**`0735` applied**) and 2212 (**`0736` applied**; its top-level status flipped `in_progress` back to `queued` at 15:44 while the three deploy jobs waited for runners, and `gh api .../jobs` is the cheap way to see that is not a failure). 2194 to 2204 are all green, and `0732` landed in run 2201 (`9e42ebf1`); and "Apply the migrations" RAN rather than skipping in 2194, 2197, 2199 and 2201. Run 2200 needed a SECOND ATTEMPT: `npx wrangler deploy` failed with "A fetch request failed, likely due to a connectivity issue" reaching Cloudflare on a docs-only commit, and `rerun_failed_jobs` was green — an infrastructure flake, worth one re-run and not two. **The run listings are worse than this file used to say, and on 2 October they were briefly useless:** no run for `fdb0301f` appeared in any status filter for fifty minutes; the completed listing's newest entry went BACKWARDS from 2198 to 2196 between two checks; and a listing filtered by `event: push` with no status returned run 2004 from 21 SEPTEMBER. Run 2199 had in fact finished at 13:00:52, one minute before the listing showed 2196 — so **an empty or stale listing is evidence about nothing, in either direction.** What works: `actions_get get_workflow_run` on a known id, `get_job_logs` with `failed_only: true, return_content: false` for a cheap failure count, `mcp__github__get_commit` to prove a push arrived, and `git rev-parse origin/<branch>`. Also: a run's top-level status can flip from `in_progress` BACK to `queued` while later jobs wait for runners, and its job count grows from 8 to 12 as they register, neither of which is a failure; and **a green run does NOT prove a migration landed**, because the apply and deploy jobs SKIP when a newer commit is already at the branch tip. Check the database. Earlier history: 2183–2185 were three red runs of mine in a row on `0727`, each a different fault; 2146 applied `0721`; 2097–2100 were `ghcr.io` refusing anonymous pulls, which is why the images come from `public.ecr.aws` |
-| Migrations | **`0738` is the highest, and `0733` through `0738` are ALL live and VERIFIED** — `schema_migrations` holds 0730 through 0738, and **36 keyed overloads exist in production**, which is the census figure exactly. Every one of the thirty-two wrappers is present at the right arity (the keyed form has one argument more than the inner one), with execute granted to `authenticated` and **not** to `anon`, and each carrying its own `comment on function` with the inner form's comment intact — the trap `0736` paid for. The query to repeat is the overload COUNT, not a spot check: it must equal what `check_write_idempotency.py` reports, and a disagreement means a migration applied halfway. `0729` through `0732` are all applied live and VERIFIED against production too — not inferred from a green run. For `0732`: `schema_migrations` has it; `upsert_pos_tender_type` and `delete_pos_tender_type` both exist with execute granted to `authenticated` and **not** to `anon`; `app.tender_type_settlement_account`'s live body skips the `on_account` and `loyalty` kinds; and all 13 `pos_tender_types` rows have an account with none on the heading. The bank accounts pointing at the 1120 heading are down from twelve to **one** — YUSOF ZAIN & CO's CIMB, the one real decision left. The query to repeat: `select 1 from supabase_migrations.schema_migrations where version like '0NNN%'`, then `pg_get_functiondef` on whatever it restated — with `ilike`, not `like`, and `grep -i`, not `grep` |
+| Migrations | **`0739` is the highest. `0733` through `0738` are live and VERIFIED; `0739` is on the branch and NOT yet verified in production** — it restates 39 function bodies verbatim from `pg_get_functiondef` with only the argument default changed, `current_date` → `app.today()`. Nothing dropped, no arity changed, so every existing caller is unaffected and a caller that passes a date never notices. The figure to check in production is `pg_get_function_arguments(oid) ~* 'DEFAULT CURRENT_DATE'` over `public` and `app`: it must be **zero**, which `utc_is_not_today.sql` also asserts. `0729` through `0732` are all applied live and VERIFIED against production too — not inferred from a green run. For `0732`: `schema_migrations` has it; `upsert_pos_tender_type` and `delete_pos_tender_type` both exist with execute granted to `authenticated` and **not** to `anon`; `app.tender_type_settlement_account`'s live body skips the `on_account` and `loyalty` kinds; and all 13 `pos_tender_types` rows have an account with none on the heading. The bank accounts pointing at the 1120 heading are down from twelve to **one** — YUSOF ZAIN & CO's CIMB, the one real decision left. The query to repeat: `select 1 from supabase_migrations.schema_migrations where version like '0NNN%'`, then `pg_get_functiondef` on whatever it restated — with `ilike`, not `like`, and `grep -i`, not `grep` |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight; Android version code 14** from the `android-release` run that printed `Firebase project: iakauntan-2026`. Both from this repository's own workflows. The Android push client is built and **not yet proved on a handset** — that is the user's to do, below |
 | Gates | **383 SQL assertion files (**206 assertions in `idempotency.sql` alone**, up from 103 this morning), 61 Python gates (+27 gate self-tests, one of which is 28 assertions of its own and one 10), 6,634 Flutter tests** (one skipped, pre-existing), 40 deno test invocations. Both build backlogs are **ZERO**: every screen and every dialog opener is built by a test. **And all of it except the Android and iOS builds runs IN THIS CONTAINER** — see the section below, which corrects what this file and `CLAUDE.md` used to say |
-| API description | 842 functions, 367 tables, version `0738`. Regenerated with `python3 scripts/generate_api_description.py "$DB"` against the local cluster and committed; CI's `--check` fails if it drifts, and it fails on a **stale comment** too — a wrapper whose `comment on function` was written against the wrong signature clobbers the inner function's comment and the description then disagrees with the schema |
+| API description | 842 functions, 367 tables, version `0739`. Regenerated with `python3 scripts/generate_api_description.py "$DB"` against the local cluster and committed; CI's `--check` fails if it drifts. `0739` changed only argument defaults, so the diff is two lines — which is itself the evidence that 39 bodies were restated verbatim |
 | In-app calling | **ON**, 30 September. The mediasoup SFU and coturn run on a Synology DS224+ behind a public address; `CALL_SFU_URL` and the rest are set. Proved the only way that counts — two devices on different networks, one on mobile data. `docs/call-deployment.md` is the runbook and its last section lists the four failures that were actually hit |
 | Rows put in production BY HAND | One set, 29 Sept 2026: the App Review demo company `iakauntan-demo` and the two accounts that ring each other — see `docs/apple-voip-review.md`. It is NOT in any migration and nothing in the schema records it, which is why it is named here. `0724` is the function that wires such a pair; the accounts themselves were made in the console, because an account cannot be created from SQL |
 
@@ -217,6 +217,98 @@ its own section: whether a given platform advertises the rotation
 extension at all. The engine now says which case a real call is in.
 
 **Do not start task #11, the MIA headless scraper.**
+
+## `0739`: thirty-nine defaults on the wrong clock, and a premise that was wrong
+
+Thirty-nine functions defaulted a date argument to `current_date` — the
+SESSION's date, which is UTC here and on Supabase. `app.today()` is Kuala
+Lumpur. **From 16:00 UTC the two are different days, every day, for eight
+hours**, which in Malaysia is midnight to eight in the morning.
+
+So for eight hours out of twenty-four: every trial balance, balance sheet
+and P&L run with the default window ended yesterday and omitted the day's
+postings; AR/AP aging and `strata_arrears` were a day young, moving a
+bucket boundary; `create_bank_transfer`, `transfer_between_matters`,
+`remit_withholding` and `fs_lodge` stamped the money yesterday;
+`exchange_rate_for` returned yesterday's rate for today's document; and
+`app.run_daily_jobs` and the four it calls processed the wrong day.
+
+### This had been audited and deliberately left alone
+
+`utc_is_not_today.sql` carried all thirty-nine as a pinned list, with a
+reason — and the reason is the interesting part:
+
+> The rest are a TRAP AND NOT A BUG […] every Dart caller of the others
+> passes a date of its own — so not one of those defaults is currently
+> taken. Rewriting forty function bodies into an append-only migration to
+> change a default nobody reaches would be a large irreversible artifact
+> bought with nothing.
+
+That is sound reasoning and the first sentence was right. **The second was
+wrong.** `repository.dart` sends several of these dates with a
+*conditional spread* — `if (asAt != null) 'p_as_at': Fmt.iso(asAt)` —
+which omits the parameter whenever the caller has no date, and the server
+default then decides. Six were reachable from the shipped client:
+
+| | |
+| --- | --- |
+| `report_ar_aging`, `report_ap_aging` | **the doc comment three lines above the call says it outright: *"Passing no date asks about today, which is what the dashboard wants."*** So the dashboard asked for today and got yesterday |
+| `report_asset_movements`, `report_stock_card` | `p_to` omitted |
+| `run_recurring_documents_for`, `run_recurring_journals_for` | `p_on` omitted — **and these two WRITE.** A recurring invoice or journal run for the wrong day |
+
+I nearly shipped the migration without reading that list, which would have
+been overriding a reasoned decision without checking it. The check is what
+turned it from an override into a correction.
+
+### How it was found: not by reading
+
+The test suite moved onto the product's clock in `5bfc3141`, and the swept
+suite was then run with **`PGTZ='Etc/GMT+12'`** — a session a day behind
+Kuala Lumpur *all* day, which is exactly what CI and this hosted database
+see from 16:00 UTC. Two files failed that nothing in the tests explained:
+
+    FAIL the combined trial balance balances: expected 0, got <NULL>
+    FAIL there are eliminations to make at all
+
+`report_group_trial_balance` came back EMPTY: the test posted on the
+Malaysian day and asked for the default window, which ended the day
+before, so every entry fell outside it.
+
+**The tests had been wrong about the clock for as long as the product was,
+so they agreed with each other and neither was tested.** Putting the suite
+on the product's clock is what made the product's clock visible — which is
+the whole argument for `5bfc3141` in one sentence.
+
+### The suite is now green BOTH ways
+
+383 files in UTC, and 383 files under `PGTZ='Etc/GMT+12'`. Before `0739`
+it was green for sixteen hours a day. The technique is written into
+`run_locally.sh`'s header, because a green suite that touches a date means
+less than it looks until it has been run that way.
+
+### The list became a ratchet at zero
+
+`utc_is_not_today.sql` no longer holds thirty-nine names. It asserts that
+**no** function in `public` or `app` defaults a date to `CURRENT_DATE`, so
+there is no list to keep in step and nothing to excuse, and the next one
+fails by name. Same shape as `check_write_idempotency.py` at `BACKLOG = 0`
+and both of `check_test_clock.py`'s pins — and reached for the same
+reason: a list of known-bad things needs somebody to prune it, and a zero
+does not.
+
+Three functions keep a `current_date` in a COMMENT explaining why they
+already use `app.today()` — `draft_bill_from_received_einvoice`,
+`module_dashboard`, `report_with_layout`. Untouched. Their comments are
+why this class was already known to be real.
+
+### What is not claimed
+
+The bodies are restated verbatim from `pg_get_functiondef` with only the
+default changed, and not one of the thirty-nine used `current_date`
+anywhere else — checked, not assumed. Nothing about `anon`: none of the
+thirty-nine is callable by it, which matters because an argument default
+is evaluated in the CALLER's context and `app.today()` needs EXECUTE,
+which `authenticated` has and `anon` does not.
 
 ## `0738`: the last eight, and the key that was already there
 

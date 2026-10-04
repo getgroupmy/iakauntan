@@ -57,6 +57,25 @@
 # that is not in the code.
 #   supabase/tests/run_locally.sh a.sql b.sql
 #
+# ## Running it on a clock that disagrees with Kuala Lumpur
+#
+#   PGTZ='Etc/GMT+12' supabase/tests/run_locally.sh
+#
+# This is worth more than it looks. Postgres runs in UTC here and on
+# Supabase, and `app.today()` is Kuala Lumpur, UTC+8 -- so from 16:00 UTC
+# the session's date is THE DAY BEFORE the product's, every day, for
+# eight hours. For the other sixteen the two agree and every clock bug in
+# the suite is invisible. `PGTZ='Etc/GMT+12'` puts the session a day
+# behind Kuala Lumpur ALL day, so one run reproduces the whole window.
+#
+# It has earned its keep twice in one day. On 4 October the swept suite
+# passed in UTC and this found two files that still failed, which led to
+# `0739`: thirty-nine functions defaulting a date parameter to
+# `CURRENT_DATE`, six of them reachable from the shipped client, one of
+# them the dashboard's aged balances. The suite is now green BOTH ways.
+#
+# Run it this way before trusting a green suite that touches a date.
+#
 # Needs postgresql-16 and pg_cron installed, and root (initdb refuses to
 # run as root, so the cluster is started as the `postgres` user).
 set -euo pipefail
