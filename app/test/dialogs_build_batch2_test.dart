@@ -171,24 +171,53 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('and who a referral brought in', (tester) async {
+    // `report_referral_hires` (0381) returns
+    //
+    //     referrer_id, referrer_no, referrer_name, hires, candidates
+    //
+    // one row per REFERRER, and the fixture described one HIRE:
+    // `applicant_name, hired_on, bonus_amount, status`, none of which
+    // anything reads. `referrer_name` was the only key that landed, so the
+    // row read "null introduced" and "null hired".
+    testWidgets('and who a referral brought in, per referrer as 0381 has it',
+        (tester) async {
       await opened(
         tester,
         [
           repoProvider.overrideWithValue(repo),
           referralHiresProvider.overrideWith((_) async => const [
                 {
-                  'applicant_name': long,
+                  'referrer_id': 'e1',
+                  'referrer_no': 'EMP-0007',
                   'referrer_name': long,
-                  'hired_on': '2026-03-01',
-                  'bonus_amount': 1500.0,
-                  'status': 'paid',
+                  'candidates': 5,
+                  'hires': 2,
+                },
+                // Somebody who introduced people and none of them was
+                // hired: the colour on the trailing figure turns on
+                // `hires > 0`, so a zero is the other half of it.
+                {
+                  'referrer_id': 'e2',
+                  'referrer_no': 'EMP-0011',
+                  'referrer_name': 'Aisyah binti Rahman',
+                  'candidates': 3,
+                  'hires': 0,
                 },
               ]),
         ],
         (context) => showReferralHires(context),
       );
       expect(tester.takeException(), isNull);
+
+      expect(find.text(long), findsOneWidget);
+      expect(find.text('Aisyah binti Rahman'), findsOneWidget);
+      // `candidates` and `hires`, which the old fixture supplied under
+      // neither name -- both lines read "null".
+      expect(find.text('5 introduced'), findsOneWidget);
+      expect(find.text('2 hired'), findsOneWidget);
+      expect(find.text('3 introduced'), findsOneWidget);
+      expect(find.text('0 hired'), findsOneWidget);
+      expect(find.textContaining('null'), findsNothing);
     });
   });
 
@@ -210,48 +239,139 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('the delivery day dialog opens', (tester) async {
+    // The fixture fed this dialog ORDERS and the dialog reads a per-outlet
+    // SUMMARY. `pos_delivery_day` (0259) returns
+    //
+    //     outlet_id, outlet_name, runs, delivered, failed, still_out,
+    //     fees, free_rides, median_minutes
+    //
+    // and the fixture sent `sale_no, customer_name, address, total,
+    // status` -- not one of which anything reads. So the row's title was
+    // `null`, `runsLine` said "0 out", `medianLabel` said "nothing has
+    // arrived yet", and the fees column read RM 0.00. `pos_driver_runs`
+    // was fed `driver_name` and `stops`, and `stops` is not a column it
+    // returns either.
+    testWidgets('the delivery day dialog opens, per outlet as 0259 returns it',
+        (tester) async {
       await opened(
         tester,
         [
           repoProvider.overrideWithValue(repo),
           posDeliveryDayProvider.overrideWith((_, __) async => const [
                 {
-                  'id': 'd1',
-                  'sale_no': 'POS-0001',
-                  'customer_name': long,
-                  'address': long,
-                  'total': 42.5,
-                  'status': 'pending',
+                  'outlet_id': 'o1',
+                  'outlet_name': 'Kedai Nasi Lemak Aman',
+                  'runs': 12,
+                  'delivered': 9,
+                  'failed': 1,
+                  'still_out': 2,
+                  'fees': 54.0,
+                  'free_rides': 3,
+                  'median_minutes': 28,
                 },
               ]),
+          // DIFFERENT numbers from the outlet above, deliberately. Both
+          // sections draw `runsLine`, so with the same figures one
+          // sentence appears twice and a `findsWidgets` on it pins
+          // neither -- which is how dropping the outlet's `runs` survived
+          // as a mutant on the first attempt. One driver of several does
+          // not match the outlet's total anyway.
           posDriverRunsProvider.overrideWith((_, __) async => const [
-                {'id': 'r1', 'driver_name': long, 'stops': 4},
+                {
+                  'driver_id': 'dr1',
+                  'driver_name': long,
+                  'outlet_name': 'Kedai Nasi Lemak Aman',
+                  'runs': 7,
+                  'delivered': 6,
+                  'still_out': 1,
+                  'fees': 31.0,
+                  'goods': 480.0,
+                  'median_minutes': 22,
+                },
               ]),
         ],
         (context) => showDeliveryDay(context),
       );
       expect(tester.takeException(), isNull);
+
+      expect(find.text('Kedai Nasi Lemak Aman'), findsWidgets);
+      // The OUTLET's line. `runsLine` leaves a zero out, so every one of
+      // these numbers has to be non-zero for the whole sentence to appear
+      // -- and `findsOneWidget` rather than `findsWidgets`, so it is this
+      // row's figures and not the driver's that satisfy it.
+      expect(
+        find.textContaining('12 out · 9 delivered · 1 failed · 2 still out'),
+        findsOneWidget,
+      );
+      // And the DRIVER's, which are different figures.
+      expect(find.textContaining('7 out · 6 delivered · 1 still out'),
+          findsOneWidget);
+
+      // `median_minutes`, which the old fixture left at "nothing has
+      // arrived yet". Different per section, for the same reason.
+      expect(find.textContaining('about 28 minutes, typically'),
+          findsOneWidget);
+      expect(find.textContaining('about 22 minutes, typically'),
+          findsOneWidget);
+      // `free_rides`, said only when the promise cost something.
+      expect(find.textContaining('3 rides given away'), findsOneWidget);
+      // And `fees`, which was RM 0.00.
+      expect(find.textContaining('54.00'), findsWidgets);
+      expect(find.textContaining('nothing has arrived yet'), findsNothing);
     });
 
-    testWidgets('and the queue day dialog', (tester) async {
+    // Same mistake as the delivery day above: the fixture fed TICKETS and
+    // the dialog reads a per-outlet SUMMARY. `pos_queue_day` (0257)
+    // returns
+    //
+    //     outlet_id, outlet_name, joined, seated, gave_up, no_shows,
+    //     still_waiting, median_wait, longest_wait
+    //
+    // and the fixture sent `ticket_no, customer_name, party_size, status`.
+    // With `joined` absent `queueDayLine` returned its first arm --
+    // **"Nobody queued"** -- and `waitLabel` said "nobody was seated", on
+    // a day the fixture was describing as somebody waiting.
+    testWidgets('and the queue day dialog, per outlet as 0257 returns it',
+        (tester) async {
       await opened(
         tester,
         [
           repoProvider.overrideWithValue(repo),
           posQueueDayProvider.overrideWith((_, __) async => const [
                 {
-                  'id': 'q1',
-                  'ticket_no': 'Q-001',
-                  'customer_name': long,
-                  'party_size': 4,
-                  'status': 'waiting',
+                  'outlet_id': 'o1',
+                  'outlet_name': 'Kedai Nasi Lemak Aman',
+                  'joined': 40,
+                  'seated': 31,
+                  'gave_up': 5,
+                  'no_shows': 2,
+                  'still_waiting': 2,
+                  'median_wait': 18,
+                  'longest_wait': 55,
                 },
               ]),
         ],
         (context) => showQueueDay(context),
       );
       expect(tester.takeException(), isNull);
+
+      expect(find.text('Kedai Nasi Lemak Aman'), findsWidgets);
+      // `joined`, which decided between this and "Nobody queued".
+      expect(
+        find.textContaining('40 joined · 31 seated · 2 still in the line'),
+        findsWidgets,
+      );
+      expect(find.textContaining('Nobody queued'), findsNothing);
+      // `gave_up` and `no_shows`, which 0257 insists on keeping apart
+      // because only one of them is a reason to open another section.
+      expect(
+        find.textContaining(
+            '5 gave up waiting, 2 did not come when called'),
+        findsWidgets,
+      );
+      // `median_wait` with a `longest_wait` above it.
+      expect(find.textContaining('about 18 min, longest 55'), findsWidgets);
+      expect(find.textContaining('nobody was seated'), findsNothing);
     });
   });
 
@@ -1172,26 +1292,75 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('the tender sheet', (tester) async {
+    // The widest shape mismatch of the set, across all three providers.
+    //
+    //   * the sale's money column is `total_amount`, not `total` -- the
+    //     sheet reads `posNum(row?['total_amount'])`;
+    //   * a tender type is chosen by `id` and its cash-ness comes from
+    //     `kind` (`pos_tender_types` has `id, code, name, kind, …`). With
+    //     no `id` the sheet's `_tenderTypeId ??= rows.first['id']` left it
+    //     null, and `opens_drawer` is not a column at all;
+    //   * memberships are filtered by `o['is_active'] == true` and drawn
+    //     from `name`, `period` and `sessions_included`. The fixture sent
+    //     `member_name` and `points`, so `is_active` was absent, the live
+    //     list came out EMPTY, and the whole section drew nothing.
+    testWidgets('the tender sheet, in the shapes the till reads',
+        (tester) async {
       await opened(
         tester,
         [
           repoProvider.overrideWithValue(repo),
           posSaleProvider.overrideWith((_, __) async => const {
                 'id': 's1',
-                'total': 42.0,
-                'paid': 0.0,
+                'invoice_no': 'POS-0042',
+                'total_amount': 42.0,
+                'rounding': -0.02,
+                'cash_due': 41.98,
               }),
           posTenderTypesProvider.overrideWith((_) async => const [
-                {'code': 'cash', 'name': long, 'opens_drawer': true},
+                {
+                  'id': 'tt1',
+                  'code': 'cash',
+                  'name': 'Cash',
+                  'kind': 'cash',
+                },
+                {
+                  'id': 'tt2',
+                  'code': 'card',
+                  'name': 'Card (Maybank terminal)',
+                  'kind': 'card',
+                },
               ]),
           posMembershipsProvider.overrideWith((_) async => const [
-                {'id': 'm1', 'member_name': long, 'points': 120},
+                {
+                  'id': 'm1',
+                  'code': 'GOLD',
+                  'name': 'Gold, twelve months',
+                  'period': 'yearly',
+                  'sessions_included': null,
+                  'is_active': true,
+                },
+                // Retired, so `o['is_active'] == true` must leave it out.
+                {
+                  'id': 'm2',
+                  'code': 'OLD',
+                  'name': 'The old scheme',
+                  'period': 'monthly',
+                  'sessions_included': 8,
+                  'is_active': false,
+                },
               ]),
         ],
         (context) => showTenderSheet(context, saleId: 's1'),
       );
       expect(tester.takeException(), isNull);
+
+      // `total_amount`, which the old fixture called `total`.
+      expect(find.textContaining('42.00'), findsWidgets);
+      // Both ways of paying, named -- the old fixture's single type had no
+      // `id` for the sheet to select it by.
+      expect(find.text('Cash'), findsWidgets);
+      expect(find.text('Card (Maybank terminal)'), findsWidgets);
     });
 
     // `item_id` and `item_name` were the fixture's words.

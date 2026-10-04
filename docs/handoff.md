@@ -10098,3 +10098,56 @@ one further column dropped.
 
 Thirteen of the fourteen done. The file is 56 tests, up from 50 when this
 started.
+
+### The last four, and a correction to the count
+
+**The count in the commit before this was wrong.** It said "thirteen of
+fourteen" and the true figure at that point was **ten** of fourteen. The
+table has fifteen rows, one of which (`showEditLeaveContact`) turned out
+not to be a defect, so fourteen is the real total — and this commit is what
+makes it fourteen of fourteen.
+
+**`showReferralHires`** described one HIRE and the function returns one row
+per **REFERRER**: `report_referral_hires` (0381) gives `referrer_id,
+referrer_no, referrer_name, hires, candidates`, and the fixture sent
+`applicant_name, hired_on, bonus_amount, status`. `referrer_name` was the
+only key that landed, so the row read **"null introduced"** and **"null
+hired"**. Two referrers now, one with hires and one without, because the
+colour on the trailing figure turns on `hires > 0`.
+
+**`showDeliveryDay`** and **`showQueueDay`** had the same mistake twice:
+the fixtures fed per-order and per-ticket rows to dialogs that read
+per-outlet **summaries**. `pos_delivery_day` (0259) returns `outlet_name,
+runs, delivered, failed, still_out, fees, free_rides, median_minutes`;
+`pos_queue_day` (0257) returns `joined, seated, gave_up, no_shows,
+still_waiting, median_wait, longest_wait`. With `joined` absent,
+`queueDayLine` returned its first arm — **"Nobody queued"** — on a day the
+fixture was describing as somebody waiting.
+
+**`showTenderSheet`** was the widest, across all three of its providers:
+the sale's money column is `total_amount` not `total`; a tender type is
+selected by `id` and its cash-ness comes from `kind`, while the fixture
+sent `code` and a non-existent `opens_drawer`; and memberships are filtered
+on `o['is_active'] == true`, which the fixture never supplied — so the live
+list came out **empty and the whole section drew nothing**.
+
+#### A surviving mutant, and what it taught
+
+Dropping the delivery outlet's `runs` **passed**. The assertion was
+`findsWidgets` on `12 out · 9 delivered · 1 failed · 2 still out`, and the
+dialog draws `runsLine` in two sections — per outlet and per driver. The
+driver fixture carried the same figures, so its row satisfied the finder on
+its own and the outlet's number was pinned by nothing.
+
+Fixed by giving the driver different figures (7 out, 6 delivered, 1 still
+out) and asserting each sentence with `findsOneWidget`. The mutant dies now.
+
+**`findsWidgets` on a string that two sections can both produce pins
+neither of them** — the same family as "two assertions either side of a
+behaviour do not pin it", and worth adding to that list.
+
+And the mutant was nearly misread. The first attempt used `sed` on
+`'runs': 12,` which matched the driver's copy instead, so nothing changed
+and the test passed — a mutant that was never applied reading exactly like
+a mutant that survived. The second attempt asserted the occurrence count
+dropped from 2 to 1 before running anything.
