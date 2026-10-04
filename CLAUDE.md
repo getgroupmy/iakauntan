@@ -5,6 +5,11 @@ accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for
 Malaysian businesses. `README.md` is the real orientation — read it before
 changing anything statutory.
 
+**Claude Code tooling** — which plugins and skills this project uses,
+which are deliberately not installed and why, and what needs a key or a
+device — is in `docs/claude-tooling.md`. It is committed because
+`.claude/settings.json` is not.
+
 **Picking up work in progress?** `docs/handoff.md` carries the state of
 the branch, what is applied to the live database, what is blocked on the
 user, and the traps that have already been paid for once. It is written

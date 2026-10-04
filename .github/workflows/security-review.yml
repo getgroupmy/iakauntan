@@ -1,0 +1,82 @@
+# An AI security review of what a pull request changes.
+#
+# `anthropics/claude-code-security-review` reads the DIFF, not the whole
+# tree, and reasons about it rather than pattern-matching -- so it is
+# aimed at the class of defect this repository's other gates cannot see.
+# The ~30 python gates and the SQL assertion suite in `ci.yml` check
+# rules somebody already knew to write down. This asks whether a change
+# introduces something nobody had thought of.
+#
+# ## Why `pull_request` and nothing else
+#
+# `claude/iakauntan-accounting-crm-8snun0` IS the default branch, so a
+# green push is a production deploy. A review that ran on push would be
+# telling us about code already live. On a pull request it runs before
+# the merge, which is the only point at which the answer can change
+# anything. The action itself also exits early on any other event, so a
+# `push` trigger would burn a runner to print "skipping".
+#
+# ## Why the key check, and why this stays green without the key
+#
+# The action FAILS (exit 1) when `claude-api-key` is empty -- it does not
+# skip. Unguarded, that is a permanently red check on every pull request
+# until somebody sets the secret. So the presence of the key is decided
+# first and the review is conditional on it: no secret means one notice
+# and a green run, which is what a dormant gate should look like.
+#
+# THE SECRET IS NOT IN THIS REPOSITORY AND MUST NOT BE. Set
+# `ANTHROPIC_API_KEY` under Settings -> Secrets and variables -> Actions.
+# `docs/claude-tooling.md` says so again next to everything else that
+# needs a key.
+name: Security review
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  security-review:
+    name: Review the diff for security defects
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The PR head, and enough history for the action to diff
+          # against the base. Shallower than 2 and it has nothing to
+          # compare.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 2
+
+      - name: Does this repository have a key to review with
+        id: key
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -n "$ANTHROPIC_API_KEY" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Security review dormant::No" \
+                 "ANTHROPIC_API_KEY secret is set, so there is nothing to" \
+                 "review with. Set it under Settings -> Secrets and" \
+                 "variables -> Actions to turn this on. Passing rather" \
+                 "than failing is deliberate: an absent key is not a" \
+                 "security finding."
+          fi
+
+      # Pinned to a commit, not a moving ref. A security reviewer that
+      # updates itself silently is a security reviewer nobody reviewed.
+      # 0c6a49f1 was HEAD of main when this was added.
+      - name: Claude security review
+        if: steps.key.outputs.present == 'true'
+        uses: anthropics/claude-code-security-review@0c6a49f1fa56a1d472575da86a94dbc1edb78eda
+        with:
+          claude-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          comment-pr: true
+          upload-results: true
+          # `graphify-out` is a generated knowledge graph and `brand` is
+          # images; neither is source anybody can introduce a defect in.
+          exclude-directories: graphify-out,brand
