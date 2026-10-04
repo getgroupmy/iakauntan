@@ -580,6 +580,51 @@ came back clean**, recorded here so nobody sweeps it twice:
 | `continue-on-error` in `ci.yml` | 4, every one deliberate and explained. The one on "Dump both schemas" states the principle this session kept rediscovering: *"could not look is not the same as looked and found nothing — a check that reports the first as the second is worse than no check, because it is reassuring while blind."* |
 | budgets above zero | 2 — `check_blind_catches` at 41, `check_async_value` at 39. **Both ratchet DOWNWARD as well** (`if n < BUDGET:` → "Lower BUDGET"), and both sit exactly at their count, so neither has quietly given ground back. |
 
+### Card and e-wallet land in the till — measured, 4 October
+
+Evidence for the open item "where card and e-wallet money lands", which
+the user has again chosen to leave open. Read-only against production:
+
+| | |
+| --- | --- |
+| `pos_tender_types` | 13 rows: 5 `cash`, 4 `card`, 4 `ewallet` — **all 13 carry a settlement account, none null** |
+| what they point at | GL `1110` (and `1121` for some orgs), every one a bank account of `account_type = 'cash'` — **a till, for card and e-wallet alike** |
+| `org_payment_gateways` | **zero rows** |
+| `on_account` / `loyalty` tender types | **none exist**, so `app.tender_type_settlement_account`'s exclusion for them has never fired in production |
+
+The last two together are the finding. The trigger tries a gateway's
+`settlement_bank_account_id` first for anything that is not a drawer
+tender — and with no gateway rows at all that branch **can never fire**,
+so card and e-wallet always fall through to "the company's own account",
+which for these shops is the cash drawer. Nothing is lost and nothing
+reaches the 1120 heading; the money is simply in the wrong kind of
+account, and no reconciliation against a card settlement will ever match.
+
+`0728` said the right answer "cannot be guessed from here" because
+merchant settlement is net of a fee and days later. That is still true.
+What is new is that the wrong answer is now specific and measurable
+rather than hypothetical.
+
+### A fifth variant of the same mistake, and this one cost something
+
+Four times today a mutant caught an assertion that matched text without
+checking meaning. The fifth time there was no mutant, because it was not
+a test — it was me asking production a question:
+
+    pg_get_functiondef(p.oid) like '%1120%'   -- "is the fallback still there?"
+
+It answered `yes`. **Every `1120` in that function is in a COMMENT** —
+including `0731`'s own "the difference between this and the fallback it
+replaces: 1120 was chosen at posting time". The string survived precisely
+because the fix documented itself.
+
+On that basis a decision was put to the user as though `0728`'s fallback
+were still open, and approval to close it was given for work `0731` had
+already done. No migration was written; the body was read first and it
+refuses already. **Read the body, not a `like` over it** — and when a
+grep agrees with a claim that something is still broken, that is the
+moment to check whether the match is code or prose.
+
 ## `0740`: client money has one door — and the claim I had to withdraw
 
 **The other door into the database.** The write-idempotency census covered
@@ -2105,6 +2150,11 @@ no screen for editing a tender type** — tenders are read by the till
 and written only by demo seeders, which is why all thirteen rows were
 null. That editor is the follow-up this did not build.
 
+> **STALE — corrected 4 October.** The editor WAS built:
+> `app/lib/src/features/pos/tenders_screen.dart`, on
+> `upsert_pos_tender_type` (`0732`). So a tender type can be changed by a
+> person now, and all thirteen rows carry an account.
+
 `app.demo_company` now gives every demo company a cash drawer at birth:
 `app.demo_warung` sells at a counter before `app.demo_purchases` has
 made it a bank account, and four more POS seeders are in the same
@@ -2481,6 +2531,16 @@ functions permitted to mention `code = '1120'` is now asserted rather
 than described.
 
 `app.post_receipt_internal` still has the fallback, on purpose.
+
+> **STALE — corrected 4 October. Everything in the rest of this
+> subsection was true when written and is not true now.** `0731` replaced
+> that fallback (it resolves an account and writes it onto the receipt,
+> refusing only when the company has no bank account at all), and `0732`
+> gave every tender type one. Measured in production on 4 October: **13 of
+> 13 `pos_tender_types` carry a settlement account, none null.** Read
+> "What `0731` actually does" above instead. Kept rather than deleted
+> because the reasoning below is why `0728` left it, and that reasoning
+> was sound on its facts.
 
 **Eleven posted receipts in production have no bank account** — all
 created 1 October, all from the counter, across five demo companies —
