@@ -10542,23 +10542,76 @@ count and the thin-assertion count are all `::notice::` now, so
 small response. Same fix as the migration-list number, for the same
 reason, found the same way.
 
+## 4 October, part four: four more, and a NINETEENTH wrong-shape fixture
+
+The thin count went 11 -> 7, and both the previous step and this one were
+the gate REFUSING the stale ceiling rather than anybody remembering to
+lower it.
+
+**`one forecast line` — the nineteenth wrong-shape fixture, and the first
+where the map came in as an ARGUMENT rather than from a provider.** The
+sheet is handed its row directly (`showForecastLineSheet(context, s, ...)`),
+so the `forecastLinesProvider` override in the test was decoration — which
+is the first thing that misleads about it. `forecast_suggestions` (0205)
+returns twenty-three columns and the fixture passed three, so the header
+read **"null · Widget"**, the state chip drew `Fmt.label(null)`, and all
+eleven figures read nought. Every row the sheet exists to show was absent
+or zero.
+
+That sheet's whole reason for existing is the lead-time row — "a buyer
+asked to spend money on a figure a model produced is entitled to see where
+it came from" — and `measured from deliveries` against `the company
+default` are worth very different amounts of trust. It now asserts the
+three order figures as the subtraction they are (60 suggested less 20
+drafted leaves 40), the four position figures, and both conditional rows.
+
+**`a supplier made out of what was scanned`** — the dialog standing between
+a misread letterhead and a permanent contact. It now asserts the
+"correct anything wrong" blurb (the other form, for a reading that did not
+happen, is noted as uncovered), that every read field reaches a box, the
+Entity Search offer with no register line yet, and both validators
+including that a CLEARED e-mail stops being complained about.
+
+**`and one item's own parameters`** — fed `{}` and `[]`, so every box was
+empty, the picker had nothing in it and the switch was off: the state of an
+item nobody has touched, indistinguishable from one whose saved parameters
+failed to load. Fed a full row at a named warehouse, which also draws the
+"This location only" half of the blurb, and all four validator bounds.
+
+**`the notifications sheet`** — the tile branches on `severity` (colour),
+`kind` (icon), `read_at` (the title's WEIGHT, invisible to a text finder)
+and whether there is a body or a timestamp at all. And
+`myNotificationsProvider` is a FAMILY on `includeRead`, which is the point
+of the "Show read" button: the flip must change which provider is watched,
+not merely the label. Overridden per argument so the two lists differ and
+the flip is observable.
+
+### A timezone trap in an assertion
+
+`Fmt.dateTime` formats `value.toLocal()`, so `find.text('01/09/2026 10:00')`
+for a `02:00Z` timestamp passes only where the machine is on +08. This
+container is UTC and the assertion went red. The expectation now goes
+through `Fmt.dateTime` itself: the claim worth making is that the row is
+DRAWN for the entry with a `created_at` and not for the one without, and
+how it is formatted is `Fmt`'s own business.
+
 ### What is left of this backlog
 
-**11 of the 34** still assert nothing but `expect(tester.takeException(),
-isNull)` — and 24 across the whole of `app/test`, the other 13 being the
+**7 of the 34** still assert nothing but `expect(tester.takeException(),
+isNull)` — and 20 across the whole of `app/test`, the other 13 being the
 overflow tests above. By test name, in file order:
 
-  * `a supplier made out of what was scanned`
-  * `one forecast line`
-  * `and one item's own parameters`
   * `an appraisal under review`
   * `billing a matter`
   * `closing a deal`
   * `logging a chase on a debt`
   * `verifying somebody against the MIA register`
-  * `the notifications sheet`
   * `one time entry`
   * `and the figures a tax computation is built on`
+
+`verifying somebody against the MIA register` is the one with the most in
+it: "Read it" runs a real paste parser with two outcomes and neither is
+asserted.
 
 The method that is working, in order: read the RPC or repository query
 behind each provider FIRST — the fixture shapes are where the defects are —

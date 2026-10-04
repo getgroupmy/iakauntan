@@ -1,17 +1,18 @@
-11
+7
 
 How many widget-test bodies check nothing but
 `expect(tester.takeException(), isNull)`, less the ones excused with a
 reason in `scripts/check_thin_assertions.py`.
 
 A CEILING, and it may only fall. It was 34 when the hunt started -- all
-of them in `dialogs_build_batch2_test.dart` -- and twenty-three have been
-rewritten, which turned up three wrong-shape fixtures and two real
-defects. The remaining eleven are named in docs/handoff.md.
+of them in `dialogs_build_batch2_test.dart` -- and twenty-seven have been
+rewritten, which turned up four wrong-shape fixtures and two real
+defects. The remaining seven are named in docs/handoff.md.
 
-It went from 14 to 11 by the gate REFUSING 14: three more were rewritten
-and the under-ceiling arm fired, which is the half of a ratchet nobody
-remembers to write and the half that keeps the ground won.
+It went 14 -> 11 -> 7 and BOTH steps were the gate refusing the stale
+number, not somebody remembering to lower it. That under-ceiling arm is
+the half of a ratchet nobody writes and the half that keeps the ground
+won.
 
 Thirteen more bodies match the pattern and are excused in `ALLOWED`:
 twelve are overflow tests, where the framework raising on `RenderFlex` IS

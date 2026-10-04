@@ -2675,6 +2675,16 @@ void main() {
       expect(find.textContaining('null'), findsNothing);
     });
 
+    // This is the dialog that stands between a misread letterhead and a
+    // PERMANENT CONTACT, and its blurb says so in one of two opposite
+    // ways depending on whether anything was read at all. Nothing
+    // asserted either, nor the two validators, nor that the reading
+    // reaches the boxes -- which is the dialog's entire purpose.
+    //
+    // (The "nothing was read" blurb needs a second call with a null
+    // reading and is not covered here; `createSupplierFromScan` is
+    // reached that way from the plain picker, where somebody is holding a
+    // bill from a supplier who is not on file.)
     testWidgets('a supplier made out of what was scanned', (tester) async {
       await openedWithRef(
         tester,
@@ -2682,9 +2692,72 @@ void main() {
           repoProvider.overrideWithValue(repo),
         ],
         (context, ref) => createSupplierFromScan(
-            context, ref, const OcrExtraction(supplierName: 'Sinar Supplies')),
+          context,
+          ref,
+          const OcrExtraction(
+            supplierName: 'Sinar Supplies Sdn Bhd',
+            supplierRegistrationNo: '202201001234',
+            supplierTaxId: 'C12345678901',
+            supplierEmail: 'accounts@sinar.example.com',
+          ),
+        ),
       );
       expect(tester.takeException(), isNull);
+
+      // The noun comes from `ScanContactKind`, which is what stopped this
+      // whole file asking somebody "which supplier?" about their own
+      // customer (0682).
+      expect(find.text('Create this supplier'), findsOneWidget);
+
+      // The blurb for a reading that HAPPENED, and it is doing two jobs:
+      // correct it now because this is permanent, and the SSM number is
+      // the field people leave until later and then never fill in.
+      expect(
+          find.textContaining('Correct anything wrong before it is saved'),
+          findsOneWidget);
+      expect(find.textContaining('Nothing was read from the document'),
+          findsNothing);
+
+      // Every field the reading supplied is in a box, which is the one
+      // claim the old assertion could not make.
+      String boxed(Key key) =>
+          tester.widget<TextFormField>(find.byKey(key)).controller!.text;
+      expect(boxed(const ValueKey('scan-supplier-name')),
+          'Sinar Supplies Sdn Bhd');
+      expect(boxed(const ValueKey('scan-supplier-reg')), '202201001234');
+      expect(find.text('Identifies the supplier on an e-Invoice'),
+          findsOneWidget);
+
+      // The register lookup is offered right here, because a number about
+      // to seed `id_value` has come off a letterhead through a reader --
+      // two chances to lose a digit.
+      expect(find.byKey(const ValueKey('scan-supplier-ssm')), findsOneWidget);
+      expect(find.text('Entity Search'), findsOneWidget);
+      // Nothing asked yet, so no "From the register" line.
+      expect(find.textContaining('From the register:'), findsNothing);
+
+      // A name is the one thing it cannot be saved without, and the
+      // e-mail check is a SHAPE check that only fires on something typed.
+      await tester.enterText(
+          find.byKey(const ValueKey('scan-supplier-name')), '  ');
+      await tester.enterText(
+          find.widgetWithText(TextFormField, 'Email'), 'not-an-address');
+      await tester.tap(find.byKey(const ValueKey('scan-supplier-save')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('A supplier needs a name.'), findsOneWidget);
+      expect(find.text('That does not look like an email address.'),
+          findsOneWidget);
+
+      // Cleared, not wrong: an empty address is a real answer, so the
+      // shape check has to stop complaining.
+      await tester.enterText(find.widgetWithText(TextFormField, 'Email'), '');
+      await tester.tap(find.byKey(const ValueKey('scan-supplier-save')));
+      await tester.pumpAndSettle();
+      expect(find.text('That does not look like an email address.'),
+          findsNothing);
+      expect(find.text('A supplier needs a name.'), findsOneWidget);
+      expect(find.textContaining('null'), findsNothing);
     });
 
     // THIS TEST OPENED NOTHING. `resolveSupplier` calls `repo.contacts`
@@ -3058,29 +3131,92 @@ void main() {
   });
 
   group('forecasting', () {
+    // A NINETEENTH WRONG-SHAPE FIXTURE, and the sheet's whole content is the
+    // map it is HANDED -- `forecastLinesProvider` is decoration here, which
+    // is the first thing that misleads. `forecast_suggestions` (0205)
+    // returns twenty-three columns and the fixture passed three, so the
+    // header read "null · Widget", the state chip read `Fmt.label(null)`,
+    // and all eleven figures read nought. Every row the sheet exists to
+    // show was absent or zero.
+    //
+    // The lead-time ROW is the reason this sheet exists at all: "a buyer
+    // asked to spend money on a figure a model produced is entitled to see
+    // where it came from", and 'measured from deliveries' against 'the
+    // company default' are worth very different amounts of trust.
     testWidgets('one forecast line', (tester) async {
       await opened(
         tester,
-        [
-          repoProvider.overrideWithValue(repo),
-          forecastLinesProvider.overrideWith((_, __) async => const [
-                {
-                  'id': 'fl1',
-                  'item_id': 'i1',
-                  'item_name': long,
-                  'suggested_qty': 10,
-                  'on_hand': 2,
-                },
-              ]),
-        ],
+        [repoProvider.overrideWithValue(repo)],
         (context) => showForecastLineSheet(
           context,
-          const {'item_id': 'i1', 'item_name': 'Widget', 'suggested_qty': 10},
+          const {
+            'id': 'fl1',
+            'item_id': 'i1',
+            'item_code': 'ITM-0042',
+            'item_name': long,
+            'uom_code': 'UNIT',
+            'warehouse_id': null,
+            'state': 'order_now',
+            'on_hand': 12,
+            'reserved': 4,
+            'on_order': 6,
+            'available': 8,
+            'mean_daily_demand': 2.5,
+            'lead_time_days': 14,
+            'lead_time_source': 'measured',
+            'safety_stock': 18,
+            'reorder_point': 53,
+            'days_cover': 3.2,
+            'stockout_on': '2026-10-15',
+            'suggested_qty': 60,
+            'already_drafted': 20,
+            'outstanding': 40,
+            'supplier_id': 'c1',
+            'supplier_name': 'Pembekal Alat Tulis',
+          },
           warehouseId: null,
           onChanged: () {},
         ),
       );
       expect(tester.takeException(), isNull);
+
+      // The header: code AND name, with the supplier under it rather than
+      // "No supplier set", and the state through `Fmt.label`.
+      expect(find.text('ITM-0042 · $long'), findsOneWidget);
+      expect(find.text('Pembekal Alat Tulis'), findsOneWidget);
+      expect(find.text('No supplier set'), findsNothing);
+      expect(find.text('Order Now'), findsOneWidget);
+
+      // The three order figures, which are a subtraction a buyer has to be
+      // able to check: 60 suggested less 20 already on a draft leaves 40.
+      expect(find.text('Suggested order'), findsOneWidget);
+      expect(find.text('60'), findsOneWidget);
+      expect(find.text('20'), findsOneWidget);
+      expect(find.text('40'), findsOneWidget);
+
+      // And the position, where `available` is its own number rather than
+      // on-hand less reserved -- the server works it out and the sheet
+      // shows what the server said.
+      expect(find.text('12'), findsOneWidget);
+      expect(find.text('4'), findsOneWidget);
+      expect(find.text('6'), findsOneWidget);
+      expect(find.text('8'), findsOneWidget);
+
+      expect(find.text('2.50 a day'), findsOneWidget);
+      expect(find.text('14.00 days (measured from deliveries)'),
+          findsOneWidget);
+      expect(find.text('18'), findsOneWidget);
+      expect(find.text('53'), findsOneWidget);
+
+      // Both conditional rows, which a fixture without `days_cover` or
+      // `stockout_on` cannot draw at all.
+      expect(find.text('Days of cover'), findsOneWidget);
+      expect(find.text('3.20'), findsOneWidget);
+      expect(find.text('Runs out about'), findsOneWidget);
+      expect(find.text('15 Oct 2026'), findsOneWidget);
+
+      expect(find.text('Parameters for this item'), findsOneWidget);
+      expect(find.textContaining('null'), findsNothing);
     });
 
     // `forecastSettingsProvider` answered `const {}`, so every one of the
@@ -3177,22 +3313,110 @@ void main() {
       expect(find.textContaining('null'), findsNothing);
     });
 
+    // `const {}` for the parameters and `const []` for the suppliers, so
+    // every box was empty, the picker had nothing in it, and the switch
+    // was off -- which is the state of an item nobody has touched, and
+    // indistinguishable on screen from one whose saved parameters failed
+    // to load. The blurb also has two forms and only one was ever drawn:
+    // "Company-wide" against "This location only", which is the whole of
+    // what `warehouseId` means here.
     testWidgets('and one item’s own parameters', (tester) async {
       await openedWithRef(
         tester,
         [
           repoProvider.overrideWithValue(repo),
-          itemForecastParamsProvider.overrideWith((_, __) async => const {}),
-          contactsProvider.overrideWith((_, __) async => const <Contact>[]),
+          itemForecastParamsProvider.overrideWith((_, __) async => const {
+                'min_quantity': 5,
+                'max_quantity': 400,
+                'min_order_quantity': 12,
+                'order_multiple': 6,
+                'lead_time_days': 21,
+                'supplier_id': 'c1',
+                'is_excluded': true,
+              }),
+          contactsProvider.overrideWith((_, __) async => [
+                Contact(
+                  id: 'c1',
+                  code: 'S-0001',
+                  name: 'Pembekal Alat Tulis',
+                  contactType: 'supplier',
+                ),
+              ]),
         ],
         (context, ref) => showItemForecastParams(
           context,
           ref,
           itemId: 'i1',
-          itemLabel: 'Widget',
+          itemLabel: 'ITM-0042 · Widget',
+          warehouseId: 'w1',
         ),
       );
       expect(tester.takeException(), isNull);
+
+      expect(find.text('ITM-0042 · Widget'), findsOneWidget);
+      // `warehouseId` is not null, so it is the LOCATION form of the
+      // blurb. The company-wide one is the other half.
+      expect(
+          find.text('This location only. Leave a field empty to use the '
+              'default.'),
+          findsOneWidget);
+      expect(find.textContaining('Company-wide'), findsNothing);
+
+      String boxed(String label) => tester
+          .widget<TextFormField>(find.widgetWithText(TextFormField, label))
+          .controller!
+          .text;
+      expect(boxed('Minimum on the shelf'), '5');
+      expect(boxed('Most to hold'), '400');
+      expect(boxed('Supplier minimum order'), '12');
+      expect(boxed('Order multiple'), '6');
+      expect(boxed('Lead time override, in days'), '21');
+
+      // The switch is on, which is its non-default -- and its subtitle is
+      // the sentence that keeps "we forecast 12 of 400 items" answerable.
+      expect(
+          tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value,
+          isTrue);
+
+      // The picker RESOLVES the saved supplier against the list it was
+      // given -- `list.any((c) => c.id == _supplier) ? _supplier : null` --
+      // so an id whose contact is not on the list shows nothing rather
+      // than somebody else's row. With the contact present it shows.
+      expect(find.text('Pembekal Alat Tulis'), findsOneWidget);
+
+      // THE BOUNDS. Empty is a real answer and must not be refused; a
+      // negative and an over-365 lead time must be.
+      await tester.enterText(
+          find.widgetWithText(TextFormField, 'Most to hold'), '');
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(find.text('A number'), findsNothing);
+      expect(find.text('Not negative'), findsNothing);
+
+      await tester.enterText(
+          find.widgetWithText(TextFormField, 'Most to hold'), '-1');
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(find.text('Not negative'), findsOneWidget);
+
+      await tester.enterText(
+          find.widgetWithText(TextFormField, 'Most to hold'), '400');
+      await tester.enterText(
+          find.widgetWithText(TextFormField, 'Lead time override, in days'),
+          '400');
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(find.text('At most 365'), findsOneWidget);
+
+      // And the whole-number box refuses a decimal in its own words,
+      // which the decimal boxes do not.
+      await tester.enterText(
+          find.widgetWithText(TextFormField, 'Lead time override, in days'),
+          '21.5');
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(find.text('A whole number'), findsOneWidget);
+      expect(find.textContaining('null'), findsNothing);
     });
   });
 
@@ -3355,25 +3579,111 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    // One unread row with no `severity` and no `kind`, so the tile drew its
+    // fallback colour and fallback icon and nothing said which. The row
+    // also branches on `read_at` (the title's WEIGHT, which no text finder
+    // can see) and on whether there is a body at all.
+    //
+    // And `myNotificationsProvider` is a FAMILY on `includeRead`, which is
+    // the point of the "Show read" button: flipping it must change which
+    // provider is watched, not merely the label. Overridden per argument
+    // so the two lists differ and the flip is observable.
     testWidgets('the notifications sheet', (tester) async {
       await openedWithRef(
         tester,
         [
           repoProvider.overrideWithValue(repo),
-          myNotificationsProvider.overrideWith((_, __) async => const [
-                {
-                  'id': 'n1',
-                  'title': long,
-                  'body': long,
-                  'created_at': '2026-09-01T02:00:00Z',
-                  'read_at': null,
-                },
-              ]),
-          unreadNotificationsProvider.overrideWith((_) async => 0),
+          myNotificationsProvider.overrideWith((_, includeRead) async =>
+              includeRead
+                  ? const [
+                      {
+                        'id': 'n9',
+                        'kind': 'fs_lodgement_due',
+                        'severity': 'warning',
+                        'title': 'Accounts lodged',
+                        'body': 'MBRS accepted them.',
+                        'created_at': '2026-08-01T02:00:00Z',
+                        'read_at': '2026-08-02T02:00:00Z',
+                      },
+                    ]
+                  : const [
+                      {
+                        'id': 'n1',
+                        'kind': 'einvoice_rejected',
+                        'severity': 'urgent',
+                        'title': 'An e-Invoice was rejected',
+                        'body': long,
+                        'created_at': '2026-09-01T02:00:00Z',
+                        'read_at': null,
+                      },
+                      // No body and no timestamp: both subtitle lines are
+                      // conditional, and a fixture that always supplies
+                      // them cannot tell whether they are.
+                      {
+                        'id': 'n2',
+                        'kind': 'ticket_overdue',
+                        'severity': 'info',
+                        'title': 'A ticket is overdue',
+                        'read_at': null,
+                      },
+                    ]),
+          unreadNotificationsProvider.overrideWith((_) async => 2),
         ],
         (context, ref) => showNotificationsSheet(context, ref),
       );
       expect(tester.takeException(), isNull);
+
+      expect(find.text('Waiting for you'), findsOneWidget);
+      expect(find.text('Nothing is waiting for you.'), findsNothing);
+
+      // Unread only to start with, so the read one is not here.
+      expect(find.text('An e-Invoice was rejected'), findsOneWidget);
+      expect(find.text('A ticket is overdue'), findsOneWidget);
+      expect(find.text('Accounts lodged'), findsNothing);
+
+      // The body and the timestamp, and their absence on the second row.
+      // The expected time goes through `Fmt.dateTime` rather than being
+      // written out, because that function formats `value.toLocal()` --
+      // a hard-coded '10:00' passes only where the machine running the
+      // test is on +08. The claim here is that the row is DRAWN for the
+      // entry that has a `created_at` and not for the one that does not;
+      // how it is formatted is `Fmt`'s own business.
+      expect(find.text(long), findsOneWidget);
+      expect(find.text(Fmt.dateTime(DateTime.parse('2026-09-01T02:00:00Z'))),
+          findsOneWidget);
+      expect(find.byType(ListTile), findsNWidgets(2));
+
+      // An icon PER KIND, which is the whole of what the leading column
+      // says and is invisible to a text finder.
+      expect(find.byIcon(Icons.gpp_bad_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.timer_off_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.info_outline), findsNothing);
+
+      // Unread is BOLD. A read row looks identical to `findsOneWidget`.
+      expect(
+          tester
+              .widget<Text>(find.text('An e-Invoice was rejected'))
+              .style
+              ?.fontWeight,
+          FontWeight.w600);
+
+      // The flip. The label changes AND the list does, because the
+      // provider is keyed on the flag.
+      expect(find.text('Show read'), findsOneWidget);
+      await tester.tap(find.text('Show read'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Unread only'), findsOneWidget);
+      expect(find.text('Accounts lodged'), findsOneWidget);
+      expect(find.text('An e-Invoice was rejected'), findsNothing);
+      expect(find.byType(ListTile), findsNWidgets(1));
+
+      // And the read row is NOT bold, which is the other half of the
+      // weight branch.
+      expect(
+          tester.widget<Text>(find.text('Accounts lodged')).style?.fontWeight,
+          FontWeight.w400);
+      expect(find.textContaining('null'), findsNothing);
     });
 
     // Two things were wrong here and the second is the bigger one.
