@@ -46,6 +46,7 @@ so the list cannot quietly become a backlog.
 from __future__ import annotations
 
 import pathlib
+import os
 import re
 import sys
 
@@ -72,6 +73,24 @@ FLOAT_TYPES = re.compile(
 # Empty, and that is the honest state: every money-shaped column in this
 # database is numeric today. An entry added here has to say why.
 ALLOWED: dict[tuple[str, str], str] = {}
+
+#: A floor under how many MONEY-NAMED columns the sweep must have found.
+#:
+#: This gate used to pass over an empty `supabase/migrations`, printing
+#: "every money column is numeric (0 migrations, 0 allowed floats)". The
+#: number was there and nothing compared it -- which is the whole lesson:
+#: printing a count is not checking one.
+#:
+#: The floor is on money-NAMED columns rather than on migrations read,
+#: because that is downstream of all three ways this can go quiet: the
+#: glob returning nothing, `declarations()` drifting so it extracts no
+#: columns, or `is_money_name()` drifting so none of them looks like
+#: money. A floor on files would catch only the first.
+#:
+#: 453 of them over 742 migrations and 5,419 column declarations. Set
+#: well below that: it guards against the sweep going blind, not against
+#: a column being renamed.
+LEAST_MONEY_COLUMNS = int(os.environ.get("IAK_LEAST_SITES", "250"))
 
 
 def strip_comments(sql: str) -> str:
@@ -128,15 +147,17 @@ def declarations(sql: str) -> list[tuple[str, str]]:
     return found
 
 
-def offenders() -> tuple[list[str], set[tuple[str, str]]]:
+def offenders() -> tuple[list[str], set[tuple[str, str]], int]:
     problems: list[str] = []
     matched: set[tuple[str, str]] = set()
+    money_named = 0
 
     for path in sorted(MIGRATIONS.glob("*.sql")):
         sql = strip_comments(path.read_text())
         for column, rest in declarations(sql):
             if not is_money_name(column):
                 continue
+            money_named += 1
             if not FLOAT_TYPES.match(rest.strip()):
                 continue
             key = (path.stem, column)
@@ -151,11 +172,22 @@ def offenders() -> tuple[list[str], set[tuple[str, str]]]:
                 f"matching a balance that is 0.00000000000001."
             )
 
-    return problems, matched
+    return problems, matched, money_named
 
 
 def main() -> int:
-    problems, matched = offenders()
+    problems, matched, money_named = offenders()
+
+    if money_named < LEAST_MONEY_COLUMNS:
+        print(
+            f"This sweep found {money_named} money-named column(s) in "
+            f"{MIGRATIONS}, and there were {LEAST_MONEY_COLUMNS} or more "
+            f"when it was written. Either the migrations are not being "
+            f"read, or `declarations()` or `is_money_name()` no longer "
+            f"matches how they are written. A sweep with nothing to look "
+            f"at reports exactly what a clean schema reports.",
+            file=sys.stderr)
+        return 2
 
     # An allowance that matches nothing is an allowance somebody wrote
     # for a column that has since been renamed or dropped, and leaving it
@@ -175,7 +207,8 @@ def main() -> int:
 
     print(
         f"every money column is numeric "
-        f"({len(list(MIGRATIONS.glob('*.sql')))} migrations, "
+        f"({money_named} money-named columns over "
+        f"{len(list(MIGRATIONS.glob('*.sql')))} migrations, "
         f"{len(ALLOWED)} allowed floats)"
     )
     return 0

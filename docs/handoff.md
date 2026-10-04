@@ -8571,8 +8571,54 @@ matched, and three only need to check the number they already print.
 `check_initstate_ref`, `check_loading_spinners`, `check_money_is_numeric`,
 `check_narrow_rows`, `check_order_direction`, `check_token_rotators`.
 
-`check_money_is_numeric` is the one to do first: it is statutory-adjacent
-(no money column may be a float) and already prints the number.
+### The ratchet fell to eleven the same session
+
+`check_money_is_numeric` is done — statutory-adjacent, and it already
+printed the number it needed to compare.
+
+The floor is on **money-NAMED columns**, not on migrations read, because
+that is downstream of all three ways the sweep can go quiet: the glob
+returning nothing, `declarations()` drifting so it extracts no columns,
+or `is_money_name()` drifting so none of them looks like money. A floor
+on files would catch only the first. **453** money-named columns over 742
+migrations and 5,419 column declarations; floor 250.
+
+Proved both ways: empty tree → exit 2; `declarations()` stubbed to return
+nothing → exit 2 with the same message. (Renaming `is_money_name`
+outright gives a `NameError` instead, which is loud but not the floor —
+worth knowing that the crude mutant and the realistic one take different
+routes to red.)
+
+**Its self-test already had the right instinct and the gate did not.**
+`ItActuallyReadsColumns` carries the comment *"If this number is ever 0,
+every other assertion in this file is theatre and the gate is passing
+because it sees nothing"* — the same shape as
+`check_counted_assertions`, where the test caught what the gate missed.
+Twice in one day, so it is a pattern rather than an accident: when
+somebody writes that thought down, it tends to land in the test, where
+it only holds while the two run together.
+
+Its harness now defaults `LEAST_MONEY_COLUMNS=0` because every case feeds
+a one- or two-file fixture, and `TheFloorItself` passes the real floor
+explicitly. Four new assertions, one of which pins the floor **between**
+zero and the census: at zero it is not a floor, at the census it goes red
+whenever a column is renamed.
+
+One slip worth recording because it cost a confused minute: I appended
+the new test class **after** `if __name__ == "__main__"`, so it was never
+defined and the run reported 13 tests rather than 17 — passing, with four
+assertions that did not exist. A test file that silently runs fewer tests
+than it contains is the same defect class as everything else in this
+section.
+
+### The ten still on the ratchet
+
+`check_captcha_tokens`, `check_capture_is_kept`, `check_current_org`,
+`check_date_arguments`, `check_dialogs_built`, `check_edge_cors`,
+`check_initstate_ref`, `check_loading_spinners`, `check_narrow_rows`,
+`check_order_direction`, `check_token_rotators` — eleven, each with a note
+in `check_sweeps_look.py` saying what it would have to count. `check_dialogs_built`
+and `check_edge_cors` are next: both already print the number.
 
 ### A note on my own verification, three times over
 

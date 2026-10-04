@@ -12,7 +12,7 @@ output.
 
 This runs each gate in a tree holding `scripts/` and EMPTY source
 directories, and requires it to fail. Nineteen gates did not, found in
-two sweeps:
+two sweeps, and the ratchet below has since taken one of them:
 
   * six by redirecting a module-level scope constant at an empty
     directory (`check_or_filters`, which guards a user's name going raw
@@ -121,9 +121,6 @@ PASSES_OVER_NOTHING: dict[str, str] = {
         "no count; needs a floor on the initState bodies examined",
     "check_loading_spinners":
         "no count of `loading:` arms examined, only of exemptions",
-    "check_money_is_numeric":
-        "prints '0 migrations, 0 allowed floats'; statutory-adjacent, and "
-        "the number is printed but not compared",
     "check_narrow_rows":
         "no count; needs a floor on the list rows examined",
     "check_order_direction":

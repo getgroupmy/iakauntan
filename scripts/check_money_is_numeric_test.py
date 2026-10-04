@@ -21,6 +21,7 @@ catches what it claims to.
 import contextlib
 import importlib.util
 import io
+import pathlib
 import unittest
 from pathlib import Path
 
@@ -32,7 +33,14 @@ SPEC.loader.exec_module(gate)
 
 
 def run(**patch):
-    """Run `main` with some of the module's globals replaced."""
+    """Run `main` with some of the module's globals replaced.
+
+    `LEAST_MONEY_COLUMNS` defaults to 0 here because every case below
+    feeds a MIGRATIONS directory of one or two files, and the gate's real
+    floor is 250 -- a floor over a two-file fixture is not a positive
+    control, it is a broken test. `TheFloorItself` passes it explicitly.
+    """
+    patch.setdefault("LEAST_MONEY_COLUMNS", 0)
     saved = {k: getattr(gate, k) for k in patch}
     for k, v in patch.items():
         setattr(gate, k, v)
@@ -199,6 +207,42 @@ class TheAllowanceList(unittest.TestCase):
         code, said = run()
         self.assertEqual(code, 0, said)
 
+class TheFloorItself(unittest.TestCase):
+    """The gate used to pass over an empty `supabase/migrations`, printing
+    "every money column is numeric (0 migrations, 0 allowed floats)". The
+    number was in the output and nothing compared it.
+
+    `ItActuallyReadsColumns` above already said the right thing -- "if
+    this number is ever 0, every other assertion in this file is theatre"
+    -- so the instinct was in the TEST and not in the GATE, and CI only
+    held because the two run together. That is a weaker arrangement than
+    it reads.
+    """
+
+    def test_an_empty_migrations_directory_is_refused(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            code, _ = run(MIGRATIONS=pathlib.Path(tmp),
+                          LEAST_MONEY_COLUMNS=250)
+        self.assertEqual(code, 2)
+
+    def test_the_real_tree_clears_the_shipped_floor(self):
+        _, matched, money = gate.offenders()
+        self.assertGreaterEqual(money, gate.LEAST_MONEY_COLUMNS)
+
+    def test_the_floor_is_below_the_census_but_not_at_zero(self):
+        """At zero it is not a floor; at the census it goes red whenever a
+        column is renamed."""
+        _, _, money = gate.offenders()
+        self.assertGreater(gate.LEAST_MONEY_COLUMNS, 0)
+        self.assertLess(gate.LEAST_MONEY_COLUMNS, money)
+
+    def test_the_success_line_reports_the_census(self):
+        code, said = run()
+        self.assertEqual(code, 0, said)
+        self.assertIn("money-named columns", said)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
