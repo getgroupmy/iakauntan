@@ -154,7 +154,17 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # this: `check_test_clock.py` holds both its pins at zero and
 # `utc_is_not_today.sql` asserts the schema has no session-clock defaults,
 # precisely so the suite counts the same on every day of the year.
-ASSERTION_FLOOR="${IAK_ASSERTION_FLOOR:-14330}"
+# Read from `supabase/tests/assertion_floor`, which ci.yml reads too --
+# the number is defined in one place or it drifts the first time it is
+# raised. An unreadable or malformed file leaves this EMPTY, which would
+# make every comparison below vacuously true, so it is checked: "could
+# not look" is not the same as "looked and found nothing".
+ASSERTION_FLOOR="${IAK_ASSERTION_FLOOR:-$(grep -Ex '[0-9]+' "$ROOT/supabase/tests/assertion_floor" || true)}"
+if ! printf '%s' "$ASSERTION_FLOOR" | grep -Exq '[0-9]+'; then
+  echo "supabase/tests/assertion_floor holds no bare integer; refusing to" >&2
+  echo "run with no floor at all." >&2
+  exit 2
+fi
 
 PGDATA="${IAK_PGDATA:-/var/tmp/pgdata}"
 PGSOCK="${IAK_PGSOCK:-/var/tmp}"

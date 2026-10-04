@@ -680,6 +680,7 @@ jobs:
       - name: Run the database assertions
         run: |
           DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
+          asserted=0
           for f in supabase/tests/statutory.sql supabase/tests/ledger.sql \
                    supabase/tests/control_accounts.sql \
                    supabase/tests/activity_reminders.sql \
@@ -1061,8 +1062,45 @@ jobs:
                    supabase/tests/quick_add_lists.sql \
                    supabase/tests/statutory_bands.sql; do
             echo "== $f"
-            psql "$DB" -v ON_ERROR_STOP=1 -f "$f"
+            # Captured, NOT piped. This step runs under `bash -e` with no
+            # `pipefail`, so `psql ... | grep` would hand the shell grep's
+            # exit status and a FAILING ASSERTION WOULD READ AS A PASS.
+            # Command substitution keeps psql's own status for the `||`.
+            out="$(psql "$DB" -v ON_ERROR_STOP=1 -f "$f" 2>&1)" || {
+              printf '%s\n' "$out"
+              echo "::error::$f failed"
+              exit 1
+            }
+            printf '%s\n' "$out"
+            n="$(printf '%s\n' "$out" | grep -c 'NOTICE:  ok ' || true)"
+            asserted=$((asserted + n))
           done
+
+          # The count of assertions that RAN, not of files that did not
+          # fail. 383 files passing is a weaker claim than N assertions
+          # holding: a fixture that moves so a branch is never entered
+          # leaves every file green over fewer checks, and nothing else
+          # in this job would notice.
+          #
+          # The floor is in `supabase/tests/assertion_floor`, read by
+          # `run_locally.sh` too so the number has one definition.
+          floor="$(grep -Ex '[0-9]+' supabase/tests/assertion_floor || true)"
+          echo "assertions executed in CI: $asserted (local floor: ${floor:-unreadable})"
+          # Zero means the COUNTING broke, not that the suite is empty --
+          # a renamed helper, a changed notice prefix, psql quietened.
+          # That is checked now. The floor itself is NOT compared here
+          # yet: this runner has a real Supabase stack where
+          # `run_locally.sh` stubs `auth` and `storage`, so its count is
+          # not known to equal the local one, and guessing a threshold on
+          # the branch that deploys to production is the wrong way to
+          # find out. Measure from this line's output over one green run,
+          # then compare.
+          if [ "$asserted" -eq 0 ]; then
+            echo "::error::the suite printed no 'NOTICE:  ok ' lines at all." \
+                 "Either every assertion stopped running, or the counting" \
+                 "above no longer matches what the helpers print." >&2
+            exit 1
+          fi
 
       # A list row whose buttons leave its own words nowhere to go.
       # `ListTile` gives its trailing the width it asks for; nothing
@@ -1504,6 +1542,21 @@ jobs:
         run: |
           python3 scripts/check_counted_assertions_test.py
           python3 scripts/check_counted_assertions.py
+
+      # And that the floor those ticks feed has ONE definition, and that
+      # the loop which counts them in this workflow does not pipe psql.
+      # The "Run the database assertions" step runs under `bash -e` with
+      # no `pipefail`: `psql ... | grep` hands the shell grep's exit
+      # status, so a FAILING ASSERTION WOULD READ AS A PASS. It captures
+      # into a command substitution instead, which keeps psql's own
+      # status, and this refuses a change back to a pipe. Verified by
+      # extracting the step out of this file and running it against a
+      # local cluster with a deliberately failing assertion spliced into
+      # the list: exit 1, as it must be.
+      - name: Check the assertion floor has one definition
+        run: |
+          python3 scripts/check_assertion_floor_test.py
+          python3 scripts/check_assertion_floor.py
 
       - name: Check every client-reachable write is accounted for
         run: |

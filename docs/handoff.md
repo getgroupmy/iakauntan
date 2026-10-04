@@ -8217,3 +8217,109 @@ TOGETHER, so `v_refused <> v_tried` stays false and only the floor
 notices. `check_eq(…, v_tried, 29)` fails in the file and names it.
 Adding a probe now means raising that number, and the friction is the
 point.
+
+## The floor I had just raised was enforced nowhere
+
+Immediately after taking the assertion count to 14,330 I went looking for
+what else was wrong with it, and found the thing that mattered most:
+**`run_locally.sh` is not run by CI.** CI has its own loop in `ci.yml`
+over a hand-kept list of the same 383 files, and that loop **counted
+nothing at all.**
+
+So the state after two commits of work was: "every assertion file ticks"
+enforced in CI, and "the ticks add up to 14,330" enforced only on the
+machine of whoever remembered to run the script. A floor nobody runs is
+not a floor. This is worth stating plainly because the two commits read,
+from their messages, like the job was done.
+
+### Why the loop had been left alone, and why that reason was right
+
+The previous note on this said: do not add counting to CI's loop without
+`set -o pipefail` and a way to prove it. That was correct and specific.
+The step runs under `bash -e` with **no `pipefail`**, so
+
+```sh
+psql "$DB" -v ON_ERROR_STOP=1 -f "$f" | tee /dev/null
+```
+
+hands the shell `tee`'s exit status, and **a failing assertion reads as a
+pass**. Adding a `| grep -c` to count would have silently disarmed the
+entire SQL suite in the one place it is authoritative.
+
+The way round it is not `pipefail` but no pipe:
+
+```sh
+out="$(psql "$DB" -v ON_ERROR_STOP=1 -f "$f" 2>&1)" || {
+  printf '%s\n' "$out"; echo "::error::$f failed"; exit 1; }
+printf '%s\n' "$out"
+n="$(printf '%s\n' "$out" | grep -c 'NOTICE:  ok ' || true)"
+```
+
+Command substitution keeps psql's own status for the `||`. The pipe that
+remains is over a `printf` of a variable, where nothing can fail.
+
+### The proof, because "it should work" is not one
+
+The step was **extracted out of `ci.yml` by parsing the YAML**, its first
+line (the `supabase status` lookup) swapped for the local connection
+string, and run under `bash -e` exactly as Actions does:
+
+| case | result |
+|---|---|
+| the real 383 files | exit 0, **14,330** — identical to `run_locally.sh` |
+| a deliberately failing assertion spliced into the list | **exit 1**, with the file named |
+| a file named in the list but absent from disk | **exit 1** |
+| every file replaced by one that asserts nothing | **exit 1**, "printed no `NOTICE:  ok ` lines at all" |
+
+The third case is worth keeping: psql says `psql: error: ... No such file
+or directory` in **lower case**, which `run_locally.sh`'s grep for
+`ERROR:` does not match — it needs a separate `[ ! -f ]` pre-check for
+that. Using the exit status covers it with nothing extra, so CI's version
+is stronger than the local one on that point.
+
+### The floor is NOT compared in CI yet, deliberately
+
+CI runs a real Supabase stack; `run_locally.sh` stubs `auth` and
+`storage`. Their counts are not *known* to be equal, and the branch this
+pushes to is the default branch, where a red build is a failed production
+deploy. Guessing a threshold there is the wrong way to find out. So CI
+prints its count and fails only on **zero** — which means the counting
+itself broke — and the floor gets compared in a follow-up once a green run
+has reported the real number.
+
+This is the same two-step the local floor used: `9626249f` counted with
+the floor at 0, `a30af282` set it to the measured 14,257. **Read the
+number off the next green run's "assertions executed in CI:" line and
+compare it with 14,330 before gating on it.** If it differs, that
+difference is itself a finding about auth/storage, not a number to paper
+over.
+
+### One definition of the number
+
+`supabase/tests/assertion_floor` now holds it, read by both runners.
+Two copies would have drifted the first time one was raised.
+
+A `grep -Ex '[0-9]+'` over a malformed file yields the **empty string**,
+and `[ "$n" -lt "" ]` is not a comparison that fails loudly — so both
+readers check for a bare integer first. Verified: with the number removed
+from the file, `run_locally.sh` exits **2** saying "refusing to run with
+no floor at all". (The first time I measured that I read `$?` after a
+pipe and got grep's status instead — the very mistake this section is
+about, made while writing it.)
+
+`scripts/check_assertion_floor.py` asserts the plumbing, not the number:
+one bare integer, above zero; both runners read the file and neither
+hardcodes one; both count the same pattern; that pattern is what
+`_helpers.sql` actually prints; the CI step does not pipe psql; it
+initialises its counter; and the step is found **by name**, so renaming it
+fails here instead of making the gate check an empty string.
+
+**Its first version failed on the very step it describes.** The pipe
+check was `psql "\$DB"[^\n]*\|`, and the capture line ends in `|| {` — so
+a bare `\|` matched the first bar of a **logical OR**. Eighth instance of
+matching text standing in for checking meaning, and the only reason it
+cost nothing is that the gate was run against the file it was written
+about before being believed. Both directions are now pinned in the
+self-test: a real pipe is caught, `|| {` is not.
+
+20 self-test assertions, 11 mutants plus a control, all 11 killed.

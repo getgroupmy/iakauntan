@@ -1,0 +1,34 @@
+# How many assertions the SQL suite is known to execute.
+#
+# ONE definition, read by BOTH runners:
+#
+#   * `supabase/tests/run_locally.sh`, which globs `supabase/tests/*.sql`
+#     against a throwaway cluster built with initdb, with `auth` and
+#     `storage` stubbed;
+#   * the "Run the database assertions" step in `.github/workflows/ci.yml`,
+#     which runs a hand-kept list of the same 383 files against a real
+#     Supabase local stack.
+#
+# It lived in `run_locally.sh` alone until this file existed, and CI --
+# which is the authoritative runner -- counted nothing at all. So the
+# floor guarded only the machine of whoever remembered to run the script,
+# which is to say it guarded nothing. Two copies of the number would have
+# drifted the first time one was raised; `scripts/check_assertion_floor.py`
+# asserts that neither runner hardcodes one.
+#
+# WHAT THE NUMBER IS: the count of `NOTICE:  ok ` lines psql prints. Every
+# `pg_temp.check_*` helper emits one on success, as do the handful of
+# places that write `raise notice 'ok   ...'` by hand. It counts
+# assertions that RAN, which is the point: 383 files passing is a weaker
+# claim than 14,330 assertions holding, and a fixture that moves so a
+# branch is never entered leaves every file green over fewer checks.
+#
+# HOW TO CHANGE IT: raise it when the number goes up, which is ordinary.
+# Lower it only on purpose, in a commit that says why. A DIP with every
+# file still green is the thing to investigate, not to paper over -- and
+# if the cause is a branch that depends on today's date, that is a defect
+# in the test rather than a reason to lower this.
+#
+# The bare integer below is the value. Anything else in this file is a
+# comment; both readers anchor on `^[0-9]+$`.
+14330
