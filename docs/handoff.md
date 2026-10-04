@@ -523,6 +523,63 @@ real files (`len(seeded()) > 10`, every real Dart entry a real exception).
 Every other assertion in the file is about fixtures and would pass on a
 day both parsers had stopped working.
 
+### Where the stale `iakauntan` database came from
+
+It cost this session an hour of wrong conclusions: `0740` looked
+unapplied because the database being queried was hundreds of migrations
+behind. The cause was `scripts/localdb/`, three files referenced by
+**nothing in this repository**:
+
+  * `rebuild.sh` — a second way to build a local Postgres from the
+    migrations "for machines without Docker", which is now exactly what
+    `supabase/tests/run_locally.sh` does and what `CLAUDE.md` documents as
+    the local path. It used the **same `PGDATA` (`/var/tmp/pgdata`)** as
+    `run_locally.sh` but a different socket directory and port
+    (`/var/tmp/pgd`, 55432 against `/var/tmp`, 5599), and it applied the
+    migrations to a database called **`iakauntan`**, which it dropped and
+    recreated. That orphan is the one that misled this session.
+  * `suite.sh` — ran CI's SQL list, selected with a `sed` range over
+    `ci.yml`. **If that range stops matching, `FILES` is empty, the loop
+    runs zero times, and it prints `assertions=0 files_failing=0` — which
+    reads as success.** The same defect this session spent the day
+    closing, sitting in an unreferenced script. `run_locally.sh`'s
+    `ci_tests()` reads that list too and refuses to start when the count
+    it matched disagrees with the count the workflow names.
+  * `supabase-shim.sql` — what `supabase start` would have created, for
+    the same purpose. `run_locally.sh` has `_local_stack.sql`, which
+    carries the three hosted observations and says where the stubs stop
+    being the real thing.
+
+All three removed. Nothing EXECUTED them, every capability they had lives
+in `run_locally.sh` and is better guarded there, and a second local path
+sharing a `PGDATA` with the documented one is a trap with a proven cost.
+Recoverable from git if ever wanted.
+
+**Two migrations still point at the removed directory, and they stay
+that way.** `0315_the_saver_could_not_save.sql` and
+`0322_the_front_page_updates_itself.sql` each explain, in a comment, what
+"the no-Docker harness in `scripts/localdb/`" could not do —
+`pg_safeupdate` is not installable there, and it has no Realtime at all.
+Migrations are **append-only and never edited once applied**, so those
+comments cannot be corrected and were not. Read them as describing
+`supabase/tests/run_locally.sh`, which is the no-Docker harness now and
+stands in the same relation to CI: the same two limits apply, and
+`_local_stack.sql` says where its stubs stop being the real thing. The
+reasoning in those two migrations is unaffected — only the path is.
+
+### The rest of that audit, which found nothing
+
+Having fixed three scope-pinned gates and one gate that never ran, the
+class was swept for other shapes of "claims more than it checks". **It
+came back clean**, recorded here so nobody sweeps it twice:
+
+| | |
+| --- | --- |
+| scripts referenced nowhere | 3, all in `scripts/localdb/` — none of them a gate. An unreferenced helper is untidy; an unreferenced GATE is a lie, and `check_web_boots` was the only one. |
+| gate invocations whose exit code is swallowed | **none** — no `|| true`, no `|| :`, no pipe into `tee`/`head`/`grep` on a `scripts/` call |
+| `continue-on-error` in `ci.yml` | 4, every one deliberate and explained. The one on "Dump both schemas" states the principle this session kept rediscovering: *"could not look is not the same as looked and found nothing — a check that reports the first as the second is worse than no check, because it is reassuring while blind."* |
+| budgets above zero | 2 — `check_blind_catches` at 41, `check_async_value` at 39. **Both ratchet DOWNWARD as well** (`if n < BUDGET:` → "Lower BUDGET"), and both sit exactly at their count, so neither has quietly given ground back. |
+
 ## `0740`: client money has one door — and the claim I had to withdraw
 
 **The other door into the database.** The write-idempotency census covered
@@ -709,6 +766,8 @@ database in that cluster from an earlier era, hundreds of migrations
 behind. Querying it to check whether a migration landed says the
 migration did not land. The connection string for a gate here is
 `postgresql://postgres@/postgres?host=/var/tmp&port=5599`.
+**Its cause is now removed** — see "Where the stale `iakauntan` database
+came from" — so a cluster rebuilt after 4 October has no such database.
 
 ## `0739`: thirty-nine defaults on the wrong clock, and a premise that was wrong
 
