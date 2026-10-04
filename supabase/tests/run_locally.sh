@@ -106,7 +106,19 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # notice too, which is a change to 383 files and a separate piece of work.
 #
 # Raise it when the number goes up. Lower it only on purpose, saying why.
-ASSERTION_FLOOR="${IAK_ASSERTION_FLOOR:-0}"
+#
+# 14,257 on 4 October, measured twice on the same cluster to check the
+# number is reproducible before an exact floor was set on it. It is higher
+# than the 13,994 assertion SITES a static count finds, because a helper
+# inside a loop runs more than once.
+#
+# A dip here with every file still green is the thing to investigate, not
+# to paper over. If the cause turns out to be a branch that depends on
+# today's date, that is a defect in the TEST rather than a reason to lower
+# this: `check_test_clock.py` holds both its pins at zero and
+# `utc_is_not_today.sql` asserts the schema has no session-clock defaults,
+# precisely so the suite counts the same on every day of the year.
+ASSERTION_FLOOR="${IAK_ASSERTION_FLOOR:-14257}"
 
 PGDATA="${IAK_PGDATA:-/var/tmp/pgdata}"
 PGSOCK="${IAK_PGSOCK:-/var/tmp}"
