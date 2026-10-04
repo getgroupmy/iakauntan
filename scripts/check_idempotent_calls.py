@@ -148,8 +148,18 @@ def main() -> int:
     if len(sys.argv) != 2:
         print(__doc__.splitlines()[2].strip(), file=sys.stderr)
         return 2
+    return run(sys.argv[1])
 
-    protected = wrappers(sys.argv[1])
+
+def run(db: str) -> int:
+    """The gate itself, taking the database rather than reading `argv`.
+
+    Split out so `check_idempotent_calls_test.py` can swap `wrappers` and
+    `CLIENTS` and exercise these four rules rather than a copy of them.
+    A gate whose test reimplements its logic asserts that the copy works.
+    """
+
+    protected = wrappers(db)
     if not protected:
         print("No idempotency wrappers in this database at all — 0307 did "
               "not apply.", file=sys.stderr)

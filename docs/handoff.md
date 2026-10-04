@@ -386,6 +386,34 @@ explaining this bug. A mutant swapping the import for
 import line and an attribute use. Five mutants, no-op control, all five
 dead.
 
+### `check_idempotent_calls` had no self-test, and that was the gate whose scope moved
+
+The debt the previous two commits created. That gate's scope widened off
+`repository.dart` like the other two, and the per-file attribution the
+change needed was verified **once, by hand** — a `callRpcOnce` planted in
+`corp_repository.dart`, reported as `corp_repository.dart:450`. A
+verification done by hand once is a verification nobody will do again, and
+this was the only one of the three with no self-test to put it in.
+
+`main()` is now split into `run(db)` the way `check_write_idempotency`
+already was and for the same stated reason, so the test can swap
+`wrappers` and `CLIENTS` and exercise the four real rules rather than a
+copy of them. 16 assertions; nine mutants with a no-op control, all nine
+dead — one per rule, plus the two the scope change touched:
+
+  * **"only the first surface is read"** (`CLIENTS[:1]`) — the bug the
+    previous commit fixed, now failing by name.
+  * **"the file a fault is in is not carried"** — hardcoding
+    `"repository.dart"` back into the report. Sending a reader to the
+    wrong line of the wrong file is worse than giving no line at all, and
+    with eleven surfaces it is the obvious way for this gate to mislead.
+
+And a mistake in the test itself, worth keeping because it is a trap with
+no warning signs: **`corp_repository.dart` CONTAINS the string
+`repository.dart`.** An `assertNotIn("repository.dart:1: …")` meant to
+prove the gate names the right file fails on the right answer and the
+wrong one alike. It compares the start of each reported line instead.
+
 ## `0740`: client money has one door — and the claim I had to withdraw
 
 **The other door into the database.** The write-idempotency census covered
