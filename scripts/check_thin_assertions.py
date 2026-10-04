@@ -317,17 +317,29 @@ LEAST_FILES = 300
 LEAST_BODIES = 5000
 
 
-def problems(files=None, ceiling_file: str | None = None) -> list[str]:
+def problems(files=None,
+             ceiling_file: str | None = None) -> tuple[list[str], str]:
+    """(problems, the one-line summary for a passing run).
+
+    The summary is RETURNED rather than printed, and that is a bug fix.
+    It used to `print('::notice::...')` from here, so every fed case in
+    `check_thin_assertions_test.py` that reached the passing path emitted a
+    workflow command -- and CI turned each one into an ANNOTATION. Run 2268
+    carried ten of `0 of 1 test bodies check only that nothing threw`
+    beside the two real ones. GitHub caps annotations at ten per step and
+    fifty per run, so self-test noise can crowd out the number the change
+    was made to make readable. `main` prints it now, once.
+    """
     keys, bodies_read, files_read = thin_bodies(files)
 
     if files_read < LEAST_FILES or bodies_read < LEAST_BODIES:
-        return [
+        return ([
             'read %s test file(s) and %s test bodies under app/test, which '
             'is below the %s files and %s bodies this sweep needs to mean '
             'anything. The pattern here matches only offenders, so finding '
             'none is also what reading nothing looks like.'
             % (files_read, bodies_read, LEAST_FILES, LEAST_BODIES)
-        ]
+        ], '')
 
     out: list[str] = []
     excused = [k for k in keys if k in ALLOWED]
@@ -349,7 +361,7 @@ def problems(files=None, ceiling_file: str | None = None) -> list[str]:
             'compare %s thin test bodies against and this check cannot do '
             'its job.' % (ceiling_file or CEILING_FILE, len(counted))
         )
-        return out
+        return (out, '')
 
     if len(counted) > ceiling:
         out.append(
@@ -370,23 +382,27 @@ def problems(files=None, ceiling_file: str | None = None) -> list[str]:
             % (len(counted), ceiling, ceiling_file or CEILING_FILE)
         )
 
-    if not out:
-        # `::notice::` for the same reason the Dart count is one: a number
-        # printed in the middle of a job is a number nobody reads, and this
-        # one has to be read for the ceiling to be lowered.
-        print('::notice::%s of %s test bodies check only that nothing threw '
-              '(ceiling %s, %s excused with a reason), over %s files and '
-              '%s bodies.'
-              % (len(counted), bodies_read, ceiling, len(excused),
-                 files_read, bodies_read))
-    return out
+    summary = ('%s of %s test bodies check only that nothing threw '
+               '(ceiling %s, %s excused with a reason), over %s files and '
+               '%s bodies.'
+               % (len(counted), bodies_read, ceiling, len(excused),
+                  files_read, bodies_read))
+    return (out, summary)
 
 
 def main() -> int:
-    out = problems()
+    out, summary = problems()
     for line in out:
         print('::error::%s' % line, file=sys.stderr)
-    return 1 if out else 0
+    if out:
+        return 1
+    # `::notice::` for the same reason the Dart count is one: a number
+    # printed in the middle of a job is a number nobody reads, and this one
+    # has to be read for the ceiling to be lowered. Emitted HERE and not
+    # from `problems`, so the self-test's fed cases do not each become an
+    # annotation of their own.
+    print('::notice::%s' % summary)
+    return 0
 
 
 if __name__ == '__main__':

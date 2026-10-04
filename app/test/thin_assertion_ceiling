@@ -1,16 +1,16 @@
-7
+5
 
 How many widget-test bodies check nothing but
 `expect(tester.takeException(), isNull)`, less the ones excused with a
 reason in `scripts/check_thin_assertions.py`.
 
 A CEILING, and it may only fall. It was 34 when the hunt started -- all
-of them in `dialogs_build_batch2_test.dart` -- and twenty-seven have been
+of them in `dialogs_build_batch2_test.dart` -- and twenty-nine have been
 rewritten, which turned up four wrong-shape fixtures and two real
-defects. The remaining seven are named in docs/handoff.md.
+defects. The remaining five are named in docs/handoff.md.
 
-It went 14 -> 11 -> 7 and BOTH steps were the gate refusing the stale
-number, not somebody remembering to lower it. That under-ceiling arm is
+It went 14 -> 11 -> 7 -> 6 -> 5 and EVERY step was the gate refusing the
+stale number, not somebody remembering to lower it. That under-ceiling arm is
 the half of a ratchet nobody writes and the half that keeps the ground
 won.
 

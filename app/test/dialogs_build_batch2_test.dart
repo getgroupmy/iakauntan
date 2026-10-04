@@ -3421,17 +3421,96 @@ void main() {
   });
 
   group('the last few', () {
+    // A bare `Appraisal(id, status, employeeId)` leaves everything null, so
+    // the title read 'Appraisal' rather than a person, the rating scale read
+    // its default 5, and the form opened empty -- which is the one state
+    // that cannot show the thing `initState` is for: the half already
+    // written is the STARTING POINT, so a reopened review is edited rather
+    // than retyped from nothing.
+    //
+    // `appraisalAction` decides everything else from four flags, and this
+    // call is the subject's part on an unsubmitted self review, so it is
+    // `writeSelf`: their rating, their words, and the button in the first
+    // person.
     testWidgets('an appraisal under review', (tester) async {
       await opened(
         tester,
         [repoProvider.overrideWithValue(repo)],
         (context) => showAppraisalReview(
           context,
-          Appraisal(id: 'ap1', status: 'self_review', employeeId: 'e1'),
+          Appraisal(
+            id: 'ap1',
+            status: 'self_review',
+            employeeId: 'e1',
+            employeeName: 'Nurul Huda binti Ismail',
+            reviewerName: 'Ahmad Faizal',
+            cycleName: 'Annual review 2026',
+            ratingScaleMax: 10,
+            selfRating: 7,
+            selfComments: 'Closed the year-end on time, twice.',
+            // The manager half is filled in too, and must NOT leak into
+            // the subject's boxes -- `initState` switches on the ACTION,
+            // not on what happens to be present.
+            managerRating: 4,
+            managerComments: 'Needs to delegate more.',
+            recommendedIncrement: 6,
+            recommendedBonus: 1200,
+            developmentPlan: 'Lead the audit file.',
+            promotionRecommended: true,
+          ),
           AppraisalPart.subject,
         ),
       );
       expect(tester.takeException(), isNull);
+
+      // The person, not the word 'Appraisal'.
+      expect(find.text('Nurul Huda binti Ismail'), findsOneWidget);
+      expect(find.text('Appraisal'), findsNothing);
+
+      // The scale is the CYCLE's, not a default: "a 4 out of 5 and a 4 out
+      // of 10 are different judgements, and the box has to say which".
+      expect(find.text('Out of 10'), findsOneWidget);
+      expect(find.text('Out of 5'), findsNothing);
+
+      String boxed(String label) => tester
+          .widget<TextField>(find.widgetWithText(TextField, label))
+          .controller!
+          .text;
+
+      // Seeded from the SELF half, in the first person, and the button
+      // says so.
+      // '7.0' and not '7': `selfRating` is a `num` and the box is seeded
+      // with `toString()`. The field takes decimals, so it is consistent
+      // rather than wrong -- but it is what the person sees, so it is what
+      // the assertion says.
+      expect(boxed('Rating *'), '7.0');
+      expect(boxed('What you did, in your words *'),
+          'Closed the year-end on time, twice.');
+      expect(find.text('Submit my review'), findsOneWidget);
+
+      // And the manager's half is nowhere in the form, which is the part a
+      // single-flag fixture cannot show: no increment, no bonus, no plan,
+      // no promotion switch on the subject's screen.
+      expect(find.text('Your assessment *'), findsNothing);
+      expect(find.text('Increment (%)'), findsNothing);
+      expect(find.text('Bonus'), findsNothing);
+      expect(find.text('Development plan'), findsNothing);
+      expect(find.text('Recommend for promotion'), findsNothing);
+
+      // The manager's words ARE on screen -- as the record of what has been
+      // written, which is the three-section summary above the form -- and
+      // that is right. What must not happen is their appearing in an
+      // EDITABLE box on the subject's screen, which the absent 'Your
+      // assessment *' label above says. Asserted both ways round because
+      // the first draft of this test assumed the wrong one.
+      expect(find.text('Needs to delegate more.'), findsOneWidget);
+      expect(
+          find.widgetWithText(TextField, 'Your assessment *'), findsNothing);
+
+      // Not waiting, so no explanation of why there is nothing to do.
+      expect(find.textContaining('This is the record of a conversation'),
+          findsNothing);
+      expect(find.textContaining('null'), findsNothing);
     });
 
     // The `whoIsAwayProvider` override this test used to carry was DEAD
@@ -3563,6 +3642,17 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    // The "Read it" button runs a REAL parser -- `MiaResultParser.parse` is
+    // pure, so no fake is needed -- and it has two outcomes that say
+    // opposite things. Neither was asserted, nor that a parsed row reaches
+    // the boxes, nor the save rule, which is the whole point of the
+    // screen: the number is the credential, and a row with a name and no
+    // number would put a green "checked on" stamp beside nothing anybody
+    // can look up again.
+    //
+    // `kinds: [MiaKind.member]` here, so the Member/Firm segmented button
+    // is NOT drawn -- `if (widget.kinds.length > 1)` -- which is itself
+    // worth asserting: an employee cannot be a firm.
     testWidgets('verifying somebody against the MIA register',
         (tester) async {
       await opened(
@@ -3577,6 +3667,68 @@ void main() {
         ),
       );
       expect(tester.takeException(), isNull);
+
+      expect(find.text('Check Aisyah Rahman on MIA'), findsOneWidget);
+      expect(find.byKey(const ValueKey('mia-open-register')), findsOneWidget);
+      // One kind offered, so no choice is drawn.
+      expect(find.byKey(const ValueKey('mia-kind')), findsNothing);
+      // Nothing read yet, so no note either way.
+      expect(find.byKey(const ValueKey('mia-parse-note')), findsNothing);
+
+      String boxed(String key) => tester
+          .widget<TextField>(find.byKey(ValueKey('mia-field-$key')))
+          .controller!
+          .text;
+
+      // RUBBISH FIRST, because a parser that refuses is the branch
+      // somebody works around by typing a number into the wrong box, and
+      // the note has to say what to do instead.
+      await tester.enterText(
+          find.byKey(const ValueKey('mia-paste')), 'who even knows');
+      await tester.tap(find.byKey(const ValueKey('mia-read')));
+      await tester.pumpAndSettle();
+
+      expect(
+          find.text('That does not look like a row from the register. Copy '
+              'the whole row, or fill the boxes in by hand.'),
+          findsOneWidget);
+      expect(boxed('member_no'), '');
+
+      // A real row, tab separated, which is what copying out of MIA's
+      // server-rendered table actually gives.
+      await tester.enterText(
+        find.byKey(const ValueKey('mia-paste')),
+        '12345\tAisyah binti Rahman\tca\tSelangor\tYes',
+      );
+      await tester.tap(find.byKey(const ValueKey('mia-read')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Read as a member. Check it, then save.'),
+          findsOneWidget);
+      expect(boxed('member_no'), '12345');
+      expect(boxed('member_name'), 'Aisyah binti Rahman');
+      // Upper-cased by the parser, because the register is inconsistent
+      // about it and the column is not.
+      expect(boxed('member_type'), 'CA');
+      expect(boxed('state'), 'Selangor');
+      expect(
+          tester
+              .widget<DropdownButtonFormField<bool?>>(
+                  find.byKey(const ValueKey('mia-pc-holder')))
+              .initialValue,
+          isTrue);
+      expect(find.textContaining('null'), findsNothing);
+
+      // THE SAVE RULE. Clear the number and the dialog refuses in words
+      // that say why rather than "required".
+      await tester.enterText(
+          find.byKey(const ValueKey('mia-field-member_no')), '');
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(
+          find.text('A member number is what the register is searched by. '
+              'Fill it in.'),
+          findsOneWidget);
     });
 
     // One unread row with no `severity` and no `kind`, so the tile drew its

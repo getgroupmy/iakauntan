@@ -93,8 +93,16 @@ class Fed:
         return self
 
     def run(self):
+        """Just the problems. `problems` returns (problems, summary) now --
+        the summary used to be PRINTED from in here as a `::notice::`, so
+        every fed case below emitted a workflow command and CI turned each
+        one into an annotation."""
         return thin.problems(files=self.paths,
-                             ceiling_file=self.ceiling_file)
+                             ceiling_file=self.ceiling_file)[0]
+
+    def summary(self):
+        return thin.problems(files=self.paths,
+                             ceiling_file=self.ceiling_file)[1]
 
     def __exit__(self, *exc):
         (thin.TESTS, thin.LEAST_FILES, thin.LEAST_BODIES,
@@ -108,8 +116,9 @@ class Fed:
 class TheLiveRepository(unittest.TestCase):
 
     def test_it_passes_as_shipped(self):
-        out = thin.problems()
+        out, summary = thin.problems()
         self.assertEqual(out, [], said(out))
+        self.assertIn('test bodies check only that nothing threw', summary)
 
     def test_the_ceiling_file_exists_and_holds_a_number(self):
         self.assertIsNotNone(thin.ceiling_from(thin.CEILING_FILE))
@@ -125,6 +134,14 @@ class TheLiveRepository(unittest.TestCase):
             with self.subTest(key):
                 self.assertIn('.dart: ', key)
                 self.assertTrue(key.startswith('test/'), key)
+
+    def test_the_summary_is_returned_and_not_printed(self):
+        # A `::notice::` emitted from `problems` becomes an annotation for
+        # every fed case in this file. Run 2268 carried ten of them.
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            thin.problems()
+        self.assertEqual(out.getvalue(), '')
 
     def test_the_real_sweep_reads_the_whole_suite(self):
         _, bodies, files = thin.thin_bodies()

@@ -10595,23 +10595,74 @@ through `Fmt.dateTime` itself: the claim worth making is that the row is
 DRAWN for the entry with a `created_at` and not for the one without, and
 how it is formatted is `Fmt`'s own business.
 
+## 4 October, part five: the MIA paste parser, an appraisal, and a gate that annotated its own self-test
+
+### The annotation noise, which the change itself caused
+
+Run 2268 confirmed the three count lines become annotations --
+`6649 Dart tests ran (floor 6649)`, `11 of 6351 test bodies check only
+that nothing threw`, `call server tests that ran: 33 (floor: 33)` -- and
+also carried **ten of these**:
+
+    notice: 0 of 1 test bodies check only that nothing threw
+            (ceiling 0, 0 excused with a reason), over 1 files and 1 bodies.
+
+They are `check_thin_assertions_test.py`'s own fed cases. The summary was
+printed from inside `problems()`, so every passing fixture in the self-test
+emitted a workflow command and CI turned each into an annotation. GitHub
+caps annotations at ten per step and fifty per run, so self-test noise can
+crowd out the number the change was made to make readable.
+
+`problems()` returns `(problems, summary)` now and `main()` prints it, once.
+Pinned by an assertion that `problems()` writes NOTHING to stdout.
+
+### `verifying somebody against the MIA register`
+
+The one with the most in it, as expected. "Read it" runs
+`MiaResultParser.parse`, which is pure, so no fake was needed -- and it has
+two outcomes that say opposite things. The test now pastes rubbish first,
+because a parser that refuses is the branch somebody works around by typing
+a number into the wrong box and the note has to say what to do instead;
+then a real tab-separated row, which is what copying out of MIA's
+server-rendered table actually gives. It asserts that the row reaches four
+boxes with `member_type` upper-cased by the parser, that the practising
+certificate dropdown resolves to Yes, that the Member/Firm segmented button
+is NOT drawn when only one kind is offered, and the save rule -- the number
+is the credential, and a row with a name and no number would put a green
+"checked on" stamp beside nothing anybody can look up again.
+
+### `an appraisal under review`, and two wrong expectations it corrected
+
+A bare `Appraisal(id, status, employeeId)` leaves everything null, so the
+title read 'Appraisal' rather than a person and the form opened empty --
+which is the one state that cannot show what `initState` is for: the half
+already written is the starting point, so a reopened review is edited
+rather than retyped. Fed a full record with the MANAGER half filled in too,
+to prove `initState` switches on the ACTION rather than on what happens to
+be present.
+
+Two of my expectations were wrong and the code settled both:
+
+  * `selfRating` is a `num`, so the box is seeded '7.0' and not '7'. The
+    field takes decimals so it is consistent rather than wrong, but it is
+    what the person sees, so it is what the assertion says.
+  * the manager's words ARE on the subject's screen -- in the three-section
+    summary above the form, which is the record of what has been written
+    and is right. What must not happen is their appearing in an EDITABLE
+    box, which the absent 'Your assessment *' label says. Asserted both
+    ways round, because the first draft assumed the wrong one.
+
 ### What is left of this backlog
 
-**7 of the 34** still assert nothing but `expect(tester.takeException(),
-isNull)` — and 20 across the whole of `app/test`, the other 13 being the
+**5 of the 34** still assert nothing but `expect(tester.takeException(),
+isNull)` — and 18 across the whole of `app/test`, the other 13 being the
 overflow tests above. By test name, in file order:
 
-  * `an appraisal under review`
   * `billing a matter`
   * `closing a deal`
   * `logging a chase on a debt`
-  * `verifying somebody against the MIA register`
   * `one time entry`
   * `and the figures a tax computation is built on`
-
-`verifying somebody against the MIA register` is the one with the most in
-it: "Read it" runs a real paste parser with two outcomes and neither is
-asserted.
 
 The method that is working, in order: read the RPC or repository query
 behind each provider FIRST — the fixture shapes are where the defects are —
