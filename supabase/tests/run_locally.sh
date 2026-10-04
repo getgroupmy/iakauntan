@@ -81,6 +81,33 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# A floor on assertions that ACTUALLY RAN, not on files that did not fail.
+#
+# The difference is the whole point. Every guard in this script so far
+# answers "was a file skipped" -- no files found, a file on disk and not
+# in `ci.yml`, a file in `ci.yml` and not on disk. None of them can see an
+# assertion that was never REACHED: a fixture that stops producing its row
+# leaves the check inside the guard unreached, the block ends, and the
+# file exits 0. 383 files still pass and the suite still says so.
+#
+# Every `pg_temp.check_*` helper raises `notice 'ok   ...'` on success, so
+# the number of those notices is the number of assertions that ran. A drop
+# with everything still green is the shape of a skipped assertion.
+#
+# WHAT THIS DOES NOT COUNT, and it is a real gap rather than a rounding
+# error: the suite has a SECOND assertion idiom -- a bare
+# `raise exception '<message>'` inside a `do $$ ... if not ... then` block,
+# which says nothing at all on success. Five files use only that form
+# (`tenant_foreign_keys.sql`, `matter_on_a_document.sql`, `scan_inbox.sql`,
+# `search_path.sql`, `attachment_content_hash.sql`) and are invisible to
+# this count. They are not invisible to the suite -- an exception still
+# fails the file -- but a SKIPPED assertion in one of them would not move
+# this number. Closing that would mean giving the bare form a success
+# notice too, which is a change to 383 files and a separate piece of work.
+#
+# Raise it when the number goes up. Lower it only on purpose, saying why.
+ASSERTION_FLOOR="${IAK_ASSERTION_FLOOR:-0}"
+
 PGDATA="${IAK_PGDATA:-/var/tmp/pgdata}"
 PGSOCK="${IAK_PGSOCK:-/var/tmp}"
 PGPORT="${IAK_PGPORT:-5599}"
@@ -300,7 +327,7 @@ main() {
   start_cluster
   if [ $keep -eq 0 ]; then bootstrap; migrate; else check_stamp; fi
 
-  local files failed=0 out
+  local files failed=0 out raw asserted=0 n
   if [ $# -gt 0 ]; then files="$*"; else files="$(ci_tests)"; fi
   # A run that finds no tests is not a run that passed. This printed
   # "all SQL assertions passed (0 files)" once, in green, and only the
@@ -352,12 +379,46 @@ main() {
     # `psql: error:` is psql itself refusing to start. A notice that
     # happens to contain the word would be a false failure, which is the
     # safe direction to be wrong in.
-    out=$($PSQL -q -v ON_ERROR_STOP=1 -f "$ROOT/$f" 2>&1 \
+    # Captured once rather than piped, for two reasons. The error grep
+    # needs it, and so does the assertion COUNT below -- and a pipe here
+    # would be the wrong shape anyway: this step runs under `bash -e`
+    # without `pipefail` in CI, where `psql ... | something` hands the
+    # shell the exit status of `something` and a failing assertion reads
+    # as a pass.
+    raw=$($PSQL -q -v ON_ERROR_STOP=1 -f "$ROOT/$f" 2>&1 || true)
+    out=$(printf '%s\n' "$raw" \
             | grep -E '^psql.*([Ee][Rr][Rr][Oo][Rr]):' | head -3 || true)
     if [ -n "$out" ]; then echo "FAIL  $f"; echo "$out"; failed=1; fi
+    # Every `pg_temp.check_*` helper says `ok   <label>` on success, so
+    # this counts assertions that ACTUALLY RAN rather than files that
+    # did not fail. See the floor above for why that is a different
+    # question.
+    n=$(printf '%s\n' "$raw" | grep -c 'NOTICE:  ok ' || true)
+    asserted=$((asserted + n))
   done
   if [ $failed -ne 0 ]; then return $failed; fi
-  echo "all SQL assertions passed ($(echo "$files" | wc -w) files)"
+  echo "all SQL assertions passed ($(echo "$files" | wc -w) files, "\
+"$asserted assertions executed)"
+
+  # The floor, and only on a full run -- a single file is meant to report
+  # its own small number.
+  if [ $# -eq 0 ]; then
+    if [ "$asserted" -lt "$ASSERTION_FLOOR" ]; then
+      echo "" >&2
+      echo "$asserted assertions ran and the floor is $ASSERTION_FLOOR." >&2
+      echo "  Fewer assertions RAN than last time, with every file still" >&2
+      echo "  passing. That is what a skipped assertion looks like: a" >&2
+      echo "  fixture that stopped producing its row leaves the check" >&2
+      echo "  inside the guard unreached, and the file exits 0." >&2
+      echo "  Find the file that got quieter, or lower the floor on" >&2
+      echo "  purpose and say why." >&2
+      return 1
+    fi
+    if [ "$asserted" -gt $((ASSERTION_FLOOR + 50)) ]; then
+      echo "  ($((asserted - ASSERTION_FLOOR)) above the floor -- raise" \
+           "ASSERTION_FLOOR in this script to hold the ground.)"
+    fi
+  fi
 
   # Only on a full run. Given explicit files, the caller is iterating on
   # one assertion and does not want five whole-repository scans.
