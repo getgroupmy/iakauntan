@@ -9556,3 +9556,88 @@ branch. It is the identical line that was written, hit and fixed in
 there about it did not stop it being written again in the next file. The
 rule worth carrying: **a path constant that a test repoints is not inside
 ROOT.** Two occurrences is a note; a third is a shared helper.
+
+## Two empty dumps compare clean, and that is the schema-drift check
+
+The most consequential check in `ci.yml` is the one that compares the
+hosted project's schema to the one these migrations build — the thing that
+caught migrations 0159 to 0173 having been typed into a console. It has a
+`--self-test` for its normaliser, a separate red path for "the dumps could
+not be read", `status=${PIPESTATUS[0]}` instead of a bare pipe, and both
+dumps uploaded as artifacts whatever the verdict. It is carefully built.
+
+And:
+
+    $ : > a.sql ; : > b.sql
+    $ python3 scripts/schema_drift.py a.sql b.sql
+    No drift: 0 statements, and the hosted project has every one of them.
+    $ echo $?
+    0
+
+**The number was in the sentence and nothing compared it** — the mistake
+this repository has written about more than any other, in the step where
+it costs the most. Two files holding nothing but the `SET` preamble do the
+same thing, because the normaliser strips that and both sides come out
+empty.
+
+It is a narrow hole and worth being precise about why. An empty dump on
+ONE side fails loudly: every statement becomes "missing from the hosted
+project" or "not in the migrations". What passes in silence is **both**
+sides being empty at once — which is exactly what a cause common to both
+looks like: a CLI flag renamed, a container that exits 0 having written
+nothing, an output format that moved. `continue-on-error` plus
+`outcome == 'success'` tests the command's exit status, not its output,
+and the `wc -l` two lines above is printed and read by nobody.
+
+### The floor, and where the number came from
+
+`LEAST_STATEMENTS = 2000`, checked on **both** dumps and **before**
+comparing — the order matters, so a thin dump is reported as a thin dump
+rather than as drift in every object in the database.
+
+Measured on a cluster built from these migrations:
+
+| dumped | statements after normalisation |
+|---|---|
+| `public` alone | 7,938 |
+| `public` and `app` | 8,773 |
+
+Floored at under a quarter of the smaller number, because which schemas
+the hosted dump covers is the CLI's business and not this file's. Raise it
+when a CI run has reported what it actually sees.
+
+Six new assertions inside `_self_test()`, driven through `main` over real
+temporary files, with both streams captured so the self-test's own verdict
+is still the last line: two empty dumps, two preamble-only dumps, a
+positive control that clears the **real** constant rather than a weakened
+copy, each side thin on its own, and real drift above the floor still
+reported as drift. Both mutants killed — floor set to 0, exit 1; the floor
+check deleted from `main`, exit 1.
+
+A detail worth keeping: `statements()` already refuses a TRUNCATED dump,
+and said so when a local `pg_dump 16` emitted `\restrict`/`\unrestrict`
+meta-commands it does not know. If the Supabase CLI's pinned `pg_dump`
+ever starts emitting those, this step goes red loudly rather than quietly.
+
+### And the completeness gate only knew one convention
+
+`check_self_tests_run.py` asserted that every `scripts/*_test.py` is run
+by CI. `schema_drift.py` carries its control behind `--self-test` instead,
+in the same file as the filter, because a normaliser that can drop
+everything needs its control beside it — and **nothing asserted that flag
+was ever passed**. The gate's name claims every self-test; it covered one
+of the two conventions. Both are checked now, both directions.
+
+The detector for it was wrong twice in five minutes, the same way each
+time. A regex over the file text matched:
+
+1. `check_self_tests_run_test.py`, where `argv[1] == "--self-test"` appears
+   as a **fixture**;
+2. then `check_self_tests_run.py` itself, where it appears as an
+   **example**, in the sentence explaining mistake 1.
+
+It reads the **abstract syntax tree** now — an `ast.Compare` with `Eq`
+against the constant — which prose cannot satisfy however it is worded.
+That is the whole reason to parse rather than grep, and the gate's own
+test pins it: a docstring, a comment and a string literal all naming the
+flag, none of them answering to it.

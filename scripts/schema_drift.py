@@ -119,6 +119,37 @@ _IGNORED = re.compile(
 )
 
 
+#: A floor under how many statements each dump must hold.
+#:
+#: Two EMPTY dumps compare clean. `schema_drift.py a b` over two empty
+#: files printed
+#:
+#:     No drift: 0 statements, and the hosted project has every one of
+#:     them.
+#:
+#: and exited 0 -- the number was in the sentence and nothing compared
+#: it, which is the mistake this repository has written about more than
+#: any other. So was a pair of dumps holding nothing but the `SET`
+#: preamble, because the normaliser strips that and both sides came out
+#: empty.
+#:
+#: It is a narrow hole and a consequential one. An empty dump on ONE side
+#: fails loudly -- every statement is then "missing from the hosted
+#: project" or "not in the migrations" -- so what passes in silence is
+#: both sides being empty at once, which is exactly what a cause common
+#: to both looks like: a CLI flag renamed, a container that exits 0
+#: having written nothing, an output format that moved. This is the step
+#: that stands between the repository and production schema drift, and it
+#: must not be able to say "no drift" about nothing.
+#:
+#: 2,000, against a measured 7,938 for `public` alone and 8,773 for
+#: `public` and `app` together, dumped from a cluster built from these
+#: migrations. Floored at under a quarter of the smaller number because
+#: the hosted dump's schema list is the CLI's business and not this
+#: file's; raise it when a CI run has reported what it actually sees.
+LEAST_STATEMENTS = 2000
+
+
 def statements(sql: str) -> list[str]:
     """The dump as a list of statements, newlines intact.
 
@@ -310,6 +341,72 @@ end $$;
     else:
         raise AssertionError("a truncated dump compared clean")
 
+    # The floor, driven through `main` over real files, because that is
+    # where it lives and a constant nobody reads is not a floor.
+    import contextlib
+    import io
+    import tempfile
+
+    def through_main(a: str, b: str) -> tuple[int, str]:
+        """(exit code, what it said). Both streams captured.
+
+        Captured rather than let through: a self-test that prints five
+        drift reports buries its own verdict, and the only line anybody
+        reads in CI is the last one. Captured rather than discarded,
+        because the assertions below are about what it SAYS as well as
+        what it returns -- the message is the remedy.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            pa = pathlib.Path(tmp) / "a.sql"
+            pb = pathlib.Path(tmp) / "b.sql"
+            pa.write_text(a)
+            pb.write_text(b)
+            out, err = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stdout(out), \
+                    contextlib.redirect_stderr(err):
+                code = main(["schema_drift.py", str(pa), str(pb)])
+            return code, out.getvalue() + err.getvalue()
+
+    # Two empty dumps used to print "No drift: 0 statements" and exit 0.
+    code, out = through_main("", "")
+    assert code == 1, "two empty dumps compared clean"
+    assert "a dump that did not happen" in out, out
+    assert "No drift" not in out.split("COMPARE CLEAN")[0], out
+
+    # And two dumps holding nothing but the preamble the normaliser
+    # strips, which is the realistic version of the same thing.
+    preamble = ("SET statement_timeout = 0;\n"
+                "SELECT pg_catalog.set_config('search_path', '', false);\n")
+    code, out = through_main(preamble, preamble)
+    assert code == 1, "two dumps of nothing but session furniture passed"
+    assert "0 statement(s)" in out, out
+
+    # The positive control, and it clears the REAL constant rather than a
+    # smaller one fed in: a floor proved against a weakened copy of
+    # itself is not proved.
+    enough = "".join("CREATE TABLE public.t%d (i integer);\n" % i
+                     for i in range(LEAST_STATEMENTS))
+    assert len(statements(enough)) >= LEAST_STATEMENTS
+    code, out = through_main(enough, enough)
+    assert code == 0, "two identical dumps above the floor did not pass"
+    assert "No drift" in out, out
+
+    # One side thin is reported as a thin dump, NOT as drift in every
+    # object in the database -- which is what checking the floor before
+    # comparing buys.
+    for a, b in ((enough, ""), ("", enough)):
+        code, out = through_main(a, b)
+        assert code == 1
+        assert "a dump that did not happen" in out, out
+        assert "SCHEMA DRIFT" not in out, out
+
+    # And real drift above the floor is still real drift.
+    code, out = through_main(
+        enough + "CREATE TABLE public.extra (i integer);\n", enough)
+    assert code == 1
+    assert "SCHEMA DRIFT" in out, out
+    assert "public.extra" in out, out
+
     print("schema_drift self-test passed")
 
 
@@ -323,9 +420,33 @@ def main(argv: list[str]) -> int:
 
     local = pathlib.Path(argv[1]).read_text()
     hosted = pathlib.Path(argv[2]).read_text()
+
+    # BEFORE comparing, and the order is the point: a dump that holds
+    # nothing is not a schema that agrees with anything, and the message
+    # has to name that rather than a drift report pointing at every
+    # object in the database.
+    counts = {argv[1]: len(statements(local)),
+              argv[2]: len(statements(hosted))}
+    thin = {name: n for name, n in counts.items() if n < LEAST_STATEMENTS}
+    if thin:
+        for name, n in sorted(thin.items()):
+            print(f"{name} holds {n} statement(s) after normalisation, and "
+                  f"the floor is {LEAST_STATEMENTS}.", file=sys.stderr)
+        print(file=sys.stderr)
+        print("A dump this short is a dump that did not happen. Two empty "
+              "dumps COMPARE CLEAN -- `No drift: 0 statements, and the "
+              "hosted project has every one of them` -- so this is "
+              "checked before anything is compared. Look at what "
+              "`supabase db dump` wrote, not at the schemas.",
+              file=sys.stderr)
+        print(f"(For scale: {sorted(counts.values())[-1]} on the other "
+              f"side, and a dump of this project's `public` schema alone "
+              f"measured 7,938.)", file=sys.stderr)
+        return 1
+
     only_local, only_hosted, cosmetic = compare(local, hosted)
 
-    total = len(statements(local))
+    total = counts[argv[1]]
     note = ""
     if cosmetic:
         # Worth saying out loud rather than hiding: these are objects the
