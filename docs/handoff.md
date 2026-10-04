@@ -10151,3 +10151,33 @@ And the mutant was nearly misread. The first attempt used `sed` on
 and the test passed — a mutant that was never applied reading exactly like
 a mutant that survived. The second attempt asserted the occurrence count
 dropped from 2 to 1 before running anything.
+
+### The one number this guard waits on is now an annotation
+
+`migration list: N row(s) parsed, M pending, F migration file(s) on disk`
+sits at step ~70 of the SQL job, and the dump step after it prints a
+hundred-odd lines of Docker image layers. Reading that line out of the log
+means a 200-line tail; three attempts at 22, 58, 118 and 148 lines all
+landed in the image pull or later and never reached it.
+
+So it is a `::notice::` now, which becomes an **annotation** —
+`repos/{owner}/{repo}/check-runs/{id}/annotations` returns it in one small
+response. That is the only reason the number is printed at all: a later
+commit floors `rows` from it, and a number nobody can read is a number
+nobody will floor.
+
+The guard was re-proved after the change: 820 rows with none pending
+exits 0 and prints the notice, and 820 rows all reading pending still
+exits 1.
+
+#### And the dump timing, twice
+
+| run | local | hosted |
+|---|---|---|
+| 2257 | 0m40.6s | **6m05.9s** |
+| 2258 | 0m32.0s | **5m03.9s** |
+
+Both dumps are ~124,500 lines. So the hosted half varies between about five
+and six minutes against the first-ever measurement of 2m40s, which is what
+the raise from eight minutes to fifteen was for. Five of fifteen is
+comfortable; six of eight was not.

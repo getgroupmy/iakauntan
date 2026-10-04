@@ -2037,8 +2037,16 @@ jobs:
           files="$(ls supabase/migrations/*.sql 2>/dev/null | wc -l \
                    | tr -d ' ')"
           pend_n="$(printf '%s' "$pending" | wc -w | tr -d ' ')"
-          echo "migration list: $rows row(s) parsed, $pend_n pending," \
-               "$files migration file(s) on disk"
+          # `::notice::` and not a bare echo. This line sits at step ~70 of
+          # a job whose dump step prints a hundred lines of image layers
+          # after it, so reading it out of the log costs a 200-line tail.
+          # A notice becomes an ANNOTATION, which
+          # `repos/{owner}/{repo}/check-runs/{id}/annotations` returns in
+          # one small response -- and that is the only reason this number
+          # is printed at all: a later commit floors `rows` from it, and a
+          # number nobody can read is a number nobody will floor.
+          echo "::notice::migration list: $rows row(s) parsed," \
+               "$pend_n pending, $files migration file(s) on disk"
 
           # The one direction of this parse that fails SILENTLY AND FOR
           # EVER. `ready=false` skips the drift comparison and the build
