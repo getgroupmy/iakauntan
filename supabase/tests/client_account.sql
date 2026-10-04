@@ -300,4 +300,113 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- 0740: client money has ONE door, and these assertions are the door
+--
+-- Everything above goes through the functions, and passes whether or not
+-- `authenticated` can also write the table directly. It could, and the
+-- shipped client did: `Repo.recordClientTransaction` inserted the trust
+-- row itself and then called `post_client_transaction`, which skipped
+-- `app.can_post` — the insert policy asked only for `app.can_write`, so a
+-- member who may not post could leave an UNPOSTED row on a client's
+-- ledger — and skipped the rule that the amount is positive and its sign
+-- follows the type.
+--
+-- It did NOT risk an overdraw, and that is worth stating because the
+-- first draft of this block claimed it did. Re-granting the door and
+-- re-running showed the direct insert refused by
+-- `app.assert_client_funds`, the deferred constraint trigger asserted at
+-- length above: the cardinal rule lives on the TABLE and holds whichever
+-- door a write comes through.
+--
+-- So these run as `authenticated`, not as the superuser the rest of this
+-- file runs as. Under a superuser a revoked grant is invisible and every
+-- one of them would pass for the wrong reason.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_owner uuid := pg_temp.test_user(); v_c uuid; v_m uuid;
+  v_bank uuid; v_txn uuid; v_n integer; v_msg text; v_took boolean;
+begin
+  v_org := pg_temp.test_org('Guaman Satu Pintu', array['legal']);
+  insert into public.org_modules (org_id, module_code, is_enabled, enabled_at)
+  values (v_org, 'legal', true, now())
+  on conflict (org_id, module_code) do update set is_enabled = true;
+  perform public.create_fiscal_year(v_org,
+    date_trunc('year', pg_temp.today())::date);
+  perform pg_temp.sign_in_as(v_owner);
+  perform public.setup_legal_module(v_org);
+  select b.id into v_bank from public.bank_accounts b
+   where b.org_id = v_org and b.is_client_account;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C1', 'Puan Aminah', 'customer') returning id into v_c;
+  insert into public.matters
+    (org_id, matter_no, name, client_id, responsible_solicitor, fee_earner)
+  values (v_org, 'M-1', 'Pindah milik', v_c, v_owner, v_owner)
+  returning id into v_m;
+
+  -- The sanctioned door still opens, which the revoke must not have shut.
+  v_txn := public.receive_client_money(v_m, 5000, pg_temp.today(),
+                                       'Deposit', 'CHQ-1', null);
+  perform pg_temp.check_true('the function still records client money',
+    v_txn is not null);
+  perform pg_temp.check_eq('and it is posted',
+    (select count(*)::integer from public.client_account_transactions t
+      where t.id = v_txn and t.gl_entry_id is not null), 1);
+
+  -- And the direct door is shut. As `authenticated`, which is what a
+  -- signed-in client really is.
+  begin
+    set local role authenticated;
+
+    -- Reading must still work: the matter screen and the client-account
+    -- ledger both read this table.
+    select count(*)::integer into v_n
+      from public.client_account_transactions t where t.org_id = v_org;
+    perform pg_temp.check_eq('a client may still READ the ledger', v_n, 1);
+
+    v_took := true;
+    begin
+      insert into public.client_account_transactions
+        (org_id, matter_id, transaction_no, transaction_date,
+         transaction_type, bank_account_id, amount)
+      values (v_org, v_m, 'CT-BYPASS', pg_temp.today(), 'payment',
+              v_bank, -999999);
+    exception when insufficient_privilege then
+      v_took := false;
+      get stacked diagnostics v_msg = message_text;
+    end;
+    perform pg_temp.check_true(
+      'but may NOT insert a trust movement directly', not v_took);
+    perform pg_temp.check_true('and the refusal is about the table',
+      v_msg like '%client_account_transactions%');
+
+    v_took := true;
+    begin
+      update public.client_account_transactions set amount = 1
+       where org_id = v_org;
+    exception when insufficient_privilege then v_took := false;
+    end;
+    perform pg_temp.check_true('nor amend one', not v_took);
+
+    v_took := true;
+    begin
+      delete from public.client_account_transactions where org_id = v_org;
+    exception when insufficient_privilege then v_took := false;
+    end;
+    perform pg_temp.check_true('nor delete one', not v_took);
+  end;
+  reset role;
+
+  -- Nothing the three attempts did survived them.
+  perform pg_temp.check_eq('the ledger still holds exactly the one receipt',
+    (select count(*)::integer from public.client_account_transactions t
+      where t.org_id = v_org), 1);
+  perform pg_temp.check_eq('with the amount the function gave it',
+    (select amount from public.client_account_transactions t
+      where t.org_id = v_org), 5000);
+
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

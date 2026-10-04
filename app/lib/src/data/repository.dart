@@ -7293,6 +7293,39 @@ extension RepoExtras on Repo {
 
   /// Records a client-money movement and posts it. `amount` is signed:
   /// positive is money received into the client account.
+  ///
+  /// 0740. This used to INSERT the trust row itself — picking the matter,
+  /// the type and the signed amount, looking the client bank account up
+  /// client-side, then calling `post_client_transaction`. It was a
+  /// hand-rolled copy of `receive_client_money` and
+  /// `pay_from_client_account` **minus every guard they exist for**:
+  ///
+  ///   * both demand `app.can_post`, saying "Insufficient privileges to
+  ///     move client money". The table's insert policy asked only for
+  ///     `app.can_write`, so a member who may write but not post could
+  ///     record a movement — and `post_client_transaction` would then
+  ///     refuse it, leaving an UNPOSTED trust row: money shown against a
+  ///     client and absent from the accounts.
+  ///   * both refuse a non-positive amount and decide the sign from the
+  ///     type; this passed a signed amount straight through, so a
+  ///     `receipt` could carry a negative one.
+  ///   * both mint `transaction_no` in the same statement as the insert.
+  ///     This took two round trips, which is a gap on a retry.
+  ///
+  /// NOT on that list: overdrawing a client. `app.assert_client_funds` is
+  /// a deferred constraint trigger on the table and refuses it whichever
+  /// door the write comes through — *"Client money held for one matter
+  /// cannot fund another."* That was measured by re-granting the door and
+  /// watching the insert fail. `_available` in
+  /// `matter_detail_screen.dart` is a courtesy to the person typing, not
+  /// the rule.
+  ///
+  /// `0549` took the transfer option off this very dropdown for writing
+  /// one leg. Same class of defect, one door down.
+  ///
+  /// The three types the dialog offers map exactly onto the two
+  /// functions, so nothing is lost by going through them, and the
+  /// grant on the table is gone in `0740` so this path cannot come back.
   Future<void> recordClientTransaction({
     required String matterId,
     required String transactionType,
@@ -7303,38 +7336,49 @@ extension RepoExtras on Repo {
     String? reference,
     String? paymentModeCode,
   }) async {
-    final bank = await client
-        .from('bank_accounts')
-        .select('id')
-        .eq('org_id', orgId)
-        .eq('is_client_account', true)
-        .maybeSingle();
-
-    if (bank == null) {
-      throw Exception(
-        'No client account configured. Open Settings and run the legal setup first.',
+    // The functions take a POSITIVE amount and decide the sign
+    // themselves; the dialog hands us the ledger's signed convention.
+    final magnitude = amount.abs();
+    if (transactionType == 'receipt') {
+      await callRpc(
+        'receive_client_money',
+        params: {
+          'p_matter': matterId,
+          'p_amount': magnitude,
+          'p_date': Fmt.iso(date),
+          'p_description': description,
+          'p_reference': reference,
+          'p_payment_mode': paymentModeCode,
+        },
       );
+      return;
     }
-
-    final row = await client
-        .from('client_account_transactions')
-        .insert({
-          'org_id': orgId,
-          'matter_id': matterId,
-          'transaction_no': await nextDocumentNumber('client_txn'),
-          'transaction_date': Fmt.iso(date),
-          'transaction_type': transactionType,
-          'bank_account_id': bank['id'],
-          'amount': amount,
-          'description': description,
-          'payee': payee,
-          'reference': reference,
-          'payment_mode_code': paymentModeCode,
-        })
-        .select()
-        .single();
-
-    await callRpc('post_client_transaction', params: {'p_id': row['id']});
+    if (transactionType == 'payment' || transactionType == 'refund') {
+      await callRpc(
+        'pay_from_client_account',
+        params: {
+          'p_matter': matterId,
+          'p_amount': magnitude,
+          'p_payee': payee,
+          'p_date': Fmt.iso(date),
+          'p_description': description,
+          'p_reference': reference,
+          'p_payment_mode': paymentModeCode,
+          'p_refund': transactionType == 'refund',
+        },
+      );
+      return;
+    }
+    // Deliberately not a silent fallback to a direct insert. The other
+    // three enum values — transfer_in, transfer_out, transfer_to_office —
+    // are made by `transfer_between_matters` and
+    // `settle_from_client_account`, each of which moves BOTH legs, and
+    // writing one of them from here is what 0549 had to undo.
+    throw ArgumentError(
+      'Client money of type "$transactionType" is not recorded here: '
+      'a transfer moves two legs and belongs to transferBetweenMatters '
+      'or the receive-payment flow.',
+    );
   }
 
   /// Moves client money from one of a client's matters to another.

@@ -117,13 +117,13 @@ finish without printing.
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
-| Head at time of writing | `0739`, which takes **thirty-nine date defaults off the session's clock** — every report, four money writes, the exchange rate and the nightly jobs were a day out for eight hours of every Malaysian day, and six of the thirty-nine were reachable from the shipped client. Found by running the swept suite under `PGTZ='Etc/GMT+12'`, not by reading. Before it `5bfc3141` put the whole TEST suite on the product's clock (940 sites, both pins to zero), and before that `0733`–`0738` took the write-idempotency census from 137 to 0 |
+| Head at time of writing | `0740`, which shuts the direct door onto a solicitor's **client account ledger** — the shipped client was inserting trust rows itself, skipping `app.can_post` and the sign rule, and `authenticated` is now SELECT-only there. It also **withdraws a claim**: the overdraw risk I first attributed to that door does not exist, because `app.assert_client_funds` is a deferred constraint trigger on the table and holds whichever door a write comes through — found by mutating the new assertions. Before it `0739` (39 date defaults off the session clock), `5bfc3141` (the test suite onto the product's clock) and `0733`–`0738` (the write-idempotency census, 137 → 0) |
 | CI | **green through run 2220 (`f8123068`, `0739`)**; 2219 (`5bfc3141`, the test-suite clock sweep) and 2220 both ran "Apply the migrations" rather than skipping. Earlier, green through run 2217 (`3890007e`, `0738`); 2204 to 2217 are all green except **2213**, which is worth remembering: `846bd339` changed one markdown file and turned the deploy branch red, because `idempotency.sql` carried a UTC-minus-KL date subtraction that goes wrong for eight hours a day and 16:10 UTC was inside them — a red run whose cause was in neither the commit nor any migration. 2215 applied `0737`, 2217 applied `0738`. Run **2213 FAILED** and is worth remembering: `846bd339` changed one markdown file and turned the branch red, because `idempotency.sql` carried a UTC-minus-KL date subtraction that goes wrong for eight hours a day and 16:10 UTC was inside them — a red run whose cause was in neither the commit nor any migration. 2204 to 2212 are all green — 2204 (`685a3156`), 2205, 2206 (**`0733` applied**), 2207, 2208, 2209, 2210 (**`0734` applied**), 2211 (**`0735` applied**) and 2212 (**`0736` applied**; its top-level status flipped `in_progress` back to `queued` at 15:44 while the three deploy jobs waited for runners, and `gh api .../jobs` is the cheap way to see that is not a failure). 2194 to 2204 are all green, and `0732` landed in run 2201 (`9e42ebf1`); and "Apply the migrations" RAN rather than skipping in 2194, 2197, 2199 and 2201. Run 2200 needed a SECOND ATTEMPT: `npx wrangler deploy` failed with "A fetch request failed, likely due to a connectivity issue" reaching Cloudflare on a docs-only commit, and `rerun_failed_jobs` was green — an infrastructure flake, worth one re-run and not two. **The run listings are worse than this file used to say, and on 2 October they were briefly useless:** no run for `fdb0301f` appeared in any status filter for fifty minutes; the completed listing's newest entry went BACKWARDS from 2198 to 2196 between two checks; and a listing filtered by `event: push` with no status returned run 2004 from 21 SEPTEMBER. Run 2199 had in fact finished at 13:00:52, one minute before the listing showed 2196 — so **an empty or stale listing is evidence about nothing, in either direction.** What works: `actions_get get_workflow_run` on a known id, `get_job_logs` with `failed_only: true, return_content: false` for a cheap failure count, `mcp__github__get_commit` to prove a push arrived, and `git rev-parse origin/<branch>`. Also: a run's top-level status can flip from `in_progress` BACK to `queued` while later jobs wait for runners, and its job count grows from 8 to 12 as they register, neither of which is a failure; and **a green run does NOT prove a migration landed**, because the apply and deploy jobs SKIP when a newer commit is already at the branch tip. Check the database. Earlier history: 2183–2185 were three red runs of mine in a row on `0727`, each a different fault; 2146 applied `0721`; 2097–2100 were `ghcr.io` refusing anonymous pulls, which is why the images come from `public.ecr.aws` |
-| Migrations | **`0739` is the highest, and `0733` through `0739` are ALL live and VERIFIED** — `schema_migrations` holds 0730 through 0739. For `0739` the figure that matters is a ZERO: no function in `public` or `app` defaults a date argument to `CURRENT_DATE` any more, 44 default to `app.today()`, and all six that the shipped client can reach with no date — `report_ar_aging`, `report_ap_aging`, `report_asset_movements`, `report_stock_card`, `run_recurring_documents_for`, `run_recurring_journals_for` — are on the product's clock. `utc_is_not_today.sql` asserts the same zero, so a regression fails in CI rather than being noticed one morning. For `0733`–`0738`: 36 keyed overloads live, the census figure exactly. `0729` through `0732` are all applied live and VERIFIED against production too — not inferred from a green run. For `0732`: `schema_migrations` has it; `upsert_pos_tender_type` and `delete_pos_tender_type` both exist with execute granted to `authenticated` and **not** to `anon`; `app.tender_type_settlement_account`'s live body skips the `on_account` and `loyalty` kinds; and all 13 `pos_tender_types` rows have an account with none on the heading. The bank accounts pointing at the 1120 heading are down from twelve to **one** — YUSOF ZAIN & CO's CIMB, the one real decision left. The query to repeat: `select 1 from supabase_migrations.schema_migrations where version like '0NNN%'`, then `pg_get_functiondef` on whatever it restated — with `ilike`, not `like`, and `grep -i`, not `grep` |
+| Migrations | **`0740` is the highest. `0733` through `0739` are live and VERIFIED; `0740` is on the branch and NOT yet verified in production** — it revokes insert, update and delete on `client_account_transactions` from `authenticated` and DROPS its three write policies — with RLS on and no policy, the command is denied whatever a future grant says, which `table_grants.sql` insisted on after refusing a first draft that merely tightened them. Nothing dropped, no data moved, SELECT untouched. The figures to check in production: `authenticated` holds **only SELECT** on that table, and all five writers (`receive_client_money`, `pay_from_client_account`, `settle_from_client_account`, `transfer_between_matters`, `post_client_transaction`) are still SECURITY DEFINER. `0729` through `0732` are all applied live and VERIFIED against production too — not inferred from a green run. For `0732`: `schema_migrations` has it; `upsert_pos_tender_type` and `delete_pos_tender_type` both exist with execute granted to `authenticated` and **not** to `anon`; `app.tender_type_settlement_account`'s live body skips the `on_account` and `loyalty` kinds; and all 13 `pos_tender_types` rows have an account with none on the heading. The bank accounts pointing at the 1120 heading are down from twelve to **one** — YUSOF ZAIN & CO's CIMB, the one real decision left. The query to repeat: `select 1 from supabase_migrations.schema_migrations where version like '0NNN%'`, then `pg_get_functiondef` on whatever it restated — with `ilike`, not `like`, and `grep -i`, not `grep` |
 | Live database | **level with the branch.** Edge functions deployed on the same run |
 | Mobile | **iOS build 5 in TestFlight; Android version code 14** from the `android-release` run that printed `Firebase project: iakauntan-2026`. Both from this repository's own workflows. The Android push client is built and **not yet proved on a handset** — that is the user's to do, below |
 | Gates | **383 SQL assertion files (**206 assertions in `idempotency.sql` alone**, up from 103 this morning), 61 Python gates (+27 gate self-tests, one of which is 28 assertions of its own and one 10), 6,634 Flutter tests** (one skipped, pre-existing), 40 deno test invocations. Both build backlogs are **ZERO**: every screen and every dialog opener is built by a test. **And all of it except the Android and iOS builds runs IN THIS CONTAINER** — see the section below, which corrects what this file and `CLAUDE.md` used to say |
-| API description | 842 functions, 367 tables, version `0739`. Regenerated with `python3 scripts/generate_api_description.py "$DB"` against the local cluster and committed; CI's `--check` fails if it drifts. `0739` changed only argument defaults, so the diff is two lines — which is itself the evidence that 39 bodies were restated verbatim |
+| API description | 842 functions, 367 tables, version `0740`. Regenerated with `python3 scripts/generate_api_description.py "$DB"` against the local cluster and committed; CI's `--check` fails if it drifts. `0740` changed only grants and policies, so the diff is three lines |
 | In-app calling | **ON**, 30 September. The mediasoup SFU and coturn run on a Synology DS224+ behind a public address; `CALL_SFU_URL` and the rest are set. Proved the only way that counts — two devices on different networks, one on mobile data. `docs/call-deployment.md` is the runbook and its last section lists the four failures that were actually hit |
 | Rows put in production BY HAND | One set, 29 Sept 2026: the App Review demo company `iakauntan-demo` and the two accounts that ring each other — see `docs/apple-voip-review.md`. It is NOT in any migration and nothing in the schema records it, which is why it is named here. `0724` is the function that wires such a pair; the accounts themselves were made in the console, because an account cannot be created from SQL |
 
@@ -217,6 +217,128 @@ its own section: whether a given platform advertises the rotation
 extension at all. The engine now says which case a real call is in.
 
 **Do not start task #11, the MIA headless scraper.**
+
+## `0740`: client money has one door — and the claim I had to withdraw
+
+**The other door into the database.** The write-idempotency census covered
+340 writes reachable by RPC; it said in writing that writes reached
+"through `client.from(...)` rather than an RPC" were never in it. There
+are **172 of those, over 83 tables**, and 37 of the tables are also
+written by a real (non-demo) `SECURITY DEFINER` function — so for those
+37 the client has a sanctioned path and goes round it.
+
+The worst was `client_account_transactions`, a solicitor's **client
+account** ledger. `authenticated` held INSERT, UPDATE and DELETE, the
+insert policy asked only for `app.can_write`, and
+`Repo.recordClientTransaction` used that door: it inserted the trust row
+itself — matter, type, signed amount, `transaction_no` minted in a
+separate round trip — and then called `post_client_transaction`. A
+hand-rolled copy of `receive_client_money` and `pay_from_client_account`
+with their guards left out.
+
+### The claim I withdrew, and how
+
+The first draft of this section, the migration header and the Dart comment
+all said the direct insert risked **overdrawing a client** — spending one
+client's money on another, which the Legal Profession (Accounts) Rules
+prohibit outright. That was the headline, and **it was wrong.**
+
+It was caught by mutating the new assertions: re-grant the door, re-run
+the file, watch them fail. They did not fail. The direct insert of
+−999,999 was refused by **`app.assert_client_funds`, a DEFERRABLE
+INITIALLY DEFERRED CONSTRAINT TRIGGER on the table**, with the sentence
+*"Client money held for one matter cannot fund another."*
+
+**The cardinal rule is enforced on the TABLE, at commit, whichever door a
+write comes through.** Somebody built that properly and it held. The
+mutation was run to prove my assertions bite; what it actually proved was
+that my reasoning about the defect was overstated. That is the whole
+argument for mutating in one paragraph — and it is why the claim is
+corrected in all three places rather than quietly softened in one.
+
+### What the open door really cost
+
+| | |
+| --- | --- |
+| **`app.can_post`** | Both functions demand it — *"Insufficient privileges to move client money."* The insert policy asked only `app.can_write`. A member who may write but not post could record a movement, and `post_client_transaction` would then refuse it — **leaving an unposted trust row**: money shown against a client and absent from the accounts. Found at an audit, not at a desk |
+| **sign and type** | Both functions refuse a non-positive amount and derive the sign from the type. The direct insert passed a *signed* amount through, so a `receipt` could carry a negative one. `assert_client_funds` checks the matter's TOTAL, not whether a row's sign agrees with its type |
+| **`transaction_no`** | Minted client-side in one round trip and inserted in another: a gap on a retry, a duplicate on a race |
+
+A privilege gap and a sign gap, not a hole in the trust arithmetic.
+Narrower than it first looked and still worth closing.
+
+`0549` had been here one door down: it took the transfer option off that
+same dropdown because it wrote ONE leg, so the client ledger fell and the
+office account was never debited.
+
+### What changed
+
+`recordClientTransaction` now calls `receive_client_money` for a receipt
+and `pay_from_client_account` for a payment or refund — the three types
+the dialog offers map exactly onto the two functions, so nothing is lost.
+It throws rather than falling back for the other three enum values
+(`transfer_in`, `transfer_out`, `transfer_to_office`), because those move
+two legs and belong to `transfer_between_matters` or the receive-payment
+flow; writing one leg from here is what `0549` had to undo.
+
+`0740` revokes INSERT, UPDATE and DELETE from `authenticated`, leaving
+SELECT — both screens read the table. The five writers are SECURITY
+DEFINER, so they are unaffected and are now the only door.
+
+### And a second correction, from the suite this time
+
+The first draft KEPT the three write policies and tightened them to
+`app.can_post`, on the reasoning that if a later migration ever restored
+the grant the rule under it should already be right. `table_grants.sql`
+refused it:
+
+    FAIL a policy without the privilege to reach it:
+      client_account_transactions (DELETE), (INSERT), (UPDATE)
+
+That is `0661` and `0662`'s lesson — a policy nobody can reach is
+decoration — and the assertion exists for the opposite mistake. It is
+right here too, and the draft's reasoning was simply wrong: **row level
+security with no policy at all is how this schema says no access**, which
+`table_grants.sql` states three lines below the assertion that caught me.
+With RLS on and no permissive policy for a command, Postgres denies it for
+every non-owner role, grant or no grant.
+
+So the three policies are DROPPED. That is not the weaker choice — it is
+the one that still holds if somebody restores the grant. Two defences
+rather than one defence and an ornament.
+
+**Two corrections in one migration, both from measurement rather than
+review**: the overdraw claim withdrawn by mutating the new assertions, and
+the policy design overturned by an assertion written years earlier for a
+different reason. Neither would have been caught by reading the diff.
+
+Nine assertions, **run as `authenticated` rather than as the superuser the
+rest of `client_account.sql` runs as** — under a superuser a revoked grant
+is invisible and every one would pass for the wrong reason.
+
+### The 36 that are left, measured and not yet decided
+
+The other both-door tables are mostly plain reference data where RLS is
+the right guard — `branches`, `warehouses`, `item_categories`, `todos`.
+The ones worth looking at next, with the function they go round:
+
+| | |
+| --- | --- |
+| `expenses`, `expense_claims` | `post_expense`, `post_expense_claim` |
+| `stock_adjustments` | `post_stock_adjustment` |
+| `fs_filings` | `fs_freeze`, `fs_lodge` |
+| `tax_estimates`, `tax_computations` | `revise_tax_estimate`, `open_tax_computation` |
+| `exchange_rates` | `ingest_exchange_rates` |
+| `recurring_journals` | `run_recurring_journals_for` |
+| `org_members`, `organizations` | `invite_member`, `hand_company_over`, and the platform functions |
+
+**This is a measured list and not a verdict.** A direct write is not a
+defect by itself: it is one where the function enforces something the
+policies do not, which is a question per table and was answered here by
+reading both and then mutating. There is no ratchet on it yet, and
+inventing one before the 36 have been read would pin a number nobody has
+justified — which is the mistake `utc_is_not_today.sql` made in the other
+direction.
 
 ## `0739`: thirty-nine defaults on the wrong clock, and a premise that was wrong
 
