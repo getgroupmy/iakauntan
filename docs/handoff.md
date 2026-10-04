@@ -9691,3 +9691,97 @@ fixtures of the table:
 The third is the one that matters: before this, that case set
 `ready=false` and the most consequential check in the workflow stopped
 running with nothing going red.
+
+## 49 of 52 dialog tests assert only that nothing threw, and the first one read was wrong
+
+`dialogs_build_batch2_test.dart` was written to clear the second half of
+`check_dialogs_built.py`'s backlog — task #60, "Open all 50 backlogged
+dialogs in tests". It opens 52 dialogs, and **49 of those tests assert
+nothing but `expect(tester.takeException(), isNull)`**.
+
+The comparison that makes the number mean something:
+`dialogs_build_batch_test.dart`, the first half, has **0 of 154** in that
+state. Every test in it pins text, measures a rect or taps something. I
+had assumed the opposite before measuring — that the older file would be
+the thin one — and the crude proxy I started with (`const []` counts) said
+so. It was wrong both times.
+
+### What the first one examined was actually doing
+
+"and the project budgets dialog" fed `projectBudgetProvider`:
+
+```dart
+{'id': 'p1', 'name': long, 'budget_hours': 100, 'actual_hours': 42,
+ 'budget_amount': 25000.0, 'actual_amount': 10500.0}
+```
+
+`report_project_budget` (migration 0389) returns:
+
+```
+project_id, code, name, customer, start_date, end_date, is_active,
+budget_amount, cost_to_date, revenue_to_date, unbilled_time, variance,
+percent_spent
+```
+
+So the fixture sent **`id` where the function returns `project_id`**, **no
+`code` at all**, and invented **`budget_hours`, `actual_hours`,
+`actual_amount`** — three columns that function does not return. The
+dialog therefore drew:
+
+* a `ListTile` keyed `budget-null`, from `ValueKey('budget-${row['project_id']}')`;
+* a title reading `null · Perniagaan Sinar Teknologi Maju Bersatu Sdn Bhd`,
+  from `'${row['code']} · ${row['name']}'`;
+* `BudgetState.none` — because `percent_spent` was absent — so **no
+  progress bar, no overrun sentence and no unbilled-time warning**, which
+  is three of the four things the row exists to show;
+* and a Close button whose `row['project_id'] as String` would throw
+  `Null is not a subtype of String` the moment anybody tapped it. Nothing
+  taps it.
+
+It passed. That is widget-tests.md **trap 11's second half** — "the column
+names the repository actually selects; read the method, do not guess from
+the screen" — found in the tree rather than in the doc.
+
+### Fixed, and the fix is proved
+
+The fixture now carries the shape 0389 returns, and the test pins what
+only a correct shape can draw: the key `budget-p1`, the title
+`PRJ-0007 · <long name>`, `RM 28,400.00 spent · RM 3,400.00 over budget`,
+a `LinearProgressIndicator`, and `RM 4,200.00 recorded and not invoiced`.
+A second test covers the other side of `is_active` — `closed`, `Reopen`,
+and the `close` band at 86.25 per cent saying what is **left** rather than
+what is over.
+
+Both mutants killed: putting `'id'` back finds **0 widgets with key
+`budget-p1`**; removing `'code'` fails the title. The old test passed with
+*both* of those wrong at once.
+
+One assertion of mine was wrong on the first run and the widget was right:
+`find.text('Close')` finds two, because the dialog's own action bar has a
+Close as well as the row. Pinned through the button's key with
+`find.descendant` instead.
+
+### And the attendance month, same file, same shape
+
+`attendanceProvider` was fed `const <AttendanceRecord>[]`, which draws an
+`EmptyState` — one icon and two centred sentences — so the row builder and
+the totals line, which are the whole dialog, never ran. Fed a long
+employee name, a day with lateness *and* overtime *and* a correction, and
+a second day, it now pins the flags, the whole totals line
+(`2 days · 95 min late · 3.08h overtime`) and the hours (`18.82h`).
+
+Nothing overflowed at 412 wide, and that is worth stating as a measured
+result rather than an absence: the totals line is an `Expanded(Text)`
+beside an unflexed `Text`, the same arrangement that overflowed by 46
+pixels in `credit_ledger_dialog.dart`. It holds here because the unflexed
+side is one short label.
+
+A note on the two fixed widths in `project_budget.dart` —
+`SizedBox(width: 680)` in the budgets dialog and `480` in the editor,
+inside an `AlertDialog`. They are **not** a phone defect: `SizedBox`
+enforces its own constraints against the parent's, and Material's dialog
+caps the content at the screen minus its inset padding, so 680 resolves to
+about 332 on a 412 phone. The content then has 332 px to work in, which is
+where an unflexed Row child would show — not the width itself.
+
+**47 to go.** The list is in the commit that fixed these two.

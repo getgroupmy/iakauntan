@@ -304,26 +304,121 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('and the project budgets dialog', (tester) async {
+    // The fixture here was a shape the database never sends, and the
+    // dialog drew `null · <name>` under a key of `budget-null` without
+    // complaining. `report_project_budget` (0389) returns
+    //
+    //     project_id, code, name, customer, start_date, end_date,
+    //     is_active, budget_amount, cost_to_date, revenue_to_date,
+    //     unbilled_time, variance, percent_spent
+    //
+    // and the fixture sent `id` for `project_id`, no `code` at all, and
+    // invented `budget_hours`, `actual_hours` and `actual_amount` --
+    // three columns that function does not return. With `percent_spent`
+    // absent, `budgetStateOf` fell to `BudgetState.none`, so the dialog
+    // drew its least interesting branch: no progress bar, no overrun, no
+    // unbilled-time warning. The single `expect(takeException(), isNull)`
+    // noticed none of it.
+    //
+    // That is widget-tests.md trap 11's second half -- "the column names
+    // the repository actually selects; read the method, do not guess from
+    // the screen" -- caught in the tree rather than in the doc.
+    testWidgets('and the project budgets dialog, in the shape 0389 returns',
+        (tester) async {
       await opened(
         tester,
         [
           repoProvider.overrideWithValue(repo),
           canPostProvider.overrideWithValue(true),
-          projectBudgetProvider.overrideWith((_, __) async => const [
+          projectBudgetProvider.overrideWith((_, __) async => [
                 {
-                  'id': 'p1',
+                  'project_id': 'p1',
+                  'code': 'PRJ-0007',
                   'name': long,
-                  'budget_hours': 100,
-                  'actual_hours': 42,
+                  'customer': 'Kedai Runcit Aman',
+                  'start_date': '2026-01-01',
+                  'end_date': '2026-12-31',
+                  'is_active': true,
                   'budget_amount': 25000.0,
-                  'actual_amount': 10500.0,
+                  'cost_to_date': 28400.0,
+                  'revenue_to_date': 18000.0,
+                  'unbilled_time': 4200.0,
+                  'variance': -3400.0,
+                  'percent_spent': 113.6,
                 },
               ]),
         ],
         (context) => showProjectBudgets(context),
       );
       expect(tester.takeException(), isNull);
+
+      // The key is built from `project_id`. Under the old fixture this
+      // was `budget-null`, which is the whole finding in one line.
+      expect(find.byKey(const ValueKey('budget-p1')), findsOneWidget);
+
+      // The title is `code · name`, so a missing `code` reads as "null ·".
+      expect(find.text('PRJ-0007 · $long'), findsOneWidget);
+
+      // Over budget, which needs `percent_spent` and `variance` -- the
+      // branch the old fixture could not reach at all.
+      expect(find.text('RM 28,400.00 spent · RM 3,400.00 over budget'),
+          findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(find.text('RM 4,200.00 recorded and not invoiced'),
+          findsOneWidget);
+
+      // `is_active` decides which button is offered, and the button's own
+      // key carries `project_id` as well.
+      expect(find.byKey(const ValueKey('budget-close-p1')), findsOneWidget);
+      // By the button's own key: the dialog's action bar has a `Close`
+      // too, so `find.text('Close')` finds two and a bare findsOneWidget
+      // fails on the wrong one of them.
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('budget-close-p1')),
+          matching: find.text('Close'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('closed'), findsNothing);
+    });
+
+    // The other side of `is_active`, which the old fixture never set.
+    testWidgets('and a closed job says so and offers Reopen',
+        (tester) async {
+      await opened(
+        tester,
+        [
+          repoProvider.overrideWithValue(repo),
+          canPostProvider.overrideWithValue(true),
+          projectBudgetProvider.overrideWith((_, __) async => [
+                {
+                  'project_id': 'p2',
+                  'code': 'PRJ-0008',
+                  'name': 'Bayu Digital, incorporation',
+                  'is_active': false,
+                  'budget_amount': 8000.0,
+                  'cost_to_date': 6900.0,
+                  'variance': 1100.0,
+                  'percent_spent': 86.25,
+                },
+              ]),
+        ],
+        (context) => showProjectBudgets(context),
+      );
+      expect(tester.takeException(), isNull);
+      expect(find.text('closed'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('budget-close-p2')),
+          matching: find.text('Reopen'),
+        ),
+        findsOneWidget,
+      );
+      // 86.25 per cent is `close`, not `within` and not `over`: the
+      // sentence says what is left rather than what is over.
+      expect(find.text('RM 6,900.00 spent · RM 1,100.00 left'),
+          findsOneWidget);
     });
 
     testWidgets('and the project editor', (tester) async {
@@ -573,6 +668,77 @@ void main() {
         ],
         (context) => showAttendanceMonth(context),
       );
+      expect(tester.takeException(), isNull);
+    });
+
+    // Trap 11, on the test directly above it. An empty list draws an
+    // `EmptyState` -- one icon and two centred sentences -- so the row
+    // builder and the totals line, which are the whole dialog, never ran.
+    // `expect(takeException(), isNull)` over an EmptyState is a claim
+    // about nothing.
+    //
+    // Fed: a long employee name, because with no employeeId the title
+    // carries one; a day with lateness, overtime AND a correction, which
+    // is the longest subtitle the flags can build; and a month's worth of
+    // totals, because the totals line is an `Expanded(Text)` beside an
+    // unflexed `Text` and that is the arrangement that overflowed in
+    // `credit_ledger_dialog.dart`.
+    testWidgets('and a month of attendance with something in it',
+        (tester) async {
+      final day = DateTime(2026, 3, 17);
+      await opened(
+        tester,
+        [
+          repoProvider.overrideWithValue(repo),
+          canManageHrProvider.overrideWithValue(true),
+          attendanceProvider.overrideWith((_, __) async => <AttendanceRecord>[
+                AttendanceRecord(
+                  id: 'a1',
+                  workDate: day,
+                  status: 'present',
+                  employeeName: long,
+                  clockIn: DateTime(2026, 3, 17, 9, 35),
+                  clockOut: DateTime(2026, 3, 17, 19, 20),
+                  workedMinutes: 585,
+                  lateMinutes: 95,
+                  otMinutes: 185,
+                  isAdjusted: true,
+                ),
+                AttendanceRecord(
+                  id: 'a2',
+                  workDate: day.add(const Duration(days: 1)),
+                  status: 'present',
+                  employeeName: long,
+                  clockIn: DateTime(2026, 3, 18, 8, 58),
+                  clockOut: DateTime(2026, 3, 18, 18, 2),
+                  workedMinutes: 544,
+                ),
+              ]),
+        ],
+        (context) => showAttendanceMonth(context),
+      );
+      expect(tester.takeException(), isNull);
+
+      // The row builder ran, which the empty case cannot show.
+      expect(find.textContaining(long), findsWidgets);
+      expect(find.textContaining('corrected'), findsOneWidget);
+      // `95 min late` is on the row AND in the totals, which is the
+      // point of the next assertion rather than a surprise -- the first
+      // version of this asked for exactly one and found two.
+      expect(find.textContaining('95 min late'), findsNWidgets(2));
+
+      // The totals line, which does not exist in the empty state at all,
+      // pinned WHOLE rather than by two assertions either side of it.
+      expect(find.text('2 days · 95 min late · 3.08h overtime'),
+          findsOneWidget);
+      expect(find.text('18.82h'), findsOneWidget);
+
+      // And nothing overflowed at 412 wide with the longest subtitle the
+      // flags can build. That totals line is an `Expanded(Text)` beside
+      // an unflexed `Text`, which is the arrangement that overflowed by
+      // 46 pixels in `credit_ledger_dialog.dart` -- it holds here because
+      // the unflexed side is one short label and the `Expanded` takes the
+      // squeeze. Asserted rather than assumed.
       expect(tester.takeException(), isNull);
     });
   });
