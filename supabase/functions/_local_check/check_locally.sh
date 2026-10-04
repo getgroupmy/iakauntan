@@ -148,23 +148,55 @@ if [ "${#tests[@]}" -eq 0 ]; then
   exit 1
 fi
 
+# The floor, read from the file CI reads. `deno test` over a file that
+# defines NO tests prints "ok | 0 passed | 0 failed" and EXITS 0 --
+# verified on deno 2.9.6 -- so a `Deno.test` block that stopped
+# registering takes its assertions with it and every line below still
+# says `ok`. The count is what notices.
+#
+# An unreadable file leaves this EMPTY, which would make the comparison
+# vacuously true, so it is checked: "could not look" is not "looked and
+# found nothing".
+floor=$(grep -Ex "[0-9]+" supabase/functions/deno_test_floor || true)
+if ! printf '%s' "$floor" | grep -Exq '[0-9]+'; then
+  echo "supabase/functions/deno_test_floor holds no bare integer;" >&2
+  echo "refusing to run with no floor at all." >&2
+  exit 2
+fi
+
 echo
 failed=0
+ran=0
 for t in "${tests[@]}"; do
+  # Captured rather than piped: the count below needs the output, and a
+  # pipe would hand the shell the exit status of the right-hand side.
   # shellcheck disable=SC2086
-  if deno test --quiet $t >/dev/null 2>&1; then
-    printf 'ok   deno test%s\n' "$t"
+  raw=$(deno test --quiet $t 2>&1) && ok=1 || ok=0
+  n=$(printf '%s\n' "$raw" | grep -oE '[0-9]+ passed' | tail -1 \
+        | grep -oE '[0-9]+' || true)
+  ran=$((ran + ${n:-0}))
+  if [ "$ok" -eq 1 ]; then
+    printf 'ok   deno test%s (%s)\n' "$t" "${n:-0} passed"
   else
     printf 'FAIL deno test%s\n' "$t"
-    # shellcheck disable=SC2086
-    deno test --quiet $t 2>&1 | tail -12
+    printf '%s\n' "$raw" | tail -12
     failed=1
   fi
 done
 [ $failed -eq 0 ] || exit 1
 
+if [ "$ran" -lt "$floor" ]; then
+  echo >&2
+  echo "$ran edge test(s) ran and the floor is $floor." >&2
+  echo "Every line above can say ok while FEWER tests run: a Deno.test" >&2
+  echo "block that stopped registering takes its assertions with it and" >&2
+  echo "deno still exits 0. Find the block; do not lower the floor." >&2
+  exit 1
+fi
+
 echo
-echo "Checked locally, and the ${#tests[@]} deno tests CI runs passed too."
+echo "Checked locally, and the ${#tests[@]} deno tests CI runs passed too"
+echo "($ran tests ran, floor $floor)."
 echo "The supabase-js client was a stub -- see"
 echo "supabase/functions/_local_check/supabase_js_stub.ts. CI checks it"
 echo "against the real package and CI is the authority."

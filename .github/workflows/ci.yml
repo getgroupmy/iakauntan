@@ -2589,6 +2589,66 @@ jobs:
       # treating `www` as a company shows a sign-in page for a company
       # that does not exist; rewriting every `Location` breaks the OAuth
       # round trip and nothing else.
+
+      # Every file above runs as its own step with its own permission
+      # flags, and nothing counted a single test until this.
+      #
+      # `deno test` over a file that defines NO tests prints
+      # "ok | 0 passed | 0 failed" and EXITS 0. Verified on deno 2.9.6: a
+      # passing test exits 0, a failing one exits 1, and an empty file
+      # exits 0 as well. So a `Deno.test` block that stopped registering
+      # -- deleted, commented out, or inside a condition that is never
+      # true -- takes its assertions with it and every step above stays
+      # green. This is the hole the SQL suite had, and the floor is the
+      # same answer; see supabase/functions/deno_test_floor.
+      #
+      # One combined invocation, which costs about 16 seconds. It uses the
+      # UNION of the flags, so it is deliberately weaker on permissions
+      # than the steps above and says nothing about them: it counts, it
+      # does not replace. `scheduler_test.ts` running with no flags at all
+      # is a claim those steps make and this one cannot.
+      - name: Count the edge tests that ran
+        run: |
+          floor="$(grep -Ex '[0-9]+' supabase/functions/deno_test_floor || true)"
+          if ! printf '%s' "$floor" | grep -Exq '[0-9]+'; then
+            echo "::error::supabase/functions/deno_test_floor holds no bare" \
+                 "integer, so there is no floor to compare against." >&2
+            exit 1
+          fi
+
+          # Every file on a `deno test` line, in ANY directory and both
+          # extensions -- the same list check_locally.sh reads. Written
+          # `supabase/functions/[^ ]*_test\.ts` first, which silently
+          # dropped three: cloudflare/email-router/mime_test.js,
+          # cloudflare/workspace-proxy/route_test.ts and
+          # scripts/play_upload_test.ts. The floor would then have been a
+          # floor over a subset, which is the shape of mistake this whole
+          # file is full of comments about.
+          files="$(grep -oE 'deno test( +--[a-z-]+)* +[^ ]*_test\.(ts|js)' \
+                     .github/workflows/ci.yml \
+                     | awk '{print $NF}' | sort -u)"
+          # Captured, NOT piped: this runs under `bash -e` with no
+          # `pipefail`, so `deno test ... | tee` would hand the shell
+          # tee's status and a FAILING TEST WOULD READ AS A PASS.
+          out="$(deno test --allow-env --allow-read $files 2>&1)" || {
+            printf '%s\n' "$out"
+            echo "::error::the combined edge-test pass failed" >&2
+            exit 1
+          }
+          printf '%s\n' "$out" | tail -3
+
+          ran="$(printf '%s\n' "$out" \
+                   | grep -oE '[0-9]+ passed' | tail -1 | grep -oE '[0-9]+')"
+          ran="${ran:-0}"
+          echo "edge tests that ran: $ran (floor: $floor)"
+          if [ "$ran" -lt "$floor" ]; then
+            echo "::error::$ran edge test(s) ran and the floor is $floor." \
+                 "Every step above can be green while FEWER tests run: a" \
+                 "Deno.test block that stopped registering takes its" \
+                 "assertions with it and deno still exits 0. Find the" \
+                 "block; do not lower the floor to match it." >&2
+            exit 1
+          fi
       - run: deno check cloudflare/workspace-proxy/route_test.ts
       - run: deno test cloudflare/workspace-proxy/route_test.ts
 

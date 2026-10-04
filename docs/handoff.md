@@ -9055,3 +9055,95 @@ width coming from a loop over `[1400, 1000, 800, 700, 600, 412, 360]` —
 so they are tested at phone width and at 360. **A non-match meant a bad
 pattern, not an absence**, for the third time today, and the corrected
 count is two rather than four.
+
+
+## `deno test` exits 0 over a file with no tests, and nothing counted
+
+The morning's SQL work was: 383 files passing is a weaker claim than
+14,330 assertions holding. The same question of the edge functions had
+never been asked.
+
+**Verified on deno 2.9.6**, which is the deno `check_locally.sh` fetches
+from npm:
+
+| case | exit |
+|---|---|
+| a passing test | 0 |
+| a failing test | 1 |
+| **a file that defines NO tests** | **0**, printing `ok \| 0 passed \| 0 failed` |
+
+So a `Deno.test` block that stopped registering — deleted, commented
+out, or left inside a condition that is never true — takes its
+assertions with it and CI stays green. CI runs those files as **40
+separate steps**, and not one of them counted anything.
+
+(`--allow-none` is not a flag in deno 2.9; my first run passed it and
+all three cases exited 1 on the flag itself, which looked like evidence
+and was not.)
+
+### The floor
+
+`supabase/functions/deno_test_floor`, read by the new CI step **Count the
+edge tests that ran** and by `check_locally.sh`. **503**, measured.
+
+Proved five ways, by extracting the step out of `ci.yml` and running it:
+the real list exits 0 at 503; a floor above the count exits 1; a floor
+file with no integer exits 1; and — the case it exists for — **a
+`Deno.test` block guarded off with `if (false)` drops the count to 502
+and fails**, where all 40 per-file steps stay green.
+
+### 503, not 467, and that mattered
+
+The first version of the step globbed `supabase/functions/[^ ]*_test.ts`
+and reported 467. `check_locally.sh` reported 503 over the same suite.
+The difference is **three files outside `supabase/functions`** —
+`cloudflare/email-router/mime_test.js`,
+`cloudflare/workspace-proxy/route_test.ts`,
+`scripts/play_upload_test.ts` — one of them a `.js` file.
+
+A floor of 467 would have **passed, over a subset**, while reading as
+though it covered everything. Caught by the two runners disagreeing,
+which is the only reason I looked: one number from two places is a
+cross-check, and this is what it is for. The list now comes off the
+`deno test` command lines, as `check_locally.sh` always did, and the
+guarded-off-block proof above was re-run against a **cloudflare** file
+specifically — one of the three the first version dropped.
+
+### Four false positives in my own new assertions, all one family
+
+`check_assertion_floor.py` now covers this floor too. Getting its checks
+right took four corrections and every one was the same mistake:
+
+1. **"PIPES `deno test`"** matched the step's own COMMENT, which quotes
+   `deno test ... | tee` while explaining why not to.
+2. **"takes its file list from a narrow glob"** matched the comment that
+   explains the glob it replaced.
+3. After stripping comments, the pipe check matched the `grep -oE 'deno
+   test...'` PATTERN — piped to `awk`. A string that mentions the thing
+   is not the thing.
+4. Stripping single-quoted strings fixed that and **blinded the glob
+   check**, because the glob legitimately lives inside a quoted grep
+   pattern. The mutant putting the narrow glob back went unflagged.
+
+The fix is that the two checks get **different text**: comments stripped
+for both, quotes stripped only for the pipe check. **One "cleaned" string
+cannot answer two different questions** — which is the sharpest version
+of the day's lesson, and I arrived at it by making the mistake four times
+inside a gate written about it.
+
+10 new assertions, 33 in that file now, and the five step-level cases
+above each verified against a fed mutant.
+
+### Two clean negatives from the same sweep
+
+* **Every one of the 40 test files is genuinely invoked** on a `deno
+  test` command line — checked by parsing the YAML and stripping `#`
+  comments, since "named in ci.yml" includes being named in a comment.
+  There is already a step asserting every file on disk is named, and it
+  works.
+* **`ask/wire_test.ts` is not a test with no assertions.** It showed 0
+  under a grep for `assert*`/`.equals(`, and it has a hand-rolled four-line
+  `eq()` instead — deliberately, because `jsr:@std/assert` would make it
+  a file only CI can run, and `jsr.io` is unreachable from some machines
+  this gets worked on. My pattern did not know the idiom. Fifth time
+  today.

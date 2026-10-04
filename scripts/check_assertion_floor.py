@@ -43,6 +43,16 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 FLOOR_FILE = ROOT / "supabase" / "tests" / "assertion_floor"
 RUNNER = ROOT / "supabase" / "tests" / "run_locally.sh"
+
+#: The SECOND floor, on the same pattern and for the same reason.
+#: `deno test` over a file that defines no tests prints
+#: "ok | 0 passed | 0 failed" and exits 0, so a `Deno.test` block that
+#: stopped registering takes its assertions with it and all 40 of CI's
+#: per-file steps stay green.
+DENO_FLOOR_FILE = ROOT / "supabase" / "functions" / "deno_test_floor"
+DENO_RUNNER = (ROOT / "supabase" / "functions" / "_local_check"
+               / "check_locally.sh")
+DENO_STEP = "Count the edge tests that ran"
 WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 
 #: What psql prints for `raise notice 'ok   <label>'`, and therefore what
@@ -62,9 +72,9 @@ def floor_value(text: str) -> str | None:
     return found[0] if len(found) == 1 else None
 
 
-def ci_step(text: str) -> str:
-    """The body of the counting step, by name rather than by line number."""
-    at = text.find("- name: %s" % STEP)
+def ci_step(text: str, name: str = STEP) -> str:
+    """The body of a step, by name rather than by line number."""
+    at = text.find("- name: %s" % name)
     if at < 0:
         return ""
     nxt = text.find("\n      - name:", at + 1)
@@ -163,6 +173,99 @@ def problems(floor_text: str | None = None, runner: str | None = None,
             "nothing either runner counts is being printed. The count "
             "would read zero, which looks like a broken runner rather "
             "than a renamed notice.")
+
+    out += deno_problems()
+    return out
+
+
+def deno_problems(floor_text: str | None = None,
+                  runner: str | None = None,
+                  workflow: str | None = None) -> list[str]:
+    """The same questions of the edge-test floor.
+
+    Separate function, same shape, because the two floors fail the same
+    ways: a second copy of the number, a runner that hardcodes one, a
+    piped `deno test` whose status the shell throws away, and -- the one
+    this floor actually got wrong first -- a FILE LIST that covers less
+    than it claims.
+    """
+    out: list[str] = []
+    if floor_text is None and not DENO_FLOOR_FILE.exists():
+        return ["%s does not exist. It is where the edge-test number "
+                "lives." % DENO_FLOOR_FILE.relative_to(ROOT)]
+    floor_text = (DENO_FLOOR_FILE.read_text() if floor_text is None
+                  else floor_text)
+    value = floor_value(floor_text)
+    if value is None:
+        out.append(
+            "supabase/functions/deno_test_floor must hold exactly one bare "
+            "integer on a line of its own; both readers anchor on "
+            "`^[0-9]+$` and a malformed file reads as the EMPTY STRING.")
+    elif int(value) <= 0:
+        out.append("the edge-test floor is %s, which passes a suite where "
+                   "every test stopped registering." % value)
+
+    runner = DENO_RUNNER.read_text() if runner is None else runner
+    if "deno_test_floor" not in runner:
+        out.append(
+            "check_locally.sh does not read "
+            "supabase/functions/deno_test_floor. The number has one "
+            "definition or it drifts the first time it is raised.")
+
+    step = ci_step(WORKFLOW.read_text() if workflow is None else workflow,
+                   DENO_STEP)
+    # Comments stripped before the two checks below, and not for tidiness:
+    # that step's own comments QUOTE both things they forbid -- the
+    # `deno test ... | tee` it must not do and the
+    # `supabase/functions/...` glob it used to do -- while explaining
+    # them. The first version of these assertions matched the explanation
+    # and reported both as live faults. A gate that reads its subject's
+    # prose is the mistake this repository has made more often than any
+    # other, and it was made here while writing a gate about it.
+    code = re.sub(r"(?<!\$)#[^\n]*", "", step)
+    # And single-quoted strings, for the same reason one layer down: the
+    # step builds its file list with
+    #     grep -oE 'deno test( +--[a-z-]+)* +...' ci.yml | awk ...
+    # so the literal `deno test` sits inside a grep PATTERN that is
+    # piped to awk. The pipe check matched that and called it a piped
+    # `deno test`. Three false positives in these assertions, all the
+    # same family: a string that MENTIONS the thing is not the thing.
+    #
+    # But ONLY for the pipe check. The glob this gate forbids legitimately
+    # lives inside a quoted grep pattern, so blanking quotes blinds that
+    # one -- which it did, and the mutant putting the narrow glob back
+    # went unflagged until the two checks were given different text. One
+    # "cleaned" string cannot answer two different questions.
+    runnable = re.sub(r"'[^'\n]*'", "''", code)
+    if not step:
+        out.append(
+            'ci.yml has no step named "%s". This gate finds the counting '
+            "step by that name." % DENO_STEP)
+    else:
+        if "deno_test_floor" not in step:
+            out.append('"%s" does not read '
+                       "supabase/functions/deno_test_floor." % DENO_STEP)
+        if not re.search(r'"\$ran"\s+-lt\s+"\$floor"', step):
+            out.append('"%s" reads the floor but never compares the count '
+                       "against it." % DENO_STEP)
+        if re.search(r"deno test[^\n|]*\|(?!\|)", runnable):
+            out.append(
+                '"%s" PIPES `deno test`. Under `bash -e` with no '
+                "`pipefail` the shell takes the right-hand side's status "
+                "and a failing test reads as a pass." % DENO_STEP)
+        # The bug this floor shipped with for ten minutes: a list that
+        # covered 37 of 40 files, so the floor was a floor over a subset.
+        if "supabase/functions/[^ ]*_test" in code:
+            out.append(
+                '"%s" takes its file list from a '
+                "`supabase/functions/...` glob, which drops the three "
+                "test files outside that directory -- two under "
+                "cloudflare/ and one under scripts/, one of them a .js "
+                "file. The floor would then cover a SUBSET and pass. Read "
+                "the list off the `deno test` command lines, as "
+                "check_locally.sh does." % DENO_STEP)
+        if "deno test" not in runnable:
+            out.append('"%s" does not run `deno test`.' % DENO_STEP)
     return out
 
 

@@ -1,0 +1,42 @@
+# How many edge-function tests the suite is known to run.
+#
+# ONE definition, read by both runners: the "Count the edge tests that
+# ran" step in `.github/workflows/ci.yml` and
+# `supabase/functions/_local_check/check_locally.sh`.
+#
+# WHY IT EXISTS. `deno test` over a file that defines no tests prints
+#
+#     ok | 0 passed | 0 failed
+#
+# and exits 0. Verified on deno 2.9.6: a passing test exits 0, a failing
+# test exits 1, and a file with NOTHING IN IT exits 0 as well. So a
+# `Deno.test` block that stopped registering -- deleted, commented out,
+# or left inside a condition that is never true -- takes its assertions
+# with it and CI stays green. There are 37 test files run as 37 separate
+# steps, and until this file existed not one of them counted anything.
+#
+# This is the same hole the SQL suite had, and `supabase/tests/assertion_floor`
+# is the same answer to it. The difference is only in what gets counted:
+# there it is `NOTICE:  ok ` lines, here it is the `N passed` that deno
+# prints itself.
+#
+# WHAT THE NUMBER IS. The total `passed` over every test file ci.yml
+# runs, in one combined invocation. 467 today, which is also exactly the
+# number of `Deno.test(` blocks on disk -- so every block registers and
+# runs, and the two counts agreeing is itself worth knowing.
+#
+# HOW TO CHANGE IT. Raise it when the number goes up, which is ordinary:
+# a new test is a new count. Lower it only on purpose, in a commit that
+# says why. A DIP with every step still green is the thing to
+# investigate, not to paper over.
+#
+# WHAT THIS DOES NOT COVER. The 37 individual steps remain authoritative:
+# each runs its own file with its own permission flags, and the flags are
+# the point -- `scheduler_test.ts` is run with none at all, and a day
+# when it needs one is a day worth noticing. The counting pass uses the
+# UNION of the flags, so it is deliberately weaker on permissions and
+# says nothing about them. It counts; it does not replace.
+#
+# The bare integer below is the value. Anything else here is a comment;
+# both readers anchor on `^[0-9]+$`.
+503

@@ -175,5 +175,85 @@ class TheHelpersStillPrintIt(unittest.TestCase):
         self.assertIn("ok", OK_HELPERS)
 
 
+
+REAL_DENO_STEP = caf.ci_step(caf.WORKFLOW.read_text(), caf.DENO_STEP)
+
+
+def deno_said(problems):
+    return "\n".join(problems)
+
+
+class TheEdgeTestFloor(unittest.TestCase):
+    """The second floor, on the same pattern.
+
+    `deno test` over a file that defines no tests prints
+    "ok | 0 passed | 0 failed" and EXITS 0 -- verified on deno 2.9.6 --
+    so a `Deno.test` block that stopped registering takes its assertions
+    with it and all 40 of CI's per-file steps stay green.
+    """
+
+    def feed(self, step):
+        return caf.deno_problems(
+            workflow="      - name: %s\n        run: |\n%s" % (
+                caf.DENO_STEP,
+                "\n".join("          " + l for l in step.splitlines())))
+
+    def test_the_plumbing_is_sound_as_shipped(self):
+        self.assertEqual(caf.deno_problems(), [])
+
+    def test_a_piped_deno_test_is_flagged(self):
+        out = self.feed(REAL_DENO_STEP.replace(
+            'out="$(deno test --allow-env --allow-read $files 2>&1)" || {',
+            'deno test --allow-env --allow-read $files | tee /tmp/o || {'))
+        self.assertIn("PIPES", deno_said(out))
+
+    def test_the_steps_own_comments_are_not_read_as_faults(self):
+        """That step's comments QUOTE both things they forbid while
+        explaining them. The first version of these assertions matched
+        the explanation and reported two live faults that were prose."""
+        self.assertIn("| tee", REAL_DENO_STEP)
+        self.assertIn("supabase/functions/[^ ]*_test", REAL_DENO_STEP)
+        self.assertEqual(self.feed(REAL_DENO_STEP), [])
+
+    def test_a_grep_pattern_is_not_a_piped_command(self):
+        """The step's file list comes from a grep whose PATTERN contains
+        the words `deno test`, piped to awk. That is not a piped
+        `deno test`, and it was read as one."""
+        self.assertRegex(REAL_DENO_STEP, r"grep -oE 'deno test")
+        self.assertNotIn("PIPES", deno_said(self.feed(REAL_DENO_STEP)))
+
+    def test_a_narrow_file_list_is_flagged(self):
+        """The bug this floor shipped with for ten minutes: 37 of 40
+        files, so a floor over a subset that passes."""
+        out = self.feed(REAL_DENO_STEP.replace(
+            "grep -oE 'deno test( +--[a-z-]+)* +[^ ]*_test\\.(ts|js)' \\",
+            "grep -oE 'supabase/functions/[^ ]*_test\\.ts' \\"))
+        self.assertIn("SUBSET", deno_said(out))
+        self.assertIn("cloudflare", deno_said(out))
+
+    def test_a_step_that_only_prints_the_count_is_flagged(self):
+        out = self.feed(REAL_DENO_STEP.replace(
+            'if [ "$ran" -lt "$floor" ]; then', 'if false; then'))
+        self.assertIn("never compares", deno_said(out))
+
+    def test_both_runners_read_the_file(self):
+        self.assertIn("deno_test_floor", caf.DENO_RUNNER.read_text())
+        self.assertIn("deno_test_floor", REAL_DENO_STEP)
+
+    def test_a_malformed_floor_file_is_reported(self):
+        out = caf.deno_problems(floor_text="# prose only\n")
+        self.assertIn("exactly one bare integer", deno_said(out))
+
+    def test_a_zero_floor_is_reported(self):
+        out = caf.deno_problems(floor_text="0\n")
+        self.assertIn("every test stopped registering", deno_said(out))
+
+    def test_the_floor_is_the_measured_number(self):
+        """503 over 40 files, which is 467 in supabase/functions plus the
+        three outside it."""
+        self.assertEqual(caf.floor_value(caf.DENO_FLOOR_FILE.read_text()),
+                         "503")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
