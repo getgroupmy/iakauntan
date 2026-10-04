@@ -10906,3 +10906,138 @@ per-site rather than per-sweep: `mutate.py` works against a test file as its
 own source, which is how the two-factor QR claims and the intercompany tax
 pair were settled. That is the tool for the 585 `textContaining` +
 `findsOneWidget` sites if anybody wants the number.
+
+## 4 October, part ten: the absence half, and the third and fourth frames
+
+Parts eight and nine each tried to judge an assertion by its shape and
+concluded NO GATE. This part tried the other half of the pairing —
+`findsNothing` — because it looked structural in a way the others were not,
+and it is where the clearest refutation of the whole approach turned up.
+
+### The number the absence half is worth
+
+Tree-wide, across 182 files, there are **3,041 assertions on a literal
+string**:
+
+| matcher | sites | |
+|---|---|---|
+| `findsOneWidget` | 2,254 | 74.1% |
+| `findsNothing` | 658 | 21.6% |
+| `findsWidgets` | 87 | 2.9% |
+| `findsNWidgets` | 33 | 1.1% |
+| `findsOne` | 9 | 0.3% |
+
+That table matters for a reason beyond bookkeeping: **a `findsNothing`
+assertion cannot be killed by mutating the string it names.** Garble the
+string and it is still absent, so the mutant survives by construction and
+says nothing about the test. 658 sites — more than a fifth of every literal
+assertion in the repository — are outside the reach of the one method that
+does measure strength. Any future mutation sweep should exclude them
+explicitly rather than count them as survivors.
+
+### The third frame: a string the app can never say
+
+An absence check is real when the string is something the screen CAN show
+and this state does not show it. It is a check that cannot fail when the
+string is one nothing can ever produce — a typo, a renamed label, a
+reworded sentence. Then it passes on a working screen and a blank one
+alike.
+
+That looked structural: it does not ask whether an assertion is strong, it
+asks whether a string exists. Controls first this time, and they passed —
+a paired absence was not flagged, an invented literal was. It reported
+**55 of 658**.
+
+Three of those were read. All three were correct code, and the second
+reading destroyed the detector:
+
+- `contact_records_test.dart:134` expects `'Create a Customer record'`
+  absent. Two lines above, the same test asserts `'Create a Supplier
+  record'` and `'Create a Prospect record'` PRESENT. The Customer string
+  can only be rendered by the code path that renders those, so the role
+  word is the only thing varying and the assertion is exact. The detector
+  matched whole literals, so the siblings did not count.
+- `dialogs_build_batch2_test.dart:2501` expects `'stays an account you can
+  post to'` absent. `sub_account_dialog.dart:63` is
+
+  ```dart
+  return '${parent.code} ${parent.name} stays an account you can post '
+      'to, and keeps its own balance. The new account is filed under '
+      'it rather than replacing it.';
+  ```
+
+  The project wraps its prose to 72 columns, so **the sentence on screen
+  appears in no source line**. The detector called one of the strongest
+  assertions in that file vacuous.
+
+### The fourth frame: join the literals, which is what the compiler does
+
+That second failure has a mechanisable cause, so it was worth fixing: build
+the corpus by concatenating adjacent string literals the way Dart does, turn
+`$interpolation` into a wildcard, and count a needle renderable if any three
+consecutive words of it appear. Three controls, run first — the wrapped
+sentence must now read renderable, an invented sentence must still be
+caught, and a sentence lifted out of `app/lib` must pass. All three did.
+
+It reported **57 of 658**, and both prose false positives were gone. But the
+57 are almost all strings composed at runtime — `'RM 4,000.00'`, `'in 0
+days'`, `'1 attempts'`, `'Every 1 month'`, `'HTTP 0'`. A composed string is
+absent from every literal by definition, so for those the detector has no
+opinion at all and never did. The informative residue was the prose-shaped
+ones, and every single one was read:
+
+- `report_view_test.dart:82` — `'COST OF SALES'` absent, with
+  `'REVENUE'` asserted present on the line above. The report upper-cases
+  its section names, so the uppercase form exists in no literal and the
+  sibling is the only proof it is producible.
+- `shell_menu_search_test.dart:415` — `'BOOKS'` absent, and the test's own
+  comment says why: "`RailHeading` upper-cases them, so this is the heading
+  as it is actually drawn."
+- `collections_screen_test.dart:185` — `'promises'` absent beside `'1 broken
+  promise'` present. A singular/plural check; the plural is interpolated.
+- `ocr_keys_admin_test.dart:504` — `'On this device'` absent, and the
+  fixture ten lines above is `'name': 'On this device'`. The string comes
+  from the data, so of course it is not in `app/lib`.
+- `sst_card_test.dart:164` — `'Zero Rated'` absent, and the comment is
+  already the argument this whole exercise was making: "'Zero Rated' rather
+  than 'Not Applicable': NA appears in the card's own copy behind the
+  dialog, so it would match whether or not it was on the menu, and an
+  assertion that cannot fail is not one."
+- `tax_details_test.dart:193` — `'Sabah'` absent, under the comment "What
+  the fixture sent, and only that. A screen holding its own copy of LHDN's
+  codes would offer all sixteen here."
+
+### Why there is no fifth attempt
+
+The last one is decisive, and not by weight of numbers. In
+`tax_details_test.dart` **the string's absence from `app/lib` is the
+property under test.** The screen must not carry its own copy of LHDN's
+state codes; `'Sabah'` is missing from the source because that is the thing
+being asserted. So the detector's signal is inverted: its sharpest hit is
+the test it should least want to touch.
+
+Underneath that, the set of strings an app can render is not computable from
+its literals, and three separate mechanisms break it — each demonstrated
+above, and only the first fixable:
+
+1. adjacent-literal wrapping (fixed by joining, as the compiler does);
+2. interpolation and runtime formatting — `'in 0 days'` can never be a
+   literal;
+3. render-time transformation — `toUpperCase()` in `RailHeading` and in the
+   report headers.
+
+Past those, the only evidence that a string is producible is a
+*present*-assertion somewhere in the suite, and that is exactly what the
+test's author already knew when they wrote the pair. **A gate cannot be
+built out of the knowledge it was supposed to supply.**
+
+Four frames now, four NO GATE: `findsWidgets` on a loose fragment, the
+widget's own words, a string the app cannot say, and the same with a joined
+corpus. The three gates that do exist all measure something structural — a
+body with no assertion, a count of tests that ran, a parse that saw no
+rows — and none of them needs to know what a test is about.
+
+Both detectors are in the session scratchpad rather than `scripts/`,
+deliberately: a detector whose every hit is correct code is not a gate, and
+committing it would invite the next session to run it and start "fixing"
+sound tests.
