@@ -150,6 +150,10 @@ void main() {
   final repo = _FakeRepo();
 
   group('HR', () {
+    // Two cycles rather than one, because the row's only conditional is
+    // whether `Open` is pressable: `onPressed` is null on a completed
+    // cycle and a disabled button looks exactly like an enabled one to
+    // `findsOneWidget`.
     testWidgets('the appraisal cycles dialog opens', (tester) async {
       await opened(
         tester,
@@ -163,12 +167,51 @@ void main() {
                   periodEnd: DateTime.utc(2026, 12, 31),
                   status: 'open',
                   ratingScaleMax: 5,
+                  opened: 4,
+                ),
+                AppraisalCycle(
+                  id: 'c2',
+                  name: 'Mid-year 2025',
+                  periodStart: DateTime.utc(2025, 1, 1),
+                  periodEnd: DateTime.utc(2025, 6, 30),
+                  status: 'completed',
+                  ratingScaleMax: 4,
+                  selfReviewDue: DateTime.utc(2025, 7, 15),
+                  managerReviewDue: DateTime.utc(2025, 7, 31),
                 ),
               ]),
         ],
         (context) => showAppraisalCycles(context),
       );
       expect(tester.takeException(), isNull);
+
+      expect(find.text('Annual review $long'), findsOneWidget);
+      expect(find.text('Mid-year 2025'), findsOneWidget);
+      // The whole subtitle, joined, rather than a `textContaining` on one
+      // clause: the separator and the order are what a reader of the
+      // screen sees, and a clause that moves into the wrong position
+      // passes a containment check.
+      expect(find.text('01/01/2026 – 31/12/2026 · out of 5 · 4 open'),
+          findsOneWidget);
+      expect(
+          find.text('01/01/2025 – 30/06/2025 · out of 4 · '
+              'self by 15/07/2025 · manager by 31/07/2025 · 0 open'),
+          findsOneWidget);
+      // `StatusChip` draws through `Fmt.label`, so these are capitalised
+      // and the raw column value would NOT be found.
+      expect(find.text('Open'), findsNWidgets(3));
+      expect(find.text('Completed'), findsOneWidget);
+      expect(find.textContaining('null'), findsNothing);
+
+      // Three `Open`s above: one chip per cycle plus the live cycle's
+      // button. The completed cycle's button is the one that must not be
+      // pressable, and that is not something text can say.
+      final buttons = tester
+          .widgetList<TextButton>(find.byType(TextButton))
+          .where((b) => b.child is Text && (b.child as Text).data == 'Open')
+          .toList();
+      expect(buttons, hasLength(2));
+      expect(buttons.where((b) => b.onPressed == null), hasLength(1));
     });
 
     // `report_referral_hires` (0381) returns
@@ -222,21 +265,111 @@ void main() {
   });
 
   group('point of sale', () {
+    // `pos_modifier_groups_admin` (0251) returns
+    //
+    //     id, code, name, min_select, max_select, sort_order, is_active,
+    //     allows_free_text, option_count, item_count
+    //
+    // and `pos_modifier_options_admin` (0250)
+    //
+    //     id, code, name, price_delta, is_default, sort_order, is_active
+    //
+    // The fixture supplied four of the ten and three of the seven, and
+    // the three it left out of each are the ones the row BRANCHES on:
+    // `is_active` absent reads as `== true` false, so the live group drew
+    // itself retired and in the disabled colour; `option_count` and
+    // `item_count` absent made every group say "0 answers · asked about 0
+    // dishes"; and the answer row's subtitle is `'${option['code']}'`,
+    // which with no `code` is the four characters n-u-l-l on the screen.
+    //
+    // None of it threw, which is the whole point of this file's rewrite.
     testWidgets('the modifier groups dialog opens', (tester) async {
       await opened(
         tester,
         [
           repoProvider.overrideWithValue(repo),
           posModifierGroupsProvider.overrideWith((_) async => const [
-                {'id': 'g1', 'name': long, 'min_select': 0, 'max_select': 3},
+                {
+                  'id': 'g1',
+                  'code': 'MG-SPICE',
+                  'name': long,
+                  'min_select': 0,
+                  'max_select': 3,
+                  'sort_order': 1,
+                  'is_active': true,
+                  'allows_free_text': true,
+                  'option_count': 2,
+                  'item_count': 7,
+                },
+                // Retired, and the only one: `is_active` false is what
+                // puts "retired" at the front of the subtitle and takes
+                // the "Stop asking it" button away, and a fixture in
+                // which every row is live cannot tell either apart.
+                {
+                  'id': 'g2',
+                  'code': 'MG-ICE',
+                  'name': 'How much ice',
+                  'min_select': 1,
+                  'max_select': 1,
+                  'sort_order': 2,
+                  'is_active': false,
+                  'allows_free_text': false,
+                  'option_count': 1,
+                  'item_count': 1,
+                },
               ]),
           posModifierOptionsProvider.overrideWith((_, __) async => const [
-                {'id': 'o1', 'name': long, 'price_delta': 2.5},
+                {
+                  'id': 'o1',
+                  'code': 'MOD-HOT',
+                  'name': long,
+                  'price_delta': 2.5,
+                  'is_default': true,
+                  'sort_order': 1,
+                  'is_active': true,
+                },
+                // Nought, and off the menu: the trailing figure says "no
+                // charge" rather than RM 0.00, which is a sentence
+                // somebody wrote on purpose.
+                {
+                  'id': 'o2',
+                  'code': 'MOD-NOCUC',
+                  'name': 'No cucumber',
+                  'price_delta': 0,
+                  'is_default': false,
+                  'sort_order': 2,
+                  'is_active': false,
+                },
               ]),
         ],
         (context) => showModifierGroups(context),
       );
       expect(tester.takeException(), isNull);
+
+      expect(find.text(long), findsOneWidget);
+      expect(find.text('How much ice'), findsOneWidget);
+      expect(
+          find.text('up to 3 · 2 answers · or anything typed · '
+              'asked about 7 dishes'),
+          findsOneWidget);
+      expect(find.text('retired · choose one · 1 answer · asked about 1 dish'),
+          findsOneWidget);
+      // Singular and plural both, from the same join: "1 answer" above
+      // and "2 answers" on the live one.
+
+      // The answers live in the `ExpansionTile`'s children, which are
+      // offstage until it is opened -- so a test that never taps asserts
+      // nothing about them, and `find.text` would not see them either.
+      await tester.tap(find.text(long));
+      await tester.pumpAndSettle();
+
+      expect(find.text(long), findsNWidgets(2));
+      expect(find.text('MOD-HOT · ticked by default'), findsOneWidget);
+      expect(find.text('No cucumber'), findsOneWidget);
+      expect(find.text('MOD-NOCUC · off the menu'), findsOneWidget);
+      expect(find.text('+RM 2.50'), findsOneWidget);
+      expect(find.text('no charge'), findsOneWidget);
+      expect(find.textContaining('null'), findsNothing);
     });
 
     // The fixture fed this dialog ORDERS and the dialog reads a per-outlet
@@ -447,33 +580,199 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    // One code in the fixture could not reach anything this dialog does.
+    // `msicMatches` ranks in three buckets -- the code typed in full,
+    // then codes that START with what was typed, then descriptions and
+    // CATEGORIES that contain it -- and a one-row list with no `category`
+    // leaves the third bucket's second half unreachable, the ordering
+    // unobservable, and the empty state (where the only way to enter a
+    // real code the seed does not carry lives) never drawn.
+    //
+    // `ref_msic_codes` is selected as `code, description, category`; the
+    // fixture named two of the three.
     testWidgets('and the MSIC picker', (tester) async {
       await opened(
         tester,
         [
           repoProvider.overrideWithValue(repo),
           msicCodesProvider.overrideWith((_) async => const [
-                {'code': '62011', 'description': 'Computer programming'},
+                {
+                  'code': '10710',
+                  'description': 'Manufacture of bread and bakery products',
+                  'category': 'Manufacturing',
+                },
+                {
+                  'code': '62011',
+                  'description': 'Computer programming activities',
+                  'category': 'Information and communication',
+                },
+                {
+                  'code': '62019',
+                  'description': 'Other computer programming activities',
+                  'category': 'Information and communication',
+                },
               ]),
         ],
         (context) => pickMsicCode(context),
       );
       expect(tester.takeException(), isNull);
+
+      Iterable<String> titles() => tester
+          .widgetList<ListTile>(find.byType(ListTile))
+          .map((t) => (t.title as Text).data!);
+
+      // Nothing typed: the whole list, in the order the query gave it.
+      expect(titles(), [
+        'Manufacture of bread and bakery products',
+        'Computer programming activities',
+        'Other computer programming activities',
+      ]);
+      expect(find.text('10710 · Manufacturing'), findsOneWidget);
+      expect(find.text('62011 · Information and communication'),
+          findsOneWidget);
+
+      Future<void> type(String q) async {
+        await tester.enterText(find.byKey(const ValueKey('msic-search')), q);
+        await tester.pumpAndSettle();
+      }
+
+      // Bucket two: a code PREFIX, which is how somebody half-remembering
+      // it looks. Both 62s, neither 10710, and in code order.
+      await type('620');
+      expect(titles(), [
+        'Computer programming activities',
+        'Other computer programming activities',
+      ]);
+
+      // Bucket three, first half: a word in the description.
+      await type('bread');
+      expect(titles(), ['Manufacture of bread and bakery products']);
+
+      // Bucket three, SECOND half: a word in the category, which no
+      // fixture without a `category` column can reach at all.
+      await type('manufacturing');
+      expect(titles(), ['Manufacture of bread and bakery products']);
+
+      // Bucket one. '62011' is a prefix of nothing else here, so what
+      // this says is that the exact row is the only row.
+      //
+      // The ORDER of buckets two and three against each other is not
+      // asserted, and that is not an omission. Swapping them --
+      // `[...exact, ...byWords, ...byCode]` -- was run as a mutant and
+      // SURVIVED, because with real MSIC data no query can land in both:
+      // a code is digits and a description and a category are words, so a
+      // digit query only ever reaches the code buckets and a word query
+      // only ever the word one. The mutant is equivalent on this data,
+      // and a fixture built to kill it would have to carry a description
+      // with another row's code inside it, which `0011`'s seed does not
+      // and MSIC 2008 does not either.
+      await type('62011');
+      expect(titles(), ['Computer programming activities']);
+
+      // The empty state, and the escape hatch inside it: the seed is a
+      // subset of MSIC 2008, so a real five-digit code the list does not
+      // carry has to be enterable.
+      await type('99999');
+      expect(find.byType(ListTile), findsNothing);
+      expect(find.text('Nothing in the list matches that.'), findsOneWidget);
+      expect(find.text('Use 99999 anyway'), findsOneWidget);
+
+      // And it is offered ONLY for something shaped like a code --
+      // `msicLooksValid` is five digits, and four is not four-fifths of a
+      // code.
+      await type('9999');
+      expect(find.text('Nothing in the list matches that.'), findsOneWidget);
+      expect(find.byKey(const ValueKey('msic-use-typed')), findsNothing);
+
+      expect(find.textContaining('null'), findsNothing);
     });
   });
 
   group('timesheets', () {
+    // Two empty lists make two empty pickers, and an empty picker has no
+    // rows to be right or wrong about. The one rule in this sheet lives
+    // in the Person picker's comprehension --
+    //
+    //     for (final m in team.where((m) => m.userId != null))
+    //
+    // because only somebody who has ACCEPTED the invitation has a user to
+    // hang a rate on -- and a fixture with no team cannot tell whether
+    // that `where` is there.
     testWidgets('the billing rate sheet opens', (tester) async {
       await opened(
         tester,
         [
           repoProvider.overrideWithValue(repo),
-          projectsProvider.overrideWith((_) async => const []),
-          teamProvider.overrideWith((_) async => const []),
+          projectsProvider.overrideWith((_) async => const [
+                {'id': 'p1', 'name': 'Menara Hijau fit-out', 'code': 'MH-01'},
+              ]),
+          teamProvider.overrideWith((_) async => [
+                TeamMember(
+                  memberId: 'm1',
+                  userId: 'u1',
+                  role: 'staff',
+                  status: 'active',
+                  fullName: 'Nurul Huda binti Ismail',
+                  email: 'nurul@example.com',
+                ),
+                // Accepted, and with no name of their own yet: the label
+                // falls to the e-mail and the sublabel is suppressed, so
+                // the address is not printed twice.
+                TeamMember(
+                  memberId: 'm2',
+                  userId: 'u2',
+                  role: 'staff',
+                  status: 'active',
+                  email: 'ahmad@example.com',
+                ),
+                // INVITED, so no `user_id`: this one must not be
+                // offerable, and under the old empty fixture nothing
+                // said so.
+                TeamMember(
+                  memberId: 'm3',
+                  role: 'staff',
+                  status: 'invited',
+                  fullName: 'Siti Aminah',
+                  email: 'siti@example.com',
+                ),
+              ]),
         ],
         (context) => showBillingRateSheet(context),
       );
       expect(tester.takeException(), isNull);
+
+      // `Record` is dead until a date is chosen, and `_from` starts null
+      // -- so the sheet opens with its own save button disabled, which is
+      // deliberate and nothing checked.
+      expect(
+          tester
+              .widget<FilledButton>(find.byKey(const ValueKey('rate-save')))
+              .onPressed,
+          isNull);
+
+      await tester.tap(find.byKey(const ValueKey('rate-person')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nurul Huda binti Ismail'), findsOneWidget);
+      expect(find.text('nurul@example.com'), findsOneWidget);
+      // Name absent: the address is the label, and appears ONCE.
+      expect(find.text('ahmad@example.com'), findsOneWidget);
+      // And the invited one is not on offer at all.
+      expect(find.text('Siti Aminah'), findsNothing);
+
+      await tester.tap(find.text('Nurul Huda binti Ismail'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('rate-project')));
+      await tester.pumpAndSettle();
+
+      // `allowEmpty`, so the first row is the default rather than a blank:
+      // a rate that applies to every project is the common case and has
+      // to be sayable.
+      expect(find.text('Every project — the default rate'), findsOneWidget);
+      expect(find.text('Menara Hijau fit-out'), findsOneWidget);
+      expect(find.text('MH-01'), findsOneWidget);
+      expect(find.textContaining('null'), findsNothing);
     });
 
     // The fixture here was a shape the database never sends, and the
@@ -593,13 +892,75 @@ void main() {
           findsOneWidget);
     });
 
+    // Every rule in this editor is one function -- `projectBlockedBecause`
+    // -- whose answer is both the red line under the form and whether
+    // `Save` is pressable. Opening it and asserting nothing exercised the
+    // first of its four branches and read neither.
+    //
+    // Walked forward rather than asserted at one state, because the point
+    // of the thing is that it CHANGES: a form that says "Give it a code."
+    // for ever is as broken as one that never says it.
     testWidgets('and the project editor', (tester) async {
       await opened(
         tester,
-        [repoProvider.overrideWithValue(repo)],
+        [
+          repoProvider.overrideWithValue(repo),
+          contactsProvider.overrideWith((_, __) async => [
+                Contact(
+                  id: 'c1',
+                  code: 'C-0001',
+                  name: 'Puan Aminah',
+                  contactType: 'customer',
+                ),
+              ]),
+        ],
         (context) => showProjectEditor(context),
       );
       expect(tester.takeException(), isNull);
+
+      bool savable() => tester
+              .widget<FilledButton>(find.byKey(const ValueKey('project-save')))
+              .onPressed !=
+          null;
+
+      expect(find.text('New project'), findsOneWidget);
+      expect(find.text('Give it a code.'), findsOneWidget);
+      expect(savable(), isFalse);
+
+      await tester.enterText(
+          find.byKey(const ValueKey('project-code')), 'MH-01');
+      await tester.pump();
+      expect(find.text('Give it a name.'), findsOneWidget);
+      expect(savable(), isFalse);
+
+      await tester.enterText(
+          find.byKey(const ValueKey('project-name')), 'Menara Hijau fit-out');
+      await tester.pump();
+      expect(find.text('Give it a name.'), findsNothing);
+      expect(savable(), isTrue);
+
+      // A budget is optional, so this is the one branch that needs a
+      // value present AND wrong rather than absent.
+      await tester.enterText(
+          find.byKey(const ValueKey('project-budget')), '-100');
+      await tester.pump();
+      expect(find.text('A budget is not negative.'), findsOneWidget);
+      expect(savable(), isFalse);
+
+      await tester.enterText(
+          find.byKey(const ValueKey('project-budget')), '250000');
+      await tester.pump();
+      expect(savable(), isTrue);
+
+      // The customer is allowed to be nobody -- internal work is real --
+      // and the helper says what that costs rather than refusing it.
+      await tester.tap(find.byKey(const ValueKey('project-customer')));
+      await tester.pumpAndSettle();
+      expect(find.text('Puan Aminah'), findsOneWidget);
+      expect(find.text('C-0001'), findsOneWidget);
+      expect(find.text('Time on a project with no customer cannot be invoiced'),
+          findsOneWidget);
+      expect(find.textContaining('null'), findsNothing);
     });
   });
 
@@ -667,14 +1028,64 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    // Opened WITHOUT a `defaultTo` and without a `buildPdf`, which is the
+    // dialog's thinnest configuration -- and is also the one where the
+    // helper line has to tell somebody that the customer has no address
+    // on file, because there is nothing to fall back to. The old test
+    // asserted neither that nor the address check, which governs both
+    // send buttons at once.
     testWidgets('and the e-mail dialog', (tester) async {
       await opened(
         tester,
-        [repoProvider.overrideWithValue(repo)],
+        [
+          repoProvider.overrideWithValue(repo),
+          documentActivityProvider.overrideWith((_, __) async => const []),
+        ],
         (context) =>
             showEmailDialog(context, documentId: 'd1', docNo: 'INV-0001'),
       );
       expect(tester.takeException(), isNull);
+
+      // `OutlinedButton.icon` and `FilledButton.icon` are both
+      // `ButtonStyleButton`s, and `find.byType` matches the exact runtime
+      // type -- so the button is reached from its LABEL upwards.
+      bool sendable(String label) => tester
+              .widgetList<ButtonStyleButton>(find.ancestor(
+                of: find.text(label),
+                matching: find.byWidgetPredicate((w) => w is ButtonStyleButton),
+              ))
+              .first
+              .onPressed !=
+          null;
+
+      expect(find.text('Email INV-0001'), findsOneWidget);
+      expect(find.text('This customer has no address saved — type one'),
+          findsOneWidget);
+      // `buildPdf` is null here, so there is nothing to attach and the
+      // checkbox must not be offered at all.
+      expect(find.byType(CheckboxListTile), findsNothing);
+      expect(find.text('Nothing has been sent, shared or downloaded.'),
+          findsOneWidget);
+
+      // Empty is allowed -- it means "the address on the customer" -- so
+      // the buttons are live before anything is typed.
+      expect(sendable('Queue it'), isTrue);
+      expect(sendable('Send now'), isTrue);
+
+      await tester.enterText(find.byType(TextField).first, 'not-an-address');
+      await tester.pump();
+      expect(find.text('That does not look like an email address'),
+          findsOneWidget);
+      expect(sendable('Queue it'), isFalse);
+      expect(sendable('Send now'), isFalse);
+
+      await tester.enterText(
+          find.byType(TextField).first, 'accounts@example.com');
+      await tester.pump();
+      expect(find.text('That does not look like an email address'),
+          findsNothing);
+      expect(sendable('Send now'), isTrue);
+      expect(find.textContaining('null'), findsNothing);
     });
 
     // `token` and `views` were the fixture's words. `document_share_links`
@@ -814,10 +1225,18 @@ void main() {
       );
     });
 
+    // The same dialog as above with its other half supplied: a
+    // `buildPdf`, so the attach checkbox exists. Its SUBTITLE is the
+    // point -- it argues the case either way, and which argument is on
+    // the screen depends on the box, so a test that never ticks it reads
+    // one of two sentences and cannot tell it is the right one.
     testWidgets('and the receipt e-mail dialog', (tester) async {
       await opened(
         tester,
-        [repoProvider.overrideWithValue(repo)],
+        [
+          repoProvider.overrideWithValue(repo),
+          documentActivityProvider.overrideWith((_, __) async => const []),
+        ],
         (context) => showReceiptEmailDialog(
           context,
           receiptId: 'r1',
@@ -826,6 +1245,30 @@ void main() {
         ),
       );
       expect(tester.takeException(), isNull);
+
+      expect(find.text('Email RCPT-0001'), findsOneWidget);
+      expect(find.byType(CheckboxListTile), findsOneWidget);
+      expect(find.text('Attach the receipt'), findsOneWidget);
+      expect(find.text('This customer has no address saved — type one'),
+          findsOneWidget);
+
+      // On by default here, and that is the difference from the document
+      // dialog above rather than an oversight: a receipt is the thing the
+      // customer files, so the PDF travels unless somebody says not to.
+      expect(
+          tester.widget<CheckboxListTile>(find.byType(CheckboxListTile)).value,
+          isTrue);
+      expect(find.text('The customer gets a PDF they can file.'),
+          findsOneWidget);
+
+      await tester.tap(find.byType(CheckboxListTile));
+      await tester.pumpAndSettle();
+
+      expect(
+          tester.widget<CheckboxListTile>(find.byType(CheckboxListTile)).value,
+          isFalse);
+      expect(find.text('Just the message — nothing to keep.'), findsOneWidget);
+      expect(find.textContaining('null'), findsNothing);
     });
   });
 
