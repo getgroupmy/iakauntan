@@ -146,9 +146,19 @@ void main() {
   /// A phone-sized window builds only the visible rows, and a document
   /// is longer than one. Given room, everything is on screen and the
   /// test is about assignment rather than about scrolling.
+  ///
+  /// `tester.view.physicalSize`, not `setSurfaceSize`. The latter resizes
+  /// the render surface and leaves `MediaQuery` reporting 800x600, so a
+  /// widget that sizes itself from `MediaQuery` would go on building only
+  /// the rows that fit 600 while this test believed it had 2400 -- and the
+  /// test would not fail, it would simply stop looking at the rows it
+  /// names. `docs/widget-tests.md` calls the shorter call the trap, and
+  /// five other test files carry a comment saying so;
+  /// `check_surface_size.py` now enforces it instead.
   Future<void> roomToSeeItAll(WidgetTester tester) async {
-    await tester.binding.setSurfaceSize(const Size(1000, 2400));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.physicalSize = const Size(1000, 2400);
+    addTearDown(tester.view.reset);
   }
 
   testWidgets('a line assigned on the page reaches the form', (tester) async {

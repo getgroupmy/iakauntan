@@ -1604,6 +1604,25 @@ jobs:
           python3 scripts/check_sweeps_look_test.py
           python3 scripts/check_sweeps_look.py
 
+      # There are two ways to make a widget test's window narrow and only
+      # one of them works. `tester.binding.setSurfaceSize` moves the
+      # RENDER SURFACE and leaves `MediaQuery` reporting 800x600, so it
+      # catches a RenderFlex overflow and does NOT move the breakpoint:
+      # every `MediaQuery.sizeOf(context).width < 700` in the app still
+      # takes the desktop branch, and a test asserting the narrow one is
+      # asserting against a layout that is not on the screen. It passes,
+      # because the widgets it names are there.
+      #
+      # docs/widget-tests.md calls the shorter call the trap and five test
+      # files carry a hand-written comment saying so -- the decision
+      # written down five times and enforced nowhere, which is what this
+      # replaces. A comment is advice to whoever reads the file, and
+      # nobody reads a file before writing a new one.
+      - name: Check a widget test resizes its window the way that works
+        run: |
+          python3 scripts/check_surface_size_test.py
+          python3 scripts/check_surface_size.py
+
       - name: Check every client-reachable write is accounted for
         run: |
           DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"

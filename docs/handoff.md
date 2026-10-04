@@ -8828,3 +8828,90 @@ for g in ambiguous_overloads bank_account_types discarded_values \
   [ $? -eq 0 ] && echo "PASSES OVER NOTHING: check_$g"
 done
 ```
+
+
+## The widget-test window: the trap was documented five times and gated once
+
+Asked the day's question of the PRODUCT's tests rather than the gates:
+which of them cannot fail? `docs/widget-tests.md` already names the
+answer in its thirteenth entry — a widget test's surface is **800x600,
+which is landscape**, so a screen laid out for a portrait phone can be
+broken at every size a person holds and pass a file full of assertions
+that only ever counted widgets.
+
+457 test files; 117 set `physicalSize`, 18 measure with `getRect`.
+Demanding all 457 set it would be wrong — a test that checks a widget
+appears does not need a phone-sized window. But the doc names something
+narrower and exactly checkable:
+
+> `setSurfaceSize` resizes the RENDER SURFACE, so it does catch an
+> overflow. It does NOT move `MediaQuery`, which goes on reporting 800 —
+> so every `MediaQuery.sizeOf(context).width < 700` in the app still
+> takes the DESKTOP branch, and a test asserting the narrow one is
+> asserting against a layout that is not on the screen. **The shorter
+> call is the trap.**
+
+25 places in `app/lib` branch on a width threshold. **Five test files
+carry a hand-written comment saying to use the other call** — the
+decision written down five times and enforced nowhere. A comment is
+advice to whoever reads the file, and nobody reads a file before writing
+a new one.
+
+### One real use, converted rather than excused
+
+`scan_all_data_test.dart` resized to 1000x2400 so a lazily-built list
+would construct every row, with a comment explaining why. Nothing there
+asserted a narrow layout, so **the trap was not sprung** — and it was one
+`MediaQuery`-sized sheet away from silently building only the rows that
+fit 600 while believing it had 2400. It would not have failed; it would
+have stopped looking at the rows it names. `tester.view.physicalSize`
+drives both and cost two lines. All 14 tests in the file pass before and
+after.
+
+### `scripts/check_surface_size.py`
+
+Zero-expected with a pattern matching only offenders, so it takes the
+`check_current_org` shape from earlier today: a floor on what it READ
+(457 files, floor 250) plus a **canary** — `tester.view.physicalSize`
+must still appear somewhere, or the API was renamed and the gate is blind
+rather than satisfied. Both proved: an empty tree exits 2, and renaming
+the right call exits 2 saying *this is the canary, not a defect in the
+tests*.
+
+12 + 5 self-test assertions, 7 mutants, all 7 killed.
+
+### Three things this one taught
+
+**My first attempt at proving the comment-stripping proved nothing.** The
+sample was prose — "not `setSurfaceSize`: it lies" — which has no paren,
+so it never matched `TRAP` at all and reported 0 both stripped and
+unstripped. The test now asserts the sample hits the pattern BEFORE
+stripping, or it is not a test of stripping.
+
+**Asserting a helper works is not asserting the caller calls it.** Two
+mutants that removed `without_comments` from inside `offenders()` and
+`census()` survived, because `ACommentIsNotACall` calls those helpers
+directly. Both are now driven through the real functions over a fed tree
+— which needed `offenders()` to stop raising on a path outside `ROOT`. A
+gate that cannot be pointed at a fed tree can only be tested against the
+real one, and then its failure paths are never exercised.
+
+**One mutant is left alive deliberately, as EQUIVALENT:** widening `TRAP`
+to the bare name `setSurfaceSize\b`. In this tree it changes nothing —
+the only bare-name uses are comments, stripped either way — and flagging
+a reference to the method in code is arguably right too. `mutate.py` is
+explicit that a survivor is either a missing assertion or an unobservable
+change, and saying which is the point.
+
+### The meta-gate paid for itself here
+
+`check_sweeps_look` picked the new gate up with no change to it: 44 of 62
+became **45 of 63**, and the new gate had to fail over an empty tree to
+get in. That is the thing a per-gate fix cannot do, and it was the whole
+argument for building it.
+
+### My probe disagreed with a gate a SIXTH time
+
+`grep -rl physicalSize app/test` says 117 files; the gate says 106,
+because 11 of those are comments. Same rule as the other five: write
+down the number the gate reports.
