@@ -1,20 +1,33 @@
-5
+0
 
 How many widget-test bodies check nothing but
 `expect(tester.takeException(), isNull)`, less the ones excused with a
 reason in `scripts/check_thin_assertions.py`.
 
-A CEILING, and it may only fall. It was 34 when the hunt started -- all
-of them in `dialogs_build_batch2_test.dart` -- and twenty-nine have been
-rewritten, which turned up four wrong-shape fixtures and two real
-defects. The remaining five are named in docs/handoff.md.
+A CEILING, and it may only fall. IT HAS REACHED ZERO, which is the only
+kind nobody has to remember to lower -- the same shape
+`check_counted_assertions.py` arrived at, and for the same reason.
 
-It went 14 -> 11 -> 7 -> 6 -> 5 and EVERY step was the gate refusing the
-stale number, not somebody remembering to lower it. That under-ceiling arm is
-the half of a ratchet nobody writes and the half that keeps the ground
-won.
+It started at 34, all of them in `dialogs_build_batch2_test.dart`, and
+every one has been rewritten. On the way: four wrong-shape fixtures (the
+modifier groups drawing the four characters n-u-l-l, "What null bills", a
+filing fixture that was a row from another table, and a forecast sheet
+handed three of twenty-three columns) and two real defects (an approval
+rule naming an invited member who had never accepted, and a test that
+opened no dialog at all because the throwing fake made `resolveSupplier`
+return before it drew).
 
-Thirteen more bodies match the pattern and are excused in `ALLOWED`:
-twelve are overflow tests, where the framework raising on `RenderFlex` IS
-the assertion and `takeException` is what collects it, and one writes a
-spreadsheet that `check_xlsx.py` reads back in the same job.
+It came down 34 -> 14 -> 11 -> 7 -> 6 -> 5 -> 0, and EVERY step after the
+first was the gate refusing the stale number rather than somebody
+remembering to lower it. That under-ceiling arm is the half of a ratchet
+nobody writes and the half that keeps the ground won.
+
+## What a zero ceiling means for the next test
+
+A new body that checks only `takeException` now fails CI. The remedy is
+to assert what the screen SAYS -- or, where "it did not throw" genuinely
+is the whole claim, to name the test in `ALLOWED` with a reason. Thirteen
+are named there: twelve overflow tests, where the framework raising on
+`RenderFlex` IS the assertion and `takeException` is what collects it,
+and one that writes a spreadsheet `check_xlsx.py` reads back in the same
+job.

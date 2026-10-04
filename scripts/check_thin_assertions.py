@@ -20,6 +20,11 @@ So: a CEILING, which may only fall, on how many such bodies there are. Not
 a ban -- a ban would be wrong, see the excuses below -- and not a floor,
 because the only direction worth allowing is downward.
 
+**IT IS NOW AT ZERO.** All thirty-four were rewritten, so a new body that
+checks only `takeException` fails CI from here on. The remedy is to assert
+what the screen SAYS, or to name the test in `ALLOWED` with a reason. A
+zero ceiling is the only kind nobody has to remember to lower.
+
 ## What this does NOT prove
 
 That a body with assertions in it asserts anything worth having.

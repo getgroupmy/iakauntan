@@ -10652,17 +10652,74 @@ Two of my expectations were wrong and the code settled both:
     box, which the absent 'Your assessment *' label says. Asserted both
     ways round, because the first draft assumed the wrong one.
 
-### What is left of this backlog
+## 4 October, part six: ZERO. All thirty-four, and the ceiling to match
 
-**5 of the 34** still assert nothing but `expect(tester.takeException(),
-isNull)` — and 18 across the whole of `app/test`, the other 13 being the
-overflow tests above. By test name, in file order:
+The last five went in one pass and `app/test/thin_assertion_ceiling` reads
+**0**, which is the only kind of ratchet nobody has to remember to lower.
+The gate refused every stale number on the way down — 34 → 14 → 11 → 7 → 6
+→ 5 → 0, and every step after the first was the under-ceiling arm firing
+rather than anybody noticing.
 
-  * `billing a matter`
-  * `closing a deal`
-  * `logging a chase on a debt`
-  * `one time entry`
-  * `and the figures a tax computation is built on`
+**From here on a new body that checks only `takeException` fails CI.** The
+remedy is to assert what the screen says, or to name the test in `ALLOWED`
+with a reason. Thirteen are named there and all thirteen are legitimate:
+twelve overflow tests where the framework raising on `RenderFlex` IS the
+assertion, and one that writes a spreadsheet `check_xlsx.py` reads back in
+the same job.
+
+### The last five, and what each one could not see
+
+* **`logging a chase on a debt`** — the fixture's shape was already right
+  (its comment records the throw that got it there) and nothing read a
+  thing off the screen. Its one rule is one the database also enforces: a
+  promise DATE belongs only to "promised", so changing the outcome away
+  from it has to clear the date rather than let somebody submit a
+  contradiction. Unreachable before, because the outcome starts at
+  `no_answer` and nothing ever changed it. A second history row with no
+  notes covers the other side of the `notes == null` join.
+
+* **`closing a deal`** — `stageType: 'won'` is the dialog's thinnest
+  configuration: one choice, so no segmented button and no blurb;
+  `outcomeNeedsReason('won')` is false, so `outcomeBlockedBecause` never
+  fires. On `'lost'` it offers Lost and Abandoned and ONLY those two,
+  because offering "Won" on a card dropped into Closed Lost would let the
+  board say one thing and the record another. The walk now asserts the
+  refusal that says WHY ("a pipeline that records that deals died and not
+  why cannot answer the only question it is for"), the chip list changing
+  with the outcome, and the button renaming itself.
+
+* **`billing a matter`** — the empty list drew the sheet's most MISLEADING
+  state: "Nothing to bill in these dates" above "Every billable hour on
+  this matter has been billed", which is true of a matter with no time on
+  it and reads as reassurance. Four entries now — one billable inside, one
+  not billable, one already billed, one billable outside — so the card's
+  whole point is asserted: 3.5h unbilled in all, 1.50h of it outside the
+  dates, which is the sentence that stops a correct-looking total being
+  accepted.
+
+* **`one time entry`** — four empty providers, so the "Against" picker had
+  nothing in it and the sheet drew its warning instead. The duration parser
+  is the arithmetic here: '1.5' and '1:30' are the same hour and a half,
+  '2h' is allowed because people type it, and '1:60' is a typo for two
+  hours that the parser REFUSES rather than guesses at. Projects and
+  matters share the box to enforce `time_entries_one_anchor`, and against
+  nothing the Chargeable switch cannot be turned on at all.
+
+* **`and the figures a tax computation is built on`** — none of the seven
+  figures was in the fixture, so `_seed` ran on one arm only, the arm that
+  cannot go wrong. Five supplied and the two SME figures left null covers
+  both in one fixture: blank is deliberate for those two, because "a zero
+  paid-up capital would pass the SME test, and a form that offers zero
+  invites somebody to leave it". The hints are asserted too, because they
+  are the only place the statutory reasoning is written on the screen —
+  capital at the BEGINNING of the basis period, allowances brought forward
+  are not a loss, zakat is a rebate capped at the tax under s.6A(3).
+
+### Two more model traps
+
+`Matter` requires `clientId`, which the compiler caught; and `Opportunity`
+defaults `status` to 'open', which is what made the close-deal walk
+possible without constructing a closed deal.
 
 The method that is working, in order: read the RPC or repository query
 behind each provider FIRST — the fixture shapes are where the defects are —

@@ -3580,18 +3580,116 @@ void main() {
       expect(find.text('+60 12-345 6789'), findsNothing);
     });
 
+    // `const <TimeEntry>[]` drew the sheet's most MISLEADING state: "Nothing
+    // to bill in these dates" above "Every billable hour on this matter has
+    // been billed." -- which is true of a matter with no time on it and is
+    // the sentence somebody would read as reassurance. Nothing asserted it
+    // either way.
+    //
+    // The period defaults to the month just gone, so the fixture dates are
+    // built from `DateTime.now()` the same way the sheet does. The whole
+    // point of the card is the comparison: "the usual mistake is a period
+    // that misses hours, and a total with nothing to compare it against
+    // looks correct".
     testWidgets('billing a matter', (tester) async {
+      final now = DateTime.now();
+      final inside = DateTime(now.year, now.month - 1, 15);
+      final outside = DateTime(now.year, now.month, 5);
+
       await opened(
         tester,
         [
           repoProvider.overrideWithValue(repo),
-          timeEntriesProvider.overrideWith((_, __) async => const <TimeEntry>[]),
+          timeEntriesProvider.overrideWith((_, __) async => [
+                // Two hours, billable, unbilled, inside the period: the
+                // only entry that should be billed.
+                TimeEntry(
+                  id: 't1',
+                  entryDate: inside,
+                  description: 'Drafting the lease',
+                  minutes: 120,
+                  hourlyRate: 300,
+                  amount: 600,
+                  isBillable: true,
+                  isBilled: false,
+                ),
+                // Inside, and NOT billable -- left where it is.
+                TimeEntry(
+                  id: 't2',
+                  entryDate: inside,
+                  description: 'Internal file review',
+                  minutes: 60,
+                  hourlyRate: 300,
+                  amount: 300,
+                  isBillable: false,
+                  isBilled: false,
+                ),
+                // Inside, and already billed. "An hour cannot be billed
+                // twice."
+                TimeEntry(
+                  id: 't3',
+                  entryDate: inside,
+                  description: 'Advice on the deposit',
+                  minutes: 60,
+                  hourlyRate: 300,
+                  amount: 300,
+                  isBillable: true,
+                  isBilled: true,
+                ),
+                // Billable and unbilled, but OUTSIDE the period -- which is
+                // the line the card exists to print.
+                TimeEntry(
+                  id: 't4',
+                  entryDate: outside,
+                  description: 'Completion statement',
+                  minutes: 90,
+                  hourlyRate: 300,
+                  amount: 450,
+                  isBillable: true,
+                  isBilled: false,
+                ),
+              ]),
         ],
         (context) => showBillMatterSheet(context, matterId: 'm1'),
       );
       expect(tester.takeException(), isNull);
+
+      expect(find.text('Bill the time recorded'), findsOneWidget);
+      expect(find.text('Nothing to bill in these dates'), findsNothing);
+      expect(find.textContaining('Every billable hour'), findsNothing);
+
+      // One entry of the four, and the hours are its own. ('1 entries' is
+      // what the string says -- there is no singular -- and the assertion
+      // reports what is on the screen rather than what it ought to be.)
+      expect(find.text('1 entries · 2.0h'), findsOneWidget);
+      expect(find.text('RM 600.00'), findsOneWidget);
+
+      // THE COMPARISON. 3.5h is billable and unbilled in all, so 1.50h of
+      // it falls outside the dates -- and that is the sentence that stops a
+      // correct-looking total from being accepted.
+      expect(
+          find.text('3.5h unbilled in all, so 1.50h falls outside these '
+              'dates.'),
+          findsOneWidget);
+
+      expect(
+          tester
+              .widget<FilledButton>(find.byKey(const ValueKey('bill-matter')))
+              .onPressed,
+          isNotNull);
+      expect(find.text('Bill RM 600.00'), findsOneWidget);
+      expect(find.text('The period ends before it starts.'), findsNothing);
+      expect(find.textContaining('null'), findsNothing);
     });
 
+    // `stageType: 'won'` is this dialog's THINNEST configuration: one choice,
+    // so no segmented button and no blurb; `outcomeNeedsReason('won')` is
+    // false, so the reason is optional and `outcomeBlockedBecause` never
+    // fires. Everything the screen is for was on the other branch.
+    //
+    // 'lost' here, which offers Lost AND Abandoned -- and only those two,
+    // because offering "Won" on a card dropped into Closed Lost would let
+    // the board say one thing and the record another.
     testWidgets('closing a deal', (tester) async {
       await opened(
         tester,
@@ -3605,12 +3703,81 @@ void main() {
             stageId: 'st1',
             pipelineId: 'p1',
           ),
-          stageType: 'won',
+          stageType: 'lost',
         ),
       );
       expect(tester.takeException(), isNull);
+
+      expect(find.text('OPP-0001 · Sinar renewal'), findsOneWidget);
+
+      bool closable() => tester
+              .widget<FilledButton>(find.ancestor(
+                of: find.textContaining('Close as '),
+                matching: find.byType(FilledButton),
+              ))
+              .onPressed !=
+          null;
+
+      // Two outcomes, not three, and the button NAMES the one chosen --
+      // which is the confirmation, so it has to change with the choice.
+      expect(find.text('Lost'), findsOneWidget);
+      expect(find.text('Abandoned'), findsOneWidget);
+      expect(find.text('Won'), findsNothing);
+      expect(find.text('Close as lost'), findsOneWidget);
+
+      // A reason is REQUIRED on a loss, and the refusal says why rather
+      // than "required": a pipeline that records that deals died and not
+      // why cannot answer the only question it is for.
+      expect(find.text('Why *'), findsOneWidget);
+      expect(find.text('Why (optional)'), findsNothing);
+      expect(
+          find.textContaining('A pipeline that records that deals died and '
+              'not why'),
+          findsOneWidget);
+      expect(closable(), isFalse);
+
+      // The chips are one tap, and they are the LOST list.
+      expect(find.text('Price'), findsOneWidget);
+      expect(find.text('Went with a competitor'), findsOneWidget);
+      expect(find.text('Went quiet'), findsNothing);
+
+      await tester.tap(find.text('Price'));
+      await tester.pumpAndSettle();
+      expect(closable(), isTrue);
+
+      // Abandoned is a different thing from lost and says so: "counting
+      // these as losses reports a loss rate that is not true". Its chips
+      // are its own list, and the button renames itself.
+      await tester.tap(find.text('Abandoned'));
+      await tester.pumpAndSettle();
+
+      expect(
+          find.textContaining('Counting these as losses reports a loss rate '
+              'that is not true'),
+          findsOneWidget);
+      expect(find.text('Went quiet'), findsOneWidget);
+      expect(find.text('Went with a competitor'), findsNothing);
+      expect(find.text('Close as abandoned'), findsOneWidget);
+      expect(find.text('Close as lost'), findsNothing);
+      // The reason typed for the loss is still there, so it is still
+      // closable -- the chip list changed, not the answer.
+      expect(closable(), isTrue);
+
+      // The competitor is asked on a win as well, because a win-loss
+      // report that only knows about the losses is a report about the
+      // losses.
+      expect(find.text('Who else was in it, on a win or a loss'),
+          findsOneWidget);
+      expect(find.textContaining('null'), findsNothing);
     });
 
+    // The fixture shape was already right -- its comment records the throw
+    // that got it there -- but nothing read a single thing off the screen.
+    // The sheet has one rule in it, and it is a rule the database also
+    // enforces: a promise DATE belongs only to "promised", so changing the
+    // outcome away from it has to clear the date rather than let somebody
+    // submit a contradiction. That whole branch was unreachable, because
+    // the outcome starts at 'no_answer' and nothing ever changed it.
     testWidgets('logging a chase on a debt', (tester) async {
       await openedWithRef(
         tester,
@@ -3629,6 +3796,14 @@ void main() {
                   'outcome': 'promised',
                   'notes': long,
                 },
+                // A second attempt with NO notes, which is the other side
+                // of `h['notes'] == null ? '' : ' — ${h['notes']}'`.
+                {
+                  'id': 'h2',
+                  'attempted_on': '2026-08-20',
+                  'outcome': 'no_answer',
+                  'notes': null,
+                },
               ]),
         ],
         (context, ref) => showLogAttemptSheet(
@@ -3640,6 +3815,49 @@ void main() {
         ),
       );
       expect(tester.takeException(), isNull);
+
+      expect(find.text('Sinar Teknologi'), findsOneWidget);
+      expect(find.text('RM 1,200.00 outstanding'), findsOneWidget);
+
+      // What the last person was told, before anybody dials -- with the
+      // outcome in WORDS, not as the column value, and the note joined on
+      // only where there is one.
+      expect(find.text('01/09/2026 · Promised to pay — $long'),
+          findsOneWidget);
+      expect(find.text('20/08/2026 · No answer'), findsOneWidget);
+
+      // The defaults: a call that nobody answered, which is the commonest
+      // thing to be logging.
+      expect(find.text('Called'), findsOneWidget);
+      // ONE, not two: the history line above is a single joined string
+      // ('20/08/2026 · No answer'), so the only bare 'No answer' on screen
+      // is the dropdown's own selection.
+      expect(find.text('No answer'), findsOneWidget);
+      // No promise, so no date row at all.
+      expect(find.text('No date yet'), findsNothing);
+      expect(find.text('Pick a date'), findsNothing);
+
+      // Promise to pay, and the date row appears with nothing in it.
+      await tester.tap(find.byType(DropdownButtonFormField<String>).last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Promised to pay').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('No date yet'), findsOneWidget);
+      expect(find.text('Pick a date'), findsOneWidget);
+
+      // And moving off "promised" takes it away again, which is the rule:
+      // the database refuses a promise date on any other outcome, so the
+      // screen must not be able to offer one.
+      await tester.tap(find.byType(DropdownButtonFormField<String>).last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Disputes the invoice').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('No date yet'), findsNothing);
+      expect(find.text('Pick a date'), findsNothing);
+      expect(find.text('Log it'), findsOneWidget);
+      expect(find.textContaining('null'), findsNothing);
     });
 
     // The "Read it" button runs a REAL parser -- `MiaResultParser.parse` is
@@ -3915,19 +4133,118 @@ void main() {
           findsOneWidget);
     });
 
+    // Four empty providers, so the "Against" picker had nothing in it -- and
+    // with nothing to charge time to, the sheet draws a WARNING instead,
+    // which nothing asserted. Nor the duration parser, which is the one
+    // piece of arithmetic here: '1.5' and '1:30' are the same hour and a
+    // half, and '1:60' is a typo for two hours that the parser refuses
+    // rather than guesses at.
+    //
+    // Fed one project and one matter, because they share the box to enforce
+    // `time_entries_one_anchor` -- one selection cannot name both -- and
+    // the prefix on the value is what says which table the id came from.
     testWidgets('one time entry', (tester) async {
       await opened(
         tester,
         [
           repoProvider.overrideWithValue(repo),
           currentUserProvider.overrideWithValue(null),
-          mattersProvider.overrideWith((_, __) async => const <Matter>[]),
-          projectsProvider.overrideWith((_) async => const []),
+          mattersProvider.overrideWith((_, __) async => [
+                Matter(
+                  id: 'm1',
+                  matterNo: 'MAT-0001',
+                  name: 'Menara Hijau lease',
+                  clientId: 'c1',
+                  status: 'open',
+                ),
+              ]),
+          projectsProvider.overrideWith((_) async => const [
+                {'id': 'p1', 'name': 'Menara Hijau fit-out', 'code': 'MH-01'},
+              ]),
           teamProvider.overrideWith((_) async => const <TeamMember>[]),
         ],
         (context) => showTimeEntrySheet(context),
       );
       expect(tester.takeException(), isNull);
+
+      expect(find.text('Record time'), findsOneWidget);
+      // There IS something to charge to now, so the warning is gone.
+      expect(find.textContaining('There is nothing to charge time to yet'),
+          findsNothing);
+
+      bool savable() => tester
+              .widget<FilledButton>(find.byKey(const ValueKey('time-save')))
+              .onPressed !=
+          null;
+
+      // Nothing typed and nothing chosen: no duration, so nothing to save.
+      expect(savable(), isFalse);
+
+      // THE DURATION PARSER, through the helper line under the box.
+      Future<void> type(String v) async {
+        await tester.enterText(
+            find.byKey(const ValueKey('time-duration')), v);
+        await tester.pump();
+      }
+
+      await type('1.5');
+      expect(find.text('1.50h'), findsOneWidget);
+      await type('1:30');
+      expect(find.text('1.50h'), findsOneWidget);
+      // A trailing h is allowed, because people type it.
+      await type('2h');
+      expect(find.text('2.00h'), findsOneWidget);
+      // '1:60' is a typo for 2:00 and guessing which is worse than asking,
+      // so the helper goes away rather than saying 2.00h.
+      await type('1:60');
+      expect(find.text('2.00h'), findsNothing);
+      expect(find.text('1.00h'), findsNothing);
+
+      await type('1.5');
+      // A duration, but still nothing to charge it to -- `chargeable` wants
+      // an anchor, so the button stays dead.
+      expect(savable(), isFalse);
+
+      // Both tables in one box, each with its own reference as the second
+      // line, because somebody recording an hour knows what they worked on
+      // and not which table it lives in.
+      await tester.tap(find.byKey(const ValueKey('time-anchor')));
+      await tester.pumpAndSettle();
+      expect(find.text('Menara Hijau fit-out'), findsOneWidget);
+      expect(find.text('MH-01'), findsOneWidget);
+      expect(find.text('Menara Hijau lease'), findsOneWidget);
+      expect(find.text('MAT-0001'), findsOneWidget);
+      // And "nothing" is a named answer rather than a blank row.
+      expect(find.text('Nothing — this is not chargeable'), findsOneWidget);
+
+      // Against nothing, the Chargeable switch cannot be turned on at all,
+      // and its subtitle says why -- the trigger refuses the same thing.
+      expect(
+          tester
+              .widget<SwitchListTile>(find.byKey(const ValueKey(
+                'time-billable',
+              )))
+              .onChanged,
+          isNull);
+      expect(find.text('An hour against nothing has nobody to bill it to.'),
+          findsOneWidget);
+
+      await tester.tap(find.text('Menara Hijau lease'));
+      await tester.pumpAndSettle();
+
+      // Now it can be saved, the switch is live, and the subtitle changes
+      // to the other sentence.
+      expect(savable(), isTrue);
+      expect(
+          tester
+              .widget<SwitchListTile>(find.byKey(const ValueKey(
+                'time-billable',
+              )))
+              .onChanged,
+          isNotNull);
+      expect(find.text('Unchargeable hours still count towards utilisation.'),
+          findsOneWidget);
+      expect(find.textContaining('null'), findsNothing);
     });
 
     // `address` was the fixture's word. `my_mailboxes` (0560) returns
@@ -3999,6 +4316,15 @@ void main() {
       expect(find.textContaining('null@'), findsNothing);
     });
 
+    // None of the seven figures was in the fixture, so every box seeded blank
+    // and `_seed`'s whole job -- `v == null ? '' : Fmt.toDouble(v)
+    // .toStringAsFixed(2)` -- was exercised on one side only. Which is the
+    // side that cannot go wrong.
+    //
+    // Five supplied and the two SME figures left null, so both arms run in
+    // one fixture. Blank is deliberate for those two: "a zero paid-up
+    // capital would pass the SME test, and a form that offers zero invites
+    // somebody to leave it".
     testWidgets('and the figures a tax computation is built on',
         (tester) async {
       await opened(
@@ -4009,11 +4335,59 @@ void main() {
                 'id': 'tc1',
                 'year_of_assessment': 2026,
                 'status': 'draft',
+                // The two halves of the SME test, DELIBERATELY absent.
+                'paid_up_capital': null,
+                'gross_business_income': null,
+                // The five that are NOT NULL with a default of zero, each
+                // a different number so no two assertions can swap.
+                'capital_allowance_bf': 12000,
+                'loss_bf': 34500.5,
+                'zakat_paid': 2500,
+                's110_tax_deducted': 780.25,
+                'cp204_paid': 9000,
               }),
         ],
         (context) => showTaxInputs(context, 'tc1'),
       );
       expect(tester.takeException(), isNull);
+
+      expect(find.text('Figures the accounts cannot know'), findsOneWidget);
+
+      String boxed(String key) => tester
+          .widget<TextField>(find.byKey(ValueKey('tax-input-$key')))
+          .controller!
+          .text;
+
+      // Seeded to two decimals, because these are money and the saved
+      // value is a numeric.
+      expect(boxed('capital_allowance_bf'), '12000.00');
+      expect(boxed('loss_bf'), '34500.50');
+      expect(boxed('zakat_paid'), '2500.00');
+      expect(boxed('s110_tax_deducted'), '780.25');
+      expect(boxed('cp204_paid'), '9000.00');
+
+      // And BLANK, not '0.00', for the two that may be unknown.
+      expect(boxed('paid_up_capital'), '');
+      expect(boxed('gross_business_income'), '');
+
+      // The hints are the statutory reasoning, which is the only place on
+      // the screen it is written down: the SME test is capital AT THE
+      // BEGINNING of the basis period plus gross income, the allowances
+      // brought forward are not a loss, and zakat is a rebate capped at
+      // the tax under s.6A(3).
+      expect(
+          find.text('At the BEGINNING of the basis period. Half of the SME '
+              'test.'),
+          findsOneWidget);
+      expect(find.text('For the basis period. The other half of the SME test.'),
+          findsOneWidget);
+      expect(find.text('From last year’s computation. Not a loss.'),
+          findsOneWidget);
+      expect(find.text('Set against statutory income, after the allowances.'),
+          findsOneWidget);
+      expect(find.text('A rebate against the tax, capped at it — s.6A(3).'),
+          findsOneWidget);
+      expect(find.textContaining('null'), findsNothing);
     });
   });
 }
