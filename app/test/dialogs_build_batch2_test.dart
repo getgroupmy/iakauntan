@@ -255,7 +255,24 @@ void main() {
   });
 
   group('settings', () {
-    testWidgets('the scanning credit ledger opens', (tester) async {
+    // `kind` was the fixture's word and `entry_type` is the dialog's, so
+    // `creditMovement(null)` fell to its `_` arm and every row in this
+    // test said "Adjustment" where a real usage row says "A scan".
+    // `balance_after` was absent too, so the figure under each amount was
+    // always `left RM 0.00`. Neither is anything the database sends.
+    //
+    // This is the dialog widget-tests.md trap 11 was written about -- its
+    // totals line overflowed by 46 pixels, and the `Flexible` that fixed
+    // it carries a comment naming "RM 12,345.67 in · RM 9,876.54 out" as
+    // the case. Those are the figures below, so the assertion is on the
+    // sentence that comment is about.
+    //
+    // TWO rows, not three. A third is below the fold at 412x900 and a
+    // `ListView` builds lazily, so an assertion about it counts a widget
+    // that is not in the tree -- which is how the first version of this
+    // test failed, looking for two "A scan" rows and finding one.
+    testWidgets('the scanning credit ledger opens, in the shape it is sent',
+        (tester) async {
       await opened(
         tester,
         [
@@ -263,15 +280,49 @@ void main() {
           creditLedgerProvider.overrideWith((_) async => const [
                 {
                   'id': 'cl1',
-                  'kind': 'usage',
-                  'amount': -1.5,
-                  'description': 'Scan of $long.pdf',
+                  'entry_type': 'topup',
+                  'amount': 12345.67,
+                  'balance_after': 12345.67,
+                  'description': 'Credit bought',
                   'created_at': '2026-09-01T02:00:00Z',
+                },
+                {
+                  'id': 'cl2',
+                  'entry_type': 'usage',
+                  'amount': -9876.54,
+                  'balance_after': 2469.13,
+                  'description': 'Scan of $long.pdf',
+                  'created_at': '2026-09-30T03:00:00Z',
                 },
               ]),
         ],
         (context) => showCreditLedger(context),
       );
+      expect(tester.takeException(), isNull);
+
+      // `entry_type`, read through `creditMovement`. Under the old
+      // fixture both rows said "Adjustment".
+      expect(find.textContaining('A scan · '), findsOneWidget);
+      expect(find.textContaining('Credit bought · '), findsOneWidget);
+      expect(find.textContaining('Adjustment'), findsNothing);
+
+      // `balance_after`, which the old fixture never supplied: the figure
+      // under each amount was `left RM 0.00` on every row.
+      expect(find.text('left RM 12,345.67'), findsOneWidget);
+      expect(find.text('left RM 2,469.13'), findsOneWidget);
+      expect(find.text('left RM 0.00'), findsNothing);
+
+      // Money in carries a `+` the widget adds; money out carries the
+      // minus the amount already has. `Fmt.money(-9876.54)` is
+      // `RM -9,876.54`, not `-RM 9,876.54` -- the currency prefix goes in
+      // front of whatever the number formatter produced, sign included.
+      expect(find.text('+RM 12,345.67'), findsOneWidget);
+      expect(find.text('RM -9,876.54'), findsOneWidget);
+
+      // And the totals line the `Flexible` exists for, with the two
+      // five-figure sums its comment names. Nothing overflowed at 412.
+      expect(find.text('Over the last 2 movements'), findsOneWidget);
+      expect(find.text('RM 12,345.67 in · RM 9,876.54 out'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 

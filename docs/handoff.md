@@ -9785,3 +9785,79 @@ about 332 on a 412 phone. The content then has 332 px to work in, which is
 where an unflexed Row child would show — not the width itself.
 
 **47 to go.** The list is in the commit that fixed these two.
+
+### The same defect, mechanically: fourteen more fixtures of the wrong shape
+
+The project-budget one was not a one-off. Comparing, for each
+`opened(...)` in the batch files, the string keys its fixture **supplies**
+against every `row['...']` the file defining that opener **reads**:
+
+| dialog | fixture supplies, the file never reads | notable key it reads and the fixture omits |
+|---|---|---|
+| `showReferralHires` | `applicant_name, bonus_amount, hired_on, status` | `candidates, hires` |
+| `showDeliveryDay` | `address, customer_name, sale_no, status, stops, total` | `delivered, failed, fees, outlet_name` |
+| `showQueueDay` | `customer_name, party_size, status, ticket_no` | `seated, gave_up, median_wait` |
+| `showTenderSheet` | `code, member_name, opens_drawer, paid, points` | `cash_due, change_due, total_amount` |
+| `showCreditLedger` | `kind` | **`entry_type`, `balance_after`** |
+| `showStallItems` | `item_id, item_name` | `code, name` |
+| `showActivityDialog` | `created_at, kind, subject, to_address` | `to_email, last_error` |
+| `showShareDialog` | `token, views` | `sent_to_email, open_count, revoked_at` |
+| `showSettlementDetail` | `total` | `amount, doc_no, payment_mode_code` |
+| `showAppraisalGoals` | `description, status, weight` | `target, actual, weight_percent` |
+| `showInterviews` | `interviewer_name, notes, stage` | `full_name, feedback, round_no, outcome` |
+| `showTemplateItems` | `due_days` | `due_offset_days, name, is_mandatory` |
+| `showEditLeaveContact` | `leave_type_name, request_id` | `leave_type, has_contact` |
+| `showCompose` | `address` | `local_part` |
+| `showTicketShareDialog` | `token` | `ticket_no, status, open_count` |
+
+The right-hand column is noisy — a file reads keys from several different
+rows, so some of those belong to a map the fixture was never meant to
+supply. **The left-hand column is not noisy**: a key the file never reads
+anywhere is a column the database does not send.
+
+#### `showCreditLedger` is the sharpest, because the doc is about it
+
+`credit_ledger_dialog.dart` is the dialog trap 11 was written about — its
+totals line overflowed by 46 pixels, and the `Flexible` that fixed it
+carries a comment naming `RM 12,345.67 in · RM 9,876.54 out` as the case.
+Its test fed **`kind`** where the dialog reads **`entry_type`**, so
+`creditMovement(null)` fell to its `_` arm and every row said
+**"Adjustment"** where a real usage row says "A scan". `balance_after` was
+absent, so the figure under every amount was **`left RM 0.00`**.
+
+Now fed the shape it is sent, and asserting it: "A scan" and "Credit
+bought" from `entry_type`, `left RM 12,345.67` and `left RM 2,469.13` from
+`balance_after`, `+RM 12,345.67` against `RM -9,876.54`, and the totals
+line the `Flexible` exists for — with the two five-figure sums its comment
+names. Both mutants killed: `kind` back finds no "A scan"; `balance_after`
+removed finds no `left RM 12,345.67`.
+
+Two of my own expectations were wrong on the way and the widget was right:
+
+* **Three rows was one too many.** A `ListView` builds lazily and the
+  third row is below the fold at 412x900, so an assertion about it counts
+  a widget that is not in the tree. Two rows, and the five-figure totals
+  come from those two.
+* **`Fmt.money(-9876.54)` is `RM -9,876.54`**, not `-RM 9,876.54`. The
+  currency prefix goes in front of whatever the number formatter produced,
+  sign included.
+
+### And the schema-drift floor, raised on the measurement it was waiting for
+
+Run 2256 reported it:
+
+    schema_drift self-test passed
+    No drift: 8806 statements, and the hosted project has every one of them.
+    109 statement(s) differ in comments or formatting only — same code
+
+**8,806** against 8,773 measured locally for `public` and `app` — CI's two
+dumps and this machine's agree to within a few dozen objects. So
+`LEAST_STATEMENTS` goes from 2,000 to **7,000**: 2,000 was weak enough to
+pass a dump that had silently lost three quarters of the schema, and 7,000
+leaves a fifth of headroom, which is generous for a database whose
+migrations only ever append. The second half of the two-step, done on
+evidence rather than on a guess.
+
+(109 is the current count of statements the hosted project has in a
+different spelling — same code, so not drift. Worth watching: a number
+climbing there means more is being applied by hand.)

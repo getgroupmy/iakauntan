@@ -142,12 +142,21 @@ _IGNORED = re.compile(
 #: that stands between the repository and production schema drift, and it
 #: must not be able to say "no drift" about nothing.
 #:
-#: 2,000, against a measured 7,938 for `public` alone and 8,773 for
-#: `public` and `app` together, dumped from a cluster built from these
-#: migrations. Floored at under a quarter of the smaller number because
-#: the hosted dump's schema list is the CLI's business and not this
-#: file's; raise it when a CI run has reported what it actually sees.
-LEAST_STATEMENTS = 2000
+#: 7,000. It shipped at 2,000 for one run, because which schemas the
+#: hosted dump covers is the CLI's business and not this file's and the
+#: only honest source for the number was a run that reported it. Run 2256
+#: reported it:
+#:
+#:     No drift: 8806 statements, and the hosted project has every one
+#:     of them.
+#:
+#: against 8,773 measured locally for `public` and `app` and 7,938 for
+#: `public` alone -- so CI's two dumps and this machine's agree to within
+#: a few dozen objects, and 2,000 was weak enough to pass a dump that had
+#: silently lost three quarters of the schema. 7,000 leaves a fifth of
+#: headroom, which is generous for a database whose migrations only ever
+#: append.
+LEAST_STATEMENTS = 7000
 
 
 def statements(sql: str) -> list[str]:
@@ -440,8 +449,8 @@ def main(argv: list[str]) -> int:
               "`supabase db dump` wrote, not at the schemas.",
               file=sys.stderr)
         print(f"(For scale: {sorted(counts.values())[-1]} on the other "
-              f"side, and a dump of this project's `public` schema alone "
-              f"measured 7,938.)", file=sys.stderr)
+              f"side, and run 2256 reported 8,806 statements for a schema "
+              f"that matched.)", file=sys.stderr)
         return 1
 
     only_local, only_hosted, cosmetic = compare(local, hosted)
