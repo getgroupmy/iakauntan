@@ -3669,6 +3669,54 @@ jobs:
             exit 1
           fi
 
+      # Before the bundle is assembled and shipped, open it in a browser
+      # and ask whether Flutter drew anything.
+      #
+      # `scripts/check_web_boots.py` was written for the outage in
+      # `docs/passkeys.md` -- a plugin registrant that throws inside
+      # `registerPlugins()`, which runs BEFORE `runApp`, so one exception
+      # there means `main()` never finishes and every page is blank, the
+      # landing page included. Nothing else catches it: `flutter analyze`
+      # is clean, the build compiles, and the failure is a missing JS
+      # global at runtime in a browser.
+      #
+      # **And it had never run anywhere.** It was referenced in no
+      # workflow, not in `run_locally.sh`, nowhere but its own file and
+      # the doc that calls it the general answer. A gate that exists and
+      # never executes looks exactly like coverage.
+      #
+      # Here rather than in a test job because the bundle has to be BUILT
+      # first, and this job is where that happens -- and before
+      # "Assemble", so a bundle that does not start is never shipped.
+      # `check_web_plugin_registrant.py` stays where it is: it fires on
+      # the commit that adds the one plugin known to do this, which is
+      # earlier and cheaper. This is the general case.
+      #
+      # Proved both ways before being wired in: it passes on the real
+      # bundle, reports "threw before it finished starting" when an
+      # exception is injected ahead of `runApp`, and reports "did not draw
+      # anything (blank)" when the bootstrap is emptied instead. It needs
+      # no FLUTTER_ROOT -- `--no-web-resources-cdn` above makes the bundle
+      # carry its own CanvasKit, which the next step already asserts.
+      - name: Check the built bundle actually boots
+        if: steps.creds.outputs.ready == 'true'
+        run: |
+          python3 -m pip install --quiet websocket-client
+          # The runner's browser, DISCOVERED rather than assumed -- the
+          # path differs between images, and the gate exits 2 with its own
+          # message if none of these exists rather than passing quietly.
+          for candidate in /usr/bin/google-chrome \
+                           /usr/bin/google-chrome-stable \
+                           /usr/bin/chromium-browser \
+                           /usr/bin/chromium; do
+            if [ -x "$candidate" ]; then
+              export CHROME="$candidate"
+              break
+            fi
+          done
+          echo "browser: ${CHROME:-<none found>}"
+          python3 scripts/check_web_boots.py
+
       - name: Assemble the Vercel build output
         if: steps.creds.outputs.ready == 'true'
         run: |

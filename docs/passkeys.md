@@ -390,6 +390,15 @@ cd app && flutter build web --release
 python3 scripts/check_web_boots.py
 ```
 
+**It runs in CI as of 4 October, and until then it had never run
+anywhere.** This paragraph described it as the general answer to the
+outage while nothing invoked it — no workflow, not `run_locally.sh`,
+nothing but this sentence. It is now a step in the Vercel deploy job,
+immediately after the web build and **before** the bundle is assembled,
+so a bundle that does not start is never shipped. That job is where the
+build already happens, which is the only place the check costs a browser
+rather than a build.
+
 It needs a Chromium (`CHROME=`, default the Playwright one) and
 `websocket-client`. It serves the SDK's own CanvasKit beside a copy of the
 build, because a release bundle otherwise fetches it from `gstatic.com` and a

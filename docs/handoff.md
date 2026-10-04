@@ -414,6 +414,50 @@ no warning signs: **`corp_repository.dart` CONTAINS the string
 prove the gate names the right file fails on the right answer and the
 wrong one alike. It compares the start of each reported line instead.
 
+### A gate that had never run anywhere
+
+`scripts/check_web_boots.py` opens the built web bundle in a real browser
+and asks whether Flutter drew anything. It exists for the outage in
+`docs/passkeys.md`: a plugin registrant that throws inside
+`registerPlugins()`, which runs BEFORE `runApp`, so one exception there
+means `main()` never finishes and **every page is blank, the landing page
+included.** That shipped. `flutter analyze` is clean, the build compiles,
+and the failure is a missing JS global at runtime in a browser.
+
+**It was referenced in no workflow, not in `run_locally.sh`, nowhere but
+its own file and the doc calling it "the general answer".** Found by
+listing the gates with no self-test and noticing one of them was not run
+either. A gate that exists and never executes looks exactly like
+coverage — the same defect class as the three scope-pinned gates above,
+in its purest form.
+
+It is now a step in the **Vercel deploy job**, right after the web build
+and **before "Assemble the Vercel build output"**, so a bundle that does
+not start is never shipped. That job is the only place the check costs a
+browser rather than a build. `check_web_plugin_registrant.py` stays where
+it is — it fires on the commit that adds the one plugin known to do this,
+which is earlier and cheaper; this is the general case.
+
+**Proved both ways before wiring, because a gate that cannot fail is
+worse than no gate.** On the real bundle: "ok the web bundle starts and
+Flutter draws". With `throw new Error(...)` injected ahead of `runApp`:
+"The web bundle threw before it finished starting", naming the exception.
+With the bootstrap emptied instead — nothing drawn, nothing thrown: "did
+not draw anything (blank)", and it says explicitly that this is NOT the
+registrant failure. Two different faults, two different diagnoses, and
+the control passes again afterwards.
+
+Two things that make the CI step safe, both measured rather than assumed:
+
+  * **it needs no `FLUTTER_ROOT`.** The gate copies the SDK's CanvasKit
+    beside the bundle when it can find it, and `--no-web-resources-cdn`
+    in the build above already makes the bundle carry its own — which the
+    next step asserts with `test -f .../canvaskit/canvaskit.wasm`. Run
+    with `FLUTTER_ROOT=/nonexistent` it still passes.
+  * **the browser is discovered, not assumed.** The path differs between
+    runner images, so the step tries four and the gate exits 2 with its
+    own message if none exists, rather than passing quietly.
+
 ## `0740`: client money has one door — and the claim I had to withdraw
 
 **The other door into the database.** The write-idempotency census covered
