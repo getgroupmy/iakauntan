@@ -200,6 +200,34 @@ void main() {
     expect(find.text('Total'), findsNothing);
   });
 
+  // `docs/widget-tests.md` on `check_narrow_rows.py`: the gate measures a
+  // trailing `Column` by its `Money` alone, so the wider second line
+  // contributes nothing to the estimate. Two overflows shipped through
+  // that hole -- `matters_screen` by 37 pixels and payroll's `_RunTile`
+  // by 55 -- and both were found by pumping at phone width rather than by
+  // either gate. The note here has the same shape and was the only one of
+  // the fourteen carrying it that no test ever laid out narrow.
+  //
+  // No assertion needed: a `RenderFlex` overflow IS a test failure. The
+  // expects below are there so the test still means something if the
+  // layout stops overflowing for the wrong reason, like the rows
+  // disappearing.
+  testWidgets('the note lays out on a phone without running off it', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.physicalSize = const Size(412, 900);
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(scheduleHarness(year));
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Motor Vehicles'), findsOneWidget);
+    expect(find.text('Plant'), findsOneWidget);
+    expect(find.text('Total'), findsOneWidget);
+  });
+
   testWidgets("one asset's history names the disposal as a disposal", (
     tester,
   ) async {

@@ -8915,3 +8915,101 @@ argument for building it.
 `grep -rl physicalSize app/test` says 117 files; the gate says 106,
 because 11 of those are comments. Same rule as the other five: write
 down the number the gate reports.
+
+
+## A row with the shape that shipped two overflows has never been laid out
+
+`docs/widget-tests.md` is explicit about the limit of
+`check_narrow_rows.py`: it measures a trailing `Column` by its `Money`
+alone, so a wider second line contributes nothing to the estimate. Two
+overflows shipped through that hole — `matters_screen` by 37 pixels and
+payroll's `_RunTile` by 55 — and **both were found by pumping at phone
+width, neither by either gate**. The doc's own conclusion: "the thing
+that catches it is building the screen at 412x900."
+
+So I went looking for the shape. **14 rows in `app/lib` have a
+`trailing:` whose value is a `Column`**, two of them the already-fixed
+pair. Of the fourteen, nine are pumped at 412 by some test, and two are
+not: `asset_schedule_dialog` and `dashboard_screen`'s
+`_ReceivablesCard`.
+
+### The asset schedule note holds
+
+Added a 412x900 pump to `asset_schedule_test.dart` — the only one of the
+fourteen whose dialog no test ever laid out narrow. **It does not
+overflow.** A clean negative, and the test stays as a guard: a
+`RenderFlex` overflow is a test failure with no assertion required, so
+this costs nothing to keep.
+
+### `_ReceivablesCard`'s row has never been built at all
+
+This is the finding. The row is
+
+```dart
+trailing: Column(children: [
+  Money(outstanding, bold: true),
+  if (daysOverdue > 0) Text('$daysOverdue days late', fontSize: 11),
+])
+```
+
+— the documented shape exactly, and `'263 days late'` is wider than the
+`Money` above it.
+
+**Nothing in the test suite feeds `arAgingProvider`.** One file names it,
+`live_updates_test.dart`, and only inside a provider-invalidation
+assertion; it never renders the card. So that row has never been laid
+out by any test, at any width.
+
+`check_screens_built.py` counts `dashboard_screen` as constructed, and it
+is right to: with `arAgingProvider` in its default state the card draws
+**no rows**. This is the widget-test doc's **trap 11 hiding its trap
+13** — opening it with nothing in it, so the window size never gets a
+chance to matter.
+
+### I could not land the test, and that is worth being exact about
+
+`module_surface_test.dart` has a `dashboard(...)` harness and an
+`onADesktop(tester, …)` helper — with no phone counterpart, which is part
+of how this persisted. Adding `aging` and `dashboardProvider` overrides
+plus an `onAPhone` helper got the screen to build its header and
+**zero `Card`s**: the Overview's `AsyncView` never reaches its builder,
+so more of its provider graph is pending than `dashboardProvider` alone
+supplies.
+
+My first attempt failed on **its own expectation**, not on an overflow —
+which is the difference between a defect found and a fixture not reaching
+the widget, and the reason this section does not claim an overflow. I
+reverted the half-plumbed test rather than leave it in the tree.
+
+**What it needs:** someone who knows the dashboard's provider graph to
+list what the Overview's `AsyncView` waits on, then one test pumping
+`_ReceivablesCard` with an overdue row at 412x900. The data to use, which
+is the worst honest case: a long Malaysian company name, a six-figure
+sum, and a three-digit overdue count, so the second line is the wider of
+the two.
+
+Until then: **the row is unproven in both directions.** It may well be
+fine — the title carries `maxLines: 1` with ellipsis, so the title side
+cannot overflow, and a `ListTile` subtitle wraps. The honest statement is
+that nothing has measured it, not that it is broken.
+
+### Two negatives from the same doc, recorded so they are not re-tried
+
+* **Trap 7, `textContaining` on a prefix, is not gateable.** 784 call
+  sites, 19 ending in a separator. A blanket rule carries a ~765 backlog,
+  and most uses are legitimate long unique strings; the risk is specific
+  to a prefix of a composed line, which is not statically distinguishable
+  from a substring of a unique one.
+* **The dead doubled-separator assertions are already gone.** The doc
+  records four tests where a `'·  ·'` check could never fire; the three
+  matches left in the tree are comments saying there is deliberately no
+  such check.
+
+### And a third time my own detector was wrong
+
+My first pass said four of the fourteen screens set no window at all. It
+was a literal-only regex, and three of them set `Size(width, 900)` with
+width coming from a loop over `[1400, 1000, 800, 700, 600, 412, 360]` —
+so they are tested at phone width and at 360. **A non-match meant a bad
+pattern, not an absence**, for the third time today, and the corrected
+count is two rather than four.
