@@ -47,12 +47,26 @@ other half: a body cannot be scanned by blanking comments and then
 blanking strings, because a `--` inside a refusal message eats the
 write it was written for.
 """
+import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from sql_call_graph import load, mark_writers, why  # noqa: E402
+
+
+
+#: A floor under how many functions the catalogue query must return the sweep must have EXAMINED.
+#:
+#: Found by running every database-backed gate against a database
+#: that EXISTS and has an empty schema -- the case the empty-tree
+#: sweep in `check_sweeps_look.py` cannot reach, and says it
+#: cannot. Four of the ten passed, this among them.
+#:
+#: 1,653 today. Set well below that: it guards against the query coming
+#: back empty, not against a function being added or removed.
+LEAST = int(os.environ.get("IAK_LEAST_SITES", "800"))
 
 
 def main() -> int:
@@ -66,6 +80,17 @@ def main() -> int:
         print(str(e), file=sys.stderr)
         return 2
 
+    if len(rows) < LEAST:
+        print(
+            f"The catalogue query returned {len(rows)} function(s), and "
+            f"there were {LEAST} or more when this was written. Either "
+            f"the database is not the one with the schema in it, or the "
+            f"query no longer matches -- and a gate with no functions to "
+            f"read says `ok nothing declared STABLE or IMMUTABLE can "
+            f"reach a write`, which is what a correct schema says.",
+            file=sys.stderr)
+        return 2
+
     writes = mark_writers(rows)
     offenders = [
         i for i, r in enumerate(rows)
@@ -74,7 +99,8 @@ def main() -> int:
     ]
 
     if not offenders:
-        print("ok   nothing declared STABLE or IMMUTABLE can reach a write")
+        print(f"ok   nothing declared STABLE or IMMUTABLE can reach a "
+              f"write ({len(rows)} functions examined)")
         return 0
 
     print("A function that writes must not be STABLE or IMMUTABLE.")

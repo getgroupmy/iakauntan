@@ -8743,3 +8743,88 @@ references, 502 vs 500 `Fmt.*` calls, 219 vs 217 `.order(` sites. Every
 time the gate strips comments or doc comments first and my ad-hoc count
 did not. **Write down the number the gate reports.** Five times is not
 bad luck.
+
+
+## The ten gates the empty-tree sweep said it could not reach
+
+`check_sweeps_look.py` excuses ten gates as `NEEDS_A_DATABASE`: they take
+a database URL, so an empty SOURCE tree says nothing about them. That
+excuse is honest and it is also a hole — the same defect class, in ten
+gates, untested.
+
+Tested now, by the one experiment that reaches them: a database that
+**exists and has an empty schema**. `create database iak_hollow` on the
+local throwaway cluster, zero functions and zero tables in `public`, and
+each of the ten pointed at it.
+
+**Four of the ten passed over nothing:**
+
+| gate | what it said over an empty schema |
+|---|---|
+| `check_stable_writers` | "ok nothing declared STABLE or IMMUTABLE can reach a write" |
+| `check_module_gates` | "ok every function checking two modules names them both" |
+| `check_ambiguous_overloads` | "no two functions answer to one set of named arguments (**0 reachable**, 0 overloaded by name)" |
+| `check_undocumented_writes` | "Every write a signed-in user can reach carries a `comment on function`" |
+
+Six reported correctly, and `check_query_columns` had exactly the right
+message already — *"only 0 relations in public — the catalogue query
+cannot have…"*. That is the model for this bucket.
+
+### The one that refines my own earlier work
+
+`check_undocumented_writes` was given a positive control earlier today:
+`undocumented(db)` returns **2 rather than 0** when psql fails. That
+covered **the connection breaking**. It did not cover **the query
+succeeding over nothing** — different holes, and only one of them was
+shut. Worth being precise about rather than counting the earlier fix as
+having handled it.
+
+It is also zero-expected: `undocumented()` returns the offenders, so a
+floor on its length would demand that offenders exist. The floor goes on
+the **denominator** — every volatile `public` function `authenticated`
+may execute, documented or not. 525 today, floored at 250, with the
+census query kept beside `QUERY` so the two cannot drift apart quietly.
+
+| gate | census | floor |
+|---|---|---|
+| `check_stable_writers` | 1,653 functions | 800 |
+| `check_module_gates` | 842 rows | 400 |
+| `check_ambiguous_overloads` | 824 reachable | 400 |
+| `check_undocumented_writes` | 525 candidate writes | 250 |
+
+All four now exit 2 against the hollow database and still pass against
+the real schema; so do the other six, re-checked.
+
+### Not automated, and why — plus what it would take
+
+There is no gate driving this, deliberately. Automating it means a gate
+that **creates a database**, and if that were ever pointed at the
+production URL it would be a write to production, which the standing rule
+forbids unless asked. The right design is clear enough to hand over:
+
+* a uniquely named database, created and dropped in a `finally`;
+* a **refusal to run at all unless the DSN is local** — a unix socket, or
+  a host of `localhost`/`127.0.0.1`. Production is `*.supabase.co`, so
+  the test is cheap and exact;
+* a failure to create reported as "could not look", never skipped —
+  otherwise the gate inherits the defect it exists to catch;
+* the same four-bucket shape as `check_sweeps_look`, so an excuse that
+  goes stale fails.
+
+I left that unbuilt rather than bolting a database-mutating gate onto the
+branch that deploys to production at the end of a long session. The four
+fixes above stand on their own and are verified both ways.
+
+**`iak_hollow` is still on the local cluster** (`/var/tmp/pgdata`, port
+5599) if you want to re-run the experiment:
+
+```sh
+for g in ambiguous_overloads bank_account_types discarded_values \
+         module_gates overload_assertions query_columns rpc_grants \
+         stable_writers undocumented_writes write_doors; do
+  python3 scripts/check_$g.py \
+    "postgresql://postgres@/iak_hollow?host=/var/tmp&port=5599" \
+    >/dev/null 2>&1
+  [ $? -eq 0 ] && echo "PASSES OVER NOTHING: check_$g"
+done
+```

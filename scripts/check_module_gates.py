@@ -50,6 +50,7 @@ module name IS a literal, and the scanner that blanks them answers a
 different question and calls every gated function in the schema
 comment-gated. It did, 207 of them, before that distinction existed.
 """
+import os
 import re
 import sys
 import json
@@ -83,6 +84,19 @@ select coalesce(json_agg(row_to_json(t)), '[]'::json) from (
 """
 
 
+
+#: A floor under how many rows the catalogue query must return the sweep must have EXAMINED.
+#:
+#: Found by running every database-backed gate against a database
+#: that EXISTS and has an empty schema -- the case the empty-tree
+#: sweep in `check_sweeps_look.py` cannot reach, and says it
+#: cannot. Four of the ten passed, this among them.
+#:
+#: 842 today. Set well below that: it guards against the query coming
+#: back empty, not against a function being added or removed.
+LEAST = int(os.environ.get("IAK_LEAST_SITES", "400"))
+
+
 def main() -> int:
     if len(sys.argv) < 2:
         print('usage: check_module_gates.py <database-url>', file=sys.stderr)
@@ -94,11 +108,21 @@ def main() -> int:
         print(out.stderr.strip(), file=sys.stderr)
         return 2
 
+    rows = json.loads(out.stdout)
+    if len(rows) < LEAST:
+        print(
+            f'The catalogue query returned {len(rows)} row(s), and there '
+            f'were {LEAST} or more when this was written. A gate with no '
+            f'functions to read says `ok every function checking two '
+            f'modules names them both`, which is what a correct schema '
+            f'says.', file=sys.stderr)
+        return 2
+
     GATE = re.compile(r"can_(?:read|write)_module\([^,]+,\s*'([a-z_]+)'")
 
     offenders = []
     commented = []
-    for row in json.loads(out.stdout):
+    for row in rows:
         mods = sorted(set(row['modules'] or []))
         real = sorted(set(GATE.findall(strip_comments(row['src']))))
         # A module the generator will publish that the function does
@@ -130,7 +154,8 @@ def main() -> int:
         return 1
 
     if not offenders:
-        print('ok   every function checking two modules names them both')
+        print(f'ok   every function checking two modules names them both '
+          f'({len(rows)} functions examined)')
         return 0
 
     print('A function that checks more than one module must name every')

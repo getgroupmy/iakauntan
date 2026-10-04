@@ -53,6 +53,7 @@ the secret key and are not part of the described surface. And the
 requires a comment on every one of those, and there is no allowance.
 """
 import signal
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -200,6 +201,29 @@ if hasattr(signal, 'SIGPIPE'):
 
 BUDGET = 0
 
+#: A floor under how many candidate writes the sweep must have EXAMINED.
+#:
+#: Found by running every database-backed gate against a database
+#: that EXISTS and has an empty schema -- the case the empty-tree
+#: sweep in `check_sweeps_look.py` cannot reach, and says it cannot.
+#: Four of the ten passed, this among them: it printed "Every write a signed-in user can
+#: reach carries a `comment on function`" over a schema with no
+#: functions in it at all.
+#:
+#: The earlier fix here -- returning 2 when psql FAILS -- covered
+#: the connection breaking, not the query succeeding over nothing.
+#: Those are different holes and only one of them was shut.
+#:
+#: This gate is ZERO-EXPECTED: `undocumented()` returns the
+#: offenders, so a floor on ITS length would demand that
+#: offenders exist. The floor goes on the DENOMINATOR instead --
+#: every volatile public function `authenticated` may execute,
+#: documented or not.
+#:
+#: 525 today. Set well below that.
+LEAST = int(os.environ.get("IAK_LEAST_SITES", "250"))
+
+
 QUERY = r"""
 select p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')'
   from pg_proc p
@@ -219,6 +243,36 @@ select p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')'
                     where dp.objid = p.oid and dp.deptype = 'e')
  order by p.proname;
 """
+
+
+#: The denominator: the same population as QUERY, without the
+#: "has no comment" filter. Kept beside it so the two cannot drift
+#: apart silently -- if one stops matching, the ratio goes wrong in a
+#: way the floor below notices.
+CENSUS = """
+select count(*)
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname = 'public'
+   and p.prokind = 'f'
+   and p.provolatile = 'v'
+   and has_function_privilege('authenticated', p.oid, 'execute')
+   and not exists (select 1 from pg_depend dp
+                    where dp.objid = p.oid and dp.deptype = 'e');
+"""
+
+
+def candidate_writes(db: str) -> int | None:
+    """How many writes were in scope at all, or None if psql failed."""
+    out = subprocess.run(['psql', db, '-tAc', CENSUS],
+                         capture_output=True, text=True)
+    if out.returncode != 0:
+        print(out.stderr.strip(), file=sys.stderr)
+        return None
+    try:
+        return int(out.stdout.strip())
+    except ValueError:
+        return None
 
 
 def undocumented(db: str) -> list[str] | None:
@@ -243,6 +297,19 @@ def main() -> int:
 
 
 def run(db: str) -> int:
+    # The denominator FIRST. Without it this gate reads a schema with no
+    # functions in it and reports that every write is documented.
+    seen = candidate_writes(db)
+    if seen is None or seen < LEAST:
+        print(
+            'This gate found %s write(s) a signed-in user can reach, and '
+            'there were %d or more when it was written. Either the '
+            'database is not the one with the schema in it, or the query '
+            'no longer matches -- and over nothing at all it reports that '
+            'every write carries a comment.'
+            % ('no' if seen is None else seen, LEAST), file=sys.stderr)
+        return 2
+
     names = undocumented(db)
     if names is None:
         # A gate that cannot ask the database must not report a clean

@@ -34,10 +34,24 @@ SPEC.loader.exec_module(cuw)
 
 class Harness(unittest.TestCase):
 
-    def gate(self, names, budget=None):
-        """Run the real `run()` over a fed list instead of a cluster."""
+    def gate(self, names, budget=None, seen=None):
+        """Run the real `run()` over a fed list instead of a cluster.
+
+        `candidate_writes` is stubbed as well as `undocumented`. It is
+        the DENOMINATOR -- how many writes were in scope at all -- and
+        `run()` now refuses below a floor on it, because the query
+        succeeding over an empty schema used to report that every write
+        carries a comment. The earlier control here covered psql
+        FAILING, which is a different hole.
+
+        `seen=None` feeds a healthy denominator so the cases below
+        exercise what they are about; `TheDenominator` feeds it directly.
+        """
         real_q, real_b = cuw.undocumented, cuw.BUDGET
+        real_c = cuw.candidate_writes
         cuw.undocumented = lambda db: names
+        cuw.candidate_writes = lambda db: (
+            cuw.LEAST if seen is None else seen)
         if budget is not None:
             cuw.BUDGET = budget
         out, err = io.StringIO(), io.StringIO()
@@ -46,6 +60,7 @@ class Harness(unittest.TestCase):
                 code = cuw.run("db")
         finally:
             cuw.undocumented, cuw.BUDGET = real_q, real_b
+            cuw.candidate_writes = real_c
         return code, out.getvalue() + err.getvalue()
 
 
@@ -153,6 +168,56 @@ class WhatTheQueryLooksAt(unittest.TestCase):
     def test_the_comment_test_is_for_blank_as_well_as_null(self):
         """A `comment on function f is ''` is not a description."""
         self.assertRegex(self.sql, r"btrim\(d\.description\)")
+
+
+
+class TheDenominator(Harness):
+    """The hole the earlier control did not cover.
+
+    `undocumented(db)` returning None on a psql failure was added first
+    and shuts one door: the connection breaking. A query that SUCCEEDS
+    over a schema with no functions in it is a different door, and this
+    gate went through it -- found by pointing every database-backed gate
+    at a database that exists and is empty.
+    """
+
+    def test_an_empty_schema_is_refused(self):
+        code, said = self.gate([], budget=0, seen=0)
+        self.assertEqual(code, 2, said)
+        self.assertIn("found 0 write(s)", said)
+        self.assertIn("every write carries a comment", said)
+
+    def test_a_denominator_below_the_floor_is_refused(self):
+        code, said = self.gate([], budget=0, seen=cuw.LEAST - 1)
+        self.assertEqual(code, 2, said)
+
+    def test_a_healthy_denominator_passes(self):
+        code, said = self.gate([], budget=0, seen=cuw.LEAST)
+        self.assertEqual(code, 0, said)
+
+    def test_psql_failing_on_the_census_is_also_refused(self):
+        """The connection half, which must keep working: a census that
+        cannot be taken is not a census of zero, and `None` has to be
+        refused rather than compared."""
+        import contextlib
+        import io
+        real_q, real_c = cuw.undocumented, cuw.candidate_writes
+        try:
+            cuw.undocumented = lambda db: []
+            cuw.candidate_writes = lambda db: None
+            out, err = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stdout(out), \
+                    contextlib.redirect_stderr(err):
+                code = cuw.run("db")
+            said = out.getvalue() + err.getvalue()
+        finally:
+            cuw.undocumented, cuw.candidate_writes = real_q, real_c
+        self.assertEqual(code, 2, said)
+        self.assertIn("found no write(s)", said)
+
+    def test_the_floor_is_below_the_census_but_not_zero(self):
+        self.assertGreater(cuw.LEAST, 0)
+        self.assertLess(cuw.LEAST, 525)
 
 
 if __name__ == "__main__":

@@ -48,6 +48,7 @@ client sending JSON does not: `100` arrives as `integer` and matches
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 
@@ -112,6 +113,21 @@ def collides(a: dict, b: dict) -> bool:
     # to be one both will accept.
     wanted = a_need | b_need
     return wanted <= a_all and wanted <= b_all
+
+
+
+#: A floor under how many reachable functions the sweep must have EXAMINED.
+#:
+#: Found by running every database-backed gate against a database
+#: that EXISTS and has an empty schema -- the case the empty-tree
+#: sweep in `check_sweeps_look.py` cannot reach, and says it cannot.
+#: Four of the ten passed, this among them: it printed "(0
+#: reachable, 0 overloaded by name)" and exited 0. The number was
+#: already in the sentence and nothing compared it -- the same
+#: mistake as three of the source sweeps.
+#:
+#: 824 today. Set well below that.
+LEAST = int(os.environ.get("IAK_LEAST_SITES", "400"))
 
 
 def main(dsn: str) -> int:
@@ -179,6 +195,15 @@ def main(dsn: str) -> int:
             "can reach on purpose."
         )
         return 1
+
+    if len(rows) < LEAST:
+        print(
+            f"The catalogue query returned {len(rows)} reachable "
+            f"function(s), and there were {LEAST} or more when this was "
+            f"written. A gate with no functions to compare reports that "
+            f"no two of them collide, which is what a clean schema "
+            f"reports.", file=sys.stderr)
+        return 2
 
     overloaded = sum(1 for g in by_name.values() if len(g) > 1)
     print(
