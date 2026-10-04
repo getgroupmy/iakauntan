@@ -10767,3 +10767,58 @@ long label, NOT a capacity boundary. The comment says so now.
 
 Three of the thirteen excuses are measured; the other ten rest on two
 measured mechanisms in the same files. That is the honest state of it.
+
+## 4 October, part eight: the survey one level up, and why it is NOT a gate
+
+The thin-assertion gate's own docstring says what it does not prove:
+`find.textContaining` on a fragment, and `findsWidgets` on a string two
+sections can both produce, are not thin by its measure and pin almost
+nothing. So the next question was asked: how many, and are they hiding
+anything?
+
+**The sizes, out of 13,079 `expect()` calls under `app/test`:**
+
+| form | count |
+|---|---|
+| `textContaining` + `findsOneWidget` | 585 |
+| `find.text` + `findsWidgets` | 57 |
+| `textContaining` + `findsWidgets` | 33 |
+| `byType` + `findsWidgets` | 6 |
+| `findsAtLeastNWidgets` | 0 |
+| `evaluate(), isNotEmpty` | 0 |
+
+The 33 are the weakest combination — a loose matcher AND a loose count —
+so they were listed and read. Several look indefensible at a glance:
+`'tax'` is three characters; `'5,000'`, `'54.00'`, `'42.00'`, `'1320.00'`,
+`'60'` and `'0 bills'` are bare numbers; `'ST8'`, `'ST6'`, `'SL10'` are
+three short codes in a row.
+
+**And then the weakest of the lot turned out to be sound.**
+`intercompany_test.dart` asserts `find.textContaining('tax')` with
+`findsWidgets` on a taxed invoice — and `findsNothing` on the same fragment
+for an untaxed one, in the very next test. The presence/absence pair IS the
+claim, and the loose matcher is deliberate because the exact wording is not
+what is being asserted. Mutated both ways:
+
+  tax printed whether or not there is any   KILLED
+  tax never printed                         KILLED
+  CONTROL: a comment                        survived
+
+`manufacturing_order_test.dart`'s `'60'` is the same shape: paired with a
+`findsOneWidget` on `'A short run'`, which is the real claim.
+
+### So: no gate here, and that is the finding
+
+A ratchet on `findsWidgets` would have fired on the two cases examined, and
+both are correct. **The pairing is invisible to a pattern**, which is the
+same reason the thin-assertion gate needed one level of helper resolution
+and the same reason an excuse list is part of that gate rather than an
+afterthought. A gate whose true-positive rate is unknown and whose first
+two hits are both false is a gate that teaches people to excuse things.
+
+What would be worth doing, if this thread is picked up again, is the
+opposite of a sweep: take the 585 `textContaining` + `findsOneWidget` sites
+in ONE file, mutate the strings they assert, and see how many survive. That
+measures assertion strength instead of guessing at it from shape. The
+tooling is already there — `scripts/mutate.py` works against a test file as
+its own source, which is how the two-factor QR claims were measured.
