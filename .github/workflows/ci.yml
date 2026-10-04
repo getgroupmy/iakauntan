@@ -2027,11 +2027,11 @@ jobs:
                      | awk -F'|' 'NF>=3 && $1 ~ /[0-9]/ && $2 !~ /[0-9]/ {print $1}' \
                      | tr -d ' ' | tr '\n' ' ')"
 
-          # How much of that table the parse could see at all, printed so
-          # a later commit can floor it from a measurement rather than a
-          # guess. It is NOT gated yet, deliberately: nothing here can run
-          # `migration list --linked` outside CI, so the only honest
-          # source for the number is a run that reports it.
+          # How much of that table the parse could see at all. Printed
+          # first and gated below, in that order and for that reason:
+          # nothing outside CI can run `migration list --linked`, so the
+          # only honest source for the floor was a run that reported the
+          # number, and run 2265 is the one that did.
           rows="$(sed 's/│/|/g' /tmp/level.txt \
                   | awk -F'|' 'NF>=3 && $1 ~ /[0-9]/' | wc -l | tr -d ' ')"
           files="$(ls supabase/migrations/*.sql 2>/dev/null | wc -l \
@@ -2047,6 +2047,46 @@ jobs:
           # number nobody can read is a number nobody will floor.
           echo "::notice::migration list: $rows row(s) parsed," \
                "$pend_n pending, $files migration file(s) on disk"
+
+          # THE GUARD ON THE GUARD BELOW. The paragraph after this one is
+          # right that a parse seeing nothing errs toward comparing
+          # rather than toward silence -- but it also leaves `pend_n` at
+          # 0, which is below 20, so the check it guards cannot fire
+          # either. A format change that makes this awk match NOTHING
+          # therefore passes both tests written to catch a format change.
+          #
+          # Floored against the files on disk rather than a constant,
+          # because the constant is the thing that goes stale: migrations
+          # are append-only here, so the number only ever grows, and
+          # `rows` must keep up with it. Run 2265's annotation is where
+          # this number came from --
+          #
+          #     migration list: 742 row(s) parsed, 0 pending,
+          #     742 migration file(s) on disk
+          #
+          # -- so the two ARE equal on a level project, and the one-sided
+          # comparison is deliberate: a migration applied to the hosted
+          # project from outside this repository would add a row with no
+          # file behind it, which is worth knowing about and is not this
+          # parse breaking.
+          if [ "$files" -lt 700 ]; then
+            echo "::error::found only $files file(s) under" \
+                 "supabase/migrations/. The row count below is floored" \
+                 "against this number, so a glob that matches nothing" \
+                 "would make that floor pass over an empty table." >&2
+            exit 1
+          fi
+          if [ "$rows" -lt "$files" ]; then
+            echo "::error::the migration list parse saw $rows row(s) and" \
+                 "there are $files migration file(s) on disk. Every file" \
+                 "here has been applied, so \`supabase migration list" \
+                 "--linked\` prints a row for each one and this awk should" \
+                 "match all of them. Fewer means the table's format moved:" \
+                 "read it before trusting any verdict from it, including" \
+                 "the 'nothing is pending' one, which a parse matching no" \
+                 "rows at all produces by accident." >&2
+            exit 1
+          fi
 
           # The one direction of this parse that fails SILENTLY AND FOR
           # EVER. `ready=false` skips the drift comparison and the build
