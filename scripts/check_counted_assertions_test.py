@@ -35,6 +35,8 @@ SPEC.loader.exec_module(cca)
 class Harness(unittest.TestCase):
 
     def gate(self, files, reviewed):
+        """`files=None` means the real suite, which is the only scope the
+        file floor applies to."""
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             code = cca.run(files, reviewed)
@@ -163,6 +165,30 @@ class ScopeIsTheSuitesOwn(Harness):
             with self.subTest(name):
                 got = cca.counted_sources((cca.TESTS / name).read_text())
                 self.assertGreaterEqual(got, least, name)
+
+    def test_an_empty_tests_directory_is_refused(self):
+        """The gate shipped without this and passed over an empty
+        `supabase/tests`, saying "every one of 0 assertion files says
+        something when it passes". The self-test below caught it and the
+        gate did not, which is a weaker arrangement than it reads."""
+        import tempfile
+        real = cca.TESTS
+        with tempfile.TemporaryDirectory() as tmp:
+            cca.TESTS = pathlib.Path(tmp)
+            try:
+                code, said = self.gate(None, {})
+            finally:
+                cca.TESTS = real
+        self.assertEqual(code, 2, said)
+        self.assertIn("found 0 assertion file(s)", said)
+        self.assertIn("nothing to look at", said)
+
+    def test_the_floor_does_not_fire_on_a_fed_fixture(self):
+        """Only the default scope is floored, or every test above would
+        fail on its two-file fixture."""
+        f = self.write("loud.sql", COUNTS)
+        code, said = self.gate([f], {})
+        self.assertEqual(code, 0, said)
 
     def test_the_zero_floor_still_has_teeth(self):
         """A floor at zero has one failure mode that looks like success:

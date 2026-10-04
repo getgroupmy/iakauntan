@@ -127,10 +127,39 @@ def uncounted(files: list[pathlib.Path]) -> list[str]:
     return [f.name for f in files if counted_sources(f.read_text()) == 0]
 
 
+#: A floor under how many assertion files the sweep must have FOUND.
+#:
+#: This gate shipped without one and passed over an empty
+#: `supabase/tests`, printing "every one of 0 assertion files says
+#: something when it passes". Found by a sweep that ran every gate in a
+#: tree with the source directories emptied -- and worth recording that
+#: the gate's own self-test DID catch it (`test_it_looks_at_the_whole_suite`
+#: asserts more than 300), so CI was covered while the gate alone was
+#: not. A gate that only holds when its test runs beside it is weaker
+#: than it reads.
+#:
+#: 383 files today. Well below that: this guards against the directory
+#: moving, not against a file being added or removed.
+LEAST_FILES = 300
+
+
 def run(files: list[pathlib.Path] | None = None,
         reviewed: dict[str, str] | None = None) -> int:
+    # Only the DEFAULT scope is floored. The self-tests feed two or three
+    # files on purpose, and a floor of 300 over a fixture of two is not a
+    # positive control, it is a broken test.
+    swept_the_real_suite = files is None
     files = assertion_files() if files is None else files
     reviewed = UNCOUNTED if reviewed is None else reviewed
+
+    if swept_the_real_suite and len(files) < LEAST_FILES:
+        print("This sweep found %d assertion file(s) in %s, and there were "
+              "%d or more when it was written. Either the directory moved "
+              "or it is being read from the wrong place -- and a sweep with "
+              "nothing to look at reports exactly what a clean suite "
+              "reports." % (len(files), TESTS, LEAST_FILES), file=sys.stderr)
+        return 2
+
     found = uncounted(files)
 
     problems = []

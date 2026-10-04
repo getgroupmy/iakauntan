@@ -8471,3 +8471,114 @@ drives every source-scanning gate at an empty scope and requires a
 non-zero exit, carrying a reviewed list of the ones it cannot drive and
 why. That covers future gates automatically, which a per-gate test does
 not. It is the generalisation this section is one instance of.
+
+## Nineteen sweeps could not tell a clean result from an empty one
+
+The six-gate finding above was the first pass, done by redirecting a
+module-level scope constant. The fuller method reaches gates that build
+their paths inside functions: build a tree holding `scripts/` and EMPTY
+source directories, run each gate in it as a subprocess, and require it
+to fail.
+
+**Thirteen more gates passed over nothing**, for nineteen in total. And
+the correction that matters most:
+
+### Printing a count is not checking one
+
+My earlier note said 38 of 62 gates "report what they examined" and
+treated that as having a positive control. **That was wrong.** Three of
+the thirteen print a number and pass anyway, because nothing compares it:
+
+| gate | over an empty tree |
+|---|---|
+| `check_money_is_numeric` | "every money column is numeric (**0 migrations**, 0 allowed floats)", exit 0 |
+| `check_dialogs_built` | "All **0** dialog and sheet openers are called by a test", exit 0 |
+| `check_edge_cors` | "ok **0** edge functions, all on the shared CORS headers", exit 0 |
+
+A number in the output looks like evidence and is not, unless something
+refuses it. That is the twelfth variant of *matching text is not checking
+meaning* — here, reading one's own output as a control.
+
+### One of the nineteen was written this morning
+
+`check_counted_assertions.py`, added earlier the same day, passed over an
+empty `supabase/tests` printing **"every one of 0 assertion files says
+something when it passes; the ratchet is at zero."**
+
+Its own self-test *did* catch it — `test_it_looks_at_the_whole_suite`
+asserts more than 300 files — so CI was covered while the gate alone was
+not. Worth separating those two: a gate that only holds when its test
+runs beside it is weaker than it reads, and nothing guarantees the pairing
+except habit. It now has `LEAST_FILES = 300`, applied only to the default
+scope so the fed fixtures in its tests still work, and exits 2 over an
+empty directory.
+
+### The gate, rather than nineteen fixes
+
+`scripts/check_sweeps_look.py`. Nineteen is too many for one change, and
+a per-gate fix does nothing for the twentieth gate written next week. The
+gate makes the property the default: a new sweep must fail over nothing,
+or be named with a reason.
+
+Four buckets, each falsifiable **both** ways, which matters because every
+excuse here is a claim that can go stale:
+
+| bucket | n | what it must do over an empty tree |
+|---|---|---|
+| ordinary sweeps | 32 | report a problem |
+| `NEEDS_A_DATABASE` | 10 | exit with a `usage:` line |
+| `NEEDS_A_FILE` | 8 | raise `FileNotFoundError` for a named file |
+| `PASSES_OVER_NOTHING` | 12 | pass — a ratchet that may only fall |
+
+32 + 10 + 8 + 12 = 62, asserted in the self-test, because a gate in no
+bucket would be checked by nothing — which is this gate's own subject.
+
+### Its first run found two defects in itself
+
+**It drove itself**, recursing until the timeout — and *reported* that
+about itself rather than hanging, which is why it cost two minutes.
+
+**It read `usage: ... <database-url>` plus exit 2 as "reported a
+problem"**, so all ten database gates looked drivable. Non-zero for the
+wrong reason is precisely the vacuous success this gate exists to refuse,
+and the gate committed it on its first run. Hence four buckets rather
+than two.
+
+### And the mutation sweep found two more, in the test
+
+Nine mutants, two survived the first time:
+
+* **the mutant that deletes the usage branch entirely.** My assertion for
+  it read `csl.verdicts.__doc__.count("usage:") > 0` — it tested the
+  **docstring**. A test that reads prose about the behaviour is not a test
+  of the behaviour, and this was the gate whose whole subject is that
+  mistake. Now driven through `verdicts()` with a faked `drive`, over six
+  cases including a traceback that also prints usage text (a crash, not a
+  polite request for an argument).
+* **the mutant truncating the remedy text.** The assertion checked a
+  prefix that survived the truncation. Now pins the specific clause.
+
+Second sweep: 8 killed, 0 survived, control intact.
+
+### The ratchet, and what each entry needs
+
+Twelve, each with a note saying what it would have to count and compare.
+They are not one job: some need a floor on files globbed, some on sites
+matched, and three only need to check the number they already print.
+
+`check_captcha_tokens`, `check_capture_is_kept`, `check_current_org`,
+`check_date_arguments`, `check_dialogs_built`, `check_edge_cors`,
+`check_initstate_ref`, `check_loading_spinners`, `check_money_is_numeric`,
+`check_narrow_rows`, `check_order_direction`, `check_token_rotators`.
+
+`check_money_is_numeric` is the one to do first: it is statutory-adjacent
+(no money column may be a float) and already prints the number.
+
+### A note on my own verification, three times over
+
+I read `$?` after a pipe and got the pipe's status rather than the
+command's **three separate times today**, once while writing the commit
+message that explains the trap. It is in `docs/handoff.md` already, it is
+in CI's own comments, and I still did it. The habit that actually works is
+`cmd >/dev/null 2>&1; echo $?` with nothing between — not knowing about
+the problem.

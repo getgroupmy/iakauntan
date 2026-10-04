@@ -1582,6 +1582,28 @@ jobs:
           python3 scripts/check_assertion_floor_test.py
           python3 scripts/check_assertion_floor.py
 
+      # Every sweep in scripts/ has a failure mode that is invisible from
+      # outside: the glob returns nothing, or the pattern stops matching,
+      # and the gate prints its success line over an empty result.
+      # "Looked and found nothing" and "could not look" are the same
+      # output. This runs each gate in a tree holding scripts/ and EMPTY
+      # source directories and requires it to fail.
+      #
+      # Nineteen did not, found in two sweeps. Six were fixed with a floor
+      # on sites matched; twelve are a ratchet that may only fall; one was
+      # check_counted_assertions, added earlier the same day, which passed
+      # over an empty supabase/tests saying "every one of 0 assertion
+      # files says something when it passes".
+      #
+      # The correction worth carrying: PRINTING A COUNT IS NOT CHECKING
+      # ONE. check_money_is_numeric says "742 migrations, 0 allowed
+      # floats", and over an empty tree "0 migrations, 0 allowed floats",
+      # and exits 0 either way.
+      - name: Check every sweep is actually looking
+        run: |
+          python3 scripts/check_sweeps_look_test.py
+          python3 scripts/check_sweeps_look.py
+
       - name: Check every client-reachable write is accounted for
         run: |
           DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
