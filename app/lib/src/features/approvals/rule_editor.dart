@@ -268,7 +268,19 @@ class _RuleSheetState extends ConsumerState<_RuleSheet> {
     final who = _byRole
         ? roleLabel(_role)
         : team
-                  .where((m) => m.userId == _userId)
+                  // `m.userId != null` is not redundant beside the
+                  // comparison, and leaving it out named the wrong
+                  // person. Switching to "A named person" leaves
+                  // `_userId` null until somebody is chosen, and a
+                  // member who has been INVITED and not accepted also
+                  // has a null `user_id` -- so `m.userId == _userId`
+                  // matched that member, and the sentence read "cannot
+                  // be posted until Siti Aminah has approved" over a
+                  // rule naming nobody at all. The picker beside it
+                  // already drops those members for exactly this
+                  // reason; the sentence has to agree with the picker,
+                  // or it describes a rule the picker cannot write.
+                  .where((m) => m.userId != null && m.userId == _userId)
                   .map((m) => m.displayName)
                   .firstOrNull ??
               'nobody yet';

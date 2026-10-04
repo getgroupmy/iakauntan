@@ -135,6 +135,33 @@ jobs:
           python3 scripts/check_analyzer_covers_the_app_test.py
           python3 scripts/check_analyzer_covers_the_app.py
 
+      # A CEILING on the weakest assertion a widget test can make:
+      # `expect(tester.takeException(), isNull)` and nothing else. It is a
+      # real check and it is the floor of the floor -- it says the screen
+      # was BUILT, and nothing about what the screen says.
+      #
+      # Measured, not guessed: 34 bodies in
+      # `dialogs_build_batch2_test.dart` checked only that, and eighteen of
+      # them were fed a row shape the database never sends -- a title that
+      # read "What null bills", a subtitle whose code was the four
+      # characters n-u-l-l, a live modifier group drawn as retired, a
+      # filing fixture that was a row from another table. None of it threw.
+      #
+      # Twelve more bodies match the pattern legitimately and are excused
+      # by name in the gate: they are OVERFLOW tests, where the framework
+      # raising on `RenderFlex` is the assertion and `takeException` is
+      # what collects it. Proved rather than argued -- an unflexed wide
+      # `Row` inside `NewOrganizationDialog` killed "the new-company dialog
+      # fits", with a comment-only control surviving the same run.
+      #
+      # Beside the analyser gate because both are about this job's own
+      # claims rather than about the database, and neither needs Flutter.
+      - name: Count the tests that check only that nothing threw
+        working-directory: .
+        run: |
+          python3 scripts/check_thin_assertions_test.py
+          python3 scripts/check_thin_assertions.py
+
       - run: flutter analyze --fatal-infos --fatal-warnings
 
       # `- run: flutter test` was this step for 2251 runs, and a bare

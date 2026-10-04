@@ -1,0 +1,15 @@
+14
+
+How many widget-test bodies check nothing but
+`expect(tester.takeException(), isNull)`, less the ones excused with a
+reason in `scripts/check_thin_assertions.py`.
+
+A CEILING, and it may only fall. It was 34 when the hunt started -- all
+of them in `dialogs_build_batch2_test.dart` -- and twenty were rewritten
+in one sitting, which turned up three wrong-shape fixtures and two real
+defects. The remaining fourteen are named in docs/handoff.md.
+
+Thirteen more bodies match the pattern and are excused in `ALLOWED`:
+twelve are overflow tests, where the framework raising on `RenderFlex` IS
+the assertion and `takeException` is what collects it, and one writes a
+spreadsheet that `check_xlsx.py` reads back in the same job.

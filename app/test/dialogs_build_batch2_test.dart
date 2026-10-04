@@ -1,11 +1,11 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:iakauntan/src/core/providers.dart';
 import 'package:iakauntan/src/core/theme.dart';
+import 'package:iakauntan/src/core/format.dart';
 import 'package:iakauntan/src/core/searchable_picker.dart';
 import 'package:iakauntan/src/data/repository.dart';
 import 'package:iakauntan/src/data/models.dart';
@@ -21,6 +21,7 @@ import 'package:iakauntan/src/features/forecasting/forecast_screen.dart';
 import 'package:iakauntan/src/features/forecasting/forecast_settings_dialog.dart';
 import 'package:iakauntan/src/features/forecasting/item_params_dialog.dart';
 import 'package:iakauntan/src/features/hr/appraisal_part.dart';
+import 'package:iakauntan/src/features/hr/hiring.dart';
 import 'package:iakauntan/src/features/hr/appraisal_review.dart';
 import 'package:iakauntan/src/features/hr/who_is_away.dart';
 import 'package:iakauntan/src/features/pos/stall_items_dialog.dart';
@@ -70,6 +71,15 @@ import 'package:iakauntan/src/features/timesheets/project_budget.dart';
 /// because the author is thinking about a desktop modal while writing
 /// one.
 void main() {
+  /// NOTE FOR ANYONE ASSERTING ON A BUTTON. The opener below is a
+  /// `FilledButton`, and it is FIRST in the tree — so
+  /// `find.byType(FilledButton).first` reads this button and not the
+  /// dialog's. It is always enabled, so a `savable()` written that way
+  /// returns true before and after the thing it is testing and the
+  /// assertion passes in both directions. That happened once while this
+  /// file was being filled in. Anchor from the label upwards:
+  /// `find.ancestor(of: find.text('Add'), matching: find.byType(...))`,
+  /// or give the dialog's button a key and find that.
   Future<void> opened(
     WidgetTester tester,
     List<Override> overrides,
@@ -1150,22 +1160,142 @@ void main() {
       expect(find.text('Revoked'), findsOneWidget);
     });
 
+    // A SIXTEENTH WRONG-SHAPE FIXTURE, and the same hunt found it: the
+    // dialog's title is `'What ${widget.schedule['name']} bills'` and
+    // `recurring_documents` (0097) has a `name text not null`, which the
+    // fixture did not supply -- so the heading read "What null bills".
+    // It also invented `doc_type` and `next_run`; the table's columns are
+    // `kind` ('sales' or 'purchase') and `next_run_date`, and `kind` is
+    // the one that decides whether the picker offers invoices or bills.
+    // `templateKindOf(null)` happens to answer sales, so a PURCHASE
+    // schedule under this fixture would have been offered invoices and
+    // `update_recurring_template` would have raised on the save.
+    //
+    // And `documentsProvider` answered `[]`, so the dialog drew its empty
+    // state and `templateCandidates`, `templateLabel` and the save
+    // button's one condition were all unreachable.
     testWidgets('and the recurring template dialog', (tester) async {
       await opened(
         tester,
         [
           repoProvider.overrideWithValue(repo),
-          documentsProvider.overrideWith((_, __) async => const []),
+          documentsProvider.overrideWith((_, __) async => [
+                BusinessDocument(
+                  id: 'd1',
+                  docType: 'invoice',
+                  docNo: 'INV-0101',
+                  docDate: DateTime.utc(2026, 9, 1),
+                  contactId: 'c1',
+                  contactName: long,
+                  status: 'posted',
+                  totalAmount: 1250.5,
+                ),
+                // A DRAFT, which `templateCandidates` drops: a schedule
+                // built on a draft bills what somebody was still typing.
+                BusinessDocument(
+                  id: 'd2',
+                  docType: 'invoice',
+                  docNo: 'INV-0102',
+                  docDate: DateTime.utc(2026, 9, 15),
+                  contactId: 'c1',
+                  status: 'draft',
+                  totalAmount: 400,
+                ),
+                // And a voided one, dropped for the same reason the other
+                // way round.
+                BusinessDocument(
+                  id: 'd3',
+                  docType: 'invoice',
+                  docNo: 'INV-0103',
+                  docDate: DateTime.utc(2026, 9, 20),
+                  contactId: 'c1',
+                  status: 'void',
+                  totalAmount: 900,
+                ),
+              ]),
         ],
         (context) => showRecurringTemplateDialog(context, schedule: const {
           'id': 's1',
-          'doc_type': 'invoice',
+          'name': 'Menara Hijau monthly retainer',
+          'kind': 'sales',
           'frequency': 'monthly',
-          'next_run': '2026-10-01',
+          'next_run_date': '2026-10-01',
           'is_active': true,
         }),
       );
       expect(tester.takeException(), isNull);
+
+      expect(find.text('What Menara Hijau monthly retainer bills'),
+          findsOneWidget);
+      expect(find.text('INV-0101 · $long · 01/09/2026 · RM 1,250.50'),
+          findsOneWidget);
+      // Neither the draft nor the voided one is offerable.
+      expect(find.byKey(const ValueKey('template-d1')), findsOneWidget);
+      expect(find.byKey(const ValueKey('template-d2')), findsNothing);
+      expect(find.byKey(const ValueKey('template-d3')), findsNothing);
+      expect(find.textContaining('null'), findsNothing);
+
+      // Nothing chosen, nothing to save -- and then the one choice there
+      // is turns the button on.
+      bool savable() => tester
+              .widget<FilledButton>(find.byKey(const ValueKey('template-save')))
+              .onPressed !=
+          null;
+      expect(savable(), isFalse);
+      await tester.tap(find.byKey(const ValueKey('template-d1')));
+      await tester.pumpAndSettle();
+      expect(savable(), isTrue);
+    });
+
+    // The other half of `templateKindOf`, and it needed its own test: with
+    // a sales schedule in the fixture above, forcing the function to
+    // answer `DocKind.sales` always was run as a mutant and SURVIVED,
+    // because nothing on the screen differs. What differs is the QUERY --
+    // `update_recurring_template` looks for a bill on a purchase schedule
+    // and raises if it is handed an invoice -- so the argument the
+    // provider was asked for is the thing to assert.
+    testWidgets('and a purchase schedule asks for bills, not invoices',
+        (tester) async {
+      final asked = <({DocKind kind, String docType, String status,
+          String search})>[];
+      await opened(
+        tester,
+        [
+          repoProvider.overrideWithValue(repo),
+          documentsProvider.overrideWith((_, args) async {
+            asked.add(args);
+            return [
+              BusinessDocument(
+                id: 'b1',
+                docType: 'bill',
+                docNo: 'BILL-0044',
+                docDate: DateTime.utc(2026, 9, 1),
+                contactId: 'c9',
+                contactName: 'Pembekal Alat Tulis',
+                status: 'posted',
+                totalAmount: 320,
+              ),
+            ];
+          }),
+        ],
+        (context) => showRecurringTemplateDialog(context, schedule: const {
+          'id': 's2',
+          'name': 'Monthly stationery',
+          'kind': 'purchase',
+          'frequency': 'monthly',
+          'next_run_date': '2026-10-01',
+          'is_active': true,
+        }),
+      );
+      expect(tester.takeException(), isNull);
+
+      expect(asked, hasLength(1));
+      expect(asked.single.kind, DocKind.purchase);
+      expect(asked.single.docType, 'bill');
+      expect(find.text('What Monthly stationery bills'), findsOneWidget);
+      expect(find.text('BILL-0044 · Pembekal Alat Tulis · 01/09/2026 · '
+          'RM 320.00'), findsOneWidget);
+      expect(find.textContaining('null'), findsNothing);
     });
 
     // `total` was the fixture's word and `Repo.settlement` returns the
@@ -1273,22 +1403,140 @@ void main() {
   });
 
   group('financials', () {
+    // A SEVENTEENTH WRONG-SHAPE FIXTURE, and this one was a row from
+    // ANOTHER TABLE. This dialog edits `fs_filings` (0171) and saves
+    // through `updateFsFiling`; `form` and `due_on` belong to the LHDN
+    // filing calendar, and `status: 'due'` is not one of
+    // `app.fs_filing_status`, whose three values are draft, frozen and
+    // lodged. So:
+    //
+    //   * `fy_start` and `fy_end` were absent, `filingPeriodRuns` was
+    //     false, Save was dead, and the warning "The year has to end
+    //     after it begins." was the one thing on the screen the fixture
+    //     did reach -- by accident.
+    //   * nothing was ever LODGED, so `kLodgedLockedFields` and the
+    //     paragraph explaining it drew for nobody. That set follows
+    //     `app.fs_refuse_lodged_edit` field for field, and a UI that
+    //     leaves a locked field editable sends an update the trigger
+    //     refuses -- which is the whole reason the set is duplicated in
+    //     Dart at all.
+    //
+    // Lodged here, therefore, because that is the branch with a rule in
+    // it.
     testWidgets('one filing in detail opens', (tester) async {
       await opened(
         tester,
         [repoProvider.overrideWithValue(repo)],
         (context) => showFilingDetails(context, filing: const {
           'id': 'f1',
-          'form': 'CP204',
-          'due_on': '2026-10-31',
-          'status': 'due',
+          'fy_start': '2025-01-01',
+          'fy_end': '2025-12-31',
+          'framework': 'mfrs',
+          'audit_status': 'unaudited',
+          'opinion': 'qualified',
+          'auditor_name': 'Tetuan Audit Bersatu',
+          'auditor_firm_no': 'AF 1234',
+          'auditor_signatory': 'Lim Wei Jian',
+          'audit_report_date': '2026-04-30',
+          'going_concern_emphasis': true,
+          'employee_count': 42,
+          'directors_approval_date': '2026-05-15',
+          'circulated_on': '2026-05-20',
+          'notes': 'Lodged late; penalty paid.',
+          'lodged_on': '2026-06-30',
+          'mbrs_reference': 'MBRS-2026-0001',
+          'status': 'lodged',
         }),
       );
       expect(tester.takeException(), isNull);
+
+      // The period runs, so the warning is gone and Save is alive.
+      expect(find.text('The year has to end after it begins.'), findsNothing);
+      expect(
+          tester
+              .widget<FilledButton>(find.byKey(const ValueKey('filing-save')))
+              .onPressed,
+          isNotNull);
+
+      // The lodged paragraph, which no fixture had ever produced.
+      expect(find.textContaining('These have been lodged with SSM'),
+          findsOneWidget);
+
+      // Every field the row supplied is on the screen, under the column
+      // name the table uses. `Fmt.label` capitalises, so the dropdowns
+      // read 'Unaudited' and 'Qualified' rather than the enum values, and
+      // the framework is upper-cased rather than labelled.
+      expect(find.text('MFRS'), findsOneWidget);
+      expect(find.text('Unaudited'), findsOneWidget);
+      expect(find.text('Qualified'), findsOneWidget);
+      expect(find.text('Tetuan Audit Bersatu'), findsOneWidget);
+      expect(find.text('AF 1234'), findsOneWidget);
+      expect(find.text('Lim Wei Jian'), findsOneWidget);
+      expect(find.text('42'), findsOneWidget);
+      expect(find.text('Lodged late; penalty paid.'), findsOneWidget);
+      expect(
+          tester
+              .widget<SwitchListTile>(
+                  find.byKey(const ValueKey('filing-going-concern')))
+              .value,
+          isTrue);
+      expect(find.textContaining('null'), findsNothing);
+
+      // AND THE LOCK ITSELF, field by field against `kLodgedLockedFields`
+      // -- which is the point of lodging the fixture. A `null` `onChanged`
+      // is what makes a dropdown unusable, and it looks identical to a
+      // live one on the screen.
+      expect(
+          tester
+              .widget<DropdownButtonFormField<String>>(
+                  find.byKey(const ValueKey('filing-framework')))
+              .onChanged,
+          isNull);
+      expect(
+          tester
+              .widget<DropdownButtonFormField<String>>(
+                  find.byKey(const ValueKey('filing-audit-status')))
+              .onChanged,
+          isNull);
+      expect(
+          tester
+              .widget<DropdownButtonFormField<String?>>(
+                  find.byKey(const ValueKey('filing-opinion')))
+              .onChanged,
+          isNull);
+      expect(
+          tester
+              .widget<TextField>(find.byKey(const ValueKey('filing-auditor')))
+              .enabled,
+          isFalse);
+
+      // And what the lock does NOT cover: the headcount is not in the
+      // set, because `app.fs_refuse_lodged_edit` does not name it, and
+      // the Dart set follows the trigger rather than the sentence beside
+      // it. A test that only checked the locked fields would pass over a
+      // set that locked everything.
+      expect(
+          tester
+              .widget<TextField>(find.byKey(const ValueKey('filing-headcount')))
+              .enabled,
+          isTrue);
     });
   });
 
   group('reports', () {
+    // `lines: const []` drew "Nothing budgeted yet.", 0 lines and a nought
+    // total, which is every part of this dialog except the part with a
+    // rule in it. The rule is `lineSurvives(amount)`, i.e. `amount != 0`,
+    // and it does three things at once: the row is struck through, its
+    // subtitle changes to say the line will be REMOVED, and the line
+    // drops out of both the count and the total. `set_budget_lines`
+    // deletes the budget and re-inserts the payload, so a nought is not a
+    // nought -- it is a deletion, and the row has to say so before
+    // somebody presses Save.
+    //
+    // Lines in the shape `budget_lines_for` (0274) returns:
+    // account_id, code, name, account_type, period_id, period_no,
+    // period_name, amount.
     testWidgets('the budget line editor opens', (tester) async {
       await opened(
         tester,
@@ -1300,39 +1548,255 @@ void main() {
         (context) => showBudgetLineEditor(
           context,
           budget: const {'id': 'b1', 'name': '2026', 'fiscal_year_id': 'y1'},
-          lines: const [],
+          lines: const [
+            {
+              'account_id': 'a1',
+              'code': '5000',
+              'name': 'Salaries and wages',
+              'account_type': 'expense',
+              'period_id': 'p1',
+              'period_no': 1,
+              'period_name': 'January 2026',
+              'amount': 12000,
+            },
+            {
+              'account_id': 'a2',
+              'code': '5100',
+              'name': 'Rent',
+              'account_type': 'expense',
+              'period_id': 'p1',
+              'period_no': 1,
+              'period_name': 'January 2026',
+              'amount': 3500.5,
+            },
+            // Nought, which is a DELETION rather than a nought.
+            {
+              'account_id': 'a3',
+              'code': '5200',
+              'name': 'Entertainment',
+              'account_type': 'expense',
+              'period_id': 'p1',
+              'period_no': 1,
+              'period_name': 'January 2026',
+              'amount': 0,
+            },
+          ],
         ),
       );
       expect(tester.takeException(), isNull);
+
+      expect(find.text('2026'), findsOneWidget);
+      expect(find.text('Nothing budgeted yet.'), findsNothing);
+      expect(find.text('5000 Salaries and wages'), findsOneWidget);
+      expect(find.text('5100 Rent'), findsOneWidget);
+      expect(find.text('5200 Entertainment'), findsOneWidget);
+
+      // Two of the three subtitles are the bare period; the nought's says
+      // what pressing Save would do.
+      expect(find.text('January 2026'), findsNWidgets(2));
+      expect(find.text('January 2026 — will be removed'), findsOneWidget);
+
+      // And it is struck through, which the sentence beside it cannot
+      // say for a row somebody is scrolling past.
+      final gone = tester.widget<Text>(find.text('5200 Entertainment'));
+      expect(gone.style?.decoration, TextDecoration.lineThrough);
+      final kept = tester.widget<Text>(find.text('5100 Rent'));
+      expect(kept.style?.decoration, isNull);
+
+      // The count and the total both exclude it. 12,000 + 3,500.50.
+      expect(find.text('2 lines'), findsOneWidget);
+      expect(find.text('RM 15,500.50'), findsOneWidget);
+      expect(find.text('RM 12,000.00'), findsOneWidget);
+      expect(find.text('RM 0.00'), findsOneWidget);
+      expect(find.textContaining('null'), findsNothing);
     });
   });
 
   group('the rest of HR', () {
+    // Two empty lists again, so two empty pickers -- and worse, the one
+    // conditional in the form needs something TYPED to appear at all.
+    // `earliestStartDate` turns a notice period into "Earliest start
+    // <date>" under the field, and that line is not a reminder:
+    // `hire_applicant` refuses a start inside the notice period unless
+    // somebody says why, so the date is the rule showing itself early.
+    // Nothing was typed, so the helper was null on every frame.
     testWidgets('the applicant editor opens', (tester) async {
       await opened(
         tester,
         [
           repoProvider.overrideWithValue(repo),
-          directoryProvider.overrideWith((_) async => const <Employee>[]),
-          requisitionsProvider
-              .overrideWith((_) async => const <JobRequisition>[]),
+          directoryProvider.overrideWith((_) async => [
+                Employee(
+                  id: 'em1',
+                  employeeNo: 'E-0001',
+                  fullName: 'Nurul Huda binti Ismail',
+                  departmentName: 'Finance',
+                ),
+                // No department, which the sublabel joins around rather
+                // than printing an empty half.
+                Employee(
+                  id: 'em2',
+                  employeeNo: 'E-0002',
+                  fullName: 'Ahmad Faizal',
+                ),
+              ]),
+          requisitionsProvider.overrideWith((_) async => [
+                JobRequisition(
+                  id: 'r1',
+                  requisitionNo: 'REQ-0001',
+                  title: 'Senior accounts executive',
+                  status: 'open',
+                ),
+              ]),
         ],
         (context) => showApplicantEditor(context),
       );
       expect(tester.takeException(), isNull);
+
+      expect(find.text('Add a candidate'), findsOneWidget);
+      expect(find.text('Earliest start'), findsNothing);
+      expect(find.textContaining('Earliest start'), findsNothing);
+
+      // 30 days' notice typed in: the rule appears, computed off today
+      // rather than off a constant, so the expectation is computed the
+      // same way.
+      final notice = find.widgetWithText(TextField, 'Notice owed (days)');
+      await tester.enterText(notice, '30');
+      await tester.pump();
+      final earliest = earliestStartDate(
+        noticePeriodDays: 30,
+        today: DateTime.now(),
+      );
+      expect(find.text('Earliest start ${Fmt.date(earliest)}'), findsOneWidget);
+
+      // Nought is not a notice period, and neither is a word -- both read
+      // as "nobody has said", which is why the helper goes away rather
+      // than saying today.
+      await tester.enterText(notice, '0');
+      await tester.pump();
+      expect(find.textContaining('Earliest start'), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('applicant-requisition')));
+      await tester.pumpAndSettle();
+      expect(find.text('Senior accounts executive'), findsOneWidget);
+      expect(find.text('REQ-0001'), findsOneWidget);
+
+      // Escape first, because the overlay just opened is a `TapRegion`
+      // and a tap on the next field reads as a dismissal of this one
+      // rather than as a tap on that one. Then scroll: eleven fields do
+      // not fit 900 logical pixels, and `find` locates a child of a
+      // `SingleChildScrollView` that is outside the viewport while
+      // `tap` cannot hit it.
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const ValueKey(
+        'applicant-referrer',
+      )));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('applicant-referrer')));
+      await tester.pumpAndSettle();
+      // `allowEmpty` with a NAMED empty row: "Nobody" is a real answer
+      // here, and a blank row would read as the list still loading.
+      expect(find.text('Nobody'), findsOneWidget);
+      expect(find.text('Nurul Huda binti Ismail'), findsOneWidget);
+      expect(find.text('E-0001 · Finance'), findsOneWidget);
+      // No department, so no trailing separator.
+      expect(find.text('E-0002'), findsOneWidget);
+      expect(find.textContaining('null'), findsNothing);
     });
 
+    // `requisitionBlockedBecause` has five branches and the empty form
+    // reaches the first; the rest need typing. The salary one is the
+    // interesting one, because it is the only branch that needs two
+    // fields to be present AND in the wrong order -- an empty band is
+    // allowed, so it cannot be reached by leaving things blank.
     testWidgets('and the requisition editor', (tester) async {
       await opened(
         tester,
         [
           repoProvider.overrideWithValue(repo),
-          directoryProvider.overrideWith((_) async => const <Employee>[]),
-          departmentsProvider.overrideWith((_) async => const []),
+          directoryProvider.overrideWith((_) async => [
+                Employee(
+                  id: 'em1',
+                  employeeNo: 'E-0001',
+                  fullName: 'Nurul Huda binti Ismail',
+                  departmentName: 'Finance',
+                ),
+              ]),
+          departmentsProvider.overrideWith((_) async => const [
+                {'id': 'd1', 'name': 'Finance', 'code': 'FIN'},
+                {'id': 'd2', 'name': 'Operations', 'code': 'OPS'},
+              ]),
         ],
         (context) => showRequisitionEditor(context),
       );
       expect(tester.takeException(), isNull);
+
+      bool savable() => tester
+              .widget<FilledButton>(find.byKey(const ValueKey('req-save')))
+              .onPressed !=
+          null;
+
+      expect(find.text('Raise a vacancy'), findsOneWidget);
+      expect(find.text('Give it a number.'), findsOneWidget);
+      expect(savable(), isFalse);
+
+      await tester.enterText(
+          find.byKey(const ValueKey('req-no')), 'REQ-0007');
+      await tester.pump();
+      expect(find.text('Give the role a title.'), findsOneWidget);
+
+      await tester.enterText(find.byKey(const ValueKey('req-title')),
+          'Senior accounts executive');
+      await tester.pump();
+      // `Places` is seeded with 1 rather than left empty, so with a
+      // number and a title the form is already savable -- which is worth
+      // pinning, because an empty seed would have read as nought and
+      // blocked every new vacancy until somebody typed the 1 themselves.
+      expect(find.text('Give the role a title.'), findsNothing);
+      expect(savable(), isTrue);
+
+      // Nought places is not a vacancy, and `_count` parses the box
+      // rather than holding a number -- so a cleared box is a nought too.
+      await tester.enterText(find.byKey(const ValueKey('req-headcount')), '0');
+      await tester.pump();
+      expect(find.text('A vacancy is for at least one person.'),
+          findsOneWidget);
+      expect(savable(), isFalse);
+
+      await tester.enterText(find.byKey(const ValueKey('req-headcount')), '');
+      await tester.pump();
+      expect(find.text('A vacancy is for at least one person.'),
+          findsOneWidget);
+
+      await tester.enterText(find.byKey(const ValueKey('req-headcount')), '2');
+      await tester.pump();
+      expect(savable(), isTrue);
+
+      // A band the wrong way up.
+      await tester.enterText(find.widgetWithText(TextField, 'Salary from'),
+          '8000');
+      await tester.enterText(find.widgetWithText(TextField, 'to'), '5000');
+      await tester.pump();
+      expect(find.text('The salary band runs upwards.'), findsOneWidget);
+      expect(savable(), isFalse);
+
+      await tester.enterText(find.widgetWithText(TextField, 'to'), '12000');
+      await tester.pump();
+      expect(savable(), isTrue);
+
+      await tester.tap(find.byKey(const ValueKey('req-manager')));
+      await tester.pumpAndSettle();
+      // "Nobody yet" rather than a blank: the helper says a vacancy
+      // cannot be OPENED without a manager, and `openBlockedBecause` is
+      // the rule it is pointing at -- so leaving it unset has to be
+      // sayable rather than merely possible.
+      expect(find.text('Nobody yet'), findsOneWidget);
+      expect(find.text('Nurul Huda binti Ismail'), findsOneWidget);
+      expect(find.text('A vacancy cannot be opened without one'),
+          findsOneWidget);
+      expect(find.textContaining('null'), findsNothing);
     });
 
     // `weight` was the fixture's word and the dialog reads
@@ -1521,18 +1985,86 @@ void main() {
       expect(find.text('3 days before · optional'), findsOneWidget);
     });
 
+    // An empty month drew "Nothing recorded" and nothing else. The test
+    // below it already covers a populated month with every flag set, so
+    // this one takes the branches THAT one cannot reach:
+    //
+    //   * `attendanceLine`'s other two shapes -- a day clocked into and
+    //     not out of, and a row with no `clockIn` at all, where the line
+    //     is the STATUS rather than a pair of times.
+    //   * `attendanceTotals` counting days off `clockIn` and not off
+    //     rows, so three rows make two days.
+    //   * the totals line with NO late and NO overtime, which is the
+    //     `if (totals.late > 0)` suppression the other fixture always
+    //     satisfies and therefore never tests.
+    //
+    // Local `DateTime`s and not `utc`, deliberately: `Fmt.time` formats
+    // `value.toLocal()`, so a UTC fixture reads as a different clock time
+    // wherever the test happens to run.
     testWidgets('and a month of attendance', (tester) async {
       await opened(
         tester,
         [
           repoProvider.overrideWithValue(repo),
           canManageHrProvider.overrideWithValue(true),
-          attendanceProvider
-              .overrideWith((_, __) async => const <AttendanceRecord>[]),
+          attendanceProvider.overrideWith((_, __) async => [
+                // A plain day: in, out, no lateness, no overtime.
+                AttendanceRecord(
+                  id: 'a1',
+                  workDate: DateTime(2026, 10, 1),
+                  status: 'present',
+                  employeeName: 'Nurul Huda binti Ismail',
+                  clockIn: DateTime(2026, 10, 1, 9, 0),
+                  clockOut: DateTime(2026, 10, 1, 18, 0),
+                  workedMinutes: 540,
+                ),
+                // Clocked in and not out.
+                AttendanceRecord(
+                  id: 'a2',
+                  workDate: DateTime(2026, 10, 2),
+                  status: 'present',
+                  employeeName: 'Ahmad Faizal',
+                  clockIn: DateTime(2026, 10, 2, 8, 55),
+                ),
+                // An absence: no `clockIn`, so the line is the status and
+                // the day does not count toward the total.
+                AttendanceRecord(
+                  id: 'a3',
+                  workDate: DateTime(2026, 10, 3),
+                  status: 'on_leave',
+                  employeeName: 'Ahmad Faizal',
+                ),
+              ]),
         ],
         (context) => showAttendanceMonth(context),
       );
       expect(tester.takeException(), isNull);
+
+      expect(find.text('Attendance this month'), findsOneWidget);
+      expect(find.text('Nothing recorded'), findsNothing);
+
+      // `employeeId` is null here -- HR looking at everybody -- so the
+      // name joins the date.
+      expect(find.text('01/10/2026 · Nurul Huda binti Ismail'),
+          findsOneWidget);
+
+      expect(find.text('In 09:00 · out 18:00'), findsOneWidget);
+      expect(find.text('In 08:55 · still open'), findsOneWidget);
+      // `Fmt.label` on the status, so 'on_leave' reads as a sentence.
+      expect(find.text('On Leave'), findsOneWidget);
+      // No flags on any of the three, so nothing is coloured and nothing
+      // says "corrected".
+      expect(find.textContaining('late'), findsNothing);
+      expect(find.textContaining('overtime'), findsNothing);
+      expect(find.textContaining('corrected'), findsNothing);
+
+      expect(find.text('9.00h'), findsNWidgets(2));
+      expect(find.text('0.00h'), findsNWidgets(2));
+
+      // TWO days from three rows, and a totals line with neither optional
+      // clause in it.
+      expect(find.text('2 days'), findsOneWidget);
+      expect(find.textContaining('null'), findsNothing);
     });
 
     // Trap 11, on the test directly above it. An empty list draws an
@@ -1608,20 +2140,110 @@ void main() {
   });
 
   group('approvals', () {
+    // This editor states the rule it is about to write in English, in a
+    // highlighted box, built out of four moving parts -- the step, what it
+    // covers, the band, and who approves. That sentence is the whole
+    // safety of the screen: an approval rule is read once when it is
+    // written and then silently blocks postings for ever. An empty team
+    // and no assertions left it unread.
+    //
+    // AND READING IT FOUND A DEFECT, which is the reason this one is
+    // worth more than the rest of the batch. `_sentence` picked the
+    // approver with
+    //
+    //     team.where((m) => m.userId == _userId)
+    //
+    // and `_byRole` is `_userId == null`, so the moment somebody switched
+    // to "A named person" with nobody chosen, `_userId` was null -- and
+    // so is the `user_id` of any member who has been INVITED and not
+    // accepted. The comparison matched that member. The sentence then
+    // read "cannot be posted until Siti Aminah has approved" over a rule
+    // that named nobody, about a person the picker two widgets above
+    // deliberately refuses to offer. Fixed in `rule_editor.dart`; the
+    // "nobody yet" assertion below is what holds it.
     testWidgets('the rule editor opens', (tester) async {
       await openedWithRef(
         tester,
         [
           repoProvider.overrideWithValue(repo),
-          teamProvider.overrideWith((_) async => const <TeamMember>[]),
+          teamProvider.overrideWith((_) async => [
+                TeamMember(
+                  memberId: 'm1',
+                  userId: 'u1',
+                  role: 'accountant',
+                  status: 'active',
+                  fullName: 'Nurul Huda binti Ismail',
+                  email: 'nurul@example.com',
+                ),
+                // INVITED, so no `user_id`: a rule whose approver does
+                // not exist yet is a rule nobody can satisfy, and the
+                // comprehension drops them. An empty team said nothing
+                // about that either way.
+                TeamMember(
+                  memberId: 'm2',
+                  role: 'admin',
+                  status: 'invited',
+                  fullName: 'Siti Aminah',
+                  email: 'siti@example.com',
+                ),
+              ]),
         ],
         (context, ref) => showApprovalRuleEditor(context, ref),
       );
       expect(tester.takeException(), isNull);
+
+      expect(find.text('New approval rule'), findsOneWidget);
+
+      // The default rule, whole. PURCHASE documents, which is the
+      // default `entity_kind` and is worth pinning rather than assuming
+      // -- a rule editor that opened on sales would have somebody writing
+      // an approval step over their own invoices by accident.
+      expect(
+          find.text('Step 1: every purchase document cannot be posted until '
+              'Company Admin has approved. Nobody may approve a document '
+              'they raised themselves.'),
+          findsOneWidget);
+
+      // A band. Nought means every one, which is why the clause is absent
+      // above and present here.
+      await tester.enterText(
+          find.widgetWithText(TextFormField, 'From amount'), '5000');
+      await tester.pump();
+      expect(
+          find.textContaining('every purchase document of RM5000 or more '
+              'cannot be posted'),
+          findsOneWidget);
+
+      // A NAMED PERSON instead of a role, and before one is chosen the
+      // sentence says "nobody yet" rather than trailing off -- which is
+      // the branch that matters, because a rule saved in that state would
+      // name an approver who is not there.
+      await tester.tap(find.text('A named person'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('until nobody yet has approved'),
+          findsOneWidget);
+
+      await tester.tap(find.widgetWithText(TextFormField, 'Approved by'));
+      await tester.pumpAndSettle();
+      expect(find.text('Nurul Huda binti Ismail'), findsOneWidget);
+      expect(find.text('Siti Aminah'), findsNothing);
+
+      await tester.tap(find.text('Nurul Huda binti Ismail'));
+      await tester.pumpAndSettle();
+      expect(
+          find.textContaining('until Nurul Huda binti Ismail has approved'),
+          findsOneWidget);
+      expect(find.textContaining('null'), findsNothing);
     });
   });
 
   group('pickers that can make what is missing', () {
+    // The seed goes into ONE of two boxes and which one is a decision:
+    // `looksLikeAccountCode` sends "6210" to Number and "Courier" to
+    // Name. Opening it with a name and asserting nothing exercised
+    // neither side of that, nor the cascade that follows a number typed
+    // afterwards -- the kind follows the first digit, 1xxx asset through
+    // 6xxx expense, and resets the subtype under it.
     testWidgets('a new account from the picker', (tester) async {
       await opened(
         tester,
@@ -1629,20 +2251,167 @@ void main() {
         (context) => createAccountFromPicker(context, typed: 'Courier'),
       );
       expect(tester.takeException(), isNull);
+
+      expect(find.text('New account'), findsOneWidget);
+      // A name, so Name is seeded and Number is left empty for them to
+      // choose. The other way round for a number, which is the sibling
+      // assertion below.
+      expect(
+          tester
+              .widget<TextFormField>(
+                  find.widgetWithText(TextFormField, 'Name'))
+              .controller
+              ?.text,
+          'Courier');
+      expect(
+          tester
+              .widget<TextFormField>(
+                  find.widgetWithText(TextFormField, 'Number'))
+              .controller
+              ?.text,
+          '');
+      // No number to guess from, so the kind falls back to expense --
+      // which is the commonest reason somebody is on this dialog at all.
+      expect(find.text('Expense'), findsOneWidget);
+      expect(find.text('Cost Of Sales'), findsOneWidget);
+
+      // The number is what the reports are ordered by, so it is not
+      // optional however much of a hurry the picker was in.
+      await tester.tap(find.text('Create and use'));
+      await tester.pumpAndSettle();
+      expect(
+          find.textContaining('Every account needs a number'), findsOneWidget);
+
+      // 1xxx is an asset, and the subtype under it resets to that type's
+      // first rather than keeping an expense subtype on an asset.
+      await tester.enterText(
+          find.widgetWithText(TextFormField, 'Number'), '1000');
+      await tester.pumpAndSettle();
+      expect(find.text('Asset'), findsOneWidget);
+      expect(find.text('Current Asset'), findsOneWidget);
+      expect(find.text('Cost Of Sales'), findsNothing);
+      expect(find.textContaining('null'), findsNothing);
     });
 
+    // The seed going the OTHER way, which is the half the name case
+    // cannot show: a number lands in Number, Name is left empty, and the
+    // kind is guessed from the first digit before anything is typed.
+    testWidgets('and a number typed into it seeds the other box',
+        (tester) async {
+      await opened(
+        tester,
+        [repoProvider.overrideWithValue(repo)],
+        (context) => createAccountFromPicker(context, typed: '4100'),
+      );
+      expect(tester.takeException(), isNull);
+
+      expect(
+          tester
+              .widget<TextFormField>(
+                  find.widgetWithText(TextFormField, 'Number'))
+              .controller
+              ?.text,
+          '4100');
+      expect(
+          tester
+              .widget<TextFormField>(
+                  find.widgetWithText(TextFormField, 'Name'))
+              .controller
+              ?.text,
+          '');
+      expect(find.text('Revenue'), findsOneWidget);
+      expect(find.text('Sales'), findsOneWidget);
+
+      // And the name is not optional either.
+      await tester.tap(find.text('Create and use'));
+      await tester.pumpAndSettle();
+      expect(find.text('And a name.'), findsOneWidget);
+      expect(find.textContaining('null'), findsNothing);
+    });
+
+    // An empty `unregisteredBankAccountsProvider` makes
+    // `_AlreadyOnTheChart` return `SizedBox.shrink()`, so the whole of
+    // 0689 -- the fix for a report that read "BANK ACCOUNT NOT SHOWING",
+    // where a bank account is two records and nothing connected the two
+    // -- drew nothing and was asserted about by nothing.
+    //
+    // Rows in the shape `unregistered_bank_accounts` (0689) returns:
+    // account_id, code, name, account_subtype, balance.
     testWidgets('a new bank account from the picker', (tester) async {
       await opened(
         tester,
         [
           repoProvider.overrideWithValue(repo),
-          unregisteredBankAccountsProvider.overrideWith((_) async => const []),
+          unregisteredBankAccountsProvider.overrideWith((_) async => const [
+                {
+                  'account_id': 'a1',
+                  'code': '1050',
+                  'name': 'Maybank current account',
+                  'account_subtype': 'bank',
+                  'balance': 12450.75,
+                },
+                {
+                  'account_id': 'a2',
+                  'code': '1090',
+                  'name': 'Petty cash',
+                  'account_subtype': 'cash',
+                  'balance': 300,
+                },
+              ]),
         ],
         (context) => createBankAccountFromPicker(context, typed: 'Maybank'),
       );
       expect(tester.takeException(), isNull);
+
+      expect(find.text('New bank account'), findsOneWidget);
+      expect(find.text('Already on your chart'), findsOneWidget);
+      expect(find.text('1050 — Maybank current account'), findsOneWidget);
+      expect(find.text('1090 — Petty cash'), findsOneWidget);
+      // The blurb while nothing is chosen: a NEW chart account will be
+      // opened. Which is the thing the section above exists to talk
+      // somebody out of.
+      expect(find.textContaining('Not on file yet'), findsOneWidget);
+      expect(find.byKey(const ValueKey('chart-account-clear')), findsNothing);
+
+      // Register one of them. The dialog stops offering the list, says
+      // which code it is registering, and promises not to open another --
+      // because whatever is already posted to that account has to stay
+      // where it is.
+      await tester.tap(find.descendant(
+        of: find.byKey(const ValueKey('chart-account-1050')),
+        matching: find.text('Register'),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Already on your chart'), findsNothing);
+      expect(find.textContaining('Registering 1050, which is already on '
+          'your chart'), findsOneWidget);
+      expect(find.textContaining('Not on file yet'), findsNothing);
+      expect(
+          find.byKey(const ValueKey('chart-account-clear')), findsOneWidget);
+      // The seed was 'Maybank', so the name box was NOT empty and the
+      // chart account's name must not overwrite it.
+      expect(
+          tester
+              .widget<TextFormField>(
+                  find.widgetWithText(TextFormField, 'Name'))
+              .controller
+              ?.text,
+          'Maybank');
+
+      // And backing out of it puts the list back.
+      await tester.tap(find.byKey(const ValueKey('chart-account-clear')));
+      await tester.pumpAndSettle();
+      expect(find.text('Already on your chart'), findsOneWidget);
+      expect(find.textContaining('Not on file yet'), findsOneWidget);
+      expect(find.textContaining('null'), findsNothing);
     });
 
+    // The noun in the heading is a three-way switch on `contactType`, and
+    // the TIN's helper line is the one piece of advice on the dialog that
+    // is about something else entirely -- an e-Invoice cannot be filed
+    // without it, said here because at posting time it is too late to be
+    // useful. Opening it and asserting nothing read neither.
     testWidgets('a new contact from the picker', (tester) async {
       await opened(
         tester,
@@ -1651,26 +2420,172 @@ void main() {
             context, contactType: 'customer', typed: 'Sinar'),
       );
       expect(tester.takeException(), isNull);
+
+      expect(find.text('New customer'), findsOneWidget);
+      expect(
+          tester
+              .widget<TextFormField>(
+                  find.widgetWithText(TextFormField, 'Name'))
+              .controller
+              ?.text,
+          'Sinar');
+      expect(find.text('Needed before an e-Invoice can be filed for them.'),
+          findsOneWidget);
+      expect(
+          find.textContaining('A code is drawn from the series '
+              'automatically'),
+          findsOneWidget);
+
+      // A name is the one thing it cannot be saved without, and the
+      // message says why rather than saying "required".
+      await tester.enterText(
+          find.widgetWithText(TextFormField, 'Name'), '   ');
+      await tester.tap(find.text('Create and use'));
+      await tester.pumpAndSettle();
+      expect(find.text('A name. It is what the invoice is addressed to.'),
+          findsOneWidget);
+      expect(find.textContaining('null'), findsNothing);
     });
 
-    testWidgets('a sub-account under one account', (tester) async {
+    // The other two nouns, which one call cannot show. A prospect is not
+    // a customer and a supplier is not either; the heading is what tells
+    // somebody which list they are about to add a row to.
+    testWidgets('and it is named for what it is being added to',
+        (tester) async {
       await opened(
         tester,
         [repoProvider.overrideWithValue(repo)],
+        (context) => createContactFromPicker(
+            context, contactType: 'supplier', typed: 'Pembekal'),
+      );
+      expect(tester.takeException(), isNull);
+      expect(find.text('New supplier'), findsOneWidget);
+      expect(find.text('New customer'), findsNothing);
+    });
+
+    // "The warning is the point of the screen", says the library comment,
+    // and the warning says one of two OPPOSITE things: the parent becomes
+    // a heading and stops being postable, or -- since 0693 -- it stays
+    // postable and the child is filed under it anyway. Which one depends
+    // on an answer the dialog fetches before it draws, so a test that
+    // never supplies one reads whichever branch the fake falls into and
+    // cannot tell it from the other.
+    testWidgets('a sub-account under one account', (tester) async {
+      await opened(
+        tester,
+        [repoProvider.overrideWithValue(_AnsweringRepo(null))],
         (context) => showSubAccountDialog(
           context,
           parent: Account(
             id: 'a1',
-            code: '1000',
-            name: 'Cash at bank',
-            accountType: 'asset',
-            accountSubtype: 'cash',
+            code: '1120',
+            name: 'Travel',
+            accountType: 'expense',
+            accountSubtype: 'operating_expense',
+          ),
+          seed: 'Airfares',
+        ),
+      );
+      expect(tester.takeException(), isNull);
+
+      expect(find.byKey(const ValueKey('sub-account-dialog')), findsOneWidget);
+      expect(find.text('Filed under 1120 Travel.'), findsOneWidget);
+
+      // Nothing refused it, so the parent is about to stop being an
+      // account anybody can post to -- which is the consequence somebody
+      // needs BEFORE pressing Add.
+      expect(
+          find.byKey(const ValueKey('sub-account-promotion')), findsOneWidget);
+      expect(find.textContaining('1120 Travel becomes a heading'),
+          findsOneWidget);
+      expect(find.textContaining('stays an account you can post to'),
+          findsNothing);
+
+      // The seed lands in the name; the number is left empty and its hint
+      // names the parent rather than an example, because the number is
+      // generated from it.
+      expect(
+          tester
+              .widget<TextFormField>(
+                  find.byKey(const ValueKey('sub-account-name')))
+              .controller
+              ?.text,
+          'Airfares');
+      expect(find.text('Left empty, the next number under 1120 is used'),
+          findsOneWidget);
+
+      // The type is not asked at all -- it is the parent's -- and the
+      // subtype DEFAULTS to the parent's rather than to the first in the
+      // list.
+      expect(
+          tester
+              .widget<DropdownButtonFormField<String>>(
+                  find.byKey(const ValueKey('sub-account-subtype')))
+              .initialValue,
+          'operating_expense');
+      expect(find.text('Operating Expense'), findsOneWidget);
+      expect(find.text('Kind'), findsNothing);
+      expect(find.textContaining('null'), findsNothing);
+    });
+
+    // The other branch, which is the one 0693 added: the server says the
+    // parent may NOT be promoted, and that is no longer a reason the child
+    // cannot exist. Both sentences had to be read off the screen, because
+    // telling somebody their account is about to stop taking postings when
+    // it is not is as wrong as the other way round.
+    testWidgets('and one whose parent goes on posting', (tester) async {
+      await opened(
+        tester,
+        [
+          repoProvider.overrideWithValue(
+              _AnsweringRepo('1120 Travel has posted lines.')),
+        ],
+        (context) => showSubAccountDialog(
+          context,
+          parent: Account(
+            id: 'a1',
+            code: '1120',
+            name: 'Travel',
+            accountType: 'expense',
+            accountSubtype: 'operating_expense',
           ),
         ),
       );
       expect(tester.takeException(), isNull);
+
+      expect(
+          find.textContaining('1120 Travel stays an account you can post to'),
+          findsOneWidget);
+      expect(find.textContaining('becomes a heading'), findsNothing);
+
+      // And a parent that is ALREADY a heading gets no note either way,
+      // because taking another child changes nothing about it -- which is
+      // asserted here rather than in a third test because it is the same
+      // function answering.
+      expect(
+          promotionNote(
+            Account(
+              id: 'a2',
+              code: '1100',
+              name: 'Expenses',
+              accountType: 'expense',
+              accountSubtype: 'operating_expense',
+              isGroup: true,
+            ),
+          ),
+          isNull);
+      expect(find.textContaining('null'), findsNothing);
     });
 
+    // "Getting the rate wrong is a wrong number on every document from
+    // here on", says this dialog's own library comment, and the rate is
+    // what the whole screen turns on: the inclusive checkbox's subtitle
+    // WORKS OUT what RM 100 would be net at that rate, so somebody can
+    // see which of the two numbers moves before saving. An empty
+    // `exemptionReasonsProvider` also left the exemption dropdown with
+    // nothing but "Not said" in it, and `exemptionBlockedBecause` -- an
+    // exempt code that does not say what exempts it is an e-Invoice LHDN
+    // cannot check -- unreachable.
     testWidgets('a tax code that was typed rather than picked',
         (tester) async {
       await openedWithRef(
@@ -1678,11 +2593,86 @@ void main() {
         [
           repoProvider.overrideWithValue(repo),
           taxCodesProvider.overrideWith((_) async => const <TaxCode>[]),
-          exemptionReasonsProvider.overrideWith((_) async => const []),
+          exemptionReasonsProvider.overrideWith((_) async => const [
+                {'code': 'E001', 'description': 'Exempt under Schedule A'},
+                {'code': 'E002', 'description': 'Exempt under Schedule B'},
+              ]),
         ],
         (context, ref) => pickedTaxCode(context, ref, 'SR-6'),
       );
       expect(tester.takeException(), isNull);
+
+      // From the label upwards, NOT `find.byType(FilledButton).first` --
+      // the harness's own "open" button is a `FilledButton` too and is
+      // first in the tree, so `.first` read an always-enabled button and
+      // this assertion passed in both directions before it was fixed.
+      bool savable() => tester
+              .widget<FilledButton>(find.ancestor(
+                of: find.text('Add'),
+                matching: find.byType(FilledButton),
+              ))
+              .onPressed !=
+          null;
+
+      expect(find.text('New tax code'), findsOneWidget);
+      // The seed goes into the CODE box, upper-cased, because "SR8" is
+      // what somebody types when they are looking for a rate.
+      expect(
+          tester
+              .widget<TextField>(find.byKey(const ValueKey('tax-code-code')))
+              .controller
+              ?.text,
+          'SR-6');
+      // No name and no rate yet, so there is nothing to add.
+      expect(savable(), isFalse);
+
+      // With no rate the inclusive subtitle cannot work anything out and
+      // says the general thing.
+      expect(
+          find.text('A price typed on a line already contains the tax, and '
+              'the line shows what is left as net.'),
+          findsOneWidget);
+
+      await tester.enterText(
+          find.byKey(const ValueKey('tax-code-name')), 'Sales tax 6%');
+      await tester.enterText(find.byKey(const ValueKey('tax-code-rate')), '6');
+      await tester.pump();
+      expect(savable(), isTrue);
+
+      // And with one it does the arithmetic, rounded the way
+      // `app.calc_document_line` rounds it: 100 / 1.06 is 94.3396, which
+      // is 94.34 and leaves 5.66.
+      expect(
+          find.text('A price typed on a line already contains the 6% — so '
+              'RM 100 is RM 94.34 plus RM 5.66 tax.'),
+          findsOneWidget);
+
+      // A rate outside 0..100 is not a rate.
+      await tester.enterText(
+          find.byKey(const ValueKey('tax-code-rate')), '101');
+      await tester.pump();
+      expect(savable(), isFalse);
+      await tester.enterText(find.byKey(const ValueKey('tax-code-rate')), '6');
+      await tester.pump();
+      expect(savable(), isTrue);
+
+      // Exempt, and nothing said about why: the dropdown appears and the
+      // code cannot be saved until it answers.
+      expect(find.byKey(const ValueKey('tax-exemption-reason')), findsNothing);
+      await tester.tap(find.text('Exempt'));
+      await tester.pumpAndSettle();
+      expect(
+          find.byKey(const ValueKey('tax-exemption-reason')), findsOneWidget);
+      expect(savable(), isFalse);
+
+      await tester.tap(find.byKey(const ValueKey('tax-exemption-reason')));
+      await tester.pumpAndSettle();
+      expect(find.text('E001 · Exempt under Schedule A'), findsWidgets);
+      expect(find.text('E002 · Exempt under Schedule B'), findsWidgets);
+      await tester.tap(find.text('E001 · Exempt under Schedule A').last);
+      await tester.pumpAndSettle();
+      expect(savable(), isTrue);
+      expect(find.textContaining('null'), findsNothing);
     });
 
     testWidgets('a supplier made out of what was scanned', (tester) async {
@@ -1697,15 +2687,121 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    // THIS TEST OPENED NOTHING. `resolveSupplier` calls `repo.contacts`
+    // before it draws, `_FakeRepo` raises, and the `catch (_)` arm returns
+    // `SupplierOutcome.ask` -- so the dialog never appeared and
+    // `expect(tester.takeException(), isNull)` was asserted over an empty
+    // `Scaffold`. `check_dialogs_built.py` counted the opener as covered
+    // the whole time, because it looks for the CALL.
+    //
+    // With a repository that answers, the two-stage lookup runs: a narrow
+    // search on `_searchable(name)`, and -- when that finds nothing good
+    // enough -- `rankedLikeName` over everything on file. The second stage
+    // is the expensive mistake this screen exists to prevent: "Supplier
+    // not found" next to a Create button, when the company is already
+    // there under a slightly different spelling.
     testWidgets('and resolving one against what is already here',
         (tester) async {
       await openedWithRef(
         tester,
-        [repoProvider.overrideWithValue(repo)],
+        [
+          repoProvider.overrideWithValue(_ContactsRepo([
+            // Spelled differently enough that the substring search misses
+            // it, and alike enough that `rankedLikeName` should not.
+            Contact(
+              id: 'c1',
+              code: 'S-0001',
+              name: 'Sinar Teknologi Maju Bersatu Sdn Bhd',
+              contactType: 'supplier',
+            ),
+            // Nothing to do with it, and must not be suggested.
+            Contact(
+              id: 'c2',
+              code: 'S-0002',
+              name: 'Pembekal Alat Tulis Berhad',
+              contactType: 'supplier',
+            ),
+          ])),
+        ],
         (context, ref) => resolveSupplier(
-            context, ref, const OcrExtraction(supplierName: 'Sinar Supplies')),
+          context,
+          ref,
+          const OcrExtraction(
+            supplierName: 'SINAR TEKNOLOGI SDN BHD',
+            supplierTaxId: 'C12345678901',
+            supplierEmail: 'accounts@sinar.example.com',
+          ),
+        ),
       );
       expect(tester.takeException(), isNull);
+
+      // The heading is NOT "Supplier not found", because something very
+      // like it is listed underneath -- a heading that contradicts its own
+      // dialog is how somebody presses Create without reading further.
+      expect(find.text('Is it one of these?'), findsOneWidget);
+      expect(find.text('Supplier not found'), findsNothing);
+      expect(
+          find.text('This one is already on file and looks like the same '
+              'company:'),
+          findsOneWidget);
+
+      // Ranked, and only the likely one. The unrelated supplier is on
+      // file and is not offered.
+      expect(find.byKey(const ValueKey('scan-supplier-near-c1')),
+          findsOneWidget);
+      expect(find.byKey(const ValueKey('scan-supplier-near-c2')), findsNothing);
+
+      // What the document says, as read, with the rows it has and not the
+      // ones it hasn't: no SSM number, no phone, no address were supplied,
+      // so those labels are absent rather than blank.
+      expect(find.text('SINAR TEKNOLOGI SDN BHD'), findsOneWidget);
+      expect(find.text('Tax number'), findsOneWidget);
+      expect(find.text('C12345678901'), findsOneWidget);
+      expect(find.text('Email'), findsOneWidget);
+      expect(find.text('SSM no'), findsNothing);
+      expect(find.text('Phone'), findsNothing);
+      expect(find.text('Address'), findsNothing);
+      expect(find.textContaining('null'), findsNothing);
+    });
+
+    // And when there is genuinely nothing like it, the heading says so
+    // and no suggestion box is drawn. Both sentences had to be read off
+    // the screen: the whole point of the pair is that they differ.
+    testWidgets('and says so plainly when nothing on file is like it',
+        (tester) async {
+      await openedWithRef(
+        tester,
+        [
+          repoProvider.overrideWithValue(_ContactsRepo([
+            Contact(
+              id: 'c2',
+              code: 'S-0002',
+              name: 'Pembekal Alat Tulis Berhad',
+              contactType: 'supplier',
+            ),
+          ])),
+        ],
+        (context, ref) => resolveSupplier(
+          context,
+          ref,
+          const OcrExtraction(
+            supplierName: 'Kedai Besi Hong Seng',
+            supplierRegistrationNo: '200201003726',
+          ),
+        ),
+      );
+      expect(tester.takeException(), isNull);
+
+      expect(find.text('Supplier not found'), findsOneWidget);
+      expect(find.text('Is it one of these?'), findsNothing);
+      expect(
+          find.text('Nothing on file matches this document. It can be '
+              'created from what was read:'),
+          findsOneWidget);
+      expect(find.byKey(const ValueKey('scan-supplier-near-c2')), findsNothing);
+      expect(find.text('SSM no'), findsOneWidget);
+      expect(find.text('200201003726'), findsOneWidget);
+      expect(find.textContaining('null'), findsNothing);
     });
   });
 
@@ -2278,4 +3374,47 @@ class _FakeRepo implements Repo {
         'a dialog called Repo.${invocation.memberName} while building, '
         'which this fake does not answer',
       );
+}
+
+/// A fake whose `contacts` ANSWERS, because `resolveSupplier` asks it
+/// before it draws anything and a throw there is an early return.
+///
+/// Under `_FakeRepo` the call raises, `resolveSupplier` catches it and
+/// returns `SupplierOutcome.ask` without opening a dialog at all -- so a
+/// test of that function under the throwing fake asserts
+/// `takeException(), isNull` over an empty screen, and
+/// `check_dialogs_built.py` counts the opener as covered.
+///
+/// The substring filter mirrors what the real query does -- the database
+/// search is `or(name.ilike.%q%, ...)` -- so `_bestMatches` and
+/// `rankedLikeName` see the same two-stage shape they see in production:
+/// a narrow search first, then everything on file.
+class _ContactsRepo extends _FakeRepo {
+  _ContactsRepo(this.all);
+
+  final List<Contact> all;
+
+  @override
+  Future<List<Contact>> contacts({String? type, String? search}) async {
+    final q = (search ?? '').trim().toLowerCase();
+    if (q.isEmpty) return all;
+    return all.where((c) => c.name.toLowerCase().contains(q)).toList();
+  }
+}
+
+/// The one fake that ANSWERS, for the one dialog that asks the server a
+/// question before it draws anything.
+///
+/// `SubAccountDialog` calls `subAccountRefusal` from `initState` and
+/// shows a spinner until it comes back, and `promotionNote` then says one
+/// of two opposite things depending on the answer. Under `_FakeRepo` the
+/// call throws, which the dialog treats as "no refusal" -- so the
+/// refusing branch is unreachable without this.
+class _AnsweringRepo extends _FakeRepo {
+  _AnsweringRepo(this.refusal);
+
+  final String? refusal;
+
+  @override
+  Future<String?> subAccountRefusal(String accountId) async => refusal;
 }

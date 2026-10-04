@@ -10181,3 +10181,301 @@ Both dumps are ~124,500 lines. So the hosted half varies between about five
 and six minutes against the first-ever measurement of 2m40s, which is what
 the raise from eight minutes to fifteen was for. Five of fifteen is
 comfortable; six of eight was not.
+
+## 4 October, part two: the thin assertions, and what reading them found
+
+### The measurement first
+
+`expect(tester.takeException(), isNull)` and nothing else. Across the whole
+of `app/test`, **47 test bodies** check nothing but that — out of 6,346 the
+scanner could see (flutter counts 6,638; the difference is parameterised
+loops that make several tests from one body).
+
+**34 of the 47 are in `dialogs_build_batch2_test.dart`.** The other 13 are
+not thin at all, and the count would have been wrong without checking them:
+they are OVERFLOW tests — "the register totals do not overflow a phone",
+"the new-company dialog fits" — where the FRAMEWORK is the assertion. A
+`RenderFlex` overflow becomes the test's pending exception and
+`takeException()` is what collects it, so that one line is the whole check
+and it is a real one.
+
+Proved rather than reasoned about: an unflexed wide `Row` put inside
+`NewOrganizationDialog` killed `platform_people_test.dart`'s "the
+new-company dialog fits", with a comment-only control surviving the same
+run. So the thin backlog is 34, not 47, and it is all in one file.
+
+### The scanner, and why it needed a second pass
+
+The first pass reported 18 bodies with NO `expect` at all, which looked like
+a finding. It was the detector: 17 of the 18 assert through a **helper** —
+`allInsideTheStage(tiles(tester), screen)`, `expectShellStandsUp(tester)` —
+defined in the same file and calling `expect` inside. Resolving one level of
+same-file helper took 18 down to 1.
+
+Same family as the helper-that-asserts-by-throwing from the SQL survey: **a
+body with no `expect` in it is not a body with no assertion in it.**
+
+### Twenty rewritten, and three more wrong-shape fixtures
+
+Twenty of the 34 now assert something, and eight new tests were added
+alongside them where one dialog call could not reach two branches. Three of
+the twenty turned out to be **wrong-shape fixtures**, which makes
+sixteen, seventeen and eighteen after the fourteen of the morning:
+
+**The modifier groups dialog.** `pos_modifier_groups_admin` (0251) returns
+ten columns and the fixture named four; `pos_modifier_options_admin` (0250)
+returns seven and it named three. The three missing from each are the ones
+the row BRANCHES on: `is_active` absent reads as `== true` false, so the
+live group drew itself retired and greyed; `option_count` and `item_count`
+absent made every group read "0 answers · asked about 0 dishes"; and the
+answer row's subtitle is `'${option['code']}'`, which with no `code` is the
+four characters **n-u-l-l** on the screen. Nothing threw.
+
+The answers also live in an `ExpansionTile`'s `children`, which are
+**offstage until it is tapped** — `find.text` does not see an offstage
+widget, so a test that never taps asserts nothing about them either way.
+
+**The recurring template dialog.** The title is
+`'What ${widget.schedule['name']} bills'` and `recurring_documents` (0097)
+has `name text not null`, which the fixture did not supply — so the heading
+read **"What null bills"**. It also invented `doc_type` and `next_run`; the
+columns are `kind` ('sales' or 'purchase') and `next_run_date`, and `kind`
+is what decides whether the picker offers invoices or bills.
+`templateKindOf(null)` happens to answer sales, so a purchase schedule
+under that fixture would have been offered invoices and
+`update_recurring_template` would have raised on the save.
+
+**The filing details dialog — a row from ANOTHER TABLE.** It edits
+`fs_filings` (0171) and saves through `updateFsFiling`; the fixture sent
+`form` and `due_on`, which belong to the LHDN filing calendar, and
+`status: 'due'`, which is not one of `app.fs_filing_status` (draft, frozen,
+lodged). With no `fy_start`/`fy_end`, `filingPeriodRuns` was false and Save
+was dead; nothing was ever lodged, so `kLodgedLockedFields` and the
+paragraph explaining it drew for nobody. That set follows
+`app.fs_refuse_lodged_edit` field for field, and a UI that leaves a locked
+field editable sends an update the trigger refuses — which is the only
+reason the set is duplicated in Dart at all.
+
+### AND A REAL DEFECT: the approval rule named the wrong person
+
+`rule_editor.dart` states the rule it is about to write in English, in a
+highlighted box. `_sentence` picked the approver with
+
+    team.where((m) => m.userId == _userId)
+
+and `_byRole` is `_userId == null`. So the moment somebody switched the
+editor to "A named person" with nobody chosen, `_userId` was null — and so
+is the `user_id` of any member who has been **invited and not accepted**.
+The comparison matched that member. The sentence then read
+
+    Step 1: every purchase document of RM5000 or more cannot be posted
+    until Siti Aminah has approved.
+
+over a rule that named nobody, about a person the picker two widgets above
+**deliberately refuses to offer** for exactly that reason. The guard existed
+in the picker and was missing in the sentence.
+
+Fixed with `m.userId != null &&` in front of the comparison, and the
+regression is held by an assertion on "nobody yet" — reverting the guard
+was run as a mutant and FAILED.
+
+An approval rule is read once, when it is written, and then silently blocks
+postings for ever. Nothing on that screen is checked by anything but the
+sentence.
+
+### Mutation results
+
+Each run included a comment-only CONTROL, and every control survived.
+
+| source | killed | survived |
+|---|---|---|
+| `msic_picker.dart` | 3 of 4 | 1, equivalent — written down |
+| `modifier_groups_dialog.dart` | 6 of 6 | — |
+| `recurring_template_dialog.dart` | 4 of 4 (after a test was added) | — |
+| `budget_line_editor.dart` | 4 of 4 | — |
+| `rule_editor.dart` | 3 of 3 | — |
+| `organization_admin_dialogs.dart` | 1 of 1 | — |
+
+**The MSIC equivalent mutant.** Swapping the second and third ranking
+buckets — `[...exact, ...byWords, ...byCode]` — survives because with real
+MSIC data no query can land in both: a code is digits, a description and a
+category are words. A digit query only ever reaches the code buckets and a
+word query only ever the word one. Killing it would need a description with
+another row's code inside it, which `0011`'s seed does not have and MSIC
+2008 does not either.
+
+**The template mutant that survived, and then did not.** Forcing
+`templateKindOf` to answer `DocKind.sales` always changed nothing on screen,
+because the fixture was a sales schedule. What differs for a purchase one is
+the QUERY, not the picture — `update_recurring_template` looks for a bill
+and raises if handed an invoice — so the new test captures the provider's
+`args` and asserts `kind` and `docType` directly. The mutant dies now.
+
+### Two traps this file sets for a test author
+
+**`find.byType(FilledButton).first` reads the HARNESS's button.** The
+`opened` helper in this file builds its own `FilledButton` with
+`key: ValueKey('open')` to open the dialog, and it is first in the tree. A
+`savable()` written that way returned true in both directions and the
+assertion passed before and after the thing it was testing. Anchor from the
+label upwards: `find.ancestor(of: find.text('Add'), matching: ...)`.
+
+**A tap on a second picker DISMISSES the first instead.** `SearchablePicker`
+wraps its field and overlay in a shared `TapRegion`, so with one overlay
+open a tap on the next field reads as "outside" and closes the first. Escape
+first, then `ensureVisible` — eleven fields do not fit 900 logical pixels,
+and `find` locates a child of a `SingleChildScrollView` outside the viewport
+that `tap` cannot hit.
+
+### The migration-list number, and the floor built from it
+
+Run 2265's annotation answered it:
+
+    migration list: 742 row(s) parsed, 0 pending, 742 migration file(s) on disk
+
+Two numbers that are equal, which is what a sound parse of that table looks
+like on a level project. **742 of 742 — the parse sees every row**, so the
+worry recorded yesterday ("N near 0 with F at 742 is a FINDING about the
+parse") does not apply.
+
+It is floored now, against the files on disk rather than against 742: the
+constant is the thing that goes stale, migrations are append-only here, and
+`rows` has to keep up. One-sided on purpose — a migration applied to the
+hosted project from outside this repository would add a row with no file
+behind it, which is worth knowing about and is not this parse breaking. A
+`files < 700` guard sits under it, because `ls supabase/migrations/*.sql |
+wc -l` returning 0 would make `rows >= files` true over an empty table.
+
+**What it catches that the two existing guards cannot.** The comment already
+in the file says a parse that sees nothing errs toward comparing rather than
+toward silence, and that is true. What it misses is that the same parse
+leaves `pend_n` at 0, which is below 20 — so the `pend_n > 20` guard written
+to catch a format change **cannot fire on the format change that matches
+nothing**. Both existing tests pass on it.
+
+Proved by extracting the step's own `run:` block out of `ci.yml` — not a
+copy, so the proof cannot drift from the thing proved — stubbing only the
+`link` and `migration list` calls, and feeding it four tables built from the
+real 742 filenames:
+
+| table | exit | says |
+|---|---|---|
+| 742 applied both sides | 0 | 742 parsed, 0 pending |
+| separator character changed | 1 | 0 parsed, names the floor |
+| one row with no remote stamp | 0 | 1 pending, `ready=false` |
+| run where no migrations exist | 1 | names the `files` floor |
+
+The second is the case that used to pass silently. Run 2266 then exercised
+the new floor against the real table for the first time and printed the same
+742/742.
+
+### `flutter analyze` in 4.2 seconds is not a hole
+
+Worth writing down because the number looks exactly like one.
+`--fatal-infos --fatal-warnings` now reports "No issues found! (ran in
+4.2s)" where a cold run took 70.6s, and **3.2s was what excluding
+`lib/src/**` produced** — which is the hole `check_analyzer_covers_the_app.py`
+exists to refuse. It is a warm analysis-server byte store: planting
+`int _probe() => "not an int";` in `app/lib/src/core/format.dart` reported
+both the type error and the unused-element warning, still in 4.2s.
+
+### AND A SECOND DEFECT, of a different kind: a test that opened nothing
+
+`and resolving one against what is already here` called `resolveSupplier`,
+which asks `repo.contacts` BEFORE it draws anything. `_FakeRepo` raises,
+`resolveSupplier` catches it and returns `SupplierOutcome.ask` -- so no
+dialog ever appeared, and `expect(tester.takeException(), isNull)` was
+asserted over an empty `Scaffold`.
+
+`check_dialogs_built.py` counted that opener as covered the whole time,
+because what it looks for is the CALL. A test that calls a dialog opener and
+draws nothing is indistinguishable, to that gate, from a test that draws it.
+
+It needed a fake whose `contacts` answers (`_ContactsRepo`, with a substring
+filter mirroring the real `or(name.ilike.%q%, ...)`), and then the two-stage
+lookup runs for real: a narrow search on `_searchable(name)`, and -- when
+that finds nothing good enough -- `rankedLikeName` over everything on file.
+The second stage is the expensive mistake the screen exists to prevent:
+"Supplier not found" next to a Create button, when the company is already
+there under a slightly different spelling. Both headings are now asserted,
+because the whole point of the pair is that they differ.
+
+### A CEILING, so the backlog cannot grow back
+
+`scripts/check_thin_assertions.py`, wired into the Flutter job beside the
+analyser gate, with its ceiling in `app/test/thin_assertion_ceiling`:
+
+    14 of 6351 test bodies check only that nothing threw
+    (ceiling 14, 13 excused with a reason), over 457 files and 6351 bodies.
+
+It is a ceiling and **it fires in both directions** — over it, because a
+screen built without throwing is not a screen that says the right thing;
+under it, because ground won and not written down is ground that gets given
+back. That is the `check_counted_assertions.py` idiom, and the same reason
+it uses it.
+
+Not a ban. Twelve overflow tests and one spreadsheet writer are excused BY
+NAME with a reason each, and an excuse that is no longer needed is reported
+as a problem of its own — a stale excuse is an excuse that gets reused for
+something else.
+
+Its two sweep controls are the shape `check_surface_size.py` uses:
+`LEAST_FILES = 300` and `LEAST_BODIES = 5000`, because this gate's pattern
+matches only offenders, so finding none is also what reading nothing looks
+like.
+
+Thirty-one assertions of its own, every one fed: the thin form against the
+opposite claim (`isNotNull` is a real assertion), a `test(` as well as a
+`testWidgets(`, `my_test(` which must not match, the helper resolution in
+both directions, a helper in another file (a stated limitation, not a
+discovered one), `${...}` inside a string, a `//` comment naming `expect`, a
+block comment, both ratchet directions, a missing ceiling file, a ceiling
+file with no number in it, the empty sweep, and
+`inspect.signature(...).parameters['path'].default is empty` — because
+`check_flutter_test_count.py` had a default argument there and ten of its
+floor assertions silently tested the real file.
+
+Three of the lessons already in this document were written into it as
+comments rather than left for the next author to rediscover: the default
+argument, `relative_to` raising for a path outside the tree (written, hit
+and fixed twice in `scripts/` already), and a `{` inside a string breaking
+brace matching — which the second time swallowed seventeen following tests
+into one body and showed up as a count that was too LOW, not as an error.
+
+### A trap worth one line: do not run tests beside `mutate.py`
+
+`scripts/mutate.py` edits the SOURCE FILE IN PLACE and restores it at the
+end. A `flutter test` started while it is mid-run compiles against the
+mutant, so it fails for a reason that has nothing to do with the test. That
+happened once here -- `a tax code that was typed rather than picked` came
+back red while `tax_code_dialog.dart` was checked out mutated, and
+`git diff` was what said so. Check `git status` before believing a failure
+that arrived next to a mutation run.
+
+### What is left of this backlog
+
+**14 of the 34** still assert nothing but `expect(tester.takeException(),
+isNull)` — and 27 across the whole of `app/test`, the other 13 being the
+overflow tests above. By test name, in file order:
+
+  * `a supplier made out of what was scanned`
+  * `assigning a table`
+  * `the delivery fee dialog`
+  * `one forecast line`
+  * `the forecast settings`
+  * `and one item's own parameters`
+  * `an appraisal under review`
+  * `billing a matter`
+  * `closing a deal`
+  * `logging a chase on a debt`
+  * `verifying somebody against the MIA register`
+  * `the notifications sheet`
+  * `one time entry`
+  * `and the figures a tax computation is built on`
+
+The method that is working, in order: read the RPC or repository query
+behind each provider FIRST — the fixture shapes are where the defects are —
+then assert whole joined subtitles rather than `textContaining` on one
+clause, read `onPressed` directly wherever a disabled button is the point,
+tap open anything offstage, and mutation-prove a sample per batch with a
+comment-only control.
