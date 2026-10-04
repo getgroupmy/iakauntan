@@ -220,7 +220,14 @@ def main(argv: list[str]) -> int:
               file=sys.stderr)
         return 1
 
-    print(f'{ran} Dart tests ran (floor {floor})')
+    # `::notice::`, so the number becomes an ANNOTATION. It is the one
+    # line in this job anybody comes looking for, and it sits at the end
+    # of a step followed by a workbook check and twelve lines of runner
+    # cleanup -- a 30-line tail of the job log lands past it, which is
+    # exactly how the floor stayed SIX tests behind without anybody
+    # noticing: run 2266 printed `6644 Dart tests ran (floor 6638)` and
+    # the floor is a minimum, so nothing went red and nothing was read.
+    print(f'::notice::{ran} Dart tests ran (floor {floor})')
     return 0
 
 

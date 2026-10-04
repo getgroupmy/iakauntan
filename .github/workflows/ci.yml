@@ -3144,7 +3144,7 @@ jobs:
                    | grep -oE '^# tests [0-9]+' | grep -oE '[0-9]+' \
                    | tail -1)"
           ran="${ran:-0}"
-          echo "call server tests that ran: $ran (floor: $floor)"
+          echo "::notice::call server tests that ran: $ran (floor: $floor)"
           if [ "$ran" -lt "$floor" ]; then
             echo "::error::$ran call server test(s) ran and the floor is" \
                  "$floor. node --test exits 0 over a glob that matches" \

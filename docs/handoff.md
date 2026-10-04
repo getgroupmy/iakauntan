@@ -10452,17 +10452,104 @@ back red while `tax_code_dialog.dart` was checked out mutated, and
 `git diff` was what said so. Check `git status` before believing a failure
 that arrived next to a mutation run.
 
+## 4 October, part three: THREE TESTS DELETED BY ACCIDENT, AND WHAT CAUGHT IT
+
+Worth its own heading because it is the clearest demonstration in this
+file of why the Dart-count floor exists, and because the floor was too
+slack to catch it.
+
+Three more thin tests were rewritten -- `assigning a table`, `the forecast
+settings`, `the delivery fee dialog` -- with a Python splice that computed
+the start of the block to replace like this:
+
+    i = s.index("testWidgets('%s'" % name)
+    start = s.rindex('\n', 0, s.rindex('testWidgets(', 0, i + 1)) + 1
+
+`str.rindex(sub, 0, i + 1)` searches `s[0:i+1]`, which ends ONE CHARACTER
+INTO the match at `i` -- so the substring does not fit and `rindex` returns
+the PREVIOUS occurrence. `start` was therefore the previous test's first
+line, and the replacement ate it. Three edits in a row, each eating its
+neighbour:
+
+  * `assigning a table`        ate `and says so plainly when nothing on
+                                    file is like it`
+  * `the forecast settings`    ate `one forecast line`
+  * `the delivery fee dialog`  ate `assigning a table` (the rewrite from
+                                    two steps earlier)
+
+`flutter test test/dialogs_build_batch2_test.dart` printed **"All tests
+passed!"** after every one of them.
+
+**What caught it** was extracting the test-name set from `git show HEAD:`
+and diffing it against the working tree -- 61 against 58, with the three
+names listed. Nothing else would have: the suite was green, the analyser
+was clean, and every gate passed.
+
+**And CI would not have caught it either**, which is the part worth
+fixing. The floor said 6638 while run 2266 printed `6644 Dart tests ran`,
+so there were six tests of slack; losing three would have left 6646, still
+over the floor, still green. The floor is now **6649**, which is run 2267's
+own number read out of its log, and the file says in as many words: raise
+it in the same commit as the tests, because a floor that trails the count
+is a floor with room in it.
+
+Repaired by restoring the file from `HEAD` and re-applying the three
+rewrites with an exact-match replacement of the `testWidgets(...)` call
+alone -- no backward walk at all -- then re-checking the name set against
+`HEAD` (61 of 61, nothing added, nothing removed) and running the file
+(61 passed).
+
+### Two more lessons from the same three tests
+
+**An `@override` of an EXTENSION method is a new method.**
+`AssignTableSheet._scan` awaits `repo.posTableByCode`, which lives on the
+`RepoPos` extension rather than on `Repo`. A subclass of `Repo` that
+declares `posTableByCode` does not override anything: the extension's own
+body runs and reaches `callRpc` underneath, which the throwing fake then
+raises from, out of a `try/finally` with no `catch`. The fake overrides
+`callRpc` instead, which has the side benefit that the real
+`posTableByCode` runs -- including its `rows.isEmpty ? null : rows.first`,
+which is the line the branch under test turns on.
+
+**`DropdownButtonFormField` asserts its initial value is among its items.**
+A `default_method` of `'exponential'` rather than `'exponential_smoothing'`
+raised at build rather than drawing blank. It cannot come from the database
+-- `app.forecast_method` (0197) is an enum of exactly the three the
+dropdown lists -- but it came from a fixture, which is how the assertion
+got found. A UI list that drifts from its enum is therefore a crash and not
+a quiet wrong value, which is the better of the two.
+
+### And the ratchet fired downward, as designed
+
+Raising the three tests took the thin count from 14 to 11, and
+`check_thin_assertions.py` REFUSED the stale ceiling:
+
+    ::error::only 11 thin test bodies remain and the ceiling still says 14.
+    This is a RATCHET: lower the number in app/test/thin_assertion_ceiling
+    so the ground that was won cannot be given back.
+
+That is the half of a ratchet nobody remembers to write, firing on the real
+tree within an hour of being written.
+
+### Three count lines are annotations now
+
+`6649 Dart tests ran (floor 6638)` sat at the end of a step followed by a
+workbook check and a dozen lines of runner cleanup, so a 30-line tail of
+the job log landed past it -- which is exactly how the floor stayed six
+tests behind without anybody noticing. The Dart count, the call server's
+count and the thin-assertion count are all `::notice::` now, so
+`repos/{owner}/{repo}/check-runs/{id}/annotations` returns them in one
+small response. Same fix as the migration-list number, for the same
+reason, found the same way.
+
 ### What is left of this backlog
 
-**14 of the 34** still assert nothing but `expect(tester.takeException(),
-isNull)` — and 27 across the whole of `app/test`, the other 13 being the
+**11 of the 34** still assert nothing but `expect(tester.takeException(),
+isNull)` — and 24 across the whole of `app/test`, the other 13 being the
 overflow tests above. By test name, in file order:
 
   * `a supplier made out of what was scanned`
-  * `assigning a table`
-  * `the delivery fee dialog`
   * `one forecast line`
-  * `the forecast settings`
   * `and one item's own parameters`
   * `an appraisal under review`
   * `billing a matter`

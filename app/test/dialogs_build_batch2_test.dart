@@ -2806,29 +2806,135 @@ void main() {
   });
 
   group('the rest of point of sale', () {
+    // `posFloorPlanProvider` answered `[]`, so the sheet drew "No tables
+    // yet" and the row builder never ran -- and the row builder is where
+    // the one piece of arithmetic on this screen lives. The plan returns
+    // ONE ROW PER BILL, so a table carrying a split bill appears twice;
+    // the builder folds by `table_id` and keeps the COUNT, because two
+    // bills on one table is legitimate and is said rather than prevented.
+    //
+    // Rows in the shape `pos_floor_plan` (0213) returns: table_id,
+    // table_code, table_name, area, seats, pos_x, pos_y, shape, sale_id,
+    // sale_no, covers, opened_at, minutes_seated, total_amount, line_count.
     testWidgets('assigning a table', (tester) async {
       await openedWithRef(
         tester,
         [
-          repoProvider.overrideWithValue(repo),
-          posFloorPlanProvider.overrideWith((_, __) async => const []),
+          repoProvider.overrideWithValue(_NoSuchTableRepo()),
+          posFloorPlanProvider.overrideWith((_, __) async => const [
+                {
+                  'table_id': 't1',
+                  'table_code': 'T-01',
+                  'table_name': 'Table 1',
+                  'area': 'Indoor',
+                  'seats': 4,
+                  'sale_id': 's1',
+                  'sale_no': 'POS-0001',
+                  'covers': 2,
+                  'total_amount': 48.5,
+                  'line_count': 3,
+                },
+                // THE SAME TABLE AGAIN, which is what a split bill looks
+                // like on this plan. One row per bill, so folding is the
+                // whole of the row builder.
+                {
+                  'table_id': 't1',
+                  'table_code': 'T-01',
+                  'table_name': 'Table 1',
+                  'area': 'Indoor',
+                  'seats': 4,
+                  'sale_id': 's2',
+                  'sale_no': 'POS-0002',
+                  'covers': 2,
+                  'total_amount': 19.0,
+                  'line_count': 1,
+                },
+                // Nobody on it, and NO AREA -- the subtitle joins around
+                // the missing clause rather than printing an empty one.
+                {
+                  'table_id': 't2',
+                  'table_code': 'T-02',
+                  'table_name': 'Table 2',
+                  'area': null,
+                  'seats': 6,
+                  'sale_id': null,
+                },
+              ]),
         ],
         (context, ref) =>
             assignTable(context, ref, saleId: 's1', outletId: 'o1'),
       );
       expect(tester.takeException(), isNull);
+
+      expect(find.text('Which table?'), findsOneWidget);
+      expect(find.text('No tables yet'), findsNothing);
+
+      // THREE rows in, TWO tables out.
+      expect(find.byType(ListTile), findsNWidgets(2));
+      expect(find.text('Table 1'), findsOneWidget);
+      expect(find.text('Table 2'), findsOneWidget);
+
+      // The separator here is two spaces either side of the dot, which is
+      // worth pinning exactly rather than by containment -- it is what
+      // makes a crowded subtitle legible on a till.
+      expect(find.text('Indoor  ·  4 seats  ·  2 open'), findsOneWidget);
+      expect(find.text('6 seats'), findsOneWidget);
+      expect(find.textContaining('0 open'), findsNothing);
+      expect(find.textContaining('null'), findsNothing);
+
+      // A card no table answers to. The complaint goes on the SHEET,
+      // because a snack bar would slide away underneath it where a
+      // cashier holding a card would never see it -- and the box clears
+      // and keeps focus, because the next thing that happens is another
+      // scan.
+      await tester.enterText(find.byType(TextField), 'T-99');
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+
+      expect(find.text('No table here answers to "T-99".'), findsOneWidget);
+      expect(
+          tester.widget<TextField>(find.byType(TextField)).controller?.text,
+          '');
     });
 
+    // The smallest dialog in the file and it still has a rule in it:
+    //
+    //     pop(double.tryParse(controller.text.trim()) ?? current)
+    //
+    // A fee typed as a word comes back as the fee that was already
+    // charged, NOT as nought -- which on a till is the difference between
+    // a typo and a free delivery. The old test asserted neither the seed
+    // nor the fallback, and the fallback is only observable through the
+    // returned Future, so the opener's answer is captured.
     testWidgets('the delivery fee dialog', (tester) async {
+      double? returned;
       await opened(
         tester,
         [
           repoProvider.overrideWithValue(repo),
           orgCountryAlpha2Provider.overrideWithValue('MY'),
         ],
-        (context) => showDeliveryFeeDialog(context, current: 5),
+        (context) => showDeliveryFeeDialog(context, current: 5)
+            .then((v) => returned = v),
       );
       expect(tester.takeException(), isNull);
+
+      expect(find.text('Charge something else'), findsOneWidget);
+      // Seeded through `Fmt.plain`, which is '#,##0.00' -- so a fee of 5
+      // reads as 5.00 and somebody editing it is editing a money amount
+      // rather than an integer.
+      expect(tester.widget<TextField>(find.byType(TextField)).controller?.text,
+          '5.00');
+      expect(find.text('Less than the zone charges needs a manager'),
+          findsOneWidget);
+
+      await tester.enterText(find.byType(TextField), 'free');
+      await tester.tap(find.text('Charge this'));
+      await tester.pumpAndSettle();
+
+      // The fee that was already charged, not nought.
+      expect(returned, 5);
+      expect(find.textContaining('null'), findsNothing);
     });
 
     // The widest shape mismatch of the set, across all three providers.
@@ -2977,16 +3083,98 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    // `forecastSettingsProvider` answered `const {}`, so every one of the
+    // eight boxes and both switches fell back to its DEFAULT -- and a form
+    // showing its defaults looks exactly like a form showing a company's
+    // saved settings. Which is the whole point of the dialog: these are
+    // numbers a reorder suggestion will later be defended with.
+    //
+    // Fed a real row, therefore, with every value DIFFERENT from its
+    // default, so the assertions distinguish "read from the row" from
+    // "fell back".
     testWidgets('the forecast settings', (tester) async {
       await openedWithRef(
         tester,
         [
           repoProvider.overrideWithValue(repo),
-          forecastSettingsProvider.overrideWith((_) async => const {}),
+          forecastSettingsProvider.overrideWith((_) async => const {
+                'bucket': 'month',
+                'default_method': 'exponential_smoothing',
+                'history_days': 730,
+                'horizon_buckets': 12,
+                'default_window': 6,
+                'default_alpha': 0.45,
+                'service_level': 0.99,
+                'default_lead_time_days': 21,
+                'min_periods': 3,
+                'count_transfers_out': true,
+                'count_shrinkage': true,
+              }),
         ],
         (context, ref) => showForecastSettings(context, ref),
       );
       expect(tester.takeException(), isNull);
+
+      expect(find.text('Forecast settings'), findsOneWidget);
+
+      String boxed(String label) => tester
+          .widget<TextFormField>(find.widgetWithText(TextFormField, label))
+          .controller!
+          .text;
+
+      // Every default this is NOT: week, moving_average, 365, 8, 4, 0.300,
+      // 0.9500, 14, 4, false, false.
+      //
+      // `default_method` has to be one of the three the dropdown lists --
+      // `DropdownButtonFormField` ASSERTS that its initial value is among
+      // its items, so a fourth value raises rather than drawing blank. It
+      // cannot happen from the database (`app.forecast_method` is an enum
+      // of exactly those three, 0197) but it happened from this fixture,
+      // which is how the assertion got found.
+      expect(find.text('Months'), findsOneWidget);
+      expect(find.text('Weeks'), findsNothing);
+      expect(find.text('Exponential smoothing'), findsOneWidget);
+      expect(find.text('Moving average'), findsNothing);
+      expect(boxed('Days of history to read'), '730');
+      expect(boxed('Buckets to forecast ahead'), '12');
+      expect(boxed('Averaging window'), '6');
+      expect(boxed('Smoothing factor'), '0.45');
+      expect(boxed('Service level'), '0.99');
+      expect(boxed('Lead time when it cannot be measured'), '21');
+      expect(boxed('Fewest periods worth forecasting'), '3');
+
+      final switches = tester.widgetList<SwitchListTile>(
+          find.byType(SwitchListTile));
+      expect(switches, hasLength(2));
+      expect(switches.every((w) => w.value), isTrue,
+          reason: 'both count-as-demand switches default to false, so a '
+              'fixture that fed true is the only way to see them read');
+
+      // THE BOUNDS, which nothing had ever tripped. `_int` and `_decimal`
+      // each refuse two different ways, and the message names the range
+      // rather than saying "invalid".
+      await tester.enterText(
+          find.widgetWithText(TextFormField, 'Averaging window'), '100');
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(find.text('Between 2 and 52'), findsOneWidget);
+
+      await tester.enterText(
+          find.widgetWithText(TextFormField, 'Averaging window'), 'six');
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(find.text('A whole number'), findsOneWidget);
+
+      // And the decimal one refuses in its own words, because "a whole
+      // number" would be wrong advice about a smoothing factor.
+      await tester.enterText(
+          find.widgetWithText(TextFormField, 'Averaging window'), '6');
+      await tester.enterText(
+          find.widgetWithText(TextFormField, 'Smoothing factor'), '2');
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(find.text('Between 0.001 and 0.999'), findsOneWidget);
+      expect(find.textContaining('null'), findsNothing);
     });
 
     testWidgets('and one item’s own parameters', (tester) async {
@@ -3399,6 +3587,31 @@ class _ContactsRepo extends _FakeRepo {
     final q = (search ?? '').trim().toLowerCase();
     if (q.isEmpty) return all;
     return all.where((c) => c.name.toLowerCase().contains(q)).toList();
+  }
+}
+
+/// A fake that answers `pos_table_by_code` with NOTHING FOUND.
+///
+/// `AssignTableSheet._scan` awaits `posTableByCode` inside a `try/finally`
+/// with no `catch`, so under `_FakeRepo` the raise propagates out of the
+/// test instead of reaching the branch worth testing: a card scanned that
+/// no table answers to, which puts the complaint ON THE SHEET rather than
+/// in a snack bar that would slide away underneath it.
+///
+/// `callRpc` and not `posTableByCode`, and that is not a style choice:
+/// `posTableByCode` lives on the `RepoPos` extension, so an `@override` of
+/// it on a subclass of `Repo` is a NEW METHOD that nothing calls -- the
+/// extension's own body runs and reaches `callRpc` underneath. Overriding
+/// one step lower means the real `posTableByCode` runs, including its
+/// `rows.isEmpty ? null : rows.first`, which is the line the branch turns
+/// on.
+class _NoSuchTableRepo extends _FakeRepo {
+  @override
+  Future<dynamic> callRpc(String fn, {Map<String, dynamic>? params}) async {
+    if (fn == 'pos_table_by_code') return const <Map<String, dynamic>>[];
+    return super.noSuchMethod(
+      Invocation.method(Symbol(fn), [params]),
+    );
   }
 }
 

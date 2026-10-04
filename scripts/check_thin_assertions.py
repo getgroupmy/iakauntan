@@ -371,7 +371,10 @@ def problems(files=None, ceiling_file: str | None = None) -> list[str]:
         )
 
     if not out:
-        print('%s of %s test bodies check only that nothing threw '
+        # `::notice::` for the same reason the Dart count is one: a number
+        # printed in the middle of a job is a number nobody reads, and this
+        # one has to be read for the ceiling to be lowered.
+        print('::notice::%s of %s test bodies check only that nothing threw '
               '(ceiling %s, %s excused with a reason), over %s files and '
               '%s bodies.'
               % (len(counted), bodies_read, ceiling, len(excused),

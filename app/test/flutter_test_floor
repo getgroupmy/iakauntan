@@ -1,11 +1,35 @@
-6638
+6649
 
 The number of Dart tests `flutter test` runs in app/. One definition,
 read by `scripts/check_flutter_test_count.py` and by nothing else; CI's
 step "Run the Dart tests, and count them" writes the json report and
 hands it to that script, which reads this file itself.
 
-Measured twice, twelve minutes a run, both times the same.
+Measured twice, twelve minutes a run, both times the same -- at 6638, and
+then left there while the suite grew. Run 2266 printed
+
+    6644 Dart tests ran (floor 6638)
+
+and nothing went red, because a floor is a MINIMUM. So it sat six tests
+behind for a day and the slack was invisible. 6649 is run 2267's own
+number, read out of its log rather than worked out.
+
+**The slack is the whole of the risk.** With the floor at 6638 and the
+real count at 6649, eleven tests could stop registering and CI would stay
+green. Three of them did: a Python splice in this very file computed the
+start of a block with
+
+    s.rindex('testWidgets(', 0, i + 1)
+
+whose window ends ONE CHARACTER INTO the match, so `rindex` found the
+PREVIOUS test and the replacement deleted it. It happened three times in
+a row, each edit eating its neighbour, and `flutter test` reported "All
+tests passed!" every time. What caught it was comparing the test-name set
+against `git show HEAD:` -- which is what the counting step does in CI,
+and only when the number it compares against is current.
+
+So: RAISE THIS IN THE SAME COMMIT AS THE TESTS. A floor that trails the
+count is a floor with room in it.
 
 ## Why there is a floor at all
 
