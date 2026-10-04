@@ -11196,3 +11196,74 @@ at every point a hook could look at it.
 
 One at a time, never two — they share one `.dart_tool`, and a spurious
 failure from contention reads as a KILLED mutant.
+
+## 4 October, part twelve: turning the method on today's own work
+
+The three files above were somebody else's assertions. The 34 thin tests
+rewritten today were MINE, and "not thin" is weaker than "asserts the right
+thing" — so they were the least established assertions in the repository and
+the obvious thing to point the instrument at.
+
+`87f3d069..HEAD` changed **51 test bodies** in
+`dialogs_build_batch2_test.dart`: the 34 thin rewrites, the wrong-shape
+fixture fixes, and five new tests. One mutant per body, aimed at an
+assertion inside it, so a kill proves THAT test can fail:
+
+| batch | mutants | killed | control |
+|---|---|---|---|
+| 1–5 | 12+12+12+12+3 = **51** | **51** | survived in every batch |
+
+Every rewritten test has teeth. Nothing was left behind that passes with its
+own assertion wrong.
+
+### The day's total
+
+| | mutants | killed |
+|---|---|---|
+| `till_screen_test.dart` | 65 | 65 |
+| `withholding_screen_test.dart` | 21 | 21 |
+| `reconciliation_screen_test.dart` | 34 | 34 |
+| `dialogs_build_batch2_test.dart`, today's 51 rewrites | 51 | 51 |
+| **present-expecting, total** | **171** | **171** |
+| `findsNothing` (till) | 20 | **0** |
+
+Eight controls, all survived. One mutant NOT RUN and reported as such.
+
+## THE DISK FILLED, AND IT LOOKED LIKE A SLOW TEST
+
+Worth more than any of the numbers above, because it cost an hour and the
+first diagnosis was wrong.
+
+`flutter test test/dialogs_build_batch2_test.dart` was started to time it.
+After **fifteen minutes it had produced zero bytes**, and the conclusion
+drawn was that this file is twenty times slower than `till_screen_test.dart`
+and so too expensive to mutate. That was wrong. `df` said:
+
+```
+/dev/vda  252G  37G  57M  100% /
+```
+
+**The disk was full.** The frontend compiler was sitting at 857MB RSS and
+1.6% CPU, unable to write its output dill — not slow, starved. The
+environment's own note says this exactly: "Avail at 0 with low Used means
+the allowance is spent, not that the machine is broken." With space freed
+the same file ran in **35 seconds**.
+
+What filled it, in order of size:
+
+- **9,937 `/tmp/tmp*` directories, 12G** — orphaned Chromium profiles dated
+  20 SEPTEMBER, two weeks stale, from a prior session. 2,885 of them are
+  older than a week. **Still there**: sweeping them was refused as a
+  "Shared Scratch Sweep", correctly, since they are not this session's to
+  delete. That needs the user, and it is the single biggest win available.
+- **34 `/tmp/flutter_tools.*` directories, 2.7G** — these ARE a mutation
+  run's doing. Every `flutter test` makes one of roughly 100–200MB, and a
+  killed run leaves it behind. A 65-mutant run can leak several gigabytes,
+  so **`rm -rf /tmp/flutter_tools.*` between batches** is part of running
+  one, and every batch in part twelve did it.
+- two redundant Flutter SDK tarballs in `/tmp`, 2.8G, already extracted to
+  `/opt/flutter-3.47.4`.
+
+Deleting what this session owned took it from 57M to 5.6G, which is enough
+to work. If a test suite ever goes quiet for minutes with no output, run
+`df -h /` before concluding anything about the test.
