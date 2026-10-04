@@ -9913,3 +9913,56 @@ Raised to **15**, which is the same reasoning applied to the number as it
 is rather than as it was. The job's own 30-minute budget is untouched and
 does not need to move: the whole SQL job took **14.8 minutes** in that run,
 so even a dump using all fifteen leaves it inside half an hour.
+
+### Three more, and one of the fifteen was a false lead
+
+**`showStallItems` drew "null null".** `Repo.itemStalls()` selects
+`id, code, name, stall_id`; the fixture sent `item_id, item_name,
+stall_id`. The dialog draws `'${it['code']} ${it['name']}'` and keys its
+remove button `off-stall-${it['id']}`, so every row read **"null null"**
+under a button keyed **`off-stall-null`**. Now fed three items — one on
+this stall, one on none, one on another — and asserting the title, the
+key, and that the other two are absent, because this dialog lists what
+*this* stall sells and an unfiltered list is the defect the filter exists
+to prevent.
+
+**`showTemplateItems` labelled a mandatory task "optional".** The fixture
+said `due_days` and the dialog reads `due_offset_days`, so
+`Fmt.toInt(null)` gave 0 and every row said "on the start date" whatever
+its real offset. `is_mandatory` was absent, and the subtitle appends
+"optional" whenever it is not `true`. Now two rows, one of each, asserting
+`Paperwork · day 7 · for hr_manager` and `3 days before · optional`.
+
+`_dayLabel(7)` is **`day 7`**, not "in 7 days" — I wrote the expectation
+from the sentence I expected and the code says otherwise:
+
+```dart
+static String _dayLabel(int offset) => switch (offset) {
+      0 => 'on the start date',
+      1 => 'the next day',
+      _ when offset < 0 => '${-offset} days before',
+      _ => 'day $offset',
+    };
+```
+
+#### `showEditLeaveContact` was NOT one of the fifteen
+
+The key sweep flagged it: the fixture supplied `request_id` and
+`leave_type_name`, and `who_is_away.dart` reads `row['leave_type']` and
+`row['has_contact']`. Reading it says otherwise — `_EditContactDialog`
+takes a `LeaveRequest` object and reads `widget.request.contactWhileAway`.
+**It never looks at `whoIsAwayProvider` at all.** The rows with those keys
+belong to the who-is-away *list*, which lives in the same file and which
+this dialog does not draw.
+
+So the override was dead weight rather than a wrong shape, and that is
+what a sweep comparing a fixture against every `row['...']` in a FILE can
+tell you and cannot settle. Fourteen of the fifteen, then.
+
+The override is dropped and the test given the thing it was missing: the
+field opens carrying the contact there already is, which is the dialog's
+one job. Two tests — prefilled from `contactWhileAway`, and empty when
+there is none. Mutant: not passing the contact finds no `+60 12-345 6789`.
+
+Seven of the fourteen are done. `dialogs_build_batch2_test.dart` is 54
+tests now, up from 50.

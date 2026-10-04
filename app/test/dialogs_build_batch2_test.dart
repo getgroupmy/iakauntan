@@ -688,7 +688,13 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('and one onboarding template', (tester) async {
+    // `due_days` was the fixture's word and the dialog reads
+    // `due_offset_days`, so `Fmt.toInt(null)` gave 0 and every row said
+    // "on the start date" whatever its real offset. `is_mandatory` was
+    // absent, and the subtitle appends "optional" whenever it is not
+    // `true` -- so this test drew a MANDATORY task labelled optional.
+    testWidgets('and one onboarding template, in the shape it is stored',
+        (tester) async {
       await opened(
         tester,
         [
@@ -698,8 +704,18 @@ void main() {
                   'id': 'ti1',
                   'title': long,
                   'description': long,
-                  'due_days': 7,
+                  'category': 'Paperwork',
+                  'due_offset_days': 7,
                   'owner_role': 'hr_manager',
+                  'is_mandatory': true,
+                },
+                // One of each, because "optional" is only meaningful
+                // against a row that is not.
+                {
+                  'id': 'ti2',
+                  'title': 'Order a laptop',
+                  'due_offset_days': -3,
+                  'is_mandatory': false,
                 },
               ]),
         ],
@@ -707,6 +723,17 @@ void main() {
             context, const {'id': 't1', 'name': 'New joiner'}),
       );
       expect(tester.takeException(), isNull);
+
+      expect(find.text('New joiner · items'), findsOneWidget);
+      expect(find.text(long), findsOneWidget);
+
+      // `due_offset_days` through `_dayLabel`, `owner_role`, and
+      // `is_mandatory` by its absence from this line.
+      expect(find.text('Paperwork · day 7 · for hr_manager'),
+          findsOneWidget);
+      // And the other row, where the offset is before the start date and
+      // "optional" belongs.
+      expect(find.text('3 days before · optional'), findsOneWidget);
     });
 
     testWidgets('and a month of attendance', (tester) async {
@@ -945,14 +972,28 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('and which items a stall sells', (tester) async {
+    // `item_id` and `item_name` were the fixture's words.
+    // `Repo.itemStalls()` selects `id, code, name, stall_id`, and the
+    // dialog draws `'${it['code']} ${it['name']}'` -- so every row in
+    // this test read "null null", under a button keyed `off-stall-null`.
+    testWidgets('and which items a stall sells, in the shape it selects',
+        (tester) async {
       await opened(
         tester,
         [
           repoProvider.overrideWithValue(repo),
           canWriteProvider.overrideWithValue(true),
           itemStallsProvider.overrideWith((_) async => const [
-                {'item_id': 'i1', 'item_name': long, 'stall_id': 'st1'},
+                {'id': 'i1', 'code': 'NL-01', 'name': long,
+                  'stall_id': 'st1'},
+                // On no stall, so `itemsOnStall` must leave it out: this
+                // dialog lists what THIS stall sells, and an unfiltered
+                // list is the defect the filter exists to prevent.
+                {'id': 'i2', 'code': 'TEH-01', 'name': 'Teh tarik',
+                  'stall_id': null},
+                // And one that belongs to somebody else.
+                {'id': 'i3', 'code': 'MG-01', 'name': 'Mee goreng',
+                  'stall_id': 'st2'},
               ]),
         ],
         (context) => showStallItems(
@@ -960,10 +1001,23 @@ void main() {
           stall: const {'id': 'st1', 'name': 'Nasi Lemak'},
           stalls: const [
             {'id': 'st1', 'name': 'Nasi Lemak'},
+            {'id': 'st2', 'name': 'Mee Goreng Corner'},
           ],
         ),
       );
       expect(tester.takeException(), isNull);
+
+      expect(find.text('What Nasi Lemak sells'), findsOneWidget);
+      // `code` and `name`, which the old fixture supplied under neither
+      // name.
+      expect(find.text('NL-01 $long'), findsOneWidget);
+      expect(find.textContaining('null'), findsNothing);
+      // `id`, which the remove button's key is built from.
+      expect(find.byKey(const ValueKey('off-stall-i1')), findsOneWidget);
+      // The other two are this stall's business only when they are on it.
+      expect(find.textContaining('Teh tarik'), findsNothing);
+      expect(find.textContaining('Mee goreng'), findsNothing);
+      expect(find.textContaining('Nothing is this stall'), findsNothing);
     });
   });
 
@@ -1038,23 +1092,24 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    // The `whoIsAwayProvider` override this test used to carry was DEAD
+    // WEIGHT, and the keys in it (`request_id`, `leave_type_name`) were
+    // the wrong ones -- but it did not matter, because
+    // `_EditContactDialog` takes a `LeaveRequest` and reads
+    // `widget.request.contactWhileAway`. It never looks at that provider;
+    // the rows with those keys belong to the who-is-away LIST in the same
+    // file. A key sweep that compares a fixture against every `row['...']`
+    // in a file flags that as a wrong shape, and reading it says
+    // otherwise. Dropped rather than corrected.
+    //
+    // What the test was missing is the dialog's one job: the field opens
+    // carrying the contact there already is, so somebody amending it is
+    // not retyping it.
     testWidgets('changing where somebody is reachable while away',
         (tester) async {
       await opened(
         tester,
-        [
-          repoProvider.overrideWithValue(repo),
-          whoIsAwayProvider.overrideWith((_, __) async => const [
-                {
-                  'request_id': 'l1',
-                  'employee_name': long,
-                  'leave_type_name': 'Annual leave',
-                  'start_date': '2026-10-01',
-                  'end_date': '2026-10-03',
-                  'contact_while_away': long,
-                },
-              ]),
-        ],
+        [repoProvider.overrideWithValue(repo)],
         (context) => showEditLeaveContact(
           context,
           LeaveRequest(
@@ -1064,10 +1119,44 @@ void main() {
             endDate: DateTime.utc(2026, 10, 3),
             totalDays: 3,
             status: 'approved',
+            contactWhileAway: '+60 12-345 6789',
           ),
         ),
       );
       expect(tester.takeException(), isNull);
+
+      expect(find.text('Where to reach you'), findsOneWidget);
+      // The leave it is about, named, and the dates read through
+      // `describeAbsence` rather than printed raw.
+      expect(find.textContaining('Leave LV-0001'), findsOneWidget);
+      // Prefilled, which is the whole point of the dialog.
+      expect(find.text('+60 12-345 6789'), findsOneWidget);
+      expect(find.text('Leave it empty to remove the contact.'),
+          findsOneWidget);
+    });
+
+    // And the other side of it: nothing recorded yet, so the field is
+    // empty and the helper still says how to clear one.
+    testWidgets('and it opens empty when there is no contact yet',
+        (tester) async {
+      await opened(
+        tester,
+        [repoProvider.overrideWithValue(repo)],
+        (context) => showEditLeaveContact(
+          context,
+          LeaveRequest(
+            id: 'l2',
+            requestNo: 'LV-0002',
+            startDate: DateTime.utc(2026, 11, 2),
+            endDate: DateTime.utc(2026, 11, 2),
+            totalDays: 1,
+            status: 'submitted',
+          ),
+        ),
+      );
+      expect(tester.takeException(), isNull);
+      expect(find.textContaining('Leave LV-0002'), findsOneWidget);
+      expect(find.text('+60 12-345 6789'), findsNothing);
     });
 
     testWidgets('billing a matter', (tester) async {
