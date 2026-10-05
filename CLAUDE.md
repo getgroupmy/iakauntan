@@ -29,17 +29,30 @@ Three things to know before you touch the code:
 - **A widget test that passes has not yet proved anything.** Break the screen
   on purpose and watch the test fail: `python3 scripts/mutate.py <source>
   <test> <mutants.py>`, always with a no-op control, because a harness that
-  errors on every run reports a clean sweep. `docs/widget-tests.md` lists
-  thirteen ways a green test covers a broken screen — every one of them
-  happened here, and five of them hid a real defect. The twelfth is about SQL,
-  not widgets: a fixture that makes the right value and the fallback value the
-  same row cannot test which one was used, and that is how a 1120 fallback
-  survived in six posting functions with 382 assertion files running. The
-  thirteenth is about the WINDOW: a widget test's surface is 800x600 unless it
-  is told otherwise, which is landscape, so a screen laid out for a portrait
-  phone can be broken at every size a person holds and pass a file full of
-  assertions that only ever counted widgets. Set `tester.view.physicalSize`
-  and measure with `getRect`.
+  errors on every run reports a clean sweep. `docs/widget-tests.md` lists the
+  ways a green test covers a broken screen — every one of them happened here,
+  and several hid a real defect. **No count is given here on purpose:** that
+  list has grown four times, and this line said "thirteen" while two scripts
+  said "ten". Read the file; it numbers them. Three of its entries are the
+  ones most worth knowing before writing any test here:
+
+  - **A fixture that collapses the thing under test into one value.** If the
+    right answer and the fallback answer are the same row, no assertion can
+    say which one the code read. That is how a 1120 fallback survived in six
+    posting functions with 382 assertion files running — and how, later, a
+    settlement account, a payment mode code, a base currency, an interval of
+    one and a year closed on its own each hid a mutant.
+  - **The WINDOW.** A widget test's surface is 800x600 unless told otherwise,
+    which is landscape — so a screen laid out for a portrait phone can be
+    broken at every size a person holds and pass a file full of assertions
+    that only ever counted widgets. Set `tester.view.physicalSize` and
+    measure with `getRect`.
+  - **Three things that look like coverage of a fix and are not:** a comment
+    naming the gap, a static sweep of the function's source text, and a
+    careful sweep of the guard NEXT TO it. All three were found in one
+    afternoon, each leaving a shipped fix with no behavioural assertion at
+    all, and a mutation sweep is immune to all three because it reads
+    nothing.
 
 ## After every push: watch CI to green
 

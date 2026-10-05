@@ -18,9 +18,10 @@ they built at all.
 They did. That is luck rather than evidence, and the same stretch had
 already spent the evidence: sixteen tests passed over a report button
 that threw on every tap, because nothing put it where the real app
-puts it. `docs/widget-tests.md` lists ten ways a green suite covers a
+puts it. `docs/widget-tests.md` lists the ways a green suite covers a
 broken screen and this is the plainest of them — the screen is never
-run.
+run. (No count here on purpose: that list has grown four times and
+every number written down beside it went stale.)
 
 A model test cannot catch a screen that throws in `build`, reads a
 field nobody set, or puts a `Positioned` somewhere a `Stack` is not.

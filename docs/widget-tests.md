@@ -35,7 +35,7 @@ The harness mutates **one file**. Logic that lives in `models.dart` —
 `LeaveBalance.available`, `Todo.isOverdue`, `EinvoiceDocument.canCancel`
 — needs its own run against that file.
 
-## The fourteen
+## The fifteen
 
 ### 1. `find.byType` matches the exact runtime type
 
@@ -835,3 +835,49 @@ apart — so the two orderings disagree and the assertion has something to
 distinguish. Setting it explicitly is not optional: `created_at` defaults
 to `now()`, which is the TRANSACTION timestamp, so every row a fixture
 inserts shares one value and `order by created_at` orders nothing at all.
+
+
+### 15. Three things that look like coverage of a fix and are not
+
+Discovered in one afternoon, from the same sweep, in three different
+shapes. Each one left a shipped fix with zero behavioural assertions
+while a reader of the repository would have concluded it was covered.
+
+**A comment naming the gap.** `recurring_shapes.sql` section 8 opens:
+"Recurring journals and recurring documents are two runners with two
+`where` clauses, and the journal one had almost nothing on it." The file
+then closes the journal runner's `where` clause — and leaves its error
+path, its interval, its `auto_post` flag and its template unasserted,
+all four of which the document runner beside it does assert. A comment
+that names a gap is the strongest possible evidence somebody saw it. It
+is no evidence at all that they closed it.
+
+**A static sweep of function source text.**
+`money_names_the_account.sql` greps every function body in `public` and
+`app` for `code = '1120'` and requires the result to equal an
+allow-list. That is a real gate and it works: a tenth function cannot
+acquire the fallback quietly. But the file NAMES `dispose_fixed_asset`
+twice — once in a comment, once in the allow-list — and never calls it,
+so neither of the two rules `0729` added to that function had any
+behavioural test. **A file that checks the source text of a fix is not a
+file that checks the fix**, and its allow-list makes it read as though
+it were.
+
+**A careful sweep of the guard NEXT TO it.**
+`withholding_shapes.sql` tests `remit_withholding`'s cross-tenant bank
+check with four assertions, each annotated with the mutant it kills
+("MUTANT: the cross-organization guard removed", "MUTANT:
+`v_bank := null`"). The bankless-account refusal six lines below it was
+never touched. The function's own header already described this
+happening once before, to a human: "`0506` read this function and left
+it alone, correctly, for the cross-tenant guard above. Its header's
+'neither needed changing' was about that guard and said nothing about
+the fallback; it was read as a verdict on the whole function."
+
+The common shape is a verdict about PART of something being read as a
+verdict about the whole of it. A mutation sweep is immune to all three,
+because it does not read anything: it breaks one line and asks whether
+any assertion notices. That is the entire argument for running one on a
+function somebody has already written a careful test file for — and
+`withholding_shapes.sql` and `asset_disposal_shapes.sql` are both files
+whose headers describe the sweeps that produced them.

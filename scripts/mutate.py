@@ -65,8 +65,10 @@ models.dart` -- `LeaveBalance.available`, `Todo.isOverdue`,
 `EinvoiceDocument.canCancel` -- needs its own run against that file
 with the same test.
 
-See `docs/widget-tests.md` for the ten ways a widget test passes while
-asserting nothing, every one of which this harness found.
+See `docs/widget-tests.md` for the ways a widget test passes while
+asserting nothing, every one of which this harness found. The list is
+numbered there and not here: it has grown four times, and both places
+that wrote the number down still said ten.
 """
 
 from __future__ import annotations
