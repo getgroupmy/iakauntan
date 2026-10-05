@@ -531,4 +531,32 @@
 # raises before the import loop, so the loop's own
 # `deleted_at is null` is unreachable. Measured:
 # `all SQL assertions passed (384 files, 14672 assertions executed)`.
-14672
+#
+# 14676, +4: pos.sql. The first sweep POINTED BY THE NEW SURVEY rather
+# than by the ranking. `scripts/state_write_coverage.py` reported
+# `rounding_amount` as a column complete_pos_sale writes and no file
+# reaching it names -- across thirty-three files -- which looked wrong,
+# because pos_rounding.sql exists and pos.sql asserts the rounding in
+# three tenders.
+#
+# It was right about the one that mattered. pos_rounding.sql tests
+# `app.pos_cash_due`, the PURE function, and never calls
+# complete_pos_sale; its own header says it needs no fixtures. pos.sql
+# asserted the RETURN value -- 0.02 on cash, 0 on card, 0.02 on the cash
+# half of a split -- and never read either column back. Of the three
+# columns, sales_documents.rounding_amount turned out covered anyway
+# (zeroing it unbalances the journal), pos_sales.total_amount likewise
+# (the takings total), and pos_sales.rounding_amount by NOTHING. A sale
+# whose receipt said 10.05 while its own row said 10.03 passed every
+# assertion in the file, and the figure every POS report reads is the
+# column.
+#
+# THE FUNCTION'S OWN COMMENT CLAIMED OTHERWISE: "this is POS taking a
+# number the trigger normally owns, and the test asserts the result."
+# It asserted the arithmetic twice over and the write not at all -- the
+# fourth shape of something that looks like coverage and is not, after a
+# comment naming a gap, a static sweep of source text, and a careful
+# sweep of the guard next door. This one is a comment in the CODE
+# asserting that a test exists. Measured:
+# `all SQL assertions passed (384 files, 14676 assertions executed)`.
+14676

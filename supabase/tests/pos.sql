@@ -250,6 +250,45 @@ begin
   perform pg_temp.check_eq('and no change from a card', v_c, 0);
 
   -- ------------------------------------------------------------------
+  -- And the figure is STORED, not merely returned
+  -- ------------------------------------------------------------------
+  -- Pointed here by `scripts/state_write_coverage.py`, which reported
+  -- `rounding_amount` as a column complete_pos_sale writes and no file
+  -- reaching it names -- across thirty-three files. Checked, and it was
+  -- right about the one that matters:
+  --
+  --   * `pos_rounding.sql` tests `app.pos_cash_due`, the pure function,
+  --     and never calls complete_pos_sale: its header says so.
+  --   * everything above here asserts the RETURN value -- `r.rounding`
+  --     is 0.02 on cash, 0 on card, 0.02 on the cash half of a split.
+  --   * `sales_documents.rounding_amount` turned out to be covered
+  --     anyway, without being named: zeroing it unbalances the journal
+  --     (debits 10.05 against credits 10.03), which the ledger
+  --     assertions below catch.
+  --   * `pos_sales.rounding_amount` was covered by nothing at all.
+  --
+  -- A sale whose receipt said 10.05 while its own row said 10.03 would
+  -- pass every assertion in this file, and the figure every POS report
+  -- reads is the column rather than the return value.
+  --
+  -- The function's own comment above that update says "this is POS
+  -- taking a number the trigger normally owns, and the test asserts the
+  -- result". It asserted the arithmetic twice over and the write not at
+  -- all.
+  perform pg_temp.check_eq('the cash sale KEEPS its two sen of rounding',
+    (select s.rounding_amount from public.pos_sales s
+      where s.id = v_cash_sale), 0.02);
+  perform pg_temp.check_eq('and totals to the rounded figure on its own row',
+    (select s.total_amount from public.pos_sales s
+      where s.id = v_cash_sale), 10.05);
+  perform pg_temp.check_eq('while the card sale keeps none',
+    (select s.rounding_amount from public.pos_sales s
+      where s.id = v_card_sale), 0);
+  perform pg_temp.check_eq('and totals to the basket',
+    (select s.total_amount from public.pos_sales s
+      where s.id = v_card_sale), 10.03);
+
+  -- ------------------------------------------------------------------
   -- Split: only the cash half rounds
   -- ------------------------------------------------------------------
   v_sale := public.open_pos_sale(v_reg);

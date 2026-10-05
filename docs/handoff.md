@@ -13869,3 +13869,49 @@ Current reading: **17 written columns across 11 functions**, plus 3
 functions a trigger reaches that it cannot measure. Of the 11, several
 are already-swept functions whose stamps were closed this session —
 read the list as where to point the next sweep, not as a defect count.
+
+### The survey's first finding: a till that reconciled against nothing
+
+The first sweep pointed by `state_write_coverage.py` rather than by the
+ranking, and the cheapest result of the day: **4 mutants, two killed on
+the first run, all three real ones killed after.**
+
+The survey reported `rounding_amount` as a column `complete_pos_sale`
+writes and no file reaching it names — **across thirty-three files.**
+That looked wrong, because `pos_rounding.sql` exists and `pos.sql`
+asserts the rounding in three different tenders. It was right about the
+one that mattered:
+
+- `pos_rounding.sql` tests `app.pos_cash_due`, the **pure** function,
+  and never calls `complete_pos_sale` — its own header says it needs no
+  fixtures;
+- `pos.sql` asserted the **returned** figure: `r.rounding` is 0.02 on
+  cash, 0 on card, 0.02 on the cash half of a split. It never read
+  either column back;
+- `recurring_template_carries_the_document.sql` names
+  `rounding_amount` in a list of columns a recurring raise must not
+  copy, and `complete_pos_sale` only in a comment.
+
+Of the three columns: `sales_documents.rounding_amount` turned out
+covered anyway without being named (zeroing it unbalances the journal,
+10.05 against 10.03); `pos_sales.total_amount` likewise, by the takings
+total; and **`pos_sales.rounding_amount` by nothing at all.** A sale
+whose receipt said 10.05 while its own row said 10.03 passed every
+assertion in the file — and the figure every POS report reads is the
+column, not the return value.
+
+**One real gap of three is a useful hit rate for a tool that costs
+nothing to run, and it is exactly why it reports instead of gating:**
+two of those three findings would have failed CI over covered code.
+
+**And the function's own comment claimed otherwise.** Above the update:
+"this is POS taking a number the trigger normally owns, and *the test
+asserts the result*." It asserted the arithmetic twice over and the
+write not at all.
+
+That is a **fourth** shape of something that looks like coverage and is
+not, after the three in `docs/widget-tests.md` entry 15: a comment
+naming the gap, a static sweep of source text, and a careful sweep of
+the guard next door. This one is **a comment in the code asserting that
+a test exists** — and it is the most believable of the four, because it
+is written by the person who would know.
