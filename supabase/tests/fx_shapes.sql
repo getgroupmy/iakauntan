@@ -728,4 +728,195 @@ begin
   raise notice 'ok   the three filters that look redundant and are not';
 end $$;
 
+-- =====================================================================
+-- The six a second sweep found, and the asymmetry between them
+--
+-- The sweep in this file's header killed 21 of 41 across five
+-- functions. This one mutated `revalue_foreign_balances` alone -- 33
+-- mutants across the four files that reach it -- and 26 died. The seven
+-- that lived include one that is worth more than the rest put together:
+--
+-- **A VOID SALES INVOICE is excluded and asserted; a VOID BILL is
+-- excluded and not.** The two halves of the union have six conjuncts
+-- each and the file built the full set of negatives for the sales side
+-- only, so the purchase side's `d.status <> 'void'` had nothing on the
+-- other side of it. Six rules asserted on one half of a symmetric
+-- query and one of them unasserted on the other is the commonest shape
+-- there is for a union, and the only way to see it is to mutate each
+-- half separately.
+--
+-- The rest: the date boundary (every invoice in the suite is dated the
+-- 15th and valued on the 31st, so nothing lands ON the valuation day),
+-- a deleted invoice, the contact on each of the two revaluation legs,
+-- and the org scope on the lookup that picks WHICH prior revaluation to
+-- reverse.
+-- =====================================================================
+do $$
+declare
+  v_org   uuid; v_other uuid;
+  v_owner uuid := pg_temp.test_user();
+  v_cust  uuid; v_cust2 uuid; v_supp uuid;
+  v_ar    uuid; v_ap uuid;
+  v_live  uuid; v_onday uuid; v_gone uuid; v_bill uuid; v_voidbill uuid;
+  v_first uuid; v_second uuid; v_theirs uuid;
+  v_n     integer;
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  v_org := pg_temp.fs_org('Nilai Semula Celah Sdn Bhd');
+  perform pg_temp.allow_many_companies();
+  v_cust  := pg_temp.fs_customer(v_org, 'C-1');
+  v_cust2 := pg_temp.fs_customer(v_org, 'C-2');
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'S-1', 'Pembekal USD', 'supplier') returning id into v_supp;
+  select id into v_ar from public.accounts where org_id = v_org and code = '1210';
+  select id into v_ap from public.accounts where org_id = v_org and code = '2110';
+
+  -- ------------------------------------------------------------------
+  -- 1. THE DATE BOUNDARY: an invoice dated the valuation day itself
+  -- ------------------------------------------------------------------
+  -- `d.doc_date <= p_as_at`. Every invoice in this file is dated the
+  -- 15th and valued on the 31st, so narrowing the rule to `<` changed
+  -- nothing. A sale invoiced on the last day of the month is the
+  -- ordinary close, not a corner case -- and it is already in the
+  -- ledger at the booked rate, so leaving it out understates the
+  -- adjustment by its whole difference.
+  v_live  := pg_temp.fs_invoice(v_org, v_cust, 'INV-MID', 1000,
+                                'USD', 4.00, date '2026-01-15');
+  v_onday := pg_temp.fs_invoice(v_org, v_cust2, 'INV-ONDAY', 2000,
+                                'USD', 4.00, date '2026-03-31');
+
+  -- ------------------------------------------------------------------
+  -- 2. A DELETED INVOICE
+  -- ------------------------------------------------------------------
+  -- Soft-deleted rows stay in the table and keep a non-zero balance,
+  -- so `d.deleted_at is null` is the only thing keeping them out.
+  v_gone := pg_temp.fs_invoice(v_org, v_cust, 'INV-GONE', 8000,
+                               'USD', 4.00, date '2026-01-15');
+  update public.sales_documents set deleted_at = now() where id = v_gone;
+
+  -- ------------------------------------------------------------------
+  -- 3. A VOID BILL, the half the sales side already had
+  -- ------------------------------------------------------------------
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
+     subtotal, total_amount, balance_amount, status)
+  values (v_org, 'bill', 'BILL-LIVE', date '2026-01-15', v_supp, 'USD', 4.00,
+          500, 500, 500, 'draft')
+  returning id into v_bill;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, description, quantity, unit_price)
+  values (v_org, v_bill, 1, 'Import', 1, 500);
+  perform public.post_purchase_document(v_bill);
+
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
+     subtotal, total_amount, balance_amount, status)
+  values (v_org, 'bill', 'BILL-VOID', date '2026-01-15', v_supp, 'USD', 4.00,
+          9000, 9000, 9000, 'draft')
+  returning id into v_voidbill;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, description, quantity, unit_price)
+  values (v_org, v_voidbill, 1, 'Cancelled import', 1, 9000);
+  perform public.post_purchase_document(v_voidbill);
+  update public.purchase_documents set status = 'void' where id = v_voidbill;
+
+  -- ------------------------------------------------------------------
+  -- The run, and what it may and may not have seen
+  -- ------------------------------------------------------------------
+  -- USD 4.00 booked, USD 4.50 at the close: 50 sen on every dollar.
+  --   INV-MID    1000 -> gain 500
+  --   INV-ONDAY  2000 -> gain 1000   (the boundary)
+  --   BILL-LIVE   500 -> loss 250    (a payable costs more)
+  --   INV-GONE   8000 -> nothing, deleted
+  --   BILL-VOID  9000 -> nothing, void
+  v_first := public.revalue_foreign_balances(v_org, date '2026-03-31');
+  perform pg_temp.check_true('the revaluation posts', v_first is not null);
+
+  perform pg_temp.check_eq(
+    'the receivable is written up by every live foreign invoice, the one '
+    'dated the valuation day included',
+    (select round(sum(l.debit - l.credit), 2) from public.gl_lines l
+      where l.entry_id = v_first and l.account_id = v_ar), 1500);
+  -- Credit less debit on a liability, so a POSITIVE figure is the
+  -- payable growing -- which is what a rising rate does to money owed
+  -- in dollars.
+  perform pg_temp.check_eq(
+    'and the payable grows by the live bill alone, not by the void one',
+    (select round(sum(l.credit - l.debit), 2) from public.gl_lines l
+      where l.entry_id = v_first and l.account_id = v_ap), 250);
+
+  -- THE CONTACT, on both legs separately. `report_contact_statement`
+  -- reads gl_lines.contact_id, so a revaluation leg without one moves
+  -- the nominal and leaves the subledger behind -- which is exactly
+  -- what the function's own comment says the grouping exists to
+  -- prevent. The gain leg and the loss leg are built in two different
+  -- jsonb_build_object calls and either can lose it alone.
+  perform pg_temp.check_eq('each gain leg names the customer it restates',
+    (select count(*) from public.gl_lines
+      where entry_id = v_first and account_id = v_ar
+        and contact_id is null), 0);
+  perform pg_temp.check_eq('and the loss leg names the supplier',
+    (select contact_id from public.gl_lines
+      where entry_id = v_first and account_id = v_ap), v_supp);
+  perform pg_temp.check_eq(
+    'with one line per customer, so the subledger still agrees',
+    (select count(*) from public.gl_lines
+      where entry_id = v_first and account_id = v_ar), 2);
+
+  -- ------------------------------------------------------------------
+  -- 4. WHICH prior revaluation is reversed
+  -- ------------------------------------------------------------------
+  -- The lookup is scoped to the company. Another company's standing
+  -- revaluation, dated LATER so it sorts first, is what makes the scope
+  -- observable: without it this run reverses THEIR adjustment and
+  -- leaves ours standing, so both sets of books are wrong and neither
+  -- figure in this company's ledger says so.
+  v_other := pg_temp.fs_org('Syarikat Lain Nilai Sdn Bhd');
+  perform pg_temp.sign_in_as(v_owner);
+  v_theirs := pg_temp.fs_invoice(
+    v_other, pg_temp.fs_customer(v_other, 'X-1'), 'INV-X', 700,
+    'USD', 4.00, date '2026-01-15');
+  perform pg_temp.sign_in_as(v_owner);
+  -- Dated 30 April, after ours, so `order by entry_date desc` finds it
+  -- first the moment the org scope is gone.
+  insert into public.exchange_rates
+    (org_id, from_currency, to_currency, rate, rate_date, source)
+  values (v_other, 'USD', 'MYR', 4.70, date '2026-04-30', 'manual');
+  v_theirs := public.revalue_foreign_balances(v_other, date '2026-04-30');
+  perform pg_temp.check_true('the other company revalues too',
+    v_theirs is not null);
+
+  insert into public.exchange_rates
+    (org_id, from_currency, to_currency, rate, rate_date, source)
+  values (v_org, 'USD', 'MYR', 4.60, date '2026-04-30', 'manual');
+  v_second := public.revalue_foreign_balances(v_org, date '2026-04-30');
+
+  perform pg_temp.check_eq('a second run reverses OUR standing adjustment',
+    (select count(*) from public.gl_entries
+      where reversed_entry_id = v_first and status = 'posted'), 1);
+  perform pg_temp.check_eq('and leaves the other company''s alone',
+    (select count(*) from public.gl_entries
+      where reversed_entry_id = v_theirs and status = 'posted'), 0);
+  perform pg_temp.check_eq(
+    'so April measures from the booked rate and not from March''s estimate',
+    (select round(sum(l.debit - l.credit), 2) from public.gl_lines l
+      where l.entry_id = v_second and l.account_id = v_ar),
+    -- 60 sen on 3,000 dollars of live invoices
+    1800);
+
+  -- What this block does NOT prove, said here so the next sweep does
+  -- not re-chase it: `order by e.entry_date desc, e.created_at desc` on
+  -- that lookup is an EQUIVALENT mutation target, because there can
+  -- never be two rows to order. Each run reverses the one candidate it
+  -- finds before posting at most one new one, a reversal carries
+  -- `is_reversal = true` and is excluded, and a reversed entry is
+  -- excluded by the `not exists`. The only state with two candidates
+  -- needs a reversal that is no longer `posted`, and this schema has no
+  -- function that unposts or voids a gl_entry -- the undo everywhere is
+  -- another reversal. So the ORDER BY is correct, load-bearing if that
+  -- invariant ever breaks, and unobservable today.
+  raise notice 'ok   revaluation: the boundary, the deleted, the VOID BILL, the party, the company';
+end $$;
+
+
 rollback;

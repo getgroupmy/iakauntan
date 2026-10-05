@@ -429,4 +429,37 @@
 # and carries `check (exchange_rate > 0)`. No fixture can build the
 # state the coalesce guards, because the schema refuses it. Measured:
 # `all SQL assertions passed (384 files, 14621 assertions executed)`.
-14621
+#
+# 14632, +11: fx_shapes.sql. revalue_foreign_balances -- the densest
+# function swept so far, a union of two six-conjunct queries whose
+# payable half is sign-inverted inside the select so one downstream rule
+# serves both -- scored 22 of 34 on its own file; 32 of 33 across its
+# four files, one proven equivalent.
+#
+# THE FINDING WORTH MORE THAN THE REST: a VOID SALES INVOICE is excluded
+# and asserted; a VOID BILL is excluded and NOT. fx_shapes.sql had built
+# the full set of negatives for the SALES side only -- a ringgit
+# invoice, a settled one, an unposted one, a voided one -- so the
+# purchase side's `d.status <> 'void'` had nothing on the other side of
+# it. Six rules asserted on one half of a symmetric query and one of
+# them unasserted on the other is the commonest shape there is for a
+# union, and the only way to see it is to mutate each half separately.
+#
+# The rest: the date boundary (every invoice in the file is dated the
+# 15th and valued on the 31st, so nothing landed ON the valuation day,
+# and an invoice raised on the last day of the month is the ordinary
+# close), a deleted invoice, the contact on each of the two revaluation
+# legs, and the org scope on the lookup that picks which prior
+# revaluation to reverse -- made observable by another company whose
+# standing adjustment is dated LATER, so it sorts first the moment the
+# scope is gone.
+#
+# The equivalent is that lookup's ORDER BY, proven by the function's own
+# invariant: there can never be two candidates, because each run
+# reverses the one it finds before posting at most one new one, a
+# reversal is excluded by `is_reversal = false`, and a reversed entry by
+# the `not exists`. The only two-candidate state needs a reversal that
+# is no longer posted, and this schema has no function that unposts or
+# voids a gl_entry -- checked rather than assumed. Measured:
+# `all SQL assertions passed (384 files, 14632 assertions executed)`.
+14632

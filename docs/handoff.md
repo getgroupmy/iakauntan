@@ -13656,3 +13656,53 @@ behavioural assertion on it, and `settle_deposit`'s is covered by
 `revalue_foreign_balances`, `receive_stock_transfer`,
 `import_open_bills`, `import_opening_balances`, `import_open_invoices`,
 `post_manufacturing_order`.
+
+### revalue_foreign_balances: six rules on one half of a union, five on the other
+
+The densest function swept so far — a union of two six-conjunct queries
+whose payable half is sign-inverted inside the `select` so that one
+downstream rule ("a positive difference is a gain") serves both, which
+the function's own comment says in those words.
+
+**34 mutants plus a control. 22 killed on `fx_shapes.sql`, 32 of 33
+across its four files, one proven equivalent.**
+
+**The finding worth more than the rest: a VOID SALES INVOICE is
+excluded and asserted; a VOID BILL is excluded and not.**
+`fx_shapes.sql` exists *because* an earlier sweep found the `where`
+clause unasserted, and its header says so: "a ringgit invoice, a
+settled one, an unposted one, a voided one, and a customer with a
+receivable account of its own are all ordinary rows in an ordinary
+ledger." It then built that full set of negatives **for the sales side
+only.** The purchase side's `d.status <> 'void'` had nothing on the
+other side of it.
+
+**Six rules asserted on one half of a symmetric query and one of them
+unasserted on the other is the commonest shape there is for a union,
+and the only way to see it is to mutate each half separately.** Worth
+checking on every remaining union in the suite — `import_open_bills` /
+`import_open_invoices` and the two recurring runners are the obvious
+candidates.
+
+The rest: the date boundary (every invoice in the file is dated the
+15th and valued on the 31st, so nothing landed ON the valuation day —
+and an invoice raised on the last day of the month is the ordinary
+close, not a corner case), a deleted invoice, the contact on each of
+the two revaluation legs, and the org scope on the lookup that picks
+which prior revaluation to reverse — made observable by another company
+whose standing adjustment is dated LATER, so it sorts first the moment
+the scope is gone.
+
+The equivalent is that lookup's `order by e.entry_date desc,
+e.created_at desc`, proven by the function's own invariant: there can
+never be two candidates, because each run reverses the one it finds
+before posting at most one new one, a reversal is excluded by
+`is_reversal = false`, and a reversed entry by the `not exists`. The
+only two-candidate state needs a reversal that is no longer `posted`,
+and **this schema has no function that unposts or voids a `gl_entry`** —
+checked rather than assumed; the undo everywhere is another reversal.
+
+**25 of 45 money movers now have a mutants file.** Next with none:
+`receive_stock_transfer`, `import_open_bills`,
+`import_opening_balances`, `import_open_invoices`,
+`post_manufacturing_order`, `post_client_transaction`.
