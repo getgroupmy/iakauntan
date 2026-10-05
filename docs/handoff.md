@@ -11901,10 +11901,26 @@ update public.bank_accounts
    set created_at = now() - interval '2 days' where id = v_older;
 ```
 
-**Nothing else in the suite does this.** Any ordering, window function or
-"most recent" rule that tiebreaks on `created_at` is untested by
-construction, everywhere in `supabase/tests/`. That is a general hole, not a
-local one, and it is the best lead left for anyone continuing this work.
+**CORRECTION, same day.** This first said "nothing else in the suite does
+this", and that is false: **twelve lines across eight files set `created_at`
+explicitly** — `chat.sql`, `idempotency.sql`, `pos_counting.sql`,
+`pos_drawer_shapes.sql`, `contact_duplicates.sql`,
+`audit_trail_filters.sql`, `kept_files_in_the_inbox.sql`. Checked rather
+than assumed, after the overstatement was already committed.
+
+Every one of them is about **AGE**, not about order: an edit window of
+twenty minutes, an expiry at twenty-five hours, dormancy at eighteen months,
+a March date for duplicate detection. None separates two rows competing in
+an `order by ... created_at` tiebreak, and before `money_names_the_account.sql`
+nothing did.
+
+So the narrower, true claim: **35 functions in `app` and `public` pick ONE
+row by ordering on `created_at`** (`prosrc ~* 'order by[^;]*created_at[^;]*limit 1'`,
+out of 72 that order on it at all, plus one window function). For every one
+of them the ordering is invisible to a single-transaction test unless that
+test sets the timestamps apart — and exactly one now does. That is a general
+hole rather than a local one, and the best lead left for anyone continuing
+this work.
 
 **The third gap** is the repost guard: `if v_rcp.gl_entry_id is not null
 then raise` could be deleted and every file that posts a receipt stayed
