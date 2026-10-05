@@ -132,18 +132,101 @@ class TheFloor(unittest.TestCase):
     """
 
     def test_main_refuses_when_it_can_barely_see_any_files(self):
+        """The floor, isolated from the canaries.
+
+        The stub has to SATISFY both canaries and still fall short, or
+        the canary check fires first and this asserts nothing about the
+        floor -- which is how it failed when the canaries were added.
+        """
+        import io
+        import contextlib
+        few = [gate.ROOT / 'scripts' / 'check_temp_cleanup.py',
+               gate.ROOT / 'brand' / 'build.py']
+        self.assertLess(len(few), gate.LEAST_FILES)
+        real = gate.python_files
+        gate.python_files = lambda root=None: few
+        try:
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                code = gate.main()
+            self.assertEqual(code, 2, err.getvalue())
+            self.assertIn('looking in the wrong place', err.getvalue())
+        finally:
+            gate.python_files = real
+
+    def test_the_canary_check_runs_BEFORE_the_floor(self):
+        """"Cannot see it" is a better message than "saw too little".
+
+        Both are exit 2, so the order is invisible from the code alone;
+        this pins which sentence a stripped tree gets.
+        """
         import io
         import contextlib
         real = gate.python_files
         gate.python_files = lambda root=None: []
         try:
             err = io.StringIO()
-            with contextlib.redirect_stderr(err):
+            with contextlib.redirect_stderr(err), \
+                    contextlib.redirect_stdout(io.StringIO()):
                 code = gate.main()
             self.assertEqual(code, 2)
-            self.assertIn('looking in the wrong place', err.getvalue())
+            self.assertIn('nothing python found under', err.getvalue())
+            self.assertNotIn('looking in the wrong place', err.getvalue())
         finally:
             gate.python_files = real
+
+    def test_it_reports_over_the_skeleton_check_sweeps_look_builds(self):
+        """The experiment this gate failed on its first run.
+
+        `check_sweeps_look.py` drives every gate in a tree holding a full
+        copy of `scripts/` and EMPTY source directories. A gate that
+        globbed only `scripts/` passed that, which is the one thing it
+        must not do -- the verdict was "check_temp_cleanup is in no
+        bucket and did not report over an empty tree". So the skeleton is
+        rebuilt here and the gate must refuse it.
+        """
+        import contextlib
+        import io
+        import shutil
+        with tempfile.TemporaryDirectory() as tmp:
+            tree = pathlib.Path(tmp)
+            shutil.copytree(gate.ROOT / 'scripts', tree / 'scripts')
+            for d in ('app/lib', 'app/test', 'supabase/tests', 'docs'):
+                (tree / d).mkdir(parents=True, exist_ok=True)
+            real = gate.ROOT
+            gate.ROOT = tree
+            try:
+                err = io.StringIO()
+                with contextlib.redirect_stderr(err), \
+                        contextlib.redirect_stdout(io.StringIO()):
+                    code = gate.main()
+            finally:
+                gate.ROOT = real
+        self.assertEqual(code, 2, err.getvalue())
+        self.assertIn('nothing python found under brand/', err.getvalue())
+        self.assertIn('cannot tick', err.getvalue())
+
+    def test_every_canary_is_a_real_directory_with_python_in_it(self):
+        """A canary pointing at nothing fails the gate for ever."""
+        for d, why in gate.CANARIES.items():
+            with self.subTest(d):
+                found = list((gate.ROOT / d).rglob('*.py'))
+                self.assertTrue(found, '%s/ has no python in it, so the '
+                                       'canary %r can never be met' % (d, why))
+
+    def test_the_sweep_reaches_past_scripts(self):
+        """The whole point of the canaries: coverage outside scripts/."""
+        outside = [f for f in gate.python_files()
+                   if f.relative_to(gate.ROOT).parts[0] != 'scripts']
+        self.assertGreaterEqual(len(outside), 3, outside)
+
+    def test_vendored_and_generated_trees_are_skipped(self):
+        for f in gate.python_files():
+            with self.subTest(str(f)):
+                self.assertNotIn('node_modules', str(f))
+                self.assertNotIn('__pycache__', str(f))
+                self.assertNotIn('ephemeral', str(f))
 
     def test_the_floor_is_not_zero(self):
         self.assertGreaterEqual(gate.LEAST_FILES, 60)
