@@ -11942,3 +11942,156 @@ customer's credit.
 **66 mutants over ten functions, SIX real gaps found and closed, one
 equivalent proved.** Floor: 14330 → 14332 → 14335 → 14337 → 14341, measured
 every time.
+
+### Two defaults is the same as none: nine tables, and 0092 said so in 2024
+
+Task #83 set out to measure the `created_at` ordering hole and ended at a
+fix, because the measurement kept pointing at one shape.
+
+**What was measured.** Over the latest definition of every function in
+`supabase/migrations/` (latest, not first — `latest_defining()` in
+`scripts/mutate_sql.py` exists because a case-sensitive grep named the
+wrong file twice):
+
+- 73 `order by` clauses mention `created_at`, across 62 functions
+- 45 of those pick ONE row (`limit 1`), across 35 functions
+- 27 pick one row ordered **solely** by `created_at`, across 21 functions
+
+`created_at` defaults to `now()`, which is the TRANSACTION timestamp, so
+every row one transaction inserts carries the same value and
+`order by created_at limit 1` picks by physical row order. Demonstrated
+live, not argued: one org, two active warehouses inserted together, the
+first `app.default_warehouse` call returned W1; rewriting W1's *name* —
+which changes where the row sits and nothing about the ORDER BY — made
+the next call return W2.
+
+**Three of the 27 turned out to be safe, and the reason matters.**
+`app.pos_deplete_recipes` reads back the movement it has just inserted
+with `order by sm.created_at desc limit 1`, keyed only on sale and item —
+which looks exactly like the bug, and is not, because the loop it sits in
+is `group by n.item_id`: one movement per item, so the predicate matches
+exactly one row. Only two functions in the repository insert a
+`'pos_sales'`-sourced movement at all, so nothing else can add a second
+in the same transaction. Structural, not lucky. The same reading cleared
+`post_stock_adjustment`, whose predicate is per LINE.
+
+**The real hole was not the ORDER BY. It was that nothing stopped a
+second default.** Nine tables carry `is_default` with no uniqueness:
+`bank_accounts`, `branches`, `payment_terms`, `pipelines`,
+`pos_modifiers`, `price_levels`, `tax_codes`, `warehouses`,
+`work_shifts`. Twenty-three functions pick a single row out of them,
+among them where a group payment's money lands
+(`record_group_payment`) and which warehouse a POS sale depletes.
+
+**And this project already fixed this bug class, once, in 2024.**
+`0092_one_default_per_contact.sql` found it on `contact_addresses` and
+`contact_persons`, named it better than this section does -- "Two
+defaults is the same as none. Whichever row the query happens to return
+first wins, the answer can change between two runs of the same query,
+and the thing it decides is where goods get delivered" -- and closed it
+with a partial unique index. Six more tables have been given the same
+index since, one at a time, as each was built. Nine never were.
+
+`0741_two_defaults_is_the_same_as_none.sql` gives it to **eight** of the
+nine, on `(org_id) where is_default and is_active`, with 0092's
+demote-duplicates-first preamble so a failed index build cannot leave the
+migration half-applied. Live was checked read-only first: no duplicates
+in any of them, so this is a door being closed, not a mess being cleaned
+up.
+
+#### Both of the first version's mistakes were caught by the suite, not by me
+
+This is the part worth keeping. The first version of 0741 covered all
+nine tables and used the stronger predicate, `where is_default` alone.
+Fourteen hand-written assertions passed against it, and three deliberate
+mutations of the index were killed. It was wrong twice, and the full
+`run_locally.sh` -- the thing it is tempting to skip because the change
+"is only an index" -- named both in one run.
+
+**`pos_modifiers` should not have an index at all.** It was indexed on
+`(group_id)`: one pre-selected option per modifier group, which sounds
+right. `pos_fnb.sql` has asserted since `0250` that *"a group that takes
+two takes two defaults, and not a third"* -- `upsert_pos_modifier_group(
+org, 'SAUCE', 'Sos', 0, 2)`, `max_select = 2`. The limit is the group's
+own column, enforced where that column can be read; a partial unique
+index cannot express a rule living in another table, and `(group_id)`
+caps every multi-select group at one default. Dropped from the migration.
+
+**`and is_active` is not optional.** The reasoning for leaving it out was
+that no path retires a row without clearing the flag, so a retired row
+holding a stale default cannot arise -- which is true of the app and
+false of the suite. `money_names_the_account.sql` builds exactly that row
+ON PURPOSE: a closed account still flagged default, beside an open one,
+because what it tests is that the readers skip it. All seven
+`bank_accounts` readers do filter `is_active`, so that fixture states the
+contract. An index forbidding the state forbids testing the defence
+against it.
+
+The lesson is not "run the tests", which everybody already says. It is
+that **a constraint's correctness is a claim about every fixture in the
+repository, and nine tables' worth of that claim is not checkable by
+reading.** Both refutations were single lines inside 11,000-line files
+that no targeted grep of mine was going to surface -- the first search
+tried was for fixtures inserting two defaults, and it found 113 warehouse
+inserts and no way to rank them.
+
+#### The grep that missed 0092, which is the third time for this mistake
+
+Searching for the precedent returned nothing, twice:
+`grep "unique index.*is_default"` and `grep -i "unique index" | grep -i is_default`.
+Both require the two phrases on ONE line. 0092 writes
+
+```sql
+create unique index if not exists contact_addresses_one_default
+  on public.contact_addresses (contact_id) where is_default;
+```
+
+— two lines. Had the precedent stayed missed, 0741 would have been
+written as though no one had thought about this before, with a worse
+header and probably the weaker predicate. The same too-narrow-search
+mistake is already recorded twice in this file against other people's
+code; it is recorded here a third time against this session's own.
+**The reliable form is to ask the catalogue, not the text:** the query
+over `pg_index`/`pg_attribute` that produced the nine-versus-eight split
+cannot miss an index for being wrapped.
+
+#### What the test asserts, and the ways an index can be wrong
+
+`supabase/tests/one_default_per_company.sql`, 14 assertions. An index can
+be wrong in three directions and only the first is obvious, so each has
+its own assertion, and each was proved by applying the mutation:
+
+| mutation | what caught it |
+| --- | --- |
+| `drop index warehouses_one_default` | `FAIL warehouses refuses a second default for one company: it was not refused at all` |
+| `bank_accounts` tightened to `where is_default`, dropping `and is_active` | "a closed account may keep a stale default beside the open one" |
+| `warehouses` scoped globally — `((true)) where is_default and is_active` | "each company keeps its own default warehouse" |
+| re-add the `pos_modifiers` index 0741 omits | `pos_fnb.sql` goes red — the exclusion is guarded by a test that already existed |
+
+Control run clean. The second and third rows are the ones that matter:
+an index that refuses FAR TOO MUCH passes every refusal assertion, so a
+test built only out of "was it refused?" is blind to the direction this
+migration got wrong twice.
+
+The last section is the one the index exists for: an ordinary warehouse
+inserted FIRST, the default SECOND, then the two given `created_at` two
+days apart so the orderings disagree, and
+`app.default_warehouse` asserted to return the DEFAULT rather than the
+oldest active row. A fixture whose default is also its oldest row cannot
+tell those two implementations apart — the twelfth way in
+`docs/widget-tests.md`, in SQL again.
+
+#### What is left, and it is honest to call it a lead
+
+The index closes the `is_default` tier. It does not touch the FALLBACK
+tiers: `app.default_warehouse`'s second query is
+`where org_id = ... and is_active order by created_at limit 1`, with no
+`is_default` at all, and that is still decided by physical row order when
+an org's active warehouses share a transaction timestamp. In production
+they rarely do — rows created minutes apart have different timestamps —
+so this is a fixture-determinism problem before it is a production one.
+The mechanical fix is `order by created_at, id`, which is total and
+cannot change an answer that was already determinate. It is deliberately
+NOT applied here in bulk: each function needs a `create or replace`, and
+re-defining a function to fix one line is how `0029` reverted `0404`'s
+`calc_statutory` earlier in this same session.

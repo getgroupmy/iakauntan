@@ -58,4 +58,15 @@
 # `app.post_receipt_internal` -- the default-account tiebreak, the
 # oldest-active tiebreak, and the repost guard. Measured:
 # `all SQL assertions passed (383 files, 14341 assertions executed)`.
-14341
+#
+# 14355, +14: `one_default_per_company.sql`, the 384th file. 0741 gives
+# eight tables the partial unique index 0092 gave contact_addresses in
+# 2024, so "the default" stops being whichever row came back first.
+# Fourteen assertions in three groups, because an index can be wrong in
+# three directions: absent, scoped globally so the second company gets
+# none, and tightened past `and is_active` so a closed account may not
+# hold a stale default. The first version of 0741 was wrong in the last
+# two; neither was caught by these fourteen, both by the full suite
+# (`pos_fnb.sql` and `money_names_the_account.sql`). Measured:
+# `all SQL assertions passed (384 files, 14355 assertions executed)`.
+14355

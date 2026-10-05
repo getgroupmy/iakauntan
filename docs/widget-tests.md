@@ -35,7 +35,7 @@ The harness mutates **one file**. Logic that lives in `models.dart` —
 `LeaveBalance.available`, `Todo.isOverdue`, `EinvoiceDocument.canCancel`
 — needs its own run against that file.
 
-## The thirteen
+## The fourteen
 
 ### 1. `find.byType` matches the exact runtime type
 
@@ -775,3 +775,63 @@ which asserts `'Sabah'` is absent precisely BECAUSE the screen must not
 carry its own copy of LHDN's state codes — there, the string's absence
 from `app/lib` is the property under test. `docs/handoff.md` part ten
 has the full account.
+
+### 14. A refusal test cannot see a constraint that refuses too much
+
+The fourteenth, SQL again, and the only one here found by a change of
+mine being refuted rather than by a defect in production.
+
+`0741` gives eight tables a partial unique index so a company cannot have
+two default warehouses, two default bank accounts, two default tax codes.
+The obvious test is the one everybody writes: insert a second default,
+expect `23505`. `one_default_per_company.sql` has eight of those and they
+all pass.
+
+They also all pass against an index that is far too strict, and the first
+version of that migration was too strict in two different ways.
+
+Scope `pos_modifiers`'s index to `(group_id)` — one pre-selected option
+per modifier group — and a shop can no longer have a Sauce group that
+takes two. The second insert is still refused with `23505`, so every
+refusal assertion stays green. Scope `warehouses`'s to `((true))` and the
+SECOND COMPANY IN THE DATABASE cannot have a default warehouse at all —
+same `23505`, same green. Index on `where is_default` without
+`and is_active` and a CLOSED account may no longer hold a stale default
+beside an open one — same `23505`, same green.
+
+**A constraint has two failure directions, and a test built only out of
+"was it refused?" is blind to one of them.** Each was proved by applying
+it:
+
+| mutation | what caught it |
+| --- | --- |
+| `drop index warehouses_one_default` | `FAIL ... it was not refused at all` |
+| `bank_accounts` on `where is_default`, no `and is_active` | "a closed account may keep a stale default beside the open one" |
+| `warehouses` on `((true))` | "each company keeps its own default warehouse" |
+
+So every uniqueness assertion in this repository should come in a pair:
+one row that must be refused, and one that must be ACCEPTED for sitting
+in a different company, a different group, a different period, or for
+being retired. The positive half is the whole of the test's power against
+an over-tight constraint, and it costs one `count(*)`.
+
+And the pair has to be written before the constraint is believed, because
+**the two mutations above were not caught by this file's own fourteen
+assertions.** They were caught by the full suite: `pos_fnb.sql`, which
+has asserted since `0250` that "a group that takes two takes two
+defaults, and not a third", and `money_names_the_account.sql`, which
+builds a closed-but-still-default account on purpose because what it
+tests is that the readers skip it. Both were single lines inside
+11,000-line files. A constraint's correctness is a claim about every
+fixture in the repository, and that claim is not checkable by reading.
+
+The same file carries a variant of entry 12. Asserting that
+`app.default_warehouse` returns the default is worthless if the fixture's
+default is also its oldest row, because `is_default` and
+`order by created_at` then name the same row and the assertion cannot say
+which one the function read. The fixture inserts the ordinary warehouse
+FIRST and the default SECOND, then sets their `created_at` two days
+apart — so the two orderings disagree and the assertion has something to
+distinguish. Setting it explicitly is not optional: `created_at` defaults
+to `now()`, which is the TRANSACTION timestamp, so every row a fixture
+inserts shares one value and `order by created_at` orders nothing at all.
