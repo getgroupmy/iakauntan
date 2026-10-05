@@ -85,6 +85,19 @@ begin
   select id into v_sched from app.statutory_schedule_on('pcb', date '2026-01-31');
 
   -- Below the threshold, and inside the rebate.
+  --
+  -- `app.annual_tax` opens with `if p_chargeable <= 0 then return 0`, and
+  -- a mutation run on 5 October proved that guard is an EQUIVALENT
+  -- MUTANT: weaken it to `< 0` and a nil or negative income still comes
+  -- back 0, because the lowest band starts at 0.00 and the rebate's
+  -- `greatest(..., 0)` floors the result anyway. Verified by applying the
+  -- mutant and calling the function, not by reading it. So there is no
+  -- assertion to write here, and nobody should go hunting for one.
+  --
+  -- The sen rule IS tested, just not in this file: `tax_bands.sql` holds
+  -- "sen in the chargeable income are ignored", which is what kills
+  -- `floor(p_chargeable)` becoming `ceil`. Every call below is whole
+  -- ringgit, so this file cannot see that one.
   perform pg_temp.check_eq('tax on 5,000', app.annual_tax(5000, v_sched), 0);
   perform pg_temp.check_eq('tax on 30,000 after the RM400 rebate',
     app.annual_tax(30000, v_sched), 150 + (30000 - 20000) * 0.03 - 400);

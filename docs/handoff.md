@@ -11693,13 +11693,29 @@ accepts `0530` and `0404` with no false positive.
 
 ### Where SQL mutation now stands
 
-| function | mutants | killed | by |
+| function | mutants | accounted for | by |
 |---|---|---|---|
-| `app.calc_statutory` | 8 | 8 | four files between them; **4 of 8 by `statutory.sql` alone** |
-| `app.calc_pcb` | 10 | 10 | `statutory.sql` alone |
+| `app.calc_statutory` | 8 | 8 killed | four files between them; **4 of 8 by `statutory.sql` alone** |
+| `app.calc_pcb` | 10 | 10 killed | `statutory.sql` alone |
+| `app.annual_tax` | 10 | 9 killed + 1 proven equivalent | `statutory.sql` 8, `tax_bands.sql` 1 |
 | bank rules | — | — | `supabase/tests/mutants/bank_rules.py`, from September |
 
-Both statutory engines are genuinely asserted. The next function worth the
-same treatment is whatever else a wrong number would reach a person through:
-`app.annual_tax` (which `calc_pcb` leans on twice), `app.round_statutory`,
-and the posting functions behind a payslip.
+**28 mutants across the three statutory functions, every one accounted for.**
+The arithmetic behind a Malaysian payslip is genuinely asserted, not merely
+covered.
+
+`annual_tax` makes the per-file point a second time: `statutory.sql` kills 8
+of 10, and the survivor that matters — `floor(p_chargeable)` becoming
+`ceil`, which is LHDN's practice of ignoring sen — is killed by
+`tax_bands.sql` instead. Every `annual_tax` call in `statutory.sql` is whole
+ringgit, so that file cannot see it.
+
+The tenth is the first **proven equivalent mutant** in the SQL work.
+`if p_chargeable <= 0 then return 0` weakened to `< 0` returns 0 either way,
+because the lowest band starts at `0.00` and `greatest(..., 0)` floors the
+result. Proved by applying the mutant and calling the function rather than by
+reading it, and written up beside the "tax on 5,000" assertion in
+`statutory.sql` so nobody hunts for a test that cannot be written.
+
+Still worth the same treatment: `app.round_statutory`, and the posting
+functions behind a payslip.
