@@ -46,4 +46,10 @@
 # SOCSO employer EXPENSE accounts in `post_payroll_run` keeps the journal
 # balanced and survived four test files. Measured, as above:
 # `all SQL assertions passed (383 files, 14335 assertions executed)`.
-14335
+#
+# 5 October, third time: 14335 -> 14337. Two assertions added to
+# control_accounts.sql, because adding 'debit_note' to the credit-note
+# sign list in `app.post_sales_document_internal` -- a one-word edit
+# that REVERSES the journal -- survived twelve test files. Measured:
+# `all SQL assertions passed (383 files, 14337 assertions executed)`.
+14337

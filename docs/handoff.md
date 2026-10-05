@@ -11785,3 +11785,64 @@ assertion floor went 14330 → 14332 → 14335, measured each time.
 3. **Prove an equivalent mutant, do not reason it.** `annual_tax`'s
    `<= 0` guard looks like a gap and is not; applying the mutant and calling
    the function with 0 and -5 settles it in one command.
+
+### The sales journal: twelve files, and a one-word edit that reverses it
+
+`app.post_sales_document_internal` posts every invoice, credit note, debit
+note and refund note. Eight mutants,
+`supabase/tests/mutants/post_sales_document.py`, all accounted for — and it
+took **twelve test files**, with no single file killing more than three.
+
+| mutant | killed by |
+|---|---|
+| the contact's own receivable account ignored | `control_accounts.sql` — its whole purpose |
+| receivable line with both sides positive | `control_accounts.sql`, via a check constraint |
+| a credit note posted the same way round as an invoice | `credit_note_return.sql` and `revenue_recognition.sql` |
+| the exchange rate ignored | `credit_note_return.sql` |
+| an unearned line crediting revenue on the day | `revenue_recognition.sql` |
+| a credit note opening a deferral of its own | `revenue_recognition.sql` |
+| output tax moved off `2130` | `sst_return_declares_what_was_charged.sql` — **after nine files had missed it** |
+| **a debit note reversed like a credit note** | **nothing, until 5 October** |
+
+**The gap.** Adding `'debit_note'` to
+`case when doc_type in ('credit_note', 'refund_note') then -1 else 1 end`
+is a one-word edit that reverses the journal, and it survived all twelve.
+The type is handled by the function and required by the e-Invoice rules,
+yet neither place that builds one produces a journal: `credit_control.sql`
+posts one only to watch the credit limit REFUSE it, and `sst_summary.sql`
+inserts a row already marked `'posted'` without going through the function.
+A reversed debit note moves a customer's balance the wrong way by twice its
+value and balances perfectly. Closed with two assertions in
+`control_accounts.sql`.
+
+**The near-miss is worth as much.** The output-tax mutant survived NINE
+files and was about to be reported as a statutory gap in the account a
+Customs officer ties the SST return to. The tenth killed it, on
+`sst_return_declares_what_was_charged.sql`'s positive control — "there is
+tax to declare in the first place". Third time in one day that a per-file
+score nearly became a false alarm.
+
+Also: that function is declared `CREATE OR REPLACE FUNCTION` in UPPER CASE,
+so `awk '/function app\.post_sales/'` finds nothing. Same case-sensitivity
+that hid `0530` from a `calc_pcb` search. `mutate_sql.py` reads with `re.I`.
+
+### SQL mutation, final tally for 5 October
+
+| function | mutants | outcome |
+|---|---|---|
+| `app.calc_statutory` | 8 | all killed, four files |
+| `app.calc_pcb` | 10 | all killed, `statutory.sql` alone |
+| `app.annual_tax` | 10 | 9 killed, 1 proven equivalent |
+| `round_statutory`, `epf_category`, `age_at` | 8 | 7 killed, **1 gap closed** |
+| `public.post_payroll_run` | 12 | 11 killed, **1 gap closed** |
+| `app.post_sales_document_internal` | 8 | 7 killed, **1 gap closed** |
+| bank rules | 5 | September |
+
+**56 mutants over nine functions, three real gaps found and closed, one
+equivalent proved.** The assertion floor went 14330 → 14332 → 14335 →
+14337, measured every time.
+
+Every gap was a thing the eye slides over: a default nobody states, two
+adjacent account codes, one word in a list of document types. None was a
+weak assertion — they were absent ones, in paths that either nothing drives
+or nothing looks at after driving.
