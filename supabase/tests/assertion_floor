@@ -103,4 +103,15 @@
 # unasserted in all of them. 21 of 21 killed afterwards, nothing
 # equivalent. Measured:
 # `all SQL assertions passed (384 files, 14390 assertions executed)`.
-14390
+#
+# 14397, +7: landed_cost.sql. post_landed_cost_run scored 14 of 15 on
+# the first run -- the best of the session, because that file already
+# asserted the ratio, the sen, both sides of the journal, the movement
+# link and the status. The one survivor was `not is_group` on the 1310
+# lookup, which survived for the reason 0727/0728 went unnoticed for a
+# year: the seeded 1310 is postable, so "the inventory account" and
+# "any account coded 1310" were the same row. The 1120 heading bug on
+# the stock side. Closed with a company whose 1310 IS a heading.
+# Measured:
+# `all SQL assertions passed (384 files, 14397 assertions executed)`.
+14397

@@ -950,4 +950,113 @@ begin
   raise notice 'landed cost: 3 refusals, the sen, the basis, and the edit';
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Inventory is an account, not the heading above it
+-- ---------------------------------------------------------------------
+--
+-- `post_landed_cost_run` finds where to capitalise with
+--
+--   select id into v_inv from public.accounts
+--    where org_id = v_run.org_id and code = '1310' and not is_group;
+--
+-- and refuses when there is no such account. Mutating `not is_group`
+-- away survived everything else in this file, because the seeded 1310
+-- is postable -- so "the inventory account" and "any account coded
+-- 1310" were the same row and no assertion could tell which rule found
+-- it. Fifteen mutants, fourteen killed, this the one survivor:
+-- `supabase/tests/mutants/post_landed_cost_run.py`.
+--
+-- This is the same shape as `0727`/`0728`, where six posting functions
+-- credited account **1120** -- the postable HEADING above the real bank
+-- accounts -- and 380 assertion files never noticed, because every
+-- fixture hung its bank account on 1120 itself. An entry on a heading
+-- balances, reports, and reconciles against nothing.
+--
+-- A company whose 1310 is a heading with real inventory accounts
+-- beneath it is an ordinary chart, not a broken one. What it must get
+-- is the refusal, not a posting onto the parent.
+--
+-- The 1310 lookup happens BEFORE the preview loop -- after the run, the
+-- module right, the draft check and the charge total -- so this needs a
+-- run and a charge and nothing else: no bill, no stock, no movement.
+do $$
+declare
+  v_owner uuid := pg_temp.test_user();
+  v_org   uuid;
+  v_run   uuid;
+  v_1310  uuid;
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  v_org := pg_temp.test_org('Pengimport Tajuk Sdn Bhd',
+                            array['inventory', 'accounting']);
+  perform public.create_fiscal_year(v_org,
+    date_trunc('year', pg_temp.today())::date);
+
+  select id into v_1310 from public.accounts
+   where org_id = v_org and code = '1310';
+  perform pg_temp.check_true('the seeded 1310 is postable, as every other '
+    'fixture in this file relies on',
+    (select not is_group from public.accounts where id = v_1310));
+
+  insert into public.landed_cost_runs (org_id, run_no, run_date, status)
+  values (v_org, 'LC-HEAD', pg_temp.today(), 'draft') returning id into v_run;
+  insert into public.landed_cost_charges
+    (org_id, run_id, line_no, description, amount, basis, account_id)
+  values (v_org, v_run, 1, 'Ocean freight', 100, 'value',
+          (select id from public.accounts
+            where org_id = v_org and code = '5400'));
+
+  -- Now make 1310 a heading, the way a company with several inventory
+  -- accounts beneath it would have it.
+  update public.accounts set is_group = true where id = v_1310;
+  perform pg_temp.check_true('1310 is now a heading',
+    (select is_group from public.accounts where id = v_1310));
+
+  perform pg_temp.check_refused(
+    'a run will not capitalise onto the inventory HEADING',
+    format('select public.post_landed_cost_run(%L)', v_run),
+    'This company has no inventory account.', 'P0002');
+
+  perform pg_temp.check_eq('and nothing was written on the way to refusing',
+    (select count(*)::integer from public.stock_movements
+      where source_table = 'landed_cost_runs' and source_id = v_run), 0);
+  perform pg_temp.check_eq('the run is still a draft',
+    (select status::text from public.landed_cost_runs where id = v_run),
+    'draft');
+
+  -- And with a real postable 1310 beneath that heading, the same run
+  -- posts. Without this the assertion above would pass against a
+  -- function that refused every run for any reason at all.
+  insert into public.accounts
+    (org_id, code, name, account_type, account_subtype, parent_id, is_group)
+  values (v_org, '1311', 'Inventory on hand', 'asset', 'inventory',
+          v_1310, false);
+  perform pg_temp.check_refused(
+    'a 1311 beneath it is not 1310 either, so the refusal stands',
+    format('select public.post_landed_cost_run(%L)', v_run),
+    'This company has no inventory account.', 'P0002');
+
+  -- No positive control is needed here, and the first attempt at one was
+  -- WRONG: with 1310 made postable again this run still cannot post,
+  -- because it has no bills -- `Those bills have no stocked goods on
+  -- them`. The assertion was written as though the heading were the
+  -- only thing refusing it, and it is not.
+  --
+  -- What discriminates instead is that `check_refused` matches the
+  -- WHOLE message. With `not is_group` deleted, the function finds the
+  -- heading, gets past that check, and refuses further down for the
+  -- no-stocked-goods reason -- a different sentence, so the assertion
+  -- reports "refused, but for the wrong reason" and the mutant dies.
+  -- A `%inventory%` fragment would have passed against both.
+  --
+  -- And the blocks above this one post runs successfully several times
+  -- over, which is the positive control: this function plainly does not
+  -- refuse everything.
+  perform pg_temp.check_true('1310 is still the heading these refusals '
+    'were about',
+    (select is_group from public.accounts where id = v_1310));
+
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

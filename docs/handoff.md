@@ -12617,3 +12617,62 @@ is deterministic for a fixed sequence of operations on a given
 PostgreSQL, which is what CI runs, and the determinism assertion beside
 it does not depend on heap order at all. If it ever does flake, the
 determinism half is the one to keep.
+
+### post_landed_cost_run: 14 of 15, and the 1120 bug again on the stock side
+
+Next off `mutation_targets.py`'s ranking. **15 mutants, 14 killed on the
+first run** — the best first-run score of anything measured this
+session. `landed_cost.sql` already asserted the ratio, the sen, both
+sides of the journal, the movement-to-journal link and the status, and
+its balance check caught every sign mutation outright:
+
+```
+killed  the charge accounts are DEBITED and inventory credited
+        -- Journal does not balance: debits 800.00, credits 0.00
+```
+
+**A balance check is a cheap kill for an ASYMMETRIC mutation and
+useless against a symmetric one.** The rounding-order mutant — which
+reverses `order by c.line_no` so the FIRST charge line absorbs the
+rounding instead of the last, moving one sen between two accounts —
+balances perfectly, and was caught only by an assertion naming the
+account and the figure. That is the same rule the payroll run taught in
+an earlier stretch, arriving again from the other direction.
+
+The one survivor was `not is_group` on the 1310 lookup:
+
+```sql
+select id into v_inv from public.accounts
+ where org_id = v_run.org_id and code = '1310' and not is_group;
+```
+
+It survived for exactly the reason `0727`/`0728` went unnoticed for a
+year: **the seeded 1310 is postable, so "the inventory account" and
+"any account coded 1310" are the same row**, and nothing could say which
+rule found it. This is the 1120 heading bug on the stock side — an entry
+on a heading balances, reports and reconciles against nothing. Closed
+with a company whose 1310 is a heading, which must get the refusal
+rather than a posting onto the parent, plus an assertion that a 1311
+beneath it is not 1310 either.
+
+#### The positive control I wrote was wrong, and the exact message saved it
+
+The block first ended by making 1310 postable again and asserting the
+run then posts — "so the refusal was about the heading and not the run".
+It is not: that run has no bills, so it still refuses, with
+`Those bills have no stocked goods on them`. The assertion was written
+as though the heading were the only thing standing in the way.
+
+What actually discriminates is that `check_refused` matches the **whole
+message**. With `not is_group` deleted the function finds the heading,
+gets past that check, and refuses further down for the other reason — a
+different sentence, so the assertion reports *"refused, but for the
+wrong reason"* and the mutant dies. A `%inventory%` fragment would have
+passed against both. That is the third time in this session the whole
+message has been the thing doing the work, and the second time a
+fragment would have hidden a mutant.
+
+The positive control is the rest of the file, which posts runs
+successfully several times over. Written down rather than re-invented
+locally, because a local one here needed a bill, a received line and
+stock on hand to say what three existing blocks already say.
