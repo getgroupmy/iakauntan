@@ -11629,3 +11629,77 @@ Then confirm the schema is really there before trusting a baseline —
 should read 518, and `public` should hold 381 tables. There is no
 `supabase_migrations.schema_migrations` in a locally-built cluster, so its
 absence is not evidence of an empty database.
+
+## 5 October: PCB is 10 of 10, and the harness downgraded the database twice
+
+`app.calc_pcb` — the monthly tax deduction — got the same treatment as
+`calc_statutory`. Eleven mutants, in `supabase/tests/mutants/calc_pcb.py`,
+each breaking one rule a Malaysian payslip depends on: the bonus annualised,
+the EPF and SOCSO/EIS relief caps, zakat not deducted from the year's tax, a
+disabled child's RM6,000, the claim percentage, the months-remaining divisor
+(wrong in both directions), PCB already paid not credited, and spouse relief
+paid to a working spouse.
+
+**10 of 10 killed by `statutory.sql` alone**, control surviving. Unlike
+`calc_statutory`, this function needs no second file, and the diagnostics are
+exact — "a RM40,000 bonus is taxed once, in full: expected 2901.40, got
+19659.3" is the `0446` defect being caught by name.
+
+### THE MIGRATION YOU NAME IS THE ONE THE RESTORE PUTS BACK
+
+The expensive part. **`grep -ln "create or replace function app.calc_pcb"`
+names `0446` as the latest definition, and it is wrong.** `0530` redefines
+the same function with the statement in a different CASE, which a
+case-sensitive grep does not see — and `0446`'s name
+(`the_bonus_that_was_taxed_every_month`) reads exactly like the last word on
+this function.
+
+`mutate_sql.py`'s restore re-applies the body from **the file you named**. So
+the run restored `0446`, leaving the live `calc_pcb` paying RM8,000 for a
+disabled child in higher education where `0530` pays RM14,000 — and every
+later run of the suite then fails for a reason that is in neither the code
+nor the test. Repair is to re-apply the right migration by hand:
+
+```
+psql "$DB" -v ON_ERROR_STOP=1 -f \
+  supabase/migrations/0530_a_disabled_child_in_higher_education.sql
+```
+
+**The control caught it.** It was reported killed and the harness refused to
+let the run be believed. That is the whole argument for insisting on one, and
+it is now paid for in SQL as well as in Dart.
+
+Always find the definition case-insensitively:
+
+```
+grep -lin "function .*<name>" supabase/migrations/*.sql | tail -3
+```
+
+### The guard, and the wrong first version of it
+
+`mutate_sql.py` now compares the file's function body against `pg_proc`
+before the baseline and refuses a mismatch, naming the differing line and the
+grep that finds the real migration. It already read `prosrc` to confirm a
+mutation landed, so the check costs nothing.
+
+**The first version of that guard was wrong, and wrong in the way this
+document keeps warning about.** It sampled four long lines from the file and
+asked whether the live source contained them. `0446` and `0530` differ by ONE
+NUMBER, all four sampled lines matched, the check passed — and the run
+downgraded the database a *second* time. A sampling probe cannot detect a
+one-line difference. It is now a whole-body comparison, whitespace-
+insensitive, and verified in both directions: it refuses `0446`, and it
+accepts `0530` and `0404` with no false positive.
+
+### Where SQL mutation now stands
+
+| function | mutants | killed | by |
+|---|---|---|---|
+| `app.calc_statutory` | 8 | 8 | four files between them; **4 of 8 by `statutory.sql` alone** |
+| `app.calc_pcb` | 10 | 10 | `statutory.sql` alone |
+| bank rules | — | — | `supabase/tests/mutants/bank_rules.py`, from September |
+
+Both statutory engines are genuinely asserted. The next function worth the
+same treatment is whatever else a wrong number would reach a person through:
+`app.annual_tax` (which `calc_pcb` leans on twice), `app.round_statutory`,
+and the posting functions behind a payslip.
