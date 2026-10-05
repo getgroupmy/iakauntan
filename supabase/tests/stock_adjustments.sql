@@ -42,7 +42,13 @@ begin
   insert into public.stock_movements
     (org_id, movement_no, movement_date, movement_type, item_id, warehouse_id,
      quantity, unit_cost)
-  values (p_org, 'OPEN-1', date '2026-01-01', 'opening_balance', v_item, v_wh,
+  -- The movement number has to be unique per company, and this helper
+  -- used to hardcode 'OPEN-1' -- so it could be called only ONCE per
+  -- org, and the second call failed on
+  -- `stock_movements_org_id_movement_no_key`. The suffix matches the
+  -- one on the item code just above.
+  values (p_org, 'OPEN-' || substr(gen_random_uuid()::text, 1, 6),
+          date '2026-01-01', 'opening_balance', v_item, v_wh,
           p_qty, p_cost);
   return v_item;
 end;
@@ -385,6 +391,154 @@ begin
       where id = v_entry));
   perform pg_temp.check_true('the count is posted, not still open',
     (select status = 'posted' from public.stock_adjustments where id = v_adj));
+
+  perform pg_temp.sign_out();
+end $$;
+
+-- ---------------------------------------------------------------------
+-- The three a mutation run found this file could not see
+-- ---------------------------------------------------------------------
+--
+-- `public.post_stock_adjustment` was mutated 22 ways on 5 October.
+-- Eighteen died against the assertions above -- the second-best score
+-- measured -- and four survived. `lot_allocation_shapes.sql`, the other
+-- file that reaches it, killed nothing the assertions above had not
+-- already killed.
+--
+--     python3 scripts/mutate_sql.py \
+--       supabase/migrations/0087_stock_adjustments.sql \
+--       supabase/tests/stock_adjustments.sql \
+--       supabase/tests/mutants/post_stock_adjustment.py
+--
+-- One of the four is EQUIVALENT and proven so rather than argued. The
+-- function reads back what the movement cost with
+--
+--   select total_cost into v_cost from public.stock_movements
+--    where source_line_id = r.id and source_table = 'stock_adjustments'
+--    order by created_at desc limit 1;
+--
+-- and reversing that `desc` changes nothing, because `source_line_id`
+-- is per LINE, this function inserts exactly one movement per line, it
+-- is the ONLY function in the repository that writes a
+-- `stock_adjustments`-sourced movement, and a second post is refused.
+-- One matching row, so the ordering orders nothing. The same shape in
+-- `app.pos_deplete_recipes` looked identical and needed its `group by`
+-- to prove the same thing -- which is why this was checked rather than
+-- assumed.
+--
+-- The other three are gaps, and the third is the interesting one.
+do $$
+declare
+  v_org   uuid;
+  v_poor  uuid;
+  v_item  uuid;
+  v_free  uuid;
+  v_adj   uuid;
+  v_entry uuid;
+  v_n     integer;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  perform pg_temp.allow_many_companies();
+
+  -- ------------------------------------------------------------------
+  -- No 5900, and nothing named on the adjustment
+  -- ------------------------------------------------------------------
+  -- The other side of every stock adjustment goes to 5900 unless the
+  -- count names an account. With neither, the function must say so
+  -- rather than post a one-sided journal.
+  v_poor := pg_temp.sa_org('Tiada 5900 Sdn Bhd');
+  v_item := pg_temp.stocked_item(v_poor, 100, 10);
+  update public.accounts set code = '5901'
+   where org_id = v_poor and code = '5900';
+  v_adj := pg_temp.adjustment(v_poor, v_item, 100, 90);
+  perform pg_temp.check_refused(
+    'with no 5900 and no account named, the count is refused',
+    format('select public.post_stock_adjustment(%L)', v_adj),
+    '%adjustment account (5900)%', 'P0002');
+  perform pg_temp.check_eq('and nothing moved on the way to refusing',
+    (select count(*)::integer from public.stock_movements
+      where source_table = 'stock_adjustments' and source_id = v_adj), 0);
+
+  -- Naming one on the adjustment is the documented way round it, which
+  -- is what makes the refusal above a refusal about 5900 rather than
+  -- about the count.
+  update public.stock_adjustments
+     set account_id = (select id from public.accounts
+                        where org_id = v_poor and code = '5901')
+   where id = v_adj;
+  perform pg_temp.check_true('naming an account on the count posts it',
+    public.post_stock_adjustment(v_adj) is not null);
+
+  -- ------------------------------------------------------------------
+  -- No 1310, and the item names none either
+  -- ------------------------------------------------------------------
+  v_poor := pg_temp.sa_org('Tiada 1310 Sdn Bhd');
+  v_item := pg_temp.stocked_item(v_poor, 100, 10);
+  update public.accounts set code = '1311'
+   where org_id = v_poor and code = '1310';
+  v_adj := pg_temp.adjustment(v_poor, v_item, 100, 90);
+  perform pg_temp.check_refused(
+    'with no 1310 and no account on the item, the count is refused',
+    format('select public.post_stock_adjustment(%L)', v_adj),
+    '%inventory account (1310)%', 'P0002');
+
+  -- And again, the way round it: the ITEM may carry its own.
+  update public.items
+     set inventory_account_id = (select id from public.accounts
+                                  where org_id = v_poor and code = '1311')
+   where id = v_item;
+  perform pg_temp.check_true('an item carrying its own account posts',
+    public.post_stock_adjustment(v_adj) is not null);
+
+  -- ------------------------------------------------------------------
+  -- A worthless line writes no journal line
+  -- ------------------------------------------------------------------
+  -- `if v_cost = 0 then continue` skips a line whose stock is worth
+  -- nothing -- a difference in quantity at a cost of zero. Nothing in
+  -- `app.create_gl_entry_internal` drops a line of two zeroes, so
+  -- without that `continue` the journal gains a row of `debit 0,
+  -- credit 0`: a line in the ledger that records no money. It balances,
+  -- so no balance assertion sees it, and every figure asserted above
+  -- stays right. Only COUNTING the lines catches it.
+  v_org := pg_temp.sa_org('Barang Tak Bernilai Sdn Bhd');
+  v_item := pg_temp.stocked_item(v_org, 100, 10);
+  -- A second item held at no cost at all: counted short, worth nothing.
+  v_free := pg_temp.stocked_item(v_org, 50, 0);
+  perform pg_temp.check_eq('the second item is held at nothing',
+    (select coalesce(average_cost, 0) from public.items where id = v_free),
+    0.0000);
+
+  insert into public.stock_adjustments
+    (org_id, adjustment_no, adjustment_date, warehouse_id, reason,
+     adjustment_type, status)
+  values (v_org, 'ADJ-ZERO', date '2026-03-31',
+          app.default_warehouse(v_org), 'Annual count', 'stock_take', 'draft')
+  returning id into v_adj;
+  insert into public.stock_adjustment_lines
+    (org_id, adjustment_id, line_no, item_id, system_quantity,
+     counted_quantity)
+  values (v_org, v_adj, 1, v_item, 100, 90),
+         (v_org, v_adj, 2, v_free, 50, 40);
+
+  v_entry := public.post_stock_adjustment(v_adj);
+  perform pg_temp.check_true('the count posts', v_entry is not null);
+
+  perform pg_temp.check_eq('both lines moved stock, worth something or not',
+    (select count(*)::integer from public.stock_movements
+      where source_table = 'stock_adjustments' and source_id = v_adj), 2);
+  perform pg_temp.check_eq(
+    'but the journal has TWO lines, not three: the worthless one '
+    'writes no ledger entry',
+    (select count(*)::integer from public.gl_lines
+      where entry_id = v_entry), 2);
+  perform pg_temp.check_eq('one inventory line, at ten each for ten short',
+    (select round(sum(l.credit - l.debit), 2) from public.gl_lines l
+      join public.accounts a on a.id = l.account_id
+     where l.entry_id = v_entry and a.code = '1310'), 100.00);
+  perform pg_temp.check_eq('and 5900 takes the same figure the other way',
+    (select round(sum(l.debit - l.credit), 2) from public.gl_lines l
+      join public.accounts a on a.id = l.account_id
+     where l.entry_id = v_entry and a.code = '5900'), 100.00);
 
   perform pg_temp.sign_out();
 end $$;

@@ -128,4 +128,17 @@
 # where the three wrong routes give 4.166667, 423.450000 and 17.64.
 # 18 of 18 killed afterwards. Measured:
 # `all SQL assertions passed (384 files, 14415 assertions executed)`.
-14415
+#
+# 14426, +11: stock_adjustments.sql. post_stock_adjustment scored 18 of
+# 22 on the first run -- second best measured -- with three gaps and one
+# proven equivalent. The gap worth reading twice: `if v_cost = 0 then
+# continue` skips a stocktake line whose stock is worth nothing, and
+# nothing in create_gl_entry_internal drops a line of two zeroes, so
+# without it the journal gains a `debit 0, credit 0` row. It BALANCES,
+# so no balance assertion sees it and every figure asserted elsewhere
+# stays right -- only COUNTING the journal's lines catches it. The
+# equivalent is the read-back's `order by created_at desc`, where
+# source_line_id is per line and only this function writes such a
+# movement. Measured:
+# `all SQL assertions passed (384 files, 14426 assertions executed)`.
+14426

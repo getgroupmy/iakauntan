@@ -12805,3 +12805,84 @@ BEFORE the quantity guard, so the note has to have 2118 put back before
 the quantity refusal can be the one under test. A fixture that tripped
 the earlier guard would have passed this assertion while proving nothing
 about the later one.
+
+### post_stock_adjustment: 18 of 22, and a journal line that records no money
+
+Second-best first-run score of the sweep. **22 mutants, eighteen killed,
+four survived**; `lot_allocation_shapes.sql` killed nothing
+`stock_adjustments.sql` had not already killed. 21 of 22 now, the last
+proven equivalent rather than closed.
+
+**The gap worth reading twice** is the third of three. `if v_cost = 0
+then continue` skips a stocktake line whose stock is worth nothing — a
+difference in quantity at a cost of zero. Nothing in
+`app.create_gl_entry_internal` drops a line of two zeroes, so without
+that `continue` the journal gains a row of `debit 0, credit 0`: an entry
+in the ledger recording no money.
+
+**It balances.** Every balance assertion stays green, and every figure
+asserted anywhere else stays right. Only COUNTING the journal's lines
+catches it — the clearest case in this sweep of a defect invisible to
+every assertion about values and visible to one about shape. The two
+others were plain: no 5900 with no account named on the count, and no
+1310 with no account on the item. Both now assert the refusal AND the
+documented way round it, so the refusal is about the missing account
+rather than about the count.
+
+The equivalent, proven rather than argued: reversing
+`order by created_at desc` on
+
+```sql
+select total_cost into v_cost from public.stock_movements
+ where source_line_id = r.id and source_table = 'stock_adjustments'
+ order by created_at desc limit 1;
+```
+
+changes nothing, because `source_line_id` is per LINE, the function
+inserts exactly one movement per line, it is the only function in the
+repository that writes a `stock_adjustments`-sourced movement — checked
+against every latest definition, not assumed — and a second post is
+refused. One matching row, so the ordering orders nothing.
+
+#### My own guard produced a false refusal, and sent the operator to a file with no function in it
+
+`mutate_sql.py` refused to run against `0087` with
+
+```
+HARNESS ERROR: post_stock_adjustment is last defined in
+0571_what_posting_and_creating_commit_you_to.sql, not 0087_stock_adjustments.sql.
+  use: .../0571_what_posting_and_creating_commit_you_to.sql
+```
+
+`0571` holds **no definition of it at all** — only
+`comment on function public.post_stock_adjustment(uuid) is ...`.
+`latest_defining()` matched a bare `\bfunction\s+<name>\s*\(`, so a
+`comment on function`, a `revoke all on function` and a
+`grant execute on function` all counted as definitions.
+
+This is worse than the failure the guard exists to prevent. That one
+leaves the database wrong and says nothing; this one **refuses a correct
+run and prints an instruction that is wrong while looking
+authoritative** — follow it and you mutate a file with no body, for
+reasons that will not make sense. Fixed to require
+`create [or replace] function`, and verified still to refuse the real
+case it was built for (`0446` for `calc_pcb`, where `0530` is the
+latest).
+
+Worth noting which tool was right: `scripts/mutation_targets.py` named
+`0087` correctly all along, because its pattern always required
+`create or replace function`. The newer, narrower tool was correct and
+the older, more defensive one was wrong — defensiveness in the matcher
+is not the same as correctness in it.
+
+Also fixed while there: a mistyped migration filename came back as a raw
+`FileNotFoundError` traceback, which reads like the harness is broken
+rather than the argument. It now says `no such migration: <path>`.
+
+#### A fixture helper that could only be called once
+
+`pg_temp.stocked_item` hardcoded `movement_no = 'OPEN-1'`, and
+`stock_movements` is unique on `(org_id, movement_no)` — so the helper
+worked exactly once per company and the second call died on the
+constraint. Every existing caller used it once, so nothing had noticed.
+Now suffixed like the item code beside it.

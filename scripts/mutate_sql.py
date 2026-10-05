@@ -164,10 +164,25 @@ def latest_defining(name: str) -> pathlib.Path | None:
     Case-insensitively because `0530` writes `CREATE OR REPLACE FUNCTION`
     where `0446` writes it in lower case, so `grep -ln "create or replace
     function app.calc_pcb"` names `0446` as the latest and is wrong.
+
+    `create ... function`, not a bare `function <name>(`. The first
+    version matched the bare form and so counted
+
+        comment on function public.post_stock_adjustment(uuid) is ...
+        revoke all on function public.post_stock_adjustment(uuid) ...
+        grant execute on function public.post_stock_adjustment(uuid) ...
+
+    as definitions. It refused a legitimate run against `0087` and sent
+    the operator to `0571`, which only comments on the function and
+    holds no body at all -- a FALSE refusal, and a worse failure than
+    the one this guard exists to prevent, because the instruction it
+    prints is wrong and looks authoritative.
     """
+    define = re.compile(
+        r"\bcreate\s+(?:or\s+replace\s+)?function\s+[a-z_]*\.?"
+        + re.escape(name) + r"\s*\(", re.I)
     found = [p for p in sorted(MIGRATIONS.glob("*.sql"))
-             if re.search(r"\bfunction\s+[a-z_]*\.?" + re.escape(name)
-                          + r"\s*\(", p.read_text(), re.I)]
+             if define.search(p.read_text())]
     return found[-1] if found else None
 
 
@@ -206,6 +221,11 @@ def main() -> int:
         print(__doc__)
         return 2
     migration, test, spec = sys.argv[1:4]
+    if not pathlib.Path(migration).is_file():
+        sys.exit(f"HARNESS ERROR: no such migration: {migration}\n"
+                 f"  (a mistyped filename used to come back as a raw "
+                 f"FileNotFoundError traceback, which reads like the "
+                 f"harness is broken rather than the argument)")
     original = pathlib.Path(migration).read_text()
 
     mutants: list[tuple] = []
