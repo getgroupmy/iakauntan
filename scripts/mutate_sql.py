@@ -151,6 +151,36 @@ def live(name: str) -> str:
         capture_output=True, text=True).stdout
 
 
+def body_of(statement: str) -> str:
+    """Just the body, between the dollar-quote tags."""
+    found = re.search(r"\bas\s+(\$[a-z_]*\$)(.*)\1", statement, re.S | re.I)
+    return found.group(2) if found else ""
+
+
+def squash(text: str) -> str:
+    """Whitespace-insensitive, because `prosrc` is not a byte copy."""
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def differing(body: str, got: str) -> list[str]:
+    """Lines of the FILE that are not in the live function, for the report.
+
+    A sampling probe is not good enough and that is not a guess: the
+    first version of this check took four long lines from the file and
+    asked whether the live source contained them. `0446` and `0530`
+    differ by ONE number, so all four matched, the check passed, and the
+    run went on to downgrade the database a second time.
+    """
+    live_lines = {l.strip() for l in got.splitlines()}
+    out = []
+    for line in body.splitlines():
+        bare = line.strip()
+        if len(bare) > 8 and bare not in live_lines:
+            out.append("in the file but not live: " + bare[:68])
+    return out or ["the bodies differ but no single line does; "
+                   "check whitespace and the dollar-quote tag"]
+
+
 def main() -> int:
     if len(sys.argv) != 4:
         print(__doc__)
@@ -172,6 +202,42 @@ def main() -> int:
         if keep:
             print(f"carrying {len(keep.splitlines())} grant(s) on {name}, "
                   f"which a replace does not keep")
+
+    # Is the migration you named the one the DATABASE is running?
+    #
+    # This is not a nicety. The restore at the end of a run re-applies
+    # the body from THE FILE YOU NAMED, so naming a superseded migration
+    # does not merely report nonsense -- it leaves the local database on
+    # an OLDER definition of the function, and every later run of the
+    # suite fails for a reason that is in neither the code nor the test.
+    #
+    # It happened on 5 October. `grep -ln "create or replace function
+    # app.calc_pcb"` named `0446` as the latest, because `0530` writes
+    # the same statement in a different case and a case-sensitive grep
+    # does not see it. So the sweep ran against `0446`, restored `0446`,
+    # and left `calc_pcb` paying RM8,000 for a disabled child in higher
+    # education where `0530` pays RM14,000. The control was reported
+    # KILLED, which is what stopped the run being believed, and the
+    # database had to be repaired by hand.
+    #
+    # The check is one `prosrc` comparison, and the harness already reads
+    # `prosrc` to confirm a mutation landed, so this costs nothing.
+    for _, name, *_ in mutants:
+        body = body_of(block(original, name))
+        got = live(name)
+        if body and got.strip() and squash(body) != squash(got):
+            print(f"HARNESS ERROR: {name} in the database does not match "
+                  f"{migration}.", file=sys.stderr)
+            print("A LATER migration almost certainly redefines it, so this "
+                  "file is superseded. Find it CASE-INSENSITIVELY:",
+                  file=sys.stderr)
+            print(f'  grep -lin "function .*{name}" '
+                  f'supabase/migrations/*.sql | tail -3', file=sys.stderr)
+            print("Running anyway would restore the OLD body and leave the "
+                  "database wrong for every later run.", file=sys.stderr)
+            for line in differing(body, got)[:3]:
+                print(f"  {line}", file=sys.stderr)
+            return 2
 
     before = run(test)
     print(f"baseline: {'passed' if before is None else 'FAILED ' + before}")
