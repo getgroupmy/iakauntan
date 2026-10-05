@@ -495,4 +495,40 @@
 # at all, so the receipt's own `movement_type = 'transfer_in'` can
 # never exclude anything. Measured:
 # `all SQL assertions passed (384 files, 14660 assertions executed)`.
-14660
+#
+# 14672, +12: open_item_import.sql. import_open_invoices and
+# import_open_bills -- near line-for-line symmetric, so the SAME twenty
+# mutants were applied to both and any difference in the kill sheet is
+# a difference in COVERAGE rather than in the code. 39 of 55 on this
+# file; 49 of 53 across its five files, four proven equivalent.
+#
+# THE PER-FILE RESULT WAS ASYMMETRIC IN BOTH DIRECTIONS AT ONCE:
+#
+#   "the opening document reads as already paid"   invoice LIVED, bill DIED
+#   "the journal is filed as this year's trading"  bill LIVED, invoice DIED
+#
+# Each half had an assertion the other lacked and they were DIFFERENT
+# assertions, so neither half was the thorough one -- and a reader
+# comparing them would have concluded both were covered. The union
+# closed both, from two different files.
+#
+# AND THE EIGHT THAT SURVIVED EVERYWHERE CAME IN FOUR PERFECT PAIRS.
+# The halves end up with the same holes once every file is counted; it
+# is only the route to each hole that differs. The four real ones are
+# what a predecessor's export actually looks like: the contact code
+# spelled however the old system spelled it, and the currency in lower
+# case. Every row in the suite until now was 'C-001' exactly and 'USD'
+# or nothing, so `lower()` and `upper()` each had nothing on the other
+# side of them.
+#
+# ONE EQUIVALENT PAIR IS PROVEN BY A TRIGGER, which is a third kind of
+# proof after "the code's own shape" and "the table's constraints":
+# recalc_sales_totals_header fires on the LINE insert two statements
+# later and overwrites base_total_amount on the header, so whatever the
+# document insert put there is unobservable. The file asserts the figure
+# that SURVIVES (4,250.00 on USD 1,000 at 4.25). The other pair is
+# proven by the VALIDATOR: it runs the same contact lookup first and
+# raises before the import loop, so the loop's own
+# `deleted_at is null` is unreachable. Measured:
+# `all SQL assertions passed (384 files, 14672 assertions executed)`.
+14672

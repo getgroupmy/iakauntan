@@ -13759,3 +13759,64 @@ filter is ever tightened.
 `import_open_bills`, `import_opening_balances`, `import_open_invoices`,
 `post_manufacturing_order`, `post_client_transaction`,
 `app.run_recurring_journals`.
+
+### The open-item import pair: asymmetric in both directions at once
+
+`import_open_invoices` and `import_open_bills` bring a predecessor's
+open items onto the ledger on changeover day, and they are near
+line-for-line symmetric. **So the sweep applied the SAME twenty mutants
+to both**, generated from one table — any difference in the kill sheet
+is a difference in coverage, not in the code.
+
+**55 mutants (53 plus one control per function). 39 killed on
+`open_item_import.sql`, 49 of 53 across its five files, four proven
+equivalent.**
+
+**The per-file result was asymmetric in both directions at once.** On
+`open_item_import.sql`:
+
+| mutant | invoice | bill |
+| --- | --- | --- |
+| the opening document reads as already paid | **lived** | died |
+| the journal is filed as this year's trading | died | **lived** |
+
+Each half had an assertion the other lacked, and **they were different
+assertions** — so neither half was the thorough one, and a reader
+comparing the two would have concluded both were covered. The union
+closed both, from two different files (`cash_is_not_credit.sql` and
+`migration_progress.sql`).
+
+**And the eight that survived everywhere came in four perfect pairs.**
+The halves end up with the same holes once every file is counted; it is
+only the *route* to each hole that differs. That is the refinement of
+the lesson `revalue_foreign_balances` and `receive_stock_transfer` both
+gave: a per-file score on one half of a symmetric pair tells you
+nothing about the other half, and a union score tells you about both.
+
+The four real ones are what a predecessor's export actually looks like:
+**the contact code spelled however the old system spelled it, and the
+currency in lower case.** Every row in the suite until now was `C-001`
+exactly and `USD` or nothing, so `lower()` and `upper()` each had
+nothing on the other side of them. Without the fold the contact lookup
+finds nothing, `v_contact_id` is null, and the import dies on a
+not-null violation — a database error where a successful changeover
+belongs.
+
+**Three kinds of equivalence proof are now in use**, and this function
+supplied the third:
+
+| proof | example |
+| --- | --- |
+| the code's own shape | a guard above makes a later conjunct unreachable (`create_deposit`, `clear_pdc`, `remit_withholding`) |
+| the table's constraints | `coalesce(exchange_rate, 1)` on a NOT NULL DEFAULT 1 column with `check (> 0)` (`remit_withholding`) |
+| **a trigger** | `recalc_sales_totals_header` overwrites `base_total_amount` on the line insert two statements later, so whatever the document insert put there is unobservable |
+
+The second equivalent pair here is proven by the **validator**:
+`app.validate_open_items` runs the same contact lookup first and
+`if p_commit and v_bad > 0` raises before the loop, so the loop's own
+`deleted_at is null` can never exclude anything.
+
+**28 of 45 money movers now have a mutants file.** Next with none:
+`import_opening_balances`, `post_manufacturing_order`,
+`post_client_transaction`, `app.run_recurring_journals`, and the four
+demo builders.

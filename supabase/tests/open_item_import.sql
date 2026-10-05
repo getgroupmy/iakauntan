@@ -758,4 +758,126 @@ begin
   raise notice 'ok   open items: the twenty-one and the fifteen a sweep found';
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The four pairs a sweep of BOTH halves found, and the two it proved
+-- cannot be found
+--
+-- `import_open_invoices` and `import_open_bills` are near line-for-line
+-- symmetric, so the sweep applied the SAME twenty mutants to both. 39
+-- of 53 died on this file and 43 across all five that reach them.
+--
+-- THE PER-FILE RESULT WAS ASYMMETRIC IN BOTH DIRECTIONS AT ONCE, which
+-- is the thing worth recording. On this file:
+--
+--   "the opening document reads as already paid"  invoice lived, bill died
+--   "the journal is filed as this year's trading"  bill lived, invoice died
+--
+-- Each half had an assertion the other lacked, and they were different
+-- assertions -- so neither file was the thorough one. The union closed
+-- both (cash_is_not_credit.sql and migration_progress.sql), and the
+-- eight that survived everywhere came in four perfect PAIRS. The halves
+-- end up with the same holes; it is only the route to each hole that
+-- differs.
+--
+-- The two pairs that CANNOT be closed are recorded at the end.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_boss uuid := pg_temp.another_user('celah@openitems.test');
+  v_org  uuid;
+  v_doc  uuid; v_bill uuid;
+  v_e    uuid;
+begin
+  v_org := pg_temp.open_org('Open Items Celah Sdn Bhd', v_boss);
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-Mix', 'Pelanggan Campur', 'customer'),
+         (v_org, 'S-Mix', 'Pembekal Campur', 'supplier');
+  insert into public.exchange_rates
+    (org_id, from_currency, to_currency, rate, rate_date, source)
+  values (v_org, 'USD', 'MYR', 4.25, date '2026-01-01', 'manual');
+
+  -- A file as a predecessor's export really arrives: the currency in
+  -- lower case, the contact code in whatever case the old system used,
+  -- and a foreign rate. Every row in this file until now has been
+  -- 'USD' or nothing, 'C-001' exactly, and MYR at rate 1 -- so
+  -- `upper()`, `lower()` and `round(amount * rate, 2)` each had
+  -- nothing on the other side of them.
+  perform public.import_open_invoices(v_org, jsonb_build_array(
+    jsonb_build_object('doc_no','INV-MIX-1','contact_code','c-mix',
+      'doc_date','2026-06-30','outstanding_amount','1000',
+      'currency','usd','exchange_rate','4.25','reference','PO 91')),
+    date '2026-08-01', true);
+  perform public.import_open_bills(v_org, jsonb_build_array(
+    jsonb_build_object('doc_no','BILL-MIX-1','contact_code','s-mix',
+      'doc_date','2026-06-30','outstanding_amount','400',
+      'currency','usd','exchange_rate','4.25','reference','PO 92')),
+    date '2026-08-01', true);
+
+  select id into v_doc from public.sales_documents
+   where org_id = v_org and doc_no = 'INV-MIX-1';
+  select id into v_bill from public.purchase_documents
+   where org_id = v_org and doc_no = 'BILL-MIX-1';
+
+  -- 1. THE CONTACT CODE'S CASE. A predecessor's export spells the code
+  --    however that system spelled it. Without the fold the lookup
+  --    finds nothing and the insert fails on a null contact -- which is
+  --    a not-null violation where a successful import belongs.
+  perform pg_temp.check_true('an invoice row finds its customer whatever the case',
+    (select contact_id from public.sales_documents where id = v_doc)
+      = (select id from public.contacts where org_id = v_org and code = 'C-Mix'));
+  perform pg_temp.check_true('and a bill row its supplier',
+    (select contact_id from public.purchase_documents where id = v_bill)
+      = (select id from public.contacts where org_id = v_org and code = 'S-Mix'));
+
+  -- 2. THE CURRENCY'S CASE, folded UP on the way in, because every
+  --    report and every rate lookup in this schema spells a currency in
+  --    capitals.
+  perform pg_temp.check_eq('an invoice in "usd" is stored in USD',
+    (select currency from public.sales_documents where id = v_doc), 'USD');
+  perform pg_temp.check_eq('and a bill in "usd" the same',
+    (select currency from public.purchase_documents where id = v_bill), 'USD');
+
+  -- 3. THE BASE TOTAL, which is the only figure on the document in the
+  --    company's own money. Every import before this was MYR at rate 1,
+  --    where the foreign total and the base total are one number.
+  perform pg_temp.check_eq('the invoice is worth its ringgit on the document',
+    (select base_total_amount from public.sales_documents where id = v_doc),
+    4250.00);
+  perform pg_temp.check_eq('and so is the bill',
+    (select base_total_amount from public.purchase_documents where id = v_bill),
+    1700.00);
+  perform pg_temp.check_eq('while the foreign total stays foreign',
+    (select total_amount from public.sales_documents where id = v_doc), 1000);
+
+  -- 4. THE LINK BACK. `report_open_item_import` and the migration
+  --    progress count both find these documents through their journal's
+  --    source, and a journal that names no document is an opening
+  --    balance belonging to nothing.
+  select gl_entry_id into v_e from public.sales_documents where id = v_doc;
+  perform pg_temp.check_eq('the invoice''s journal names the document',
+    (select source_id from public.gl_entries where id = v_e), v_doc);
+  perform pg_temp.check_eq('in the table it lives in',
+    (select source_table from public.gl_entries where id = v_e),
+    'sales_documents');
+  select gl_entry_id into v_e from public.purchase_documents where id = v_bill;
+  perform pg_temp.check_eq('and the bill''s journal names its document',
+    (select source_id from public.gl_entries where id = v_e), v_bill);
+  perform pg_temp.check_eq('in the table that one lives in',
+    (select source_table from public.gl_entries where id = v_e),
+    'purchase_documents');
+
+  -- THE PAIR THAT CANNOT BE CLOSED, said here so the next sweep does
+  -- not re-chase it. Both import loops look the contact up with
+  -- `and c.deleted_at is null`, and so does `app.validate_open_items`,
+  -- which runs FIRST on the same rows and marks a row whose contact it
+  -- cannot find as an error -- and `if p_commit and v_bad > 0` then
+  -- raises before the loop runs at all. So a row naming a deleted
+  -- contact can never reach the import's own lookup, and dropping
+  -- `deleted_at is null` from it is an EQUIVALENT mutation on both
+  -- sides. Right to keep: it is the lookup that would matter the day
+  -- the validator's own filter changed, and the two are meant to agree.
+  raise notice 'ok   open items: the case, the case, the rate and the link, on both halves';
+end $$;
+
+
 rollback;
