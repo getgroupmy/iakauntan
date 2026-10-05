@@ -11251,11 +11251,17 @@ the same file ran in **35 seconds**.
 
 What filled it, in order of size:
 
-- **9,937 `/tmp/tmp*` directories, 12G** — orphaned Chromium profiles dated
-  20 SEPTEMBER, two weeks stale, from a prior session. 2,885 of them are
-  older than a week. **Still there**: sweeping them was refused as a
-  "Shared Scratch Sweep", correctly, since they are not this session's to
-  delete. That needs the user, and it is the single biggest win available.
+- **2,885 `/tmp/tmp*` directories, 4.9G** — orphaned Chromium profiles
+  dated 9–20 SEPTEMBER, from a prior session. Deleted once the user asked
+  for it; the first attempt was refused as a "Shared Scratch Sweep", which
+  was right, because they are not this session's to delete.
+
+  **This bullet first said "9,937 directories, 12G ... Chromium profiles",
+  and that was wrong — one sampled directory was generalised to all of
+  them.** Only ~2,885 plus a few hundred tiny `.org.chromium.Chromium.*`
+  stubs were browser-related. See the section below for what the other
+  7,052 actually are, because they are the bigger number and nobody has
+  identified them yet.
 - **34 `/tmp/flutter_tools.*` directories, 2.7G** — these ARE a mutation
   run's doing. Every `flutter test` makes one of roughly 100–200MB, and a
   killed run leaves it behind. A 65-mutant run can leak several gigabytes,
@@ -11267,3 +11273,53 @@ What filled it, in order of size:
 Deleting what this session owned took it from 57M to 5.6G, which is enough
 to work. If a test suite ever goes quiet for minutes with no output, run
 `df -h /` before concluding anything about the test.
+
+### UNEXPLAINED: 7,052 copies of this repository in /tmp, 7.2G
+
+Found while clearing the disk, and **nobody has identified the cause.** It is
+written down here because it is 7.2G, because the first guess was wrong, and
+because it may start again.
+
+Each `/tmp/tmp<random>` directory is **1.3M and holds a partial copy of this
+repository** — `.github`, `app`, `deploy`, `docs`, `scripts`, `supabase`,
+113 files, no `.git`. Not a browser profile, which is what they were first
+taken for.
+
+When they appeared, by hour on 4 October:
+
+```
+03:00  72    09:00  100    13:00 1006
+04:00  24    10:00  169    14:00  938
+05:00  48    11:00 1288    15:00  848
+06:00  53    12:00 1004    16:00  622
+08:00  50
+```
+
+Up to ~1,300 an hour — twenty a minute — and then it **stopped dead**. The
+newest is 16:41 and the count was still 7,052 seven hours later, stable over
+a 20-second window, so nothing is producing them now. The container
+restarted somewhere in that gap, which may be the whole explanation.
+
+**The obvious hypothesis was tested and is WRONG.** Several
+`scripts/check_*_test.py` build a throwaway tree with `mkdtemp`, and a leak
+there would look exactly like this. It is not that: running
+`check_or_filters_test.py` and `check_thin_assertions_test.py` leaked
+**zero** directories. The stop hook does not copy anything either — it is
+`git diff --quiet` and nothing more.
+
+So the question is open: what wrote a 113-file copy of this repository into
+`/tmp` twenty times a minute for five hours? Worth answering before it fills
+the disk again, since a full disk does not announce itself — it presents as a
+test that has gone quiet.
+
+Deleting them was refused as a "Shared Scratch Sweep" and was NOT retried.
+They are inert and provably stale, so the command, for whoever has the
+permission:
+
+```
+find /tmp -mindepth 1 -maxdepth 1 -name 'tmp*' -exec rm -rf {} +
+```
+
+`-mindepth 1` matters: without it `-name 'tmp*'` matches `/tmp` itself, which
+made an earlier `du` report the whole of `/tmp` as the set's size and put the
+count out by one.
