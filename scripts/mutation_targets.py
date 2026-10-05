@@ -67,15 +67,29 @@ FUNCTION = re.compile(
 # what this ranking is for -- a view, a report or a lookup can be wrong
 # without anybody's balance being wrong.
 MOVES = (
+    "app.create_gl_entry_internal",
     "insert into public.gl_lines",
     "insert into public.gl_entries",
     "insert into public.stock_movements",
     "insert into public.client_account_transactions",
-    "app.post_journal",
+    "insert into public.receipts",
+    "insert into public.purchase_payments",
     "public.post_receipt",
     "public.post_client_transaction",
     "public.post_purchase_payment",
 )
+
+# Every signature above has to match SOMETHING, or the ranking narrows
+# without saying so. The first version of this list contained
+# `app.post_journal`, which exists nowhere in the repository -- the name
+# was invented. The real helper is `app.create_gl_entry_internal`, which
+# TWENTY-NINE functions call, so the single most important signature in
+# the list was dead and the ranking covered 26 functions where it should
+# have covered far more. That is the same failure as a gate whose
+# matcher has stopped matching, in a tool built to find exactly that,
+# and it went unnoticed through five functions' worth of use because the
+# ones it DID rank were real.
+LEAST_PER_SIGNATURE = 1
 
 
 def definitions() -> dict[str, list[str]]:
@@ -267,8 +281,25 @@ def rank() -> list[tuple]:
     return sorted(rows)
 
 
+def dead_signatures() -> list[str]:
+    """MOVES entries that match no function at all."""
+    defs = definitions()
+    bodies = [body_of(n, w[-1]).lower() for n, w in defs.items()]
+    return [sig for sig in MOVES
+            if sum(1 for b in bodies if sig in b) < LEAST_PER_SIGNATURE]
+
+
 def main() -> int:
     how_many = int(sys.argv[1]) if len(sys.argv) > 1 else 20
+
+    dead = dead_signatures()
+    if dead:
+        print("WARNING: these MOVES signatures match no function, so the "
+              "ranking below is narrower than it looks:")
+        for sig in dead:
+            print(f"  {sig!r}")
+        print("Fix the name or drop the entry.\n")
+
     rows = rank()
     unmeasured = [r for r in rows if not r[7]]
     n_trg = sum(1 for r in rows if r[6])

@@ -12990,3 +12990,35 @@ still matched the migration and carried no mutation marker. The harness
 is safe against a mutant that will not parse, because PostgreSQL refuses
 the whole `create or replace` atomically. A mutant that parses and is
 wrong is the dangerous kind, which is what the CONTROL entry is for.
+
+### The ranking tool was understating its own target set by 42%
+
+`scripts/mutation_targets.py` decides what "moves money or stock" by
+looking for one of a handful of signatures in a function's body. One of
+them was `app.post_journal`.
+
+**There is no `app.post_journal` anywhere in the repository. The name
+was invented.** The real helper is `app.create_gl_entry_internal`, which
+**twenty-nine** functions call — so the single most important signature
+in the list matched nothing, and the tool ranked 26 money movers where
+it should have ranked 45.
+
+That is precisely the failure every gate in `scripts/` keeps a canary
+against: a matcher that has stopped matching reports a short list, and a
+short list reads like a small problem. It went unnoticed through five
+functions' worth of use, because the 26 it DID rank were all real — the
+tool was never wrong about what it named, only about what it left out,
+which is the invisible direction.
+
+Fixed, and given the guard the gates have: `dead_signatures()` reports
+any MOVES entry matching no function, and `main()` prints a warning
+above the ranking rather than quietly narrowing. Verified by adding a
+nonsense signature and seeing it named.
+
+The nineteen that were invisible include some of the most-redefined
+functions in the schema: `public.create_deposit` (five definitions),
+`public.create_contra`, `record_pdc`, `bounce_pdc`,
+`post_bank_transaction`, `settle_shared_payment`, `close_fiscal_year`
+and `reopen_fiscal_year`. The sweep is less than half done, not nearly
+finished — which is the useful correction, since the previous entry read
+as though the money movers were almost covered.
