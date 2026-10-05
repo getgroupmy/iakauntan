@@ -14546,9 +14546,9 @@ null`, so a **retired account is still posted to** — the same finding
 It changes what a statutory posting resolves to, so it stays the user's
 call and not a sweep's.
 
-**35 of 45 money movers now have a mutants file** — `python3
+**37 of 45 money movers now have a mutants file** — `python3
 scripts/mutation_targets.py` prints that line itself, so ask it rather
-than this file. The ten with none, as that tool ranks them:
+than this file. The eight with none, as that tool ranks them:
 
 * the four demo builders — `app.demo_legal_guaman`,
   `app.demo_sinar_bank`, `app.demo_purchases`,
@@ -14560,9 +14560,11 @@ than this file. The ten with none, as that tool ranks them:
   are reached by so much of the suite that the sweep is expensive, and
   the last of them is the function almost every other sweep has been
   mutating *through*.
-* four reached only by a TRIGGER, where the tool cannot count files:
-  `app.create_gl_entry_internal`, `app.pos_deplete_recipes`,
-  `app.move_document_bundles`, `app.pos_return_recipes`.
+* two reached only by a TRIGGER, where the tool cannot count files:
+  `app.create_gl_entry_internal` and `app.move_document_bundles`. The
+  other two trigger-reached ones, `app.pos_deplete_recipes` and
+  `app.pos_return_recipes`, now have files — see the modifier finding
+  above, which is what reading them side by side turned up.
 
 An earlier draft of this paragraph said what was left was "almost
 entirely the demo builders". It is not, and the tool says so in one
