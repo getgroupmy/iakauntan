@@ -12646,14 +12646,17 @@ select id into v_inv from public.accounts
  where org_id = v_run.org_id and code = '1310' and not is_group;
 ```
 
-It survived for exactly the reason `0727`/`0728` went unnoticed for a
+It survived for the same REASON `0727`/`0728` went unnoticed for a
 year: **the seeded 1310 is postable, so "the inventory account" and
 "any account coded 1310" are the same row**, and nothing could say which
-rule found it. This is the 1120 heading bug on the stock side — an entry
-on a heading balances, reports and reconciles against nothing. Closed
-with a company whose 1310 is a heading, which must get the refusal
-rather than a posting onto the parent, plus an assertion that a 1311
-beneath it is not 1310 either.
+rule found it. Closed with a company whose 1310 is a heading, which must
+get the refusal rather than a posting onto the parent, plus an assertion
+that a 1311 beneath it is not 1310 either.
+
+It is NOT the same MECHANISM as the 1120 bug, and the first version of
+this section said it was. See the correction below: `1120` has
+`is_group = false`, so a `not is_group` guard would never have caught
+it.
 
 #### The positive control I wrote was wrong, and the exact message saved it
 
@@ -12676,3 +12679,50 @@ The positive control is the rest of the file, which posts runs
 successfully several times over. Written down rather than re-invented
 locally, because a local one here needed a bill, a received line and
 stock on hand to say what three existing blocks already say.
+
+
+### The is_group audit that found nothing, and the claim it corrected
+
+`app.post_goods_received_internal` looks up the inventory account with
+`where org_id = ... and code = '1310'` and NO `not is_group`, where
+`post_landed_cost_run` has one. That inconsistency looked like the start
+of a sweep, so it was measured over the latest definition of every
+function: **7 account-by-code lookups carry a not-is_group guard and
+105 do not.**
+
+105 against 7 reads like a finding. It is not, and both halves of the
+reasoning behind it were wrong.
+
+**First: `is_group` is not the signal the 1120 bug needed.** In the
+seeded chart `1120` is `is_group = FALSE` — "Bank Accounts", postable,
+with the real accounts hung beneath it in 1121-1199. It is a heading by
+CONVENTION, not by the column. So a `not is_group` guard would not have
+caught `0727`/`0728` at all, and calling the landed-cost survivor "the
+1120 bug on the stock side" (as the section above first did) overstates
+it. The analogy that holds is posting onto a parent instead of a leaf;
+the mechanism is different, and the 1120 fix had to be its own thing
+(task #74, refusing a bank account on the 1120 heading).
+
+**Second: the codes that genuinely ARE groups are looked up as
+PARENTS.** Of the unguarded lookups, only `2100` (Current Liabilities)
+and `5000` (Cost of Sales) are `is_group = true` in the seed, three
+times each — and every one of those six is
+
+```sql
+insert into public.accounts (org_id, code, ..., parent_id, ...)
+values (..., (select id from public.accounts
+               where org_id = p_org_id and code = '5000'), ...)
+```
+
+in `0539` and `0022`, hanging a new account beneath its heading. Being a
+group is exactly what is wanted there. The rest of the 105 name postable
+leaves: 1310, 2110, 1210, 1510, 1590, 2118, 4100, 5100, 5200, 6400.
+
+So the guard in `post_landed_cost_run` is defence against a CUSTOMISED
+chart — a company that has made 1310 a heading with real inventory
+accounts beneath it — and the 105 lookups without it are not 105 call
+sites to fix. **Written down so the next session does not run the same
+audit and "fix" them.** If the guard is ever worth spreading, the
+argument has to be about customised charts, and the measurement to make
+first is whether any live org has `is_group` set on a code the posting
+functions look up.
