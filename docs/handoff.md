@@ -13108,3 +13108,47 @@ guard, the landed-check bug by the body guard on the NEXT run, and the
 mutated database by reading `pg_proc` for the marker rather than
 trusting either message. Three layers, and the top two both reported the
 wrong cause.
+
+### record_pdc and bounce_pdc: a general test killing a specific defect
+
+**27 mutants across the two functions, 23 killed by
+`post_dated_cheques.sql`, four survived; 27 of 27 across all three
+files.** Nothing equivalent.
+
+| file | kills |
+| --- | --- |
+| `post_dated_cheques.sql` | 23, then 25 |
+| `cash_forecast.sql` | 3 |
+| `idempotency.sql` | the last 2 |
+
+**The two that only `idempotency.sql` kills are the interesting result,
+because it kills them without asserting anything about either.** They
+are the status rule (a cleared or bounced cheque can be bounced again)
+and `status = 'bounced'` not being written — which leaves the cheque
+HELD while its journal and its deleted allocations say otherwise.
+
+Both die on `pg_temp.refuses_a_repeat('bounce_pdc', ...)`, a helper that
+calls the function twice and demands the second be refused. A cheque
+left `held` can be bounced twice, so a generic idempotency check catches
+a specific defect in a status write that nothing in the dedicated file
+looks at.
+
+**A test asserting a GENERAL property can kill a mutation in a
+particular field, and that is the best argument in this sweep for having
+both kinds.** Every other survivor rescued by a second file was rescued
+by a file asserting the same subject from another angle; this one was
+rescued by a file asserting something else entirely.
+
+The two real gaps:
+
+- **The boundary's other side.** `p_cheque_date <= v_on` is the entire
+  definition of "post-dated" — a cheque bankable today is a receipt. The
+  file stood on TODAY (refused) and on dates weeks out (accepted), so
+  widening the rule to refuse TOMORROW changed no assertion. Tomorrow is
+  the first valid date, and that is now asserted. **This is the third
+  function in a row whose boundary gap was the permission next to the
+  refusal rather than the refusal itself** — `send_stock_transfer`,
+  `import_opening_stock` (already covered elsewhere) and now this.
+- **`bounce_pdc`'s own `can_write_module`**, which nothing asserted. A
+  bounce writes a journal and deletes the allocations, so it is as much
+  a posting as taking the cheque in was.

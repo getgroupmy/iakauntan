@@ -165,4 +165,17 @@
 # module a company always holds and `purchases` is not -- a stranger is
 # refused whichever guard survives and proves neither. Measured:
 # `all SQL assertions passed (384 files, 14453 assertions executed)`.
-14453
+#
+# 14456, +3: post_dated_cheques.sql. record_pdc and bounce_pdc scored 23
+# of 27 on the first file, 27 of 27 across all three. The two that only
+# idempotency.sql kills are the result worth keeping: the status rule,
+# and `status = 'bounced'` not being written -- both die on
+# `refuses_a_repeat('bounce_pdc', ...)`, which asserts nothing about
+# either and catches them because a cheque left `held` can be bounced
+# twice. A test asserting a GENERAL property killing a mutation in a
+# particular field. The two gaps closed here: the boundary's other side
+# (`p_cheque_date <= v_on` is the whole definition of post-dated, and
+# nothing stood on TOMORROW, the first valid date) and bounce_pdc's own
+# can_write_module. Measured:
+# `all SQL assertions passed (384 files, 14456 assertions executed)`.
+14456

@@ -276,6 +276,20 @@ begin
       v_msg like '%is a receipt, not a post-dated cheque%');
   end;
 
+  -- The OTHER side of that boundary, which a mutation run on 5 October
+  -- found nothing stood on. `p_cheque_date <= v_on` is the entire
+  -- definition of "post-dated", and every accepted cheque in this file
+  -- is dated weeks out -- so widening the rule to `<= v_on + 1`, which
+  -- refuses TOMORROW, changed no assertion. Today is the last invalid
+  -- date and tomorrow the first valid one; a fixture that stands only
+  -- on today proves half of it.
+  perform pg_temp.check_true(
+    'and a cheque dated TOMORROW is post-dated, which is the first day '
+    'it can be',
+    public.record_pdc(
+      v_org, 'incoming', v_cust, '123471', pg_temp.today() + 1, 100,
+      '[]'::jsonb, v_bank) is not null);
+
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status)
@@ -325,6 +339,26 @@ begin
     perform pg_temp.check_true('a bounce says why, because it decides what next',
       v_msg like '%Say why%');
   end;
+
+  -- And who may bounce it. `bounce_pdc` has its own
+  -- `can_write_module` -- derived from the cheque's DIRECTION, so an
+  -- incoming cheque needs sales -- and nothing asserted it: the mutant
+  -- deleting that guard survived every file on 5 October. A bounce
+  -- writes a journal and deletes the allocations, so it is as much a
+  -- posting as taking the cheque in was.
+  --
+  -- The WHOLE message, not a fragment: `record_pdc` and `bounce_pdc`
+  -- raise the same sentence, and other guards in this schema raise
+  -- `Insufficient privileges to post`, which also contains the word.
+  perform pg_temp.sign_in_as(pg_temp.another_user('luar-cek@example.test'));
+  perform pg_temp.check_refused(
+    'a stranger cannot bounce another company''s cheque',
+    format('select public.bounce_pdc(%L, %L)', v_pdc, 'Refer to drawer'),
+    'not permitted to write for this organization', '42501');
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_eq('and the cheque is still held',
+    (select c.status::text from public.post_dated_cheques c
+      where c.id = v_pdc), 'held');
 
   -- Handed back before anything happened to it: the entry is reversed
   -- and the invoice is outstanding again.
