@@ -409,4 +409,216 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The ten a sweep found, on the function this file is named for
+--
+-- `post_client_transaction` was mutated 26 ways across the five files
+-- that reach it. 15 died on this one and 16 across all five. The ten
+-- that lived are of one kind: **the two rules in this file's header are
+-- asserted thoroughly and nothing else is.**
+--
+-- Rule 1 (client money in a client account) kills four mutants here.
+-- Rule 2 (one client's money is not another's) is a trigger and has its
+-- own block. Both guards at the TOP of the function -- who may post,
+-- and not twice -- the two refusals for a firm whose chart is missing
+-- an account, the journal's date, its reference, the movement's own
+-- description and `posted_at` were between them worth nothing.
+--
+-- A breach of the Solicitors' Accounts Rules is a disciplinary matter
+-- rather than a bookkeeping one, which makes "who posted it, and when"
+-- the part of this function a regulator reads first.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org    uuid;
+  v_owner  uuid := pg_temp.test_user();
+  v_other  uuid;
+  v_bank   uuid; v_1150 uuid; v_2300 uuid;
+  v_client uuid; v_matter uuid;
+  v_txn    uuid; v_entry uuid; v_msg text;
+  v_bare   uuid; v_no text;
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  v_org := pg_temp.test_org('Guaman Celah & Rakan', array['legal']);
+  perform pg_temp.allow_many_companies();
+  insert into public.org_modules (org_id, module_code, is_enabled, enabled_at)
+  values (v_org, 'legal', true, now())
+  on conflict (org_id, module_code) do update set is_enabled = true;
+  perform public.create_fiscal_year(v_org, date '2026-01-01');
+  perform pg_temp.sign_in_as(v_owner);
+  perform public.setup_legal_module(v_org);
+
+  select b.id into v_bank from public.bank_accounts b
+   where b.org_id = v_org and b.is_client_account;
+  select id into v_1150 from public.accounts
+   where org_id = v_org and code = '1150';
+  select id into v_2300 from public.accounts
+   where org_id = v_org and code = '2300';
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'CL9', 'Puan Latifah', 'customer') returning id into v_client;
+  insert into public.matters (org_id, matter_no, name, client_id, fee_earner)
+  values (v_org, 'M-9', 'Conveyancing', v_client, v_owner)
+  returning id into v_matter;
+
+  -- A movement with a DESCRIPTION, a REFERENCE and a date in the PAST.
+  -- Every movement in this file until now took the default date and no
+  -- reference, so `v_txn.transaction_date`, `v_txn.reference` and the
+  -- `coalesce(description, transaction_no)` had nothing on the other
+  -- side of them.
+  insert into public.client_account_transactions
+    (org_id, transaction_no, transaction_date, matter_id,
+     transaction_type, bank_account_id, amount, currency, description,
+     reference, status)
+  values (v_org, 'CAT-9001', date '2026-02-14', v_matter,
+          'receipt', v_bank, 12000, 'MYR', 'Deposit on the Rawang purchase',
+          'CHQ 441002', 'draft')
+  returning id into v_txn;
+  v_entry := public.post_client_transaction(v_txn);
+
+  perform pg_temp.check_eq('the journal is dated the day the money moved',
+    (select entry_date from public.gl_entries where id = v_entry)::text,
+    '2026-02-14');
+  perform pg_temp.check_eq('and carries the cheque number it came with',
+    (select reference from public.gl_entries where id = v_entry),
+    'CHQ 441002');
+  perform pg_temp.check_eq(
+    'the client account''s leg says what the money was for',
+    (select description from public.gl_lines
+      where entry_id = v_entry and account_id = v_1150),
+    'Deposit on the Rawang purchase');
+  perform pg_temp.check_eq('and the other leg says whose it is not',
+    (select description from public.gl_lines
+      where entry_id = v_entry and account_id = v_2300),
+    'Client monies held');
+  perform pg_temp.check_true('and the movement records WHEN it was posted',
+    (select posted_at is not null from public.client_account_transactions
+      where id = v_txn));
+
+  -- A movement with NO description of its own falls back to its number,
+  -- which is what a client ledger prints when there is nothing else.
+  insert into public.client_account_transactions
+    (org_id, transaction_no, transaction_date, matter_id,
+     transaction_type, bank_account_id, amount, currency, status)
+  values (v_org, 'CAT-9002', date '2026-02-20', v_matter,
+          'receipt', v_bank, 500, 'MYR', 'draft')
+  returning id into v_bare;
+  v_entry := public.post_client_transaction(v_bare);
+  perform pg_temp.check_eq(
+    'a movement with nothing said about it is named after itself',
+    (select description from public.gl_lines
+      where entry_id = v_entry and account_id = v_1150),
+    'CAT-9002');
+
+  -- ------------------------------------------------------------------
+  -- Who may post, and not twice
+  -- ------------------------------------------------------------------
+  insert into public.client_account_transactions
+    (org_id, transaction_no, transaction_date, matter_id,
+     transaction_type, bank_account_id, amount, currency, status)
+  values (v_org, 'CAT-9003', date '2026-02-21', v_matter,
+          'receipt', v_bank, 700, 'MYR', 'draft')
+  returning id into v_txn;
+
+  perform pg_temp.sign_in_as(pg_temp.another_user('luar-guaman@iakauntan.test'));
+  begin
+    perform public.post_client_transaction(v_txn);
+    v_msg := null;
+  exception when others then get stacked diagnostics v_msg = message_text;
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+  -- The WHOLE message. Two other refusals in this function are 23514
+  -- and one is a bare raise, and all of them mention an account.
+  perform pg_temp.check_eq(
+    'somebody outside the firm cannot move client money',
+    v_msg, 'Insufficient privileges to post');
+  perform pg_temp.check_true('and the movement is still a draft',
+    (select gl_entry_id is null and status = 'draft'
+       from public.client_account_transactions where id = v_txn));
+
+  perform public.post_client_transaction(v_txn);
+  perform pg_temp.check_refused(
+    'and a movement is posted once',
+    format('select public.post_client_transaction(%L)', v_txn),
+    'Transaction CAT-9003 is already posted');
+
+  -- ------------------------------------------------------------------
+  -- A firm whose chart is missing one of the two accounts
+  -- ------------------------------------------------------------------
+  -- Both refusals name `setup_legal_module`, which is the one thing a
+  -- firm in that state can do about it -- and both were worth nothing,
+  -- because every firm in this file has run it.
+  --
+  -- A company of its own for each, because the accounts have to be
+  -- really GONE and this firm has posted to both.
+  v_other := pg_temp.test_org('Guaman Tanpa 1150', array['legal']);
+  perform pg_temp.allow_many_companies();
+  insert into public.org_modules (org_id, module_code, is_enabled, enabled_at)
+  values (v_other, 'legal', true, now())
+  on conflict (org_id, module_code) do update set is_enabled = true;
+  perform public.create_fiscal_year(v_other, date '2026-01-01');
+  perform pg_temp.sign_in_as(v_owner);
+  perform public.setup_legal_module(v_other);
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_other, 'CL1', 'Somebody', 'customer') returning id into v_client;
+  insert into public.matters (org_id, matter_no, name, client_id, fee_earner)
+  values (v_other, 'M-1', 'A matter', v_client, v_owner) returning id into v_matter;
+  -- No bank account named, so the function falls to the chart's 1150 --
+  -- and that is the lookup whose refusal is under test.
+  insert into public.client_account_transactions
+    (org_id, transaction_no, transaction_date, matter_id,
+     transaction_type, amount, currency, status)
+  values (v_other, 'CAT-X1', date '2026-02-01', v_matter,
+          'receipt', 100, 'MYR', 'draft')
+  returning id into v_txn;
+  -- The client bank account points at 1150, so it goes first. And a
+  -- SOFT delete would not do: the lookup is a bare
+  -- `where org_id = ... and code = '1150'` with no `deleted_at is
+  -- null`, so a retired account of that code is still found and still
+  -- posted to -- the same shape already recorded in docs/handoff.md for
+  -- dispose_fixed_asset's 1510/1590/6400, now in a second module.
+  delete from public.bank_accounts
+   where org_id = v_other
+     and account_id = (select id from public.accounts
+                        where org_id = v_other and code = '1150');
+  delete from public.accounts where org_id = v_other and code = '1150';
+  perform pg_temp.check_refused(
+    'a firm with no client account in its chart is told to set the module up',
+    format('select public.post_client_transaction(%L)', v_txn),
+    'No client account configured. Run setup_legal_module first.');
+
+  v_other := pg_temp.test_org('Guaman Tanpa 2300', array['legal']);
+  perform pg_temp.allow_many_companies();
+  insert into public.org_modules (org_id, module_code, is_enabled, enabled_at)
+  values (v_other, 'legal', true, now())
+  on conflict (org_id, module_code) do update set is_enabled = true;
+  perform public.create_fiscal_year(v_other, date '2026-01-01');
+  perform pg_temp.sign_in_as(v_owner);
+  perform public.setup_legal_module(v_other);
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_other, 'CL1', 'Somebody else', 'customer') returning id into v_client;
+  insert into public.matters (org_id, matter_no, name, client_id, fee_earner)
+  values (v_other, 'M-1', 'Another matter', v_client, v_owner)
+  returning id into v_matter;
+  insert into public.client_account_transactions
+    (org_id, transaction_no, transaction_date, matter_id,
+     transaction_type, amount, currency, status)
+  values (v_other, 'CAT-X2', date '2026-02-01', v_matter,
+          'receipt', 100, 'MYR', 'draft')
+  returning id into v_txn;
+  delete from public.accounts where org_id = v_other and code = '2300';
+  perform pg_temp.check_refused(
+    'and so is one with nowhere to record what it owes the client',
+    format('select public.post_client_transaction(%L)', v_txn),
+    'No client monies held account configured. Run setup_legal_module first.');
+
+  -- And the two refusals are DIFFERENT sentences, which matters because
+  -- a firm meeting one of them has a different thing to fix. Asserted
+  -- on the whole message above rather than on a fragment, for the
+  -- reason bank_transfers.sql records: a fragment both share would pass
+  -- with either rule deleted.
+  perform pg_temp.sign_out();
+  raise notice 'ok   client money: who, when, which chart, and what was said about it';
+end $$;
+
+
 rollback;

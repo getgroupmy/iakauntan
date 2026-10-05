@@ -559,4 +559,36 @@
 # sweep of the guard next door. This one is a comment in the CODE
 # asserting that a test exists. Measured:
 # `all SQL assertions passed (384 files, 14676 assertions executed)`.
-14676
+#
+# 14688, +12: client_account.sql. post_client_transaction -- a movement
+# on a solicitor's CLIENT account, money the firm holds and does not own
+# -- scored 15 of 26 on its own file, 16 across its five. 25 of 25
+# after, nothing equivalent, and every real gap closable in the one file
+# the function is named for.
+#
+# THE TEN THAT LIVED ARE ALL OF ONE KIND: the two rules in
+# client_account.sql's own header are asserted thoroughly and nothing
+# else is. Rule 1 (client money in a client account, never the firm's)
+# kills four mutants on its own; rule 2 (one client's money is not
+# another's) has its own block. Both guards at the TOP of the function,
+# the two "run setup_legal_module" refusals, the journal's date and
+# reference, the movement's own description and its fallback, and
+# posted_at were between them worth nothing.
+#
+# A file that knows exactly what it is for can be exhaustive about that
+# and empty about everything beside it. This one names the Solicitors'
+# Accounts Rules 1990 and quotes two of them -- and a breach of those
+# rules is a disciplinary matter rather than a bookkeeping one, which
+# makes "who posted it, and when" the part a regulator reads first and
+# the part nothing asserted. state_write_coverage.py had flagged
+# posted_at here, its second real hit.
+#
+# AND THE SAME `deleted_at` FINDING TURNED UP IN A SECOND MODULE. To
+# reach the "no client account configured" refusal the fixture has to
+# HARD-delete 1150 (and the bank account pointing at it first), because
+# the lookup is a bare `where org_id = ... and code = '1150'` with no
+# `deleted_at is null` -- so a retired account of that code is still
+# found and still posted to, exactly as recorded in docs/handoff.md for
+# dispose_fixed_asset's 1510/1590/6400. Measured:
+# `all SQL assertions passed (384 files, 14688 assertions executed)`.
+14688

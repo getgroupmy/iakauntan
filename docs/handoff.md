@@ -13915,3 +13915,66 @@ naming the gap, a static sweep of source text, and a careful sweep of
 the guard next door. This one is **a comment in the code asserting that
 a test exists** — and it is the most believable of the four, because it
 is written by the person who would know.
+
+### post_client_transaction: a file exhaustive about its two rules and empty beside them
+
+A movement on a solicitor's **client** account — money the firm holds
+and does not own, under the Solicitors' Accounts Rules 1990.
+
+**26 mutants plus a control. 15 killed on `client_account.sql`, 16
+across its five files. 25 of 25 after the work, nothing equivalent —
+and every real gap was closable in the one file the function is named
+for.**
+
+**The ten that lived are all of one kind: the two rules in
+`client_account.sql`'s own header are asserted thoroughly and nothing
+else is.** Rule 1 (client money in a client account, never the firm's)
+kills four mutants on its own; rule 2 (one client's money is not
+another's) is a deferred constraint trigger with its own block. And
+then:
+
+| what | assertions |
+| --- | --- |
+| both guards at the top of the function | none |
+| the two "run `setup_legal_module`" refusals | none |
+| the journal's date | none |
+| the journal's reference | none |
+| the movement's description, and the fallback to its number | none |
+| `posted_at` | none |
+
+**A file that knows exactly what it is for can be exhaustive about that
+and empty about everything beside it.** That is a different failure
+from the ones already in `docs/widget-tests.md` entry 15 — nothing here
+*looked* like coverage; the file simply had a subject, and the subject
+was not the whole function. A header that states two rules is a promise
+about two rules.
+
+And a breach of those rules is a disciplinary matter rather than a
+bookkeeping one, which makes **"who posted it, and when" the part a
+regulator reads first** and the part nothing asserted.
+`state_write_coverage.py` had flagged `posted_at` here — its second
+real hit.
+
+#### The `deleted_at` finding, now in a second module
+
+To reach the "No client account configured" refusal, the fixture has to
+**hard**-delete account 1150 (and the bank account pointing at it
+first), because the lookup is a bare
+`where org_id = ... and code = '1150'` with **no `deleted_at is null`**.
+A retired account of that code is still found and still posted to —
+exactly as already recorded above for `dispose_fixed_asset`'s
+1510/1590/6400.
+
+So that is two modules with the same shape, against `app.cheque_account`
+and `app.deposit_account`, which filter on `deleted_at is null` and
+then revive the row. Still left as a finding rather than a migration,
+for the same reason: what a statutory posting resolves to is the user's
+call. The list of lookups that would need the same treatment is now
+`dispose_fixed_asset` (1510, 1590, 6400), `run_depreciation`,
+`depreciation_preview` and `post_client_transaction` (1150, 2300).
+
+**29 of 45 money movers now have a mutants file.** Next with none:
+`import_opening_balances`, `post_manufacturing_order`,
+`app.run_recurring_journals`, `post_purchase_payment`
+(flagged by the survey for `posted_at`/`posted_by`), and the four demo
+builders.
