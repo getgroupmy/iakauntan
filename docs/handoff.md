@@ -13216,3 +13216,78 @@ separate all three steps.
 **16 of 45 money movers now have a mutants file.** Next in the ranking
 with none: `settle_shared_payment`, `close_fiscal_year`,
 `reopen_fiscal_year`, `create_deposit` (five definitions), `clear_pdc`.
+
+### settle_shared_payment: almost every survivor needed a second of something
+
+The acquirer's callback — the one that turns a customer's card payment
+on a shared invoice link into a receipt in the tenant's own ledger.
+`shared_invoice_payment.sql` is the only file that drives it;
+`function_grants.sql` names it to assert its grant and can kill
+nothing.
+
+**30 mutants plus a control. 13 killed, 17 survived; 28 of 30 after the
+work, the last two proven equivalent.**
+
+**Almost every survivor needed a SECOND of something.** The file had
+one company, one bank account, one acquirer, one mode, one currency and
+one rate, and seventeen mutants lived in the gap between the one and
+the two:
+
+| what was missing | what it hid |
+| --- | --- |
+| a second acquirer | which account the takings land in, under which mode code |
+| a second bank account | the same, observably |
+| a second company | whether the config lookup is org-scoped |
+| a second currency | the receipt's currency and its rate |
+| a callback with no amount | `coalesce(p_paid_amount, 0)` |
+| a callback with no `paid` | `coalesce(p_paid, false)` |
+| a padded reference | `btrim` |
+| a mixed-case gateway code | `lower` |
+
+**The mode code is the twelfth trap in `docs/widget-tests.md`,
+verbatim, in a different module.**
+`coalesce(v_cfg.payment_mode_code, '03')` falls back to `'03'`, and the
+fixture configured its settlement with `'03'`. "Under the mode the shop
+chose" was an assertion that could not fail — the value read from the
+config and the value the code invents when it finds none were one
+string. The second acquirer is given `'06'`.
+
+**And one survivor was not a missing assertion at all — it was another
+function's fallback repairing the defect before anything looked.**
+Dropping `v_cfg.settlement_bank_account_id` from the receipt insert
+survived because `app.post_receipt_internal` resolves a bankless
+receipt to the settlement account of the first gateway by `created_at`,
+else the default active account, else the oldest — **and writes the
+answer back onto the row.** With one bank account and one gateway the
+repair and the correct value are the same row, so the assertion
+`r.bank_account_id = v_bank` was reading a figure a different function
+had fixed. Two gateways settling into two accounts, and a payment
+through the second, makes the repair visible as a repair.
+
+**That is a shape to look for everywhere a posting function resolves
+what its caller left null** — which, after `0728`, is most of them. The
+fallback is correct and was added on purpose; what it also does is make
+its callers' own choices untestable unless the fixture gives the
+fallback a different answer to give.
+
+The two equivalents, both proven by shape rather than reasoned:
+
+- **`base_amount` on the receipt insert.** The insert writes
+  `v_take, v_take`; `app.post_receipt_internal` overwrites the column
+  with `round(amount * rate, 2)` two statements later, inside the same
+  branch, unconditionally. The inserted value is unobservable. The file
+  asserts the surviving figure instead — 420.00 on a USD 100 invoice at
+  4.2.
+- **`least(v_pay.amount, balance)` with `p_paid_amount` in place of
+  `v_pay.amount`.** The short-payment guard has already returned unless
+  `paid >= v_pay.amount`; `v_pay.amount` was the balance when the
+  payment began; and a posted invoice's balance never RISES — there is
+  no unallocate, no amend-upward, and `void_sales_document` refuses a
+  document with `paid_amount > 0`. So `paid >= v_pay.amount >= balance`
+  and both forms return the balance. The finding is about the code: the
+  balance cap does all the work and `v_pay.amount` inside the `least` is
+  belt-and-braces against a state this schema cannot reach.
+
+**17 of 45 money movers now have a mutants file.** Next with none:
+`close_fiscal_year`, `reopen_fiscal_year`, `create_deposit` (five
+definitions), `clear_pdc`, `run_recurring_journals_for`.

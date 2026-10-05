@@ -205,4 +205,35 @@
 # different sentence and the same code, and only the WHOLE message
 # tells them apart. Measured:
 # `all SQL assertions passed (384 files, 14472 assertions executed)`.
-14472
+#
+# 14500, +28: shared_invoice_payment.sql. settle_shared_payment -- the
+# acquirer's callback, which turns a card payment on a shared invoice
+# link into a receipt in the tenant's ledger -- scored 13 of 30 on the
+# only file that drives it (`function_grants.sql` names it to assert
+# its grant and can kill nothing). 28 of 30 after, the last two proven
+# equivalent.
+#
+# ALMOST EVERY SURVIVOR NEEDED A SECOND OF SOMETHING: a second
+# acquirer, a second bank account, a second company, a second currency,
+# a callback with no amount, a callback with no `paid`, a padded
+# reference, a mixed-case gateway code. Seventeen mutants lived in the
+# gap between the one and the two.
+#
+# THE MODE CODE IS THE TWELFTH TRAP VERBATIM.
+# `coalesce(v_cfg.payment_mode_code, '03')` falls back to '03' and the
+# fixture configured its settlement with '03', so "under the mode the
+# shop chose" was an assertion that could not fail. The second acquirer
+# is given '06'.
+#
+# AND ONE SURVIVOR WAS ANOTHER FUNCTION'S FALLBACK HIDING THE DEFECT.
+# Dropping the settlement account from the receipt insert survived
+# because app.post_receipt_internal resolves a bankless receipt to the
+# first gateway's settlement account, else the default active one, else
+# the oldest, and WRITES THE ANSWER BACK. With one bank account the
+# repair and the correct value are the same row, so the assertion was
+# reading a figure a different function had fixed. Two gateways into two
+# accounts makes the repair visible as a repair -- and that is a shape
+# to look for everywhere a posting function resolves what its caller
+# left null. Measured:
+# `all SQL assertions passed (384 files, 14500 assertions executed)`.
+14500
