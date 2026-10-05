@@ -12928,3 +12928,65 @@ That first one generalises past this function. Every guard of the form
 under, and that is all. The boundary is where off-by-one lives, and a
 suite can assert a refusal thoroughly without ever asserting the
 permission next to it.
+
+### import_opening_stock: 25 of 25, and a prediction that was half right
+
+The best result of the sweep. **25 mutants, twenty-four killed by
+`opening_stock.sql` and the twenty-fifth by `opening_import_shapes.sql`
+— 25 of 25, no gaps, nothing equivalent.**
+
+| file | kills |
+| --- | --- |
+| `opening_stock.sql` | 24 of 25 |
+| `opening_import_shapes.sql` | the 25th, and 17 others |
+| `migration_progress.sql` | 1 — it drives the preview, not the rules |
+
+A different shape from the posting functions: **thirteen validation
+rules in one `elsif` chain**, a preview mode and a commit mode, and a
+comparison against what the ledger already says stock is worth. An
+`elsif` chain is the easiest thing in SQL to test incompletely, because
+every rule shadows the ones before it — a row that trips rule 2 never
+reaches rule 7, so a fixture can cover thirteen rules with thirteen rows
+and still not prove which rule fired for any of them. Each rule got its
+own mutant for that reason, and all thirteen died.
+
+#### The prediction, and what it got wrong
+
+Going in, the three gap families this sweep keeps finding were written
+down and looked for deliberately: unasserted permission guards,
+boundaries no fixture stands on, and fixtures collapsing several rules
+into one value. All three were given mutants.
+
+The **boundary** one duly survived `opening_stock.sql`. `v_cost < 0`
+mutated to `<= 0` refuses stock brought in at no cost — and free stock
+is real, which is why the rule is `< 0` and not `<= 0`, one line below a
+quantity rule that IS `<= 0`. Two adjacent comparisons that differ on
+purpose, the exact shape that had just cost `send_stock_transfer` a gap.
+
+**It is not a gap.** `opening_import_shapes.sql` asserts it directly —
+*"stock brought in at no cost at all is allowed — samples are stock"* —
+written by somebody who had thought about free samples, in the file
+about shapes rather than the file about opening stock.
+
+So: right about the shape, wrong about the gap. The only reason no
+duplicate assertion was added is the rule this sweep keeps proving —
+**run every file that reaches the function before believing a
+survivor.** Four functions in this sweep have now had a survivor in one
+file that another file kills, and this is the first time the prediction
+of a gap family was itself the thing that needed checking.
+
+#### A malformed mutant is safe, and that is worth knowing
+
+One mutant dropped a closing parenthesis along with the predicate it was
+deleting, and came back as
+
+```
+HARNESS ERROR: an item that has already moved ... -- ERROR:  mismatched parentheses
+```
+
+That is not a kill and not a survival — the apply failed, so the
+function was never replaced. Checked rather than assumed: the live body
+still matched the migration and carried no mutation marker. The harness
+is safe against a mutant that will not parse, because PostgreSQL refuses
+the whole `create or replace` atomically. A mutant that parses and is
+wrong is the dangerous kind, which is what the CONTROL entry is for.
