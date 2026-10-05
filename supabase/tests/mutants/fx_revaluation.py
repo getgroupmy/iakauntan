@@ -15,20 +15,32 @@
 # `fx_shapes.sql` and 12 survived; 32 of 33 across all four files, with
 # one proven EQUIVALENT. The control lived.
 #
-# SUPERSEDED THE SAME EVENING, and the figures above describe a file
-# that no longer exists. The harness's new pre-flight found that the
-# single mutant "ANOTHER COMPANY's invoices are retranslated" matched
-# its anchor TWICE -- this function's sales and purchase blocks have
+# AMENDED THE SAME EVENING. The harness's new pre-flight found that the
+# mutant "ANOTHER COMPANY's invoices are retranslated" matched its
+# anchor TWICE -- this function's sales and purchase blocks have
 # character-for-character identical `where` clauses -- so it dropped the
-# org scope from BOTH, and a double mutant's kill proves neither half.
-# The sales side was reported covered on evidence the purchase side
-# could have supplied, and the purchase side had no mutant at all.
+# org scope from BOTH, and a double mutant's kill proves neither half on
+# its own. Its anchor now carries `from public.sales_documents d`, which
+# only the sales block has.
 #
-# It is now two mutants, 35 in the file, with anchors that carry the
-# table each block reads. THE UNION ABOVE HAS NOT BEEN RE-MEASURED
-# AGAINST THE NEW PAIR: whoever next sweeps this function should do so
-# and replace this header, rather than trust a figure measured with one
-# mutant where there are now two.
+# THE PURCHASE SIDE ALREADY HAD ITS OWN MUTANT, further down: "ANOTHER
+# COMPANY's bills are retranslated", whose anchor runs on through
+# `and d.status <> 'void'` and so matches the purchase block alone. A
+# first attempt at this amendment added a second purchase mutant
+# alongside it, having asserted in a commit message that the purchase
+# side had none -- which was simply untrue, and the duplicate has been
+# removed. So the double anchor left the SALES scope resting on evidence
+# the purchase block could have supplied; it did not leave the purchase
+# scope unmeasured.
+#
+# RE-MEASURED against `fx_shapes.sql` with the anchors separated: both
+# die on their own, so each side's org scope really is asserted. That
+# file alone kills 28 of 33, and the six that survive it are the ones
+# the other three files take -- the empty run and the netting in
+# `fx_revaluation.sql`, and three about WHICH prior entry is undone in
+# `reversal.sql`. THE UNION HAS NOT BEEN RE-RUN across all four; the
+# figure at the top of this header predates the split and should be
+# replaced by whoever next sweeps the whole set.
 #
 #   fx_shapes.sql         kills 22, then 32
 #   fx_revaluation.sql    kills the empty run and the netting
@@ -179,15 +191,6 @@ m("ANOTHER COMPANY's INVOICES are retranslated",
   "       where d.currency <> v_base  -- sales org scope dropped",
   "-- sales org scope dropped")
 
-m("ANOTHER COMPANY's BILLS are retranslated",
-  "revalue_foreign_balances",
-  "        from public.purchase_documents d\n"
-  "        join public.contacts c on c.id = d.contact_id\n"
-  "       where d.org_id = p_org_id and d.currency <> v_base",
-  "        from public.purchase_documents d\n"
-  "        join public.contacts c on c.id = d.contact_id\n"
-  "       where d.currency <> v_base  -- purchase org scope dropped",
-  "-- purchase org scope dropped")
 
 m("an invoice dated the valuation day ITSELF is left out",
   "revalue_foreign_balances",
