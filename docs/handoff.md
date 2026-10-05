@@ -11564,3 +11564,68 @@ seconds, and it works often enough that **Android passed on every commit
 after `f1e65ffe`**. Re-run the failed job rather than re-diagnosing:
 `gh api -X POST repos/getgroupmy/iakauntan/actions/runs/<id>/rerun-failed-jobs`,
 which returns 403 "already running" while any job in that run is in flight.
+
+## 5 October: the statutory engine, mutation-tested for the first time
+
+`CLAUDE.md`'s second rule is that anything touching EPF, SOCSO, EIS, PCB or an
+SSM deadline needs a test that would fail if the number moved. The machinery
+to check that — `scripts/mutate_sql.py` — has existed for weeks and had been
+pointed at exactly one function family, bank rules. **The statutory engine had
+never been measured.**
+
+Eight mutants against `app.calc_statutory`, each moving a real statutory
+number, now committed as `supabase/tests/mutants/calc_statutory.py`:
+
+| mutant | killed by |
+|---|---|
+| the SOCSO insured ceiling ignored, so high wages over-contribute | `statutory.sql` — "SOCSO caps at 6000, employee: expected 30.00, got 60.00" |
+| KWSP's round-up to the next RM20 removed | `statutory.sql` — "expected 333, got 332" |
+| the wage rounded DOWN to the band instead of up | `statutory.sql` — "expected 333, got 330" |
+| the employee pays the employer's rate | `statutory.sql` — "EPF 5000 employee: expected 550, got 650" |
+| a wage no band covers reports the schedule as VERIFIED | `statutory_schedules.sql` |
+| a band's flat amount ignored in favour of the percentage | `statutory_schedules.sql` — "expected 24.7" |
+| an unpaid month contributes, the `<= 0` guard losing its equals | `statutory_schedules.sql` |
+| the lowest matching band wins instead of the highest | `statutory_changeover.sql` — "the band starting higher is the one charged: expected 250.00, got 50.0" |
+
+**8 of 8 killed, control surviving every run.** The statutory arithmetic is
+genuinely asserted, not merely covered.
+
+### The finding is about METHOD, and it nearly produced a false alarm
+
+Run against `statutory.sql` alone — 90 assertions, the obvious choice — the
+score is **4 of 8**, and the four survivors read as four missing assertions
+in the most safety-critical function in the product. They are not. Three are
+killed by `statutory_schedules.sql` and the fourth by
+`statutory_changeover.sql`; `payroll_run.sql` kills none of them.
+
+`mutate_sql.py` takes ONE test file. CI runs all of them. So **a per-file
+mutation score understates the suite, and a survivor is only a gap once every
+file that calls the function has been tried** — four files call this one.
+Reporting the first number would have invented work and impugned a sound
+suite.
+
+The sharpest instance: "a wage no band covers reports the schedule as
+verified" survives `statutory.sql`, and that is the **exact defect migration
+`0404` was written to fix** — a verified table with a missing band printing
+"verified" on a payslip that deserved a warning. A single-file run says that
+fix is unprotected. `statutory_schedules.sql` kills it.
+
+### Running it again
+
+The cluster `run_locally.sh` leaves behind is what `mutate_sql.py` talks to
+(`postgresql://postgres@/postgres?host=/var/tmp&port=5599`). If it has gone —
+and it went once mid-sweep here, reported honestly as a `HARNESS ERROR` and
+not as a survivor — the data directory usually survives and restarting beats
+a twelve-minute rebuild:
+
+```
+rm -f /var/tmp/pgdata/postmaster.pid
+su postgres -c "/usr/lib/postgresql/16/bin/pg_ctl -D /var/tmp/pgdata \
+  -l /var/tmp/pg.log -o '-k /var/tmp -p 5599' start"
+```
+
+Then confirm the schema is really there before trusting a baseline —
+`select count(*) from pg_proc join pg_namespace ... where nspname='app'`
+should read 518, and `public` should hold 381 tables. There is no
+`supabase_migrations.schema_migrations` in a locally-built cluster, so its
+absence is not evidence of an empty database.
