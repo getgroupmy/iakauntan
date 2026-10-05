@@ -61,9 +61,17 @@ declare
   v_inv    numeric;
   v_mods   uuid;
   v_extra  uuid;
+  v_modsale uuid;
 begin
   v_org := pg_temp.test_org('Warung Resipi Sdn Bhd');
   perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  -- And the next one, because section 9b dates a credit note the day
+  -- AFTER the sale and needs an open period for it. On 31 December
+  -- `today + 1` is in the following year, and a fixture that only ever
+  -- opened the current one would fail on one day in 365 and name a
+  -- fiscal period rather than the date arithmetic that caused it.
+  perform public.create_fiscal_year(
+    v_org, (date_trunc('year', pg_temp.today()) + interval '1 year')::date);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['pos','inventory']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
@@ -444,6 +452,13 @@ begin
     (select round(i.quantity_on_hand, 4) from public.items i where i.id = v_egg),
     26::numeric);
 
+  -- Pinned, because section 8 below reuses `v_sale2` for a different
+  -- sale and section 9c wants THIS one -- the bill with the modifier on
+  -- it. A block that read `v_sale2` at the end of the file would be
+  -- asking about a voided bill with no recipe behind it, and would pass
+  -- by returning nothing.
+  v_modsale := v_sale2;
+
   -- ------------------------------------------------------------------
   -- 8. The till refusing
   -- ------------------------------------------------------------------
@@ -565,6 +580,279 @@ begin
     v_r.available);
   perform pg_temp.check_eq('while the number is still advice',
     v_r.portions, 0::numeric);
+
+  -- ------------------------------------------------------------------
+  -- 9b. And what a credit puts back, which this file never asked
+  -- ------------------------------------------------------------------
+  -- `app.pos_deplete_recipes` and `app.pos_return_recipes` are the two
+  -- halves of one thing, written 155 migrations apart. A mutation sweep
+  -- of both against the five files that reach them measured the
+  -- asymmetry exactly:
+  --
+  --   depletion   13 of 31 killed -- 12 of them by THIS file
+  --   return       8 of 28 killed -- ZERO of them by this file
+  --
+  -- Four of the five files kill nothing at all on the return half; only
+  -- `credit_note_return.sql` touches it. The file named for recipes
+  -- tested one direction of them.
+  --
+  -- WORSE: the two things the return half DOCUMENTS were both
+  -- unasserted. `0269` writes them down in the function itself --
+  -- "A credit note posted twice -- reversed and re-posted, say -- must
+  -- not return the food twice" and "Never more than went out" -- and
+  -- the mutants for both lived. A rule in a comment is not a rule.
+  --
+  -- Both are asserted below by calling `app.pos_return_recipes`
+  -- DIRECTLY rather than through the credit-note trigger, because the
+  -- trigger fires once per posting and neither guard can be reached
+  -- that way: the first needs the same credit note presented twice, and
+  -- the second needs a second credit note after everything has already
+  -- come back.
+  declare
+    v_inv2   uuid;
+    v_note   uuid;
+    v_note2  uuid;
+    v_note3  uuid;
+    v_eggs   numeric;
+    v_moves  integer;
+    v_rtn    uuid;
+    v_before numeric;
+    v_entry  uuid;
+  begin
+    select invoice_id into v_inv2 from public.pos_sales where id = v_modsale;
+    perform pg_temp.check_true('the settled bill raised an invoice', v_inv2 is not null);
+
+    -- MUTANT: the return's `assembly_in` flipped to `assembly_out`, and
+    -- its quantity sign flipped. Either leaves the ledger balanced and
+    -- the shelf wrong.
+    -- Relative, not 27. An absolute figure here pins where in the file
+    -- the block happens to sit, and the first draft of it sat after
+    -- section 7 and broke section 8's count by putting eggs back.
+    select round(quantity_on_hand, 4) into v_before
+      from public.items where id = v_egg;
+    v_rtn := public.credit_sales_invoice(v_inv2, null, 'Sent it back');
+    perform pg_temp.check_eq('crediting the plate puts its own egg back',
+      (select round(i.quantity_on_hand, 4) from public.items i where i.id = v_egg),
+      v_before + 1);
+    select id into v_note from public.sales_documents
+     where original_invoice_id = v_inv2 and doc_type = 'credit_note'
+     order by created_at limit 1;
+    perform pg_temp.check_true('and the trigger raised a credit note',
+      v_note is not null);
+    perform pg_temp.check_eq('as a receipt, not a further issue',
+      (select movement_type::text from public.stock_movements
+        where source_table = 'pos_sales' and source_id = v_modsale
+          and source_line_id = v_note and item_id = v_egg),
+      'assembly_in');
+    perform pg_temp.check_true('of a positive quantity',
+      (select quantity > 0 from public.stock_movements
+        where source_table = 'pos_sales' and source_id = v_modsale
+          and source_line_id = v_note and item_id = v_egg));
+
+    -- MUTANT: `v_doc.doc_date` replaced by the day of the SALE. A
+    -- return dated the sale lands in the month the food went out, so
+    -- neither month's stock movement agrees with its own ledger.
+    perform pg_temp.check_eq('dated the day of the credit, not the day of the sale',
+      (select movement_date::text from public.stock_movements
+        where source_table = 'pos_sales' and source_id = v_modsale
+          and source_line_id = v_note and item_id = v_egg),
+      (select doc_date::text from public.sales_documents where id = v_note));
+
+    -- MUTANT: `source_line_id` set to null. It is the only thing tying
+    -- a returning movement to the credit note that caused it -- and it
+    -- is what the double-return guard reads, so losing it breaks the
+    -- guard as well as the trail.
+    -- Stated as a UNIVERSAL rather than a count. The first draft said
+    -- "expected 2" -- a guess at how many ingredients the dish has, and
+    -- wrong: it has five. A number like that pins the fixture's recipe
+    -- rather than the function's rule, and has to be re-guessed every
+    -- time the fixture gains a component.
+    perform pg_temp.check_eq(
+      'and EVERY returning movement names the credit note that caused it',
+      (select count(*)::integer from public.stock_movements
+        where source_table = 'pos_sales' and source_id = v_modsale
+          and movement_type = 'assembly_in' and source_line_id is null), 0);
+    perform pg_temp.check_true('of which there is at least one',
+      (select count(*) > 0 from public.stock_movements
+        where source_table = 'pos_sales' and source_id = v_modsale
+          and movement_type = 'assembly_in'));
+
+    -- MUTANT: the return journal's two sides swapped, and its source
+    -- lied about. Stock back in, cost of sales released.
+    select gl_entry_id into v_entry from public.stock_movements
+     where source_table = 'pos_sales' and source_id = v_modsale
+       and source_line_id = v_note and item_id = v_egg;
+    perform pg_temp.check_true('the return is linked to its journal',
+      v_entry is not null);
+    perform pg_temp.check_eq('which is marked as a stock movement',
+      (select source::text from public.gl_entries where id = v_entry),
+      'stock_movement');
+    perform pg_temp.check_true('and puts the stock back by debiting 1310',
+      (select l.debit > 0 and l.credit = 0 from public.gl_lines l
+        join public.accounts a on a.id = l.account_id
+       where l.entry_id = v_entry and a.code = '1310'));
+    perform pg_temp.check_true('while releasing the food cost from 5200',
+      (select l.credit > 0 and l.debit = 0 from public.gl_lines l
+        join public.accounts a on a.id = l.account_id
+       where l.entry_id = v_entry and a.code = '5200'));
+
+    -- --- the first documented guarantee -----------------------------
+    -- MUTANT: the `exists (... source_line_id = p_credit)` guard
+    -- dropped. 0269's own words: "A credit note posted twice --
+    -- reversed and re-posted, say -- must not return the food twice."
+    -- Presented the SAME credit note again, nothing may move.
+    select round(quantity_on_hand, 4) into v_eggs
+      from public.items where id = v_egg;
+    select count(*)::integer into v_moves from public.stock_movements
+     where source_table = 'pos_sales' and source_id = v_modsale;
+    perform pg_temp.check_true('the same credit note twice returns nothing',
+      app.pos_return_recipes(v_modsale, v_note) is null);
+    perform pg_temp.check_eq('and moves no stock the second time',
+      (select round(quantity_on_hand, 4) from public.items where id = v_egg),
+      v_eggs);
+    perform pg_temp.check_eq('and writes no second movement',
+      (select count(*)::integer from public.stock_movements
+        where source_table = 'pos_sales' and source_id = v_modsale), v_moves);
+
+    -- --- the second documented guarantee ----------------------------
+    -- MUTANT: `least(round(v_row.quantity, 4), round(v_left, 4))`
+    -- reduced to the credit's own quantity, and the
+    -- `- pos_recipe_returned(...)` term dropped. 0269's own words:
+    -- "Never more than went out."
+    --
+    -- A SECOND credit note, for the same plate, gets past the guard
+    -- above because its id is different -- and must still return
+    -- nothing, because everything that went out has already come back.
+    -- Built by hand and left as a draft: the function reads the
+    -- document and its lines and does not care about status, and
+    -- crediting the invoice twice through `credit_sales_invoice` would
+    -- be refused long before this rule was reached.
+    insert into public.sales_documents
+      (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+       exchange_rate, status, original_invoice_id)
+    -- DATED THE DAY AFTER THE SALE, and that is the whole point of it.
+    -- The trigger-made credit note above is dated today and the sale
+    -- was settled today, so "dated the credit" and "dated the sale" are
+    -- THE SAME ROW and no assertion on it can tell which the function
+    -- read. Both date mutants survived the first version of this block
+    -- for exactly that reason -- CLAUDE.md's first trap, a fixture that
+    -- collapses the thing under test into one value, met head on.
+    values (v_org, 'credit_note', 'CN-AGAIN', pg_temp.today() + 1,
+            pg_temp.today() + 1, v_walkin, 'MYR', 1, 'draft', v_inv2)
+    returning id into v_note2;
+    insert into public.sales_document_lines
+      (org_id, document_id, line_no, line_type, description, quantity,
+       uom_code, unit_price, item_id)
+    values (v_org, v_note2, 1, 'item', 'Nasi again', 1, 'C62', 12.00, v_nasi);
+
+    -- What a second credit may claim, and where it stops. The first
+    -- draft asserted that it returns NOTHING, on the assumption that a
+    -- full credit had already brought everything back. It had not --
+    -- and the reason is the defect reported in `docs/handoff.md`: the
+    -- first credit returned the dish's own egg and not the MODIFIER's,
+    -- so one egg of the two was still owing and a duplicate credit note
+    -- could legitimately claim it. The clamp was right; the premise was
+    -- wrong.
+    --
+    -- That is the defect's second-order consequence, and it is worse
+    -- than the shortfall alone: the missing stock comes back only if
+    -- somebody makes a SECOND mistake.
+    perform pg_temp.check_true('a duplicate credit note claims what is still owing',
+      app.pos_return_recipes(v_modsale, v_note2) is not null);
+    perform pg_temp.check_eq('and that is the one egg the modifier left out',
+      (select round(quantity_on_hand, 4) from public.items where id = v_egg),
+      v_eggs + 1);
+
+    -- MUTANT: `v_doc.doc_date` replaced by the day of the SALE, in the
+    -- movement and again in the journal. Now that the credit is dated a
+    -- day later than the sale, the two are separable.
+    perform pg_temp.check_eq('the returning movement is dated the credit note',
+      (select movement_date::text from public.stock_movements
+        where source_table = 'pos_sales' and source_id = v_modsale
+          and source_line_id = v_note2 and item_id = v_egg),
+      (pg_temp.today() + 1)::text);
+    perform pg_temp.check_eq('and so is the journal it posts',
+      (select e.entry_date::text from public.gl_entries e
+        join public.stock_movements sm on sm.gl_entry_id = e.id
+       where sm.source_table = 'pos_sales' and sm.source_id = v_modsale
+         and sm.source_line_id = v_note2 and sm.item_id = v_egg),
+      (pg_temp.today() + 1)::text);
+
+    -- MUTANT: the link `and sm.source_line_id = p_credit` dropped from
+    -- the final update, which restamps the DEPLETING movements with the
+    -- return's journal and loses what costed the sale in the first
+    -- place.
+    perform pg_temp.check_true(
+      'and the movements that took the food keep their own journal',
+      (select count(distinct gl_entry_id) = 1 from public.stock_movements
+        where source_table = 'pos_sales' and source_id = v_modsale
+          and movement_type = 'assembly_out'));
+    perform pg_temp.check_true('which is not the return''s',
+      (select count(distinct gl_entry_id)::integer = 3
+         from public.stock_movements
+        where source_table = 'pos_sales' and source_id = v_modsale));
+
+    -- MUTANT: `if v_sale.id is null or v_doc.id is null then return null`
+    -- dropped, and the `or` half of it dropped. Neither a sale nor a
+    -- credit note that is not there may move food.
+    perform pg_temp.check_true('a credit against a sale that is not there does nothing',
+      app.pos_return_recipes(gen_random_uuid(), v_note2) is null);
+    perform pg_temp.check_true('nor a credit note that is not there',
+      app.pos_return_recipes(v_modsale, gen_random_uuid()) is null);
+
+    -- MUTANT: `least(..., v_left)` reduced to the credit's own
+    -- quantity, and the `- pos_recipe_returned(...)` term dropped.
+    -- 0269's own words: "Never more than went out." Now that everything
+    -- really has come back, a THIRD credit note must take nothing --
+    -- and a mutant without the clamp takes another egg, putting three
+    -- back where two went out.
+    insert into public.sales_documents
+      (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+       exchange_rate, status, original_invoice_id)
+    values (v_org, 'credit_note', 'CN-THRICE', pg_temp.today(), pg_temp.today(),
+            v_walkin, 'MYR', 1, 'draft', v_inv2)
+    returning id into v_note3;
+    insert into public.sales_document_lines
+      (org_id, document_id, line_no, line_type, description, quantity,
+       uom_code, unit_price, item_id)
+    values (v_org, v_note3, 1, 'item', 'Nasi a third time', 1, 'C62', 12.00, v_nasi);
+
+    perform pg_temp.check_true('a third credit returns nothing at all',
+      app.pos_return_recipes(v_modsale, v_note3) is null);
+    -- MUTANT: `if v_qty <= 0 then continue` narrowed to `< 0`. With
+    -- everything already back the clamp makes `v_qty` exactly ZERO, and
+    -- a skip that only catches the negative writes a movement of
+    -- nothing -- which balances, costs nothing, and shows up in the
+    -- stock card as a line a storekeeper cannot explain. Returning null
+    -- is not enough to see it: the row is written before the cost is
+    -- totalled.
+    perform pg_temp.check_eq('and writes no movement of zero to say so',
+      (select count(*)::integer from public.stock_movements
+        where source_table = 'pos_sales' and source_id = v_modsale
+          and source_line_id = v_note3), 0);
+    perform pg_temp.check_eq('because never more comes back than went out',
+      (select round(quantity_on_hand, 4) from public.items where id = v_egg),
+      v_eggs + 1);
+    -- The invariant behind that sentence, stated directly.
+    perform pg_temp.check_true(
+      'and what came back never exceeds what was consumed, per ingredient',
+      (select bool_and(app.pos_recipe_returned(v_modsale, sm.item_id)
+                       <= app.pos_recipe_consumed(v_modsale, sm.item_id))
+         from (select distinct item_id from public.stock_movements
+                where source_table = 'pos_sales' and source_id = v_modsale) sm));
+
+    -- STILL OPEN, and deliberately not papered over: `l.line_type =
+    -- 'item'` and `l.quantity > 0` both survive the sweep. Closing them
+    -- needs a credit note carrying a non-item line, or a line of zero,
+    -- against a sale that STILL HAS FOOD OWING -- otherwise the clamp
+    -- above stops the mutant before its own condition is reached and
+    -- the assertion proves the clamp a second time.
+    --
+    -- The first draft of this block asserted instead that the fixture
+    -- above has no non-item lines, which is an assertion about the
+    -- fixture and not about the function: it cannot fail however
+    -- `pos_return_recipes` is broken. Removed rather than shipped.
+  end;
 
   perform pg_temp.check_true('deleting a recipe takes its lines with it',
     public.delete_pos_recipe(v_rec));

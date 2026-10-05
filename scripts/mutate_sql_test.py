@@ -51,6 +51,12 @@ begin
                     where b.org = p_id and b.is_default limit 1))
     into v_x from public.thing a where a.id = p_id;
   perform app.post(p_id, 'stock_movement', v_x, 'Narrative ' || p_id, 'thing', p_id);
+  -- Another company's rows are not this company's, and the apostrophes
+  -- in this very sentence are what defeated the parity check.
+  if v_x is null then
+    raise exception 'No thing configured. Run the setup first.'
+      using errcode = 'P0002';
+  end if;
   return p_id;
 end;
 $$;
@@ -179,6 +185,71 @@ class Preflight(unittest.TestCase):
         self.assertEqual(len(got), 2, got)
         self.assertTrue(got[0].startswith("first"), got)
         self.assertTrue(got[1].startswith("second"), got)
+
+    # --- string context ----------------------------------------------
+    def test_a_boundary_inside_a_string_literal_is_not_a_swallow(self):
+        """Inside `'...'` a `--` is message text, not a comment.
+
+        The check shipped without this and reported five mutants in
+        already-measured files -- four of them splitting a
+        `raise exception '...'` message exactly as below. A pre-flight
+        with false positives is the kind of gate somebody turns off, and
+        this one sent the session off to re-verify five committed kill
+        sheets that were never in doubt.
+        """
+        self.assertEqual(
+            one("inside a literal",
+                "  if v_x is null then\n"
+                "    raise exception 'No thing configured.",
+                "  if false then\n"
+                "    raise exception 'No thing configured."
+                "  -- refusal dropped",
+                "-- refusal dropped"),
+            [])
+
+    def test_a_boundary_in_CODE_is_still_a_swallow(self):
+        """The other side of the same coin: the check must still fire.
+
+        Proven separately so that fixing the false positive cannot
+        quietly disable the true one.
+        """
+        got = one("in code",
+                  "  perform app.post(p_id, 'stock_movement', v_x,",
+                  "  perform app.post(p_id, 'manual', v_x,  -- source lied",
+                  "-- source lied")
+        self.assertEqual(len(got), 1, got)
+        self.assertIn("comment out the rest of the line", got[0])
+
+    def test_an_apostrophe_in_a_comment_does_not_fool_the_literal_check(self):
+        """The bug that made the parity version wrong twice over.
+
+        The fixture above carries two apostrophes in a prose comment,
+        BEFORE the `raise exception`. A quote-parity check sees them as
+        opening and closing a literal and gets the answer to every
+        later question backwards. This schema's bodies are full of
+        "another company's rows", so the scanner has to skip comments.
+        """
+        self.assertFalse(mutate_sql.in_string_literal(
+            MIGRATION, MIGRATION.index("if v_x is null")))
+        self.assertTrue(mutate_sql.in_string_literal(
+            MIGRATION, MIGRATION.index("Run the setup first")))
+        # And the mutant that splits that message is still not reported.
+        self.assertEqual(
+            one("after two apostrophes",
+                "  if v_x is null then\n"
+                "    raise exception 'No thing configured.",
+                "  if false then\n"
+                "    raise exception 'No thing configured."
+                "  -- refusal dropped",
+                "-- refusal dropped"),
+            [])
+
+    def test_an_escaped_quote_does_not_end_the_literal(self):
+        """`''` inside a literal is one quote, not two delimiters."""
+        src = "create or replace function app.q() returns void as $$\n"
+        src += "begin raise exception 'it''s here. and more'; end;\n$$;\n"
+        self.assertTrue(mutate_sql.in_string_literal(src, src.index("and more")))
+        self.assertFalse(mutate_sql.in_string_literal(src, src.index("end;")))
 
     def test_the_docstring_says_what_a_harness_error_costs(self):
         """Because the reason to prefer this over the guard is the cost."""

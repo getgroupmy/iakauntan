@@ -34,18 +34,72 @@
 # what is there and cannot see what is missing -- which is why it was
 # found by reading the two halves against each other instead.
 #
-# RESULT: see the kill sheet appended when this has been run.
+# RESULT, 5 October: 29 mutants (28 plus a control).
+#
+#   BEFORE the work, across all five files:  8 of 28, and ONLY
+#   `credit_note_return.sql` killed anything. `pos_recipes.sql` -- the
+#   file named for recipes -- killed ZERO, along with `pos_fnb.sql` and
+#   both lot files. That is the asymmetry reported in
+#   `docs/handoff.md` as a number: the file that tests the recipe path
+#   tested one direction of it.
+#
+#   AFTER section 9b: 18 of 28 on `pos_recipes.sql` alone, and 18 of 28
+#   across the five -- the SAME figure, because everything
+#   `credit_note_return.sql` kills is now a subset of what this file
+#   does. THREE of the remainder are equivalent and proven so below,
+#   giving 18 of 25 killable. The control lived throughout.
+#
+#   The first draft of this header said "21 of 28 across the five",
+#   having added `credit_note_return.sql`'s eight to this file's
+#   eighteen without checking the overlap. A union is not a sum, and the
+#   figure was corrected from the measurement rather than from the
+#   arithmetic that produced it.
+#
+# The two things this function DOCUMENTS were both unasserted before
+# this. `0269` writes them into the body -- "A credit note posted twice
+# -- reversed and re-posted, say -- must not return the food twice" and
+# "Never more than went out" -- and the mutants for both lived. A rule
+# in a comment is not a rule.
+#
+# AND THE DATE FIXTURE WAS COLLAPSED. Section 9b's first version
+# asserted that the return is dated the credit note and not the sale --
+# and both date mutants survived it, because the fixture settles the
+# bill and credits it on the SAME DAY, so the two answers are one row.
+# The duplicate credit note is now dated the day after. That is
+# CLAUDE.md's first trap met head on, in a block written by somebody who
+# had just read the warning.
+#
+# STILL OPEN, measured and not papered over -- SEVEN mutants needing
+# fixtures this block does not have: food returned into another
+# company's warehouse, and into the default rather than the outlet's own
+# (two organizations, and an outlet carrying `warehouse_id`); a non-item
+# or zero-quantity credit line, and an untracked ingredient (a sale with
+# food STILL OWING, because otherwise the clamp stops the mutant before
+# its own condition is reached); and the unit cost read off the newest
+# movement or off an inbound one (two outbound layers at different
+# costs).
 
 # ===================================================================
 # app.pos_return_recipes -- the plate coming back
 # ===================================================================
 
+# EQUIVALENT, and the proof is the guard BELOW it -- the "code's own
+# shape" kind. With the refusal dropped, `v_sale` is an all-null record,
+# so `where o.id = v_sale.outlet_id` matches nothing, `v_wh` stays null
+# and the next guard returns null anyway. Nothing a fixture can do
+# distinguishes the two forms.
 m("a credit against a sale that is not there puts food back",
   "pos_return_recipes",
   "  if v_sale.id is null or v_doc.id is null then\n    return null;\n  end if;",
   "  if false then\n    return null;\n  end if;  -- missing sale or credit not checked",
   "-- missing sale or credit not checked")
 
+# EQUIVALENT for the same family of reason, one step further on. With
+# only the sale checked, a credit note that is not there gives an
+# all-null `v_doc` -- and then the loop over `sales_document_lines where
+# l.document_id = p_credit` finds NO ROWS, so nothing is moved, `v_cost`
+# stays zero and the function returns null at the zero-cost short
+# circuit. The body never reaches anything that reads `v_doc`.
 m("a credit with no document behind it puts food back",
   "pos_return_recipes",
   "  if v_sale.id is null or v_doc.id is null then",
@@ -235,6 +289,17 @@ m("the returning movements are never linked to their journal",
   "  -- return movements not linked",
   "-- return movements not linked")
 
+# EQUIVALENT, proven by the OTHER conjunct in the same `where`. The
+# update keeps `and sm.gl_entry_id is null`, so dropping the credit-note
+# scope can only reach movements that have no journal yet -- and both
+# halves of this pair link every movement they write. There is no
+# unlinked movement for the widened scope to catch.
+#
+# An earlier attempt to kill it asserted `count(distinct gl_entry_id) =
+# 1` over the depleting movements, which cannot fail either way: under
+# the mutant they would all be restamped with the SAME journal, so the
+# count stays one. A distinctness check does not separate "unchanged"
+# from "all changed together".
 m("the DEPLETING movements are relinked to the return's journal",
   "pos_return_recipes",
   "     and sm.source_line_id = p_credit and sm.gl_entry_id is null;",

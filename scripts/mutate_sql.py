@@ -332,6 +332,48 @@ def differing(body: str, got: str) -> list[str]:
                    "check whitespace and the dollar-quote tag"]
 
 
+def in_string_literal(source: str, at: int) -> bool:
+    """Is `source[at]` inside a single-quoted SQL literal?
+
+    Counting quotes does not answer this, and the version that tried
+    was wrong in the most ordinary way possible: **an apostrophe in a
+    prose comment.** This schema's function bodies are full of them --
+    "another company's rows", "the firm's money" -- and each one flips
+    the parity of every quote count after it. Five mutants in
+    already-measured files were reported as hazardous twice over before
+    that was the obvious answer.
+
+    So the source is scanned, skipping what SQL skips: `--` to the end
+    of the line, `/* ... */`, and `''` as an escaped quote inside a
+    literal rather than the end of one.
+    """
+    i, n, literal = 0, len(source), False
+    while i < at and i < n:
+        ch = source[i]
+        if literal:
+            if ch == "'":
+                if source[i + 1:i + 2] == "'":
+                    i += 2
+                    continue
+                literal = False
+            i += 1
+            continue
+        if ch == "'":
+            literal = True
+            i += 1
+            continue
+        if source.startswith("--", i):
+            j = source.find("\n", i)
+            i = n if j < 0 else j + 1
+            continue
+        if source.startswith("/*", i):
+            j = source.find("*/", i)
+            i = n if j < 0 else j + 2
+            continue
+        i += 1
+    return literal
+
+
 def preflight(original: str, mutants: list[tuple]) -> list[str]:
     """Every way a mutant can be malformed, found BEFORE anything runs.
 
@@ -392,7 +434,23 @@ def preflight(original: str, mutants: list[tuple]) -> list[str]:
         # was reported as hazardous and the fix looked like it had not
         # taken.
         tail = new.rsplit("\n", 1)[-1]
-        if after != "\n" and not new.endswith("\n") and "--" in tail:
+        # Inside a SQL STRING LITERAL `--` is message text, not a
+        # comment, so a boundary there is harmless. Without this the
+        # check reported five mutants in already-measured files, four of
+        # them splitting a `raise exception '...'` message, as in
+        #
+        #     raise exception 'No client account configured. Run
+        #                      setup_legal_module first.'
+        #
+        # and sent this session off to re-verify five committed kill
+        # sheets that were never in doubt. The first fix counted quotes
+        # for parity and was defeated by an APOSTROPHE IN A PROSE
+        # COMMENT, of which this schema has hundreds. See
+        # `in_string_literal`.
+        inside_literal = in_string_literal(
+            source, source.index(old) + len(old))
+        if (after != "\n" and not new.endswith("\n")
+                and "--" in tail and not inside_literal):
             rest = source[source.index(old) + len(old):]
             problems.append(
                 f"{label}: the marker would comment out the rest of the "

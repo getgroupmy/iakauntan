@@ -34,7 +34,43 @@
 # what is there and cannot see what is missing -- which is why it was
 # found by reading the two halves against each other instead.
 #
-# RESULT: see the kill sheet appended when this has been run.
+# RESULT, 5 October: 32 mutants (31 plus a control).
+#
+#   pos_recipes.sql              12
+#   credit_note_return.sql        9
+#   lots_across_the_new_sources   7
+#   lot_allocation_shapes.sql     6
+#   pos_fnb.sql                   0
+#
+#   Union: 13 of 31. The control lived on every file.
+#
+# `pos_fnb.sql` kills NOTHING, measured -- it sells food without a
+# recipe behind it, so it reaches the function and leaves at the first
+# `having sum(n.quantity) > 0`. Worth knowing before adding it to a
+# sweep set on the strength of its name.
+#
+# THE SIGN IS ASSERTED AND THE TYPE IS NOT. `-v_qty` flipped to `v_qty`
+# dies; `'assembly_out'` changed to `'assembly_in'` LIVES. Every
+# assertion in the suite reads the quantity on hand, and that is moved
+# by the sign alone -- so a depletion filed as a receipt, with the right
+# negative quantity, is invisible to all of them and wrong on every
+# stock card and movement report there is.
+#
+# WHAT ELSE LIVED, 18 of them, and they are the whole shape of the
+# function either side of the arithmetic: the missing-sale guard; all
+# four warehouse resolutions, including the outlet's own and another
+# company's; the modifier's zero-quantity guard and its line-quantity
+# multiplier; `track_inventory`; the zero-need and zero-available
+# skips; the lot clamp in both directions; the movement date; the cost
+# read off the newest movement rather than the oldest; the two missing
+# account refusals; the journal's source; and the relink of an earlier
+# sale's movements.
+#
+# The depletion half is the one this file's own fixtures were written
+# for and it still only reaches 13 of 31. Its sibling,
+# `pos_return_recipes.py`, went from 8 to 18 of 28 in the same sitting
+# because section 9b gave it the credit nobody had ever taken -- so the
+# cheaper half of the work was the one nobody had done.
 
 # ===================================================================
 # app.pos_deplete_recipes -- the plate going out
