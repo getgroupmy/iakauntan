@@ -40,4 +40,10 @@
 # figure (`all SQL assertions passed (383 files, 14332 assertions
 # executed)`) rather than from 14330 + 2, because a floor that trails the
 # count is a floor with room in it.
-14332
+#
+# 5 October, again: 14332 -> 14335. Three assertions added to
+# payroll_run.sql, because a mutation run found that swapping the EPF and
+# SOCSO employer EXPENSE accounts in `post_payroll_run` keeps the journal
+# balanced and survived four test files. Measured, as above:
+# `all SQL assertions passed (383 files, 14335 assertions executed)`.
+14335

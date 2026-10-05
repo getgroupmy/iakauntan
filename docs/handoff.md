@@ -11719,3 +11719,69 @@ reading it, and written up beside the "tax on 5,000" assertion in
 
 Still worth the same treatment: `app.round_statutory`, and the posting
 functions behind a payslip.
+
+## 5 October: the posting journal, and two real gaps
+
+After the three statutory calculators came the journal they end up in:
+`public.post_payroll_run`. Twelve mutants,
+`supabase/tests/mutants/post_payroll_run.py`.
+
+Ten died against `payroll_run.sql` — claims not netted off salary expense,
+EPF and SOCSO payable losing the employer half, net salaries credited with
+gross, the HRD levy expensed but never made payable, CP38 dropped from the
+year's PCB, an empty run and a draft run becoming postable, the journal
+misdated, and the permission check removed.
+
+**But five of those ten died on "Journal does not balance".** That is the
+double-entry invariant, not a statement about where the money went, and it
+is a cheaper kill than it looks. So two more mutants were written that keep
+the journal BALANCED and post to the wrong account.
+
+| balanced-but-wrong-account mutant | outcome |
+|---|---|
+| PCB credited to the zakat payable account | **killed** — zakat has an assertion of its own |
+| EPF ⇄ SOCSO employer expense accounts swapped | **survived four files** |
+
+The survivor is the finding. Both are employer contributions of similar size
+on adjacent codes — `6110` and `6120` — which is exactly the pair an eye
+slides over. `payroll_run.sql`, `payroll_chart.sql`,
+`statutory_remittances.sql` and `ea_form.sql` all stayed green.
+
+**`payroll_chart.sql` looks like the file that would catch it and
+structurally cannot.** It reads the fallback codes out of the function's
+SOURCE with a regex and checks each one EXISTS in a freshly seeded chart,
+with a positive control on the count. Swap two codes and every code named is
+still a real non-group account, so it passes — it is a test that the chart
+can support the journal, not a test of the journal.
+
+A wrong split there is invisible in the trial balance's total and wrong in
+every P&L that shows EPF and SOCSO separately. Three assertions closed it,
+in the style the file already uses — each figure joined to its own code,
+plus `both are non-zero, so neither passes on 0 = 0` — and the mutant now
+dies on "the EPF employer contribution is charged to 6110".
+
+### Where SQL mutation stands at the end of 5 October
+
+| function | mutants | outcome |
+|---|---|---|
+| `app.calc_statutory` | 8 | all killed, by four files between them |
+| `app.calc_pcb` | 10 | all killed by `statutory.sql` alone |
+| `app.annual_tax` | 10 | 9 killed, 1 **proven equivalent** |
+| `round_statutory`, `epf_category`, `age_at` | 8 | 7 killed, **1 real gap closed** |
+| `public.post_payroll_run` | 12 | 11 killed, **1 real gap closed** |
+| bank rules | — | `mutants/bank_rules.py`, September |
+
+**48 mutants, two real gaps found and closed, one equivalent proved.** The
+assertion floor went 14330 → 14332 → 14335, measured each time.
+
+### The three transferable rules
+
+1. **A per-file score understates the suite.** `mutate_sql.py` takes ONE
+   test file and CI runs all of them, so a survivor is only a gap once every
+   file that calls the function has been tried. This bit on `calc_statutory`
+   (4 of 8 in one file, 8 of 8 across four) and again on `annual_tax`.
+2. **A journal-balance failure is a cheap kill.** A mutation that moves money
+   symmetrically balances perfectly. Prefer mutants that name an account.
+3. **Prove an equivalent mutant, do not reason it.** `annual_tax`'s
+   `<= 0` guard looks like a gap and is not; applying the mutant and calling
+   the function with 0 and -5 settles it in one command.
