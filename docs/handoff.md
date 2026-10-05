@@ -11499,3 +11499,39 @@ the thing to read.
 Both local runners therefore pass on `a8c585d8`: 383 SQL files with 14,330
 assertions, and 40 deno files with 503 tests. That is as much of CI as can be
 reproduced in this container.
+
+### Which numbers in the documentation go stale, and which do not
+
+Three stale figures turned up on 5 October by running what the docs describe
+instead of reading what they say about it. That looked like "the docs are
+riddled with stale numbers", so the rest of `CLAUDE.md`'s countable claims
+were checked. They are not, and the pattern is sharper than the first
+impression:
+
+| claim | verdict |
+|---|---|
+| "thirteen ways a green test covers a broken screen" | **right** — `docs/widget-tests.md` has exactly 13 numbered sections |
+| "382 assertion files running" | **right, and HISTORICAL** — it describes the state when the 1120 fallback survived, not today's 383. Nearly "corrected" into a falsehood |
+| "a narrow declaration of the four pieces of Deno" | **right** — `deno_globals.d.ts` declares `env`, `serve`, `readTextFile`, `test` and nothing else |
+| "~800 migrations" | 742. Overstated by 8%, but written as an approximation and the argument it serves does not turn on it |
+| SQL suite "in about two minutes" | **wrong by 6x.** Fixed |
+| "seventeen" deno test files | **wrong, it is 40.** Fixed |
+
+**The two that rotted were both counts of things that GROW** — how many test
+files exist, how long a growing suite takes. The three that held were about
+fixed design: the number of numbered sections in a document, the number of
+Deno globals deliberately declared, and a count explicitly pinned to a past
+event.
+
+So the rule is not "distrust the documentation". It is narrower and
+actionable: **do not write a number for something that grows.** Where one is
+needed, make the tool print it and floor it, which is what
+`check_locally.sh` already does (`503 tests ran, floor 503`) and what
+`check_flutter_test_count.py`, `check_thin_assertions.py` and
+`check_temp_cleanup.py` do. A floored number in output cannot go stale
+without failing; a number in prose goes stale silently.
+
+And the near-miss is worth as much as the hits: **a historical count reads
+exactly like a stale one.** `382` was one off from today's `383` and would
+have been "fixed" into a lie about what the 1120 episode cost, if the
+sentence around it had not been read first.
