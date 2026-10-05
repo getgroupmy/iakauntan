@@ -1167,6 +1167,39 @@ begin
   perform pg_temp.check_true('and there is a levy to charge',
     (select total_hrdf > 0 from public.payroll_runs where id = v_r1));
 
+  -- WHICH account, not just that the journal balances.
+  --
+  -- Added 5 October from a mutation run. Five of the ten mutants on
+  -- `post_payroll_run` died on "Journal does not balance", which is the
+  -- double-entry invariant rather than a statement about where the
+  -- money went -- so a mutant was written that keeps the journal
+  -- BALANCED and posts to the wrong account: the EPF employer
+  -- contribution to the SOCSO expense account. It survived this file,
+  -- payroll_chart.sql, statutory_remittances.sql and ea_form.sql.
+  --
+  -- payroll_chart.sql looks like the file that would catch it and
+  -- cannot: it reads the fallback codes out of the function's SOURCE
+  -- and checks each one EXISTS in a seeded chart. Swap two and every
+  -- code named is still a real account, so it passes.
+  --
+  -- Both figures are employer contributions of similar size on adjacent
+  -- codes, which is exactly the pair a reader's eye slides over. A wrong
+  -- split here is invisible in the trial balance's total and wrong in
+  -- every P&L that shows EPF and SOCSO separately.
+  perform pg_temp.check_eq('the EPF employer contribution is charged to 6110',
+    (select coalesce(sum(l.debit), 0) from public.gl_lines l
+       join public.accounts a on a.id = l.account_id
+      where l.entry_id = v_entry and a.code = '6110'),
+    (select total_epf_employer from public.payroll_runs where id = v_r1));
+  perform pg_temp.check_eq('and the SOCSO employer contribution to 6120',
+    (select coalesce(sum(l.debit), 0) from public.gl_lines l
+       join public.accounts a on a.id = l.account_id
+      where l.entry_id = v_entry and a.code = '6120'),
+    (select total_socso_employer from public.payroll_runs where id = v_r1));
+  perform pg_temp.check_true('and both are non-zero, so neither passes on 0 = 0',
+    (select total_epf_employer > 0 and total_socso_employer > 0
+       from public.payroll_runs where id = v_r1));
+
   -- ==================================================================
   -- 3. The claims that ride along with the pay
   --
