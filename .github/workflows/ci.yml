@@ -1190,7 +1190,14 @@ jobs:
           # The floor is in `supabase/tests/assertion_floor`, read by
           # `run_locally.sh` too so the number has one definition.
           floor="$(grep -Ex '[0-9]+' supabase/tests/assertion_floor || true)"
-          echo "assertions executed in CI: $asserted (floor: ${floor:-unreadable})"
+          # `::notice::` rather than a bare echo, so the number is
+          # readable from the annotations API in one small request
+          # like the other three counts. `gh api .../logs` refuses
+          # the Azure redirect, so a figure that lives only in the
+          # log is a figure nobody checks: on 5 October the suite
+          # went 14330 -> 14332 -> 14335 locally and CI's own count
+          # could not be read back to confirm it agreed.
+          echo "::notice::assertions executed in CI: $asserted (floor: ${floor:-unreadable})"
 
           # An unreadable floor must not pass vacuously. `[ 14330 -lt "" ]`
           # is "integer expression expected", which `bash -e` does fail
