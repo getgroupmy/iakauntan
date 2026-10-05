@@ -14254,6 +14254,74 @@ A sweep and a hand-run of the same suite cannot share a cluster. Wait
 for `restored:`, or give the second one its own `IAK_PGPORT`. Written
 into `scripts/mutate_sql.py`.
 
+## 5 October: A REVERSAL THAT DOES NOT REVERSE — reported, not fixed
+
+Found while picking the next sweep target, reproduced by hand rather
+than reasoned about, and **waiting on the user** because the repair is a
+migration that changes live posting behaviour.
+
+`public.reverse_gl_entry` is last defined in **0421**. Its line copy is
+
+```sql
+insert into public.gl_lines (
+  org_id, entry_id, line_no, account_id, description, debit, credit,
+  currency, exchange_rate, contact_id, item_id, tax_code_id)
+select org_id, v_new_id, line_no, account_id,
+       'Reversal: ' || coalesce(description, ''),
+       credit, debit, currency, exchange_rate, contact_id, item_id, tax_code_id
+  from public.gl_lines where entry_id = p_entry_id;
+```
+
+`gl_lines` has six more columns that carry meaning, and **none of them
+is copied**: `fc_debit`, `fc_credit`, `tax_amount`, `project_code`,
+`department_code` and `matter_id`. The first three are NOT NULL DEFAULT
+0 and the last three are nullable, so the reversal is written with
+zeroes and nulls and nothing refuses it.
+
+### Reproduced
+
+A USD 1,000 bill at 4.20, with tax, a project and a department, posted
+and then reversed:
+
+```
+original: dr=4200 cr=0    fcdr=1000 fccr=0  tax=252 proj=P-1 dept=D-1
+reversal: dr=0    cr=4200 fcdr=0    fccr=0  tax=0   proj=-   dept=-
+```
+
+The ringgit side nets to zero. **Nothing else does.**
+
+* The **foreign-currency** side does not: the original carries USD 1,000
+  and the reversal carries nothing, so a USD payable shows 1,000
+  outstanding for ever after the ringgit has been reversed away.
+  `revalue_foreign_balances` reads exactly these two columns.
+* The **tax** is not reversed, so an SST return still declares 252 of
+  input tax on a journal that has been reversed.
+* The **project and department** are dropped, so the departmental and
+  project profit and loss never net: D-1 keeps the 4,200 expense and the
+  reversal lands in "no department".
+* `matter_id` likewise — and that one is the clearest statement of the
+  shape: **0687** put the matter on the line and **0688** put it on
+  every posting path. The reversal path was written in 0421 and never
+  caught up, so reversing a legal disbursement leaves the matter ledger
+  holding one half of a pair.
+
+No trigger backfills any of them. `pg_trigger` on `gl_lines` has
+`assert_balanced` (which checks debit against credit and nothing else),
+`apply_account_balance` (which reads those same two columns), the
+live-change notifiers and the audit log.
+
+### Why it is not fixed here
+
+It is the same class as the other two findings above — it changes what a
+statutory posting resolves to — and it needs a new migration redefining
+the function, which on this branch is a production deploy. Unlike those
+two it has no plausible second reading: a reversal is supposed to
+reverse. The repair is mechanical (add the six columns to the
+`insert ... select`) and should land with a test that a reversed foreign
+bill nets to zero in BOTH currencies, in its tax, and in every
+dimension. **It should NOT come with a data backfill** of the reversals
+already posted; rewriting posted history is a separate decision.
+
 ## 5 October: the depreciation run, and the strongest opening figure yet
 
 `public.run_depreciation` is the period's charge: a run row, one entry
