@@ -716,6 +716,23 @@ begin
   perform pg_temp.check_eq('and sixty tomorrow is fifty-nine',
     app.age_at(date '1966-02-01', date '2026-01-31')::numeric, 59);
 
+  -- A missing date of birth is assumed to be THIRTY, and that number
+  -- decides an EPF rate: `app.epf_category` flips at 60, so an employee
+  -- with no birthday on file is charged as under-60. Assume 60 instead
+  -- and every such employee moves to the 60-plus rate silently.
+  --
+  -- Added 5 October because a mutation run proved nothing asserted it.
+  -- `app.age_at`'s `then 30` could be changed to any number and the two
+  -- files that call the function -- this one and payroll_shapes.sql --
+  -- both stayed green. The two assertions above pin the boundary with
+  -- real dates and say nothing about a null.
+  perform pg_temp.check_eq('no birthday on file is treated as thirty',
+    app.age_at(null, date '2026-01-31')::numeric, 30);
+  perform pg_temp.check_eq(
+    'so an employee with no birthday is charged as under sixty',
+    app.epf_category('citizen', app.age_at(null, date '2026-01-31')),
+    'citizen_under60');
+
   -- SOCSO: the older one is on act800, which is the employer's side
   -- only. Kills `v_age >= 60` -> `> 60`.
   select socso_employee, socso_employer into r

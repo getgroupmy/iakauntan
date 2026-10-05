@@ -76,6 +76,7 @@ import subprocess
 import sys
 
 DB = "postgresql://postgres@/postgres?host=/var/tmp&port=5599"
+MIGRATIONS = pathlib.Path(__file__).resolve().parent.parent / "supabase" / "migrations"
 
 
 def block(src: str, name: str) -> str:
@@ -151,6 +152,25 @@ def live(name: str) -> str:
         capture_output=True, text=True).stdout
 
 
+def latest_defining(name: str) -> pathlib.Path | None:
+    """The LAST migration that defines `name`, found case-insensitively.
+
+    A repository fact, and that is the point: the body comparison below
+    asks whether the file matches the DATABASE, which silently assumes
+    the database is right. Once a previous run has already restored an
+    old body, file and database agree and that check goes quiet. This one
+    cannot: it reads the migrations.
+
+    Case-insensitively because `0530` writes `CREATE OR REPLACE FUNCTION`
+    where `0446` writes it in lower case, so `grep -ln "create or replace
+    function app.calc_pcb"` names `0446` as the latest and is wrong.
+    """
+    found = [p for p in sorted(MIGRATIONS.glob("*.sql"))
+             if re.search(r"\bfunction\s+[a-z_]*\.?" + re.escape(name)
+                          + r"\s*\(", p.read_text(), re.I)]
+    return found[-1] if found else None
+
+
 def body_of(statement: str) -> str:
     """Just the body, between the dollar-quote tags."""
     found = re.search(r"\bas\s+(\$[a-z_]*\$)(.*)\1", statement, re.S | re.I)
@@ -222,6 +242,18 @@ def main() -> int:
     #
     # The check is one `prosrc` comparison, and the harness already reads
     # `prosrc` to confirm a mutation landed, so this costs nothing.
+    named = pathlib.Path(migration).resolve()
+    for _, name, *_ in mutants:
+        last = latest_defining(name)
+        if last and last.resolve() != named:
+            print(f"HARNESS ERROR: {name} is last defined in "
+                  f"{last.name}, not {named.name}.", file=sys.stderr)
+            print("Mutating a SUPERSEDED migration restores its OLD body "
+                  "at the end of the run and leaves the database wrong.",
+                  file=sys.stderr)
+            print(f"  use: {last}", file=sys.stderr)
+            return 2
+
     for _, name, *_ in mutants:
         body = body_of(block(original, name))
         got = live(name)
