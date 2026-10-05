@@ -52,22 +52,82 @@ MIGRATIONS = ROOT / "supabase" / "migrations"
 # empty list and turned CI green on two commits.
 LEAST_FUNCTIONS = 600
 
-# Tables whose readers this gate judges: the ones carrying `is_default`
-# that a function picks a single row out of. Kept as a list rather than
-# read from the live schema because this runs with no database.
-TABLES = (
-    'bank_accounts', 'branches', 'payment_terms', 'pipelines',
-    'price_levels', 'tax_codes', 'warehouses', 'work_shifts',
-    'contact_addresses', 'payment_methods', 'pos_kitchen_stations',
-    'pos_outlet_channels', 'sla_policies', 'ticket_teams',
-)
+# The flags that mean "there is one of these". Each is a plain boolean
+# with nothing in the type system saying only one row may carry it.
+SINGLETON_FLAGS = ('is_default', 'is_primary', 'is_lead')
+
+# Any of these in the same fragment means the query asked whether the row
+# is still live. Which one is right is the table's business, not this
+# gate's: `payment_methods` uses `deleted_at is null` because a method
+# can be switched off without being deleted and its charge account is
+# still needed for last year's postings. The gate asks only whether the
+# question was asked at all.
+LIVENESS = ('is_active', 'deleted_at is null', 'not is_deleted',
+            'deleted_at is not null')
+
+# A floor on the SCOPE, not just on the function count. A parser that has
+# stopped recognising `create table` finds no flagged tables, judges
+# nothing, and reports a clean sweep.
+LEAST_TABLES = 12
 
 # Proof the gate is looking: each must be reported by `judge` when fed.
 CANARIES = {
     'bare reader, unconstrained table': (
         "select id into v_x from public.tax_codes "
-        "where org_id = p_org and is_default limit 1;", 'tax_codes'),
+        "where org_id = p_org and is_default limit 1;",
+        'tax_codes', 'is_default'),
 }
+
+COLUMN = r"(?:,|\(|^)\s*{}\s+bool"
+CREATE_TABLE = re.compile(
+    r"create\s+table\s+(?:if\s+not\s+exists\s+)?public\.([a-z_0-9]+)"
+    r"\s*\((.*?)\n\);", re.S)
+ADD_COLUMN = re.compile(
+    r"alter\s+table\s+(?:if\s+exists\s+)?public\.([a-z_0-9]+)\s+"
+    r"add\s+column\s+(?:if\s+not\s+exists\s+)?([a-z_0-9]+)\s+")
+
+
+def _columns() -> dict[str, set[str]]:
+    """table -> the column names the migrations declare on it.
+
+    Derived rather than hand-kept, because the hand-kept version of this
+    list was wrong within the hour of being written: it named
+    `contact_addresses`, which has no liveness column at all and so
+    cannot have this bug, and omitted `pos_modifiers`, which does. Two
+    errors in fourteen entries, and the same staleness the `ci.yml`
+    assertion-file list keeps a guard against.
+    """
+    out: dict[str, set[str]] = {}
+    for path in sorted(MIGRATIONS.glob("*.sql")):
+        low = path.read_text().lower()
+        for m in CREATE_TABLE.finditer(low):
+            table, body = m.group(1), m.group(2)
+            for line in body.split("\n"):
+                word = line.strip().split(" ")
+                if len(word) >= 2:
+                    out.setdefault(table, set()).add(word[0].strip('",'))
+        for m in ADD_COLUMN.finditer(low):
+            out.setdefault(m.group(1), set()).add(m.group(2))
+    return out
+
+
+def in_scope(columns: dict[str, set[str]] | None = None) -> dict[str, str]:
+    """table -> its singleton flag, for tables where liveness can go stale.
+
+    A table with no `is_active` and no `deleted_at` is excluded: every row
+    is live, so there is no second matching row for a reader to pick by
+    accident. Four of the eighteen flagged tables are in that position.
+    """
+    columns = _columns() if columns is None else columns
+    scope = {}
+    for table, cols in columns.items():
+        flag = next((f for f in SINGLETON_FLAGS if f in cols), None)
+        if flag is None:
+            continue
+        if not ({'is_active', 'deleted_at', 'is_deleted'} & cols):
+            continue
+        scope[table] = flag
+    return scope
 
 FUNCTION = re.compile(
     r"create\s+or\s+replace\s+function\s+([a-z_]+\.[a-z_0-9]+)\s*\(", re.I)
@@ -94,9 +154,13 @@ def _body(text: str, start: int) -> str:
 
 
 def constrained() -> set[str]:
-    """Tables given a `<table>_default_is_active` CHECK by a migration."""
+    """Tables given a `<table>_<flag>_is_active` CHECK by a migration.
+
+    `warehouses_default_is_active` for `is_default`;
+    `<table>_primary_is_active` would serve `is_primary` the same way.
+    """
     names = set()
-    want = re.compile(r"([a-z_]+)_default_is_active")
+    want = re.compile(r"([a-z_]+?)_(?:default|primary|lead)_is_active")
     for path in sorted(MIGRATIONS.glob("*.sql")):
         text = path.read_text().lower()
         for m in want.finditer(text):
@@ -120,8 +184,8 @@ LIVENESS = ('is_active', 'deleted_at is null', 'not is_deleted',
             'deleted_at is not null')
 
 
-def judge(body: str, table: str) -> bool:
-    """True if `body` PICKS one of `table`'s rows by `is_default` alone.
+def judge(body: str, table: str, flag: str = "is_default") -> bool:
+    """True if `body` PICKS one of `table`'s rows by `flag` alone.
 
     Deliberately structural, and deliberately blind to three things it
     would need judgement for:
@@ -145,7 +209,7 @@ def judge(body: str, table: str) -> bool:
             r"(?:from|join)\s+public\." + table + r"\b(.{0,240}?)"
             r"(limit\s+1|;|\)\s*(?:into|loop|as))", flat):
         fragment, end = m.group(1), m.group(2)
-        if 'is_default' not in fragment:
+        if flag not in fragment:
             continue
         if any(live in fragment for live in LIVENESS):
             continue
@@ -158,18 +222,22 @@ def judge(body: str, table: str) -> bool:
 
 
 def offenders(definitions: dict[str, tuple[str, str]] | None = None,
-              allowed: set[str] | None = None) -> list[str]:
+              allowed: set[str] | None = None,
+              scope: dict[str, str] | None = None) -> list[str]:
     definitions = latest_definitions() if definitions is None else definitions
     allowed = constrained() if allowed is None else allowed
+    scope = in_scope() if scope is None else scope
     bad = []
     for name, (where, body) in sorted(definitions.items()):
-        for table in TABLES:
+        for table, flag in sorted(scope.items()):
             if table in allowed:
                 continue
-            if judge(body, table):
-                bad.append(f"{name} ({where}) reads public.{table}'s default "
-                           f"without `and is_active`, and {table} has no "
-                           f"{table}_default_is_active CHECK")
+            if judge(body, table, flag):
+                short = flag.removeprefix('is_')
+                bad.append(f"{name} ({where}) picks one of public.{table}'s "
+                           f"rows by {flag} alone, and {table} has no "
+                           f"{table}_{short}_is_active CHECK to make that "
+                           f"single-rowed")
     return bad
 
 
@@ -179,8 +247,9 @@ def main() -> int:
 
     # Canaries before the floor: a gate whose matcher has stopped working
     # reports an empty list, which reads exactly like a pass.
-    for label, (snippet, table) in CANARIES.items():
-        if not judge(snippet, table):
+    scope = in_scope()
+    for label, (snippet, table, flag) in CANARIES.items():
+        if not judge(snippet, table, flag):
             print(f"::error::the canary '{label}' was not reported; this "
                   f"gate is no longer looking at anything")
             return 1
@@ -189,6 +258,17 @@ def main() -> int:
                   f"HAS the CHECK -- pick a table that does not, or the "
                   f"canary proves nothing")
             return 1
+        if table not in scope:
+            print(f"::error::the canary '{label}' names {table}, which is no "
+                  f"longer in scope, so it proves nothing about the sweep")
+            return 1
+
+    if len(scope) < LEAST_TABLES:
+        print(f"::error::only {len(scope)} flagged tables were derived from "
+              f"the migrations, fewer than the floor of {LEAST_TABLES}; the "
+              f"`create table` parser has drifted and this gate is judging "
+              f"almost nothing")
+        return 1
 
     if len(definitions) < LEAST_FUNCTIONS:
         print(f"::error::only {len(definitions)} function definitions were "
@@ -196,7 +276,7 @@ def main() -> int:
               f"migrations were not found or the pattern has drifted")
         return 1
 
-    bad = offenders(definitions, allowed)
+    bad = offenders(definitions, allowed, scope)
     if bad:
         print("::error::a default is read without asking whether the row is "
               "still active, on a table with no CHECK to make that safe:")
@@ -207,9 +287,10 @@ def main() -> int:
               "warehouses and pipelines.")
         return 1
 
-    print(f"::notice::{len(definitions)} function definitions checked; every "
-          f"bare `is_default` read is on a table whose CHECK makes it safe "
-          f"({', '.join(sorted(allowed))})")
+    print(f"::notice::{len(definitions)} function definitions checked "
+          f"against {len(scope)} tables carrying a singleton flag and a "
+          f"liveness column; every bare pick is on a table whose CHECK "
+          f"makes it safe ({', '.join(sorted(allowed))})")
     return 0
 
 

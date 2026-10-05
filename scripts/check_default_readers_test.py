@@ -74,6 +74,51 @@ class Constrained(unittest.TestCase):
         self.assertEqual(gate.constrained(), {'warehouses', 'pipelines'})
 
 
+class Scope(unittest.TestCase):
+    """The scope is DERIVED, because the hand-kept version was wrong.
+
+    It named `contact_addresses`, which has no liveness column and so
+    cannot have this bug, and omitted `pos_modifiers`, which does. Two
+    errors in fourteen entries, written and found inside an hour. These
+    tests pin the derivation against what the live catalogue reports, so
+    the list cannot silently go stale again.
+    """
+
+    def test_it_derives_the_fourteen_the_catalogue_reports(self):
+        self.assertEqual(sorted(gate.in_scope()), [
+            'bank_accounts', 'branches', 'payment_methods', 'payment_terms',
+            'pipelines', 'pos_kitchen_stations', 'pos_modifiers',
+            'pos_outlet_channels', 'price_levels', 'sla_policies',
+            'tax_codes', 'ticket_teams', 'warehouses', 'work_shifts'])
+
+    def test_pos_modifiers_is_in_scope(self):
+        # The one the hand-kept list omitted.
+        self.assertIn('pos_modifiers', gate.in_scope())
+
+    def test_a_table_with_no_liveness_column_is_out_of_scope(self):
+        # contact_addresses, contact_persons, item_barcodes and
+        # ticket_team_members carry a singleton flag and nothing that can
+        # make a row stale, so every row is live and no reader can pick a
+        # second one by accident.
+        for table in ('contact_addresses', 'contact_persons',
+                      'item_barcodes', 'ticket_team_members'):
+            self.assertNotIn(table, gate.in_scope(), table)
+
+    def test_scope_is_computed_from_columns_not_a_literal(self):
+        made_up = {'a_new_table': {'org_id', 'is_default', 'is_active'},
+                   'no_liveness': {'org_id', 'is_default'},
+                   'no_flag': {'org_id', 'is_active'}}
+        self.assertEqual(gate.in_scope(made_up), {'a_new_table': 'is_default'})
+
+    def test_is_primary_and_is_lead_are_recognised_as_flags(self):
+        self.assertEqual(
+            gate.in_scope({'t': {'is_primary', 'is_active'}}),
+            {'t': 'is_primary'})
+        self.assertEqual(
+            gate.in_scope({'u': {'is_lead', 'deleted_at'}}),
+            {'u': 'is_lead'})
+
+
 class Offenders(unittest.TestCase):
     def test_head_is_clean(self):
         self.assertEqual(gate.offenders(), [])
@@ -96,6 +141,16 @@ class Offenders(unittest.TestCase):
             allowed={'warehouses', 'pipelines'})
         self.assertEqual(len(bad), 1)
         self.assertIn('branches', bad[0])
+
+    def test_a_bare_pick_on_a_table_out_of_scope_is_not_reported(self):
+        # contact_addresses has no liveness column, so there is nothing to
+        # ask about and nothing to report.
+        bad = gate.offenders(
+            definitions={'app.x': ('9999_x.sql',
+                "select id into v_x from public.contact_addresses "
+                "where contact_id = p_c and is_default limit 1;")},
+            allowed=set())
+        self.assertEqual(bad, [])
 
     def test_the_same_reader_is_fine_once_the_table_is_constrained(self):
         bad = gate.offenders(
@@ -120,14 +175,22 @@ class Plumbing(unittest.TestCase):
                            gate.LEAST_FUNCTIONS)
 
     def test_every_canary_is_reported_by_judge(self):
-        for label, (snippet, table) in gate.CANARIES.items():
-            self.assertTrue(gate.judge(snippet, table), label)
+        for label, (snippet, table, flag) in gate.CANARIES.items():
+            self.assertTrue(gate.judge(snippet, table, flag), label)
 
     def test_no_canary_names_a_constrained_table(self):
         # A canary on a table that has since been given the CHECK would
         # stop proving anything, silently.
-        for label, (_, table) in gate.CANARIES.items():
+        for label, (_, table, _flag) in gate.CANARIES.items():
             self.assertNotIn(table, gate.constrained(), label)
+
+    def test_every_canary_names_a_table_still_in_scope(self):
+        scope = gate.in_scope()
+        for label, (_, table, _flag) in gate.CANARIES.items():
+            self.assertIn(table, scope, label)
+
+    def test_the_scope_floor_is_below_what_head_derives(self):
+        self.assertGreaterEqual(len(gate.in_scope()), gate.LEAST_TABLES)
 
     def test_main_passes_at_head(self):
         self.assertEqual(gate.main(), 0)

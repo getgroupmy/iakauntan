@@ -12210,3 +12210,72 @@ the unique-index-implication version would have been the fifth.
 and was wrong by RM6,000 of relief, twice. 19 self-tests. The gate count
 `check_sweeps_look.py` sees is 69, still 0 passing over nothing, and
 `check_self_tests_run.py` named the missing ci.yml line before CI had to.
+
+#### The gate's own hand-kept list was wrong within the hour
+
+`check_default_readers.py` shipped with its scope as a tuple of fourteen
+table names, typed out from the analysis that had just been done. Asking
+the catalogue the next question -- "are there other singleton flags?" --
+showed the tuple was wrong twice:
+
+- it **omitted `pos_modifiers`**, which carries `is_default` and
+  `is_active` and so is exactly in scope; and
+- it **named `contact_addresses`**, which carries `is_default` and no
+  liveness column at all, so every row is live, no reader can pick a
+  second one by accident, and there is nothing there to judge.
+
+Two errors in fourteen entries, written and found inside an hour, by the
+author of the analysis they were copied from. That is the whole argument
+against a hand-kept list, made by the shortest possible example, and
+`ci.yml` already says it in prose about the assertion-file list: *"a
+hand-kept list of tests goes stale in the one direction that is
+invisible."*
+
+So the scope is now DERIVED: `_columns()` parses `create table` and
+`alter table ... add column` out of the migrations, and `in_scope()`
+keeps a table only if it declares one of `is_default`, `is_primary` or
+`is_lead` AND something that can make a row stale (`is_active`,
+`deleted_at`, `is_deleted`). It derives exactly the fourteen the live
+catalogue reports, which is how the derivation was checked -- against
+the database, not against the list it replaced.
+
+The four excluded are `contact_addresses`, `contact_persons`,
+`item_barcodes` and `ticket_team_members`. All four already have the
+one-default unique index; none can have THIS bug.
+
+Mutations, each verified to have applied before being believed:
+
+| mutation | result |
+| --- | --- |
+| break the `create table` regex | scope -> 0 tables, gate exit 1 on the canary, 6 tests fail |
+| drop the liveness requirement from `in_scope` | `contact_addresses` re-enters scope, gate exit 1, 5 tests fail |
+| drop `is_primary`/`is_lead` from `SINGLETON_FLAGS` | ONE unit test fails; **the gate still exits 0** |
+
+The third row is worth stating plainly rather than hiding in a count: no
+table today needs `is_primary` or `is_lead` judged, because the four that
+carry them have no liveness column. The unit test is the only thing
+holding that capability for when a table appears that does need it.
+
+#### Two gates read as passing because of a shell pipe
+
+Twice in this stretch `echo "exit=$?"` was written after a command that
+had been piped through `head` or `tail`, so it reported the PIPE's exit
+status and not the program's. Both times a gate that had correctly
+returned 1 -- printing `::error::` in the same output -- read as
+`exit=0`:
+
+```
+python3 scripts/check_default_readers.py 2>&1 | head -2; echo "exit=$?"
+  ::error::the canary ... proves nothing about the sweep
+  exit=0
+```
+
+Measured without the pipe the same run is `exit=1`. Nothing was
+published on the strength of the wrong reading, because the `::error::`
+line was visible above it both times -- but the two disagreed in the
+output and the pipe is the liar. `set -o pipefail`, or redirect to a
+file and read it afterwards, which is what the corrected check does.
+
+The first instance was read as a bug in `check_self_tests_run.py` --
+"it reports a problem and exits 0" -- and briefly nearly written down as
+one. It was not; the gate was right and the measurement was wrong.
