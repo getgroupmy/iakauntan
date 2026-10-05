@@ -220,6 +220,24 @@ jobs:
           python3 scripts/check_migration_terminators_test.py
           python3 scripts/check_migration_terminators.py
 
+      # A SURVEY rather than a gate: `state_write_coverage.py` reports
+      # which columns a money mover writes that no test file naming it
+      # ever mentions, and it exits 0 whatever it finds. Two mutation
+      # sweeps on 5 October produced the same finding -- a file that
+      # watches the money does not watch the state -- and this is the
+      # mechanical version of looking for it.
+      #
+      # Its SELF-TEST is a gate, because what the survey reports has to
+      # be worth reading: three of its first sixteen findings were
+      # false, and the self-test pins all three shapes as
+      # must-not-report. The survey's own line runs for the log, so the
+      # list is in front of whoever reads a failing run.
+      - name: Which state a money mover writes that no test names
+        working-directory: .
+        run: |
+          python3 scripts/state_write_coverage_test.py
+          python3 scripts/state_write_coverage.py
+
       - run: flutter analyze --fatal-infos --fatal-warnings
 
       # `- run: flutter test` was this step for 2251 runs, and a bare

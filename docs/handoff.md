@@ -13820,3 +13820,52 @@ The second equivalent pair here is proven by the **validator**:
 `import_opening_balances`, `post_manufacturing_order`,
 `post_client_transaction`, `app.run_recurring_journals`, and the four
 demo builders.
+
+### A survey for the finding that kept repeating
+
+`scripts/state_write_coverage.py` (plus its self-test) reports, for
+every function `mutation_targets.py` ranks as moving money or stock,
+which columns it writes in an `update ... set` that **no test file
+reaching it ever mentions by name.**
+
+It exists because two sweeps four hours apart produced the same
+finding, and the second said it in one sentence: **a file that watches
+the money does not watch the state.** `clear_pdc` scored nine of
+twenty-six on its own dedicated file and `set status = 'cleared'`
+survived the whole of it; all thirteen of
+`run_recurring_journals_for`'s survivors were the three columns its
+loop writes on the way out. A posting function's journal is what its
+test file is *about*, so the journal gets asserted and the row the
+function stamps afterwards does not — and a stamp is invisible to every
+balance check there is.
+
+**It is a survey, not a gate: it exits 0 whatever it finds.** Its
+self-test is the gate, and CI runs both — the self-test to keep the
+survey worth reading, the survey itself for the log.
+
+**Its first run reported four false findings out of sixteen, and all
+four are now pinned as must-not-report:**
+
+- it grepped test files for the bare function name, so four `app.*`
+  functions reached through public wrappers came out as "NO TEST FILE
+  CALLS IT" — including `app.post_goods_received_internal`, which
+  `goods_received.sql` exercises line by line. It now follows
+  `mutation_targets`' call graph;
+- three of those were further reached only by a **trigger**, and
+  `mutation_targets.py`'s own comment already said what a zero means
+  there: "not measurable here, not not tested". They are listed
+  separately now and excluded from the findings.
+
+**And one false finding cannot be fixed**, which is why this is not a
+gate. `dispose_fixed_asset`'s `disposal_date` and `disposal_entry_id`
+are reported and are both genuinely asserted — by
+`depreciation_schedule.sql` and `asset_disposal_shapes.sql`, through a
+report function and a journal description, without either column being
+named. **A column can be asserted without being named, and a column can
+be named without being asserted.** The docstring says both, and the
+self-test asserts that it says both.
+
+Current reading: **17 written columns across 11 functions**, plus 3
+functions a trigger reaches that it cannot measure. Of the 11, several
+are already-swept functions whose stamps were closed this session —
+read the list as where to point the next sweep, not as a defect count.
