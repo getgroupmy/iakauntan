@@ -125,6 +125,27 @@ finish without printing.
 
 ## Where things stand
 
+### FIRST: this table's CI and Head rows are from 2 OCTOBER and are STALE
+
+Read this block, not them. The rows below are kept because their
+*history* is worth having — which run applied which migration, which
+flakes are known — but their "now" is three days old, and the file's own
+warning at the top applies to itself.
+
+**As of 5 October:**
+
+| | |
+| --- | --- |
+| Head | `1a803c8c`, on `claude/iakauntan-accounting-crm-8snun0`, pushed, tree clean |
+| CI | `4bb88662` green on all 12 checks. `78201350` and `5e1e667a` went RED on "Statutory engine and ledger rules" and `4bb88662` is the fix — a new gate that passed over nothing; see "the gate that passed over nothing" below. `f1e65ffe` lost "Build the Android app" to the known unauthenticated-JDK rate limit (`API rate limit exceeded for 20.189.188.0`, three attempts), VERIFIED from its annotations rather than assumed, and Android passed on every commit after it |
+| Migrations | **nothing new since `0740`.** No commit from `01040a8a` to `1a803c8c` touches `supabase/migrations`, so none of the skipped or displaced migrate jobs in that range cost anything |
+| Gates | **68** now drivable by `check_sweeps_look.py`, up one: `scripts/check_temp_cleanup.py`. It reports "49 of 68 ... report a problem over an empty source tree, as they must ... 0 still pass over nothing" |
+| New CI numbers | `6649 Dart tests ran (floor 6649)`; `0 of 6351 test bodies check only that nothing threw (ceiling 0, 13 excused)`; `call server tests that ran: 33 (floor 33)`; `124 python files checked, every mkdtemp has a removal` |
+| Disk | **18G free, 53% used**, after reclaiming 21G of `/tmp`. It had been at **57M free, 100%** — see "THE DISK FILLED" below, and the cause was this repository's own `check_web_boots.py` |
+| NO CI WATCH IS ARMED | The `Claude_Code_Remote` MCP server timed out on connect, so no scheduled trigger could be created or re-armed. Check CI by hand: `gh api "repos/getgroupmy/iakauntan/commits/<sha>/check-runs?per_page=30"`, **per SHA** — the run LISTING served runs from 21 September twice on 4 October |
+
+### The 2 October table, kept for its history
+
 | | |
 | --- | --- |
 | Branch | `claude/iakauntan-accounting-crm-8snun0` |
