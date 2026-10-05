@@ -197,17 +197,56 @@ def fired_by(bare: str, called_by: dict[str, set[str]],
     return hit
 
 
-def measured() -> set[str]:
-    """Functions that already have a mutants file."""
+STRING = re.compile(r'"((?:[^"\\]|\\.)*)"')
+
+
+def measured(known: frozenset[str]) -> set[str]:
+    """Bare function names that some mutants file already mutates.
+
+    Read from the FILES' CONTENTS, not their names. The first version
+    matched `supabase/tests/mutants/*.py` stems against function names,
+    and so could not see `client_money_crossing.py` -- named after the
+    test file it runs against, like `bank_rules.py` -- which mutates
+    three functions. It reported `pay_from_client_account` as unmeasured
+    immediately after 21 mutants had been run against it.
+
+    Each mutant is `m(label, function, old, new, marker)`, so the second
+    string argument is the function. Found by splitting on the calls and
+    taking the second quoted string of each, rather than by matching a
+    layout: the first attempt required `m(` alone on a line, which none
+    of these files do, and it recognised nothing but the filenames --
+    reporting `pay_from_client_account` as unmeasured immediately after
+    21 mutants had been run against it.
+
+    Read with a regex rather than by importing, because these files call
+    a global `m` that the harness injects and are not importable alone.
+
+    Intersected with `known`, the real function names, because "the
+    second quoted string" is only the function when the LABEL fits on
+    one line. Where a label is split across two lines the second string
+    is the rest of the label, and where an `old` fragment is split it is
+    SQL -- the unfiltered version returned eight lines of payroll
+    journal as function names. Intersecting is exact rather than a
+    guess about what an identifier looks like.
+    """
     if not MUTANTS.is_dir():
         return set()
-    return {p.stem for p in MUTANTS.glob("*.py")}
+    names = set()
+    for path in MUTANTS.glob("*.py"):
+        text = path.read_text()
+        for chunk in text.split("\nm(")[1:]:
+            found = STRING.findall(chunk)
+            if len(found) >= 2:
+                names.add(found[1])
+        # The stem too, for a file named after its one function.
+        names.add(path.stem)
+    return names & known
 
 
 def rank() -> list[tuple]:
     defs = definitions()
-    done = measured()
     called_by = call_graph(defs)
+    done = measured(frozenset(called_by))
     per_file = test_calls(frozenset(called_by))
     tables = trigger_tables()
     rows = []

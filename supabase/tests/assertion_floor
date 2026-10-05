@@ -91,4 +91,16 @@
 # default client account picked one by physical row order. 18 of 18
 # killed afterwards. Measured:
 # `all SQL assertions passed (384 files, 14377 assertions executed)`.
-14377
+#
+# 14390, +13: client_money_crossing.sql, after 0549's three movers --
+# money in, money out, the crossing to office -- were mutated 21 ways
+# and EIGHT survived. client_account.sql, the only other file naming
+# any of them, killed none of the 21. The eight were the same three
+# families matter_transfer.sql had given up hours earlier: three
+# unasserted can_post guards (one per function), the `status <> 'void'`
+# payout check, and four bank-selection rules collapsed into one
+# account. A guard nobody asserted in the first function of a family is
+# unasserted in all of them. 21 of 21 killed afterwards, nothing
+# equivalent. Measured:
+# `all SQL assertions passed (384 files, 14390 assertions executed)`.
+14390

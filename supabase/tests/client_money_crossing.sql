@@ -523,4 +523,221 @@ begin
     '%part of the legal module%', '42501');
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The eight a mutation run found this file could not see
+-- ---------------------------------------------------------------------
+--
+-- `0549`'s three movers -- money in, money out, and the crossing to
+-- office -- were mutated twenty-two ways on 5 October. Thirteen died
+-- against the assertions above; eight survived, and the other file that
+-- names any of them (`client_account.sql`) killed NONE of the
+-- twenty-two, so the union is this file alone.
+--
+--     python3 scripts/mutate_sql.py \
+--       supabase/migrations/0549_the_transfer_that_has_to_arrive_somewhere.sql \
+--       supabase/tests/client_money_crossing.sql \
+--       supabase/tests/mutants/client_money_crossing.py
+--
+-- They fell into three families, and all three had already been found
+-- the same day in `matter_transfer.sql`:
+--
+--   * THREE unasserted `can_post` guards -- one in each function. A
+--     stranger could pay money onto a matter, pay money out of it, and
+--     cross it to office, and nothing said no.
+--   * `status <> 'void'` in the payout check, so a bounced receipt
+--     funded a disbursement.
+--   * FOUR bank-selection rules on `receive_client_money` collapsed
+--     into one account. `firm()` above makes one client account and one
+--     office account, and with the ordering landing on the client one
+--     regardless, "a client account", "an active account", "the default
+--     account" and "the oldest account" were indistinguishable.
+--
+-- As in matter_transfer, the four cannot all be observed in ONE
+-- company: `0741` allows at most one default ACTIVE account, so showing
+-- that `is_client_account` is what excludes the office account requires
+-- the office account to be the default -- and then no client account is
+-- one, and `is_default desc` has nothing to order. Two firms again.
+--
+-- A new block rather than a change to `pg_temp.firm()`, which nine
+-- blocks above depend on.
+do $$
+declare
+  v_owner  uuid := pg_temp.test_user();
+  v_x      uuid;
+  v_y      uuid;
+  v_client uuid;
+  v_m      uuid;
+  v_m2     uuid;
+  v_xc1    uuid;
+  v_xc2    uuid;
+  v_office uuid;
+  v_shut   uuid;
+  v_yc1    uuid;
+  v_yc2    uuid;
+  v_txn    uuid;
+  v_void   uuid;
+  v_used   uuid;
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.allow_many_companies();
+
+  -- ==================================================================
+  -- Firm X: three strangers' refusals, the void, and the default rule
+  -- ==================================================================
+  v_x := pg_temp.test_org('Peguam Wang Masuk', array['legal']);
+  perform public.create_fiscal_year(v_x, date '2026-01-01');
+  perform public.setup_legal_module(v_x);
+
+  select b.id into v_xc1 from public.bank_accounts b
+   where b.org_id = v_x and b.is_client_account;
+  update public.bank_accounts set is_default = true where id = v_xc1;
+  v_xc2 := pg_temp.test_bank_account(v_x, 'Akaun klien kedua',
+    p_client => true, p_default => false);
+
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_x, 'CL', 'Puan Noraini', 'customer') returning id into v_client;
+  insert into public.matters (org_id, matter_no, name, client_id,
+                              fee_earner, responsible_solicitor)
+  values (v_x, 'X-1', 'Satu', v_client, v_owner, v_owner) returning id into v_m;
+  insert into public.matters (org_id, matter_no, name, client_id,
+                              fee_earner, responsible_solicitor)
+  values (v_x, 'X-2', 'Dua', v_client, v_owner, v_owner)
+  returning id into v_m2;
+
+  -- Money in, so there is something to pay out of.
+  v_txn := public.receive_client_money(v_m, 5000, date '2026-02-02',
+                                       'On account');
+  select t.bank_account_id into v_used
+    from public.client_account_transactions t where t.id = v_txn;
+  perform pg_temp.check_eq(
+    'with two open client accounts, money in lands in the DEFAULT one',
+    v_used, v_xc1);
+  perform pg_temp.check_true('and the other is a real alternative',
+    v_xc2 is not null and v_xc2 <> v_xc1);
+
+  -- ------------------------------------------------------------------
+  -- A void receipt does not fund a disbursement
+  -- ------------------------------------------------------------------
+  insert into public.client_account_transactions
+    (org_id, matter_id, transaction_no, transaction_date, transaction_type,
+     bank_account_id, amount, description, status)
+  values (v_x, v_m, 'XCT-V', date '2026-02-03', 'receipt',
+          v_xc1, 9000, 'Cheque that bounced', 'void')
+  returning id into v_void;
+  perform pg_temp.check_eq('the void receipt is on the matter',
+    (select count(*)::integer from public.client_account_transactions
+      where matter_id = v_m and status = 'void'), 1);
+  perform pg_temp.check_eq('but what the matter holds ignores it',
+    (select coalesce(sum(t.amount), 0) from public.client_account_transactions t
+      where t.matter_id = v_m and t.status <> 'void'), 5000.00);
+  perform pg_temp.check_refused(
+    'so a void receipt does not fund a disbursement',
+    format('select public.pay_from_client_account(%L, 6000)', v_m),
+    '%holds 5000.00 and cannot pay out 6000.00%', '23514');
+
+  -- ------------------------------------------------------------------
+  -- A stranger may do none of the three
+  -- ------------------------------------------------------------------
+  -- The WHOLE message, not `%privileges%`. All three functions raise
+  -- `Insufficient privileges to move client money`, and other guards
+  -- elsewhere raise `Insufficient privileges to post` -- so a fragment
+  -- assertion passes against the wrong one. That is exactly how the
+  -- can_post mutant on `transfer_between_matters` survived earlier the
+  -- same day, and `bank_transfers.sql` records the trap in almost these
+  -- words: "the message is what says which of the two turned them
+  -- away".
+  perform pg_temp.sign_in_as(pg_temp.another_user('luar-wang@example.test'));
+  perform pg_temp.check_refused(
+    'a stranger cannot pay money ONTO a matter',
+    format('select public.receive_client_money(%L, 100)', v_m),
+    'Insufficient privileges to move client money', '42501');
+  perform pg_temp.check_refused(
+    'a stranger cannot pay money OUT of one',
+    format('select public.pay_from_client_account(%L, 100)', v_m),
+    'Insufficient privileges to move client money', '42501');
+  perform pg_temp.check_refused(
+    'a stranger cannot cross it to office either',
+    format('select public.settle_from_client_account(%L, %L, 100)',
+           v_m, gen_random_uuid()),
+    'Insufficient privileges to move client money', '42501');
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_eq('and none of the three attempts moved anything',
+    (select coalesce(sum(t.amount), 0) from public.client_account_transactions t
+      where t.matter_id = v_m and t.status <> 'void'), 5000.00);
+
+  -- ==================================================================
+  -- Firm Y: the office account is the company default
+  -- ==================================================================
+  -- The ordinary configuration for a firm: it trades from its office
+  -- current account, so that is the company default and NO client
+  -- account is. `is_client_account` is then the only thing keeping
+  -- client money out of it.
+  v_y := pg_temp.test_org('Peguam Akaun Pejabat', array['legal']);
+  perform public.create_fiscal_year(v_y, date '2026-01-01');
+  perform public.setup_legal_module(v_y);
+
+  v_office := pg_temp.test_bank_account(v_y, 'Akaun pejabat',
+    p_client => false, p_default => true);
+  -- A CLOSED client account still carrying the default flag. 0741's
+  -- index covers only `is_default and is_active`, so this is allowed --
+  -- and it is the only way to show that `is_active` is what keeps a
+  -- shut account out, since otherwise the default office account wins.
+  v_shut := pg_temp.test_bank_account(v_y, 'Akaun klien lama',
+    p_client => true, p_default => false, p_active => false);
+  update public.bank_accounts set is_default = true where id = v_shut;
+
+  select b.id into v_yc1 from public.bank_accounts b
+   where b.org_id = v_y and b.is_client_account and b.is_active;
+  v_yc2 := pg_temp.test_bank_account(v_y, 'Akaun klien B',
+    p_client => true, p_default => false);
+  -- YC2 is created SECOND and dated EARLIER, so the correct row and the
+  -- first row are different ones. Without the `created_at` tiebreak the
+  -- query returns whichever the scan reaches first; with it, YC2. A
+  -- fixture where the right account is also the first account cannot
+  -- tell the two apart.
+  --
+  -- The ORDER of these two updates matters, and getting it wrong cost a
+  -- survivor: an UPDATE rewrites the row at the end of the heap, so
+  -- whichever is updated LAST is scanned last. YC1 is updated first and
+  -- YC2 second, which puts YC1 ahead of YC2 physically while YC2 stays
+  -- the older by `created_at` -- so the two orderings disagree. Done
+  -- the other way round, both orderings answer YC2 and the mutant that
+  -- deletes the tiebreak survives, which is what happened on the first
+  -- attempt.
+  update public.bank_accounts set created_at = now() - interval '1 day'
+   where id = v_yc1;
+  update public.bank_accounts set created_at = now() - interval '2 days'
+   where id = v_yc2;
+
+  perform pg_temp.check_true('the office account is the company default, '
+    'so no OPEN client account is',
+    (select is_default from public.bank_accounts where id = v_office)
+    and not exists (select 1 from public.bank_accounts
+                     where org_id = v_y and is_client_account
+                       and is_active and is_default));
+
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_y, 'CLY', 'Encik Faizal', 'customer') returning id into v_client;
+  insert into public.matters (org_id, matter_no, name, client_id,
+                              fee_earner, responsible_solicitor)
+  values (v_y, 'Y-1', 'Satu', v_client, v_owner, v_owner) returning id into v_m;
+
+  v_txn := public.receive_client_money(v_m, 3000, date '2026-02-02',
+                                       'On account');
+  select t.bank_account_id into v_used
+    from public.client_account_transactions t where t.id = v_txn;
+
+  perform pg_temp.check_true(
+    'client money IN never lands in the OFFICE account',
+    v_used <> v_office);
+  perform pg_temp.check_true('nor in a CLOSED client account',
+    v_used <> v_shut);
+  perform pg_temp.check_eq(
+    'and with no default client account, the OLDEST open one, not '
+    'whichever row the plan reaches first',
+    v_used, v_yc2);
+
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

@@ -12560,3 +12560,60 @@ Three things follow, and the first is the one to keep:
    anyway for an unrelated reason, which read exactly like a kill. Every
    mutation in this stretch now goes through a Python replace with
    `assert s != before, "MUTATION DID NOT APPLY"`.
+
+### The three client-money movers: eight more, and the same three families
+
+`scripts/mutation_targets.py` put `public.pay_from_client_account` top of
+its ranking, and the three functions in `0549` — money in, money out,
+and the crossing to office — were mutated together.
+
+**21 mutants. 13 killed, EIGHT survived. 21 of 21 after the work, and
+nothing was equivalent.** `client_account.sql`, the only other file that
+names any of them, killed **none** of the 21, so the union is one file.
+
+The eight fell into exactly the three families found in
+`matter_transfer.sql` hours earlier, and that repetition is worth more
+than the eight:
+
+1. **Three unasserted `can_post` guards, one per function.** A stranger
+   could pay money onto a matter, pay money out of it, and cross it to
+   office. All three raise the same sentence, which is why the
+   assertions use the whole message.
+2. **`status <> 'void'` in the payout check**, so a bounced receipt
+   funded a disbursement.
+3. **Four bank-selection rules on `receive_client_money` collapsed into
+   one account** — the fixture's ordering landed on the client account
+   whichever rule was doing the work.
+
+The pattern across both: in a family of functions written in one
+migration, a guard that nobody asserted in the first one is unasserted
+in all of them. The mutation run found the same hole three times in
+three functions, because they were written from the same template.
+
+#### The update order in a tiebreak fixture, which cost a survivor twice
+
+To show that a total ordering beats no ordering, the fixture needs the
+correct row and the physically-first row to be DIFFERENT rows. Two open
+client accounts, the second created later but dated earlier, then both
+`created_at` values rewritten.
+
+**Which one is rewritten last decides the physical order**, because an
+UPDATE writes the new row version at the end of the heap. Updating the
+older one last puts it after the newer one, so a query with no tiebreak
+answers the same row as a query with one, and the mutant that deletes
+the tiebreak survives.
+
+That happened in `client_money_crossing.sql`, where it was the single
+survivor of the second run. Fixing it exposed the same mistake in
+`matter_transfer.sql`, written an hour earlier, whose comment claimed
+the two orderings disagreed when they did not — there the mutant was
+killed by a different assertion (call it twice after rewriting a row,
+and the answer must not change), so the score was right and the stated
+reason was wrong. Both fixtures now update the newer row last, and in
+matter_transfer the mutant is killed by both assertions instead of one.
+
+A note on fragility, since this is a test that depends on heap order: it
+is deterministic for a fixed sequence of operations on a given
+PostgreSQL, which is what CI runs, and the determinism assertion beside
+it does not depend on heap order at all. If it ever does flake, the
+determinism half is the one to keep.

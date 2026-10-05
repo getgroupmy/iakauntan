@@ -444,15 +444,24 @@ begin
    where b.org_id = v_firm_b and b.is_client_account and b.is_active;
   v_cb2 := pg_temp.test_bank_account(v_firm_b, 'Akaun klien B',
     p_client => true, p_default => false);
-  -- CB2 is inserted SECOND and dated EARLIER, so the correct answer and
-  -- the physical-order answer are different rows. Without a tiebreak
-  -- after `is_default desc` the query returns CB1; with 0743's
-  -- `created_at, id` it returns CB2. A fixture where the right row is
-  -- also the first row cannot tell those two apart.
-  update public.bank_accounts set created_at = now() - interval '2 days'
-   where id = v_cb2;
+  -- CB2 is inserted SECOND and dated EARLIER, so `created_at` and
+  -- insertion order disagree. A fixture where the right row is also the
+  -- first row cannot tell a total ordering from no ordering at all.
+  --
+  -- The ORDER of these two updates matters. An UPDATE rewrites the row
+  -- at the end of the heap, so whichever is updated LAST is scanned
+  -- last: CB1 first and CB2 second leaves CB1 ahead of CB2 physically,
+  -- while CB2 stays the older by `created_at`, so the two orderings
+  -- answer differently. The first version of this fixture had them the
+  -- other way round -- which made both orderings answer CB2, so the
+  -- assertion below could not tell them apart and the mutant that
+  -- deletes 0743's tiebreak was killed only by the determinism check
+  -- further down. It is killed by both now. The same mistake cost a
+  -- survivor in `client_money_crossing.sql` an hour later.
   update public.bank_accounts set created_at = now() - interval '1 day'
    where id = v_cb1;
+  update public.bank_accounts set created_at = now() - interval '2 days'
+   where id = v_cb2;
 
   perform pg_temp.check_eq('the firm has four accounts: office, two open '
     'client accounts and a closed one',
