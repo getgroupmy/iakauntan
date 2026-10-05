@@ -11535,3 +11535,32 @@ And the near-miss is worth as much as the hits: **a historical count reads
 exactly like a stale one.** `382` was one off from today's `383` and would
 have been "fixed" into a lie about what the 1120 episode cost, if the
 sentence around it had not been read first.
+
+### setup-java v5 does NOT fix the Android JDK flake — checked, not assumed
+
+The Android job's `API rate limit exceeded for <ip>` is the one known red in
+CI, and its annotations now also carry `setup-java v4 is deprecated and will
+no longer receive updates. Please migrate to actions/setup-java@v5`. Those
+two sit next to each other and look like one fix. **They are not.**
+
+`actions/setup-java`'s release notes were read (v5.7.0 is current): nothing
+in any v5 release mentions authentication, GitHub API rate limits, or the
+`token` input being used when resolving a distribution over the GitHub API.
+So a v4 → v5 bump is a maintenance item with a deprecation behind it, and
+**not** a cure for the flake. Do not spend the hour expecting one.
+
+The flake's cause and why each fix is refused, in one place:
+
+| fix | why not |
+|---|---|
+| pass `token:` | already passed, and the error still names an IP rather than an account — `setup-java` is not putting it on that request |
+| `distribution: temurin` | `app/android/gradle/gradle-daemon-jvm.properties` names `toolchainVendor=jetbrains`; Gradle refuses its daemon without a JetBrains Runtime, and a Temurin 21 does not satisfy a vendor criterion |
+| drop the vendor criterion | that file came from a developer machine running `updateDaemonJvm`. Editing it here moves the disagreement rather than removing it, which ci.yml says in its own comment |
+| `distribution: jdkfile` | needs `cache-redirector.jetbrains.com`, which this container's egress proxy REFUSES with 403 on CONNECT, so it cannot be verified here and must not be pushed blind |
+| cache the JDK | the one untried option. Not attempted, because it can only be verified by pushing to a branch that is also the deploy branch |
+
+What is in place is the three-attempt ladder with waits of 0, 60 and 180
+seconds, and it works often enough that **Android passed on every commit
+after `f1e65ffe`**. Re-run the failed job rather than re-diagnosing:
+`gh api -X POST repos/getgroupmy/iakauntan/actions/runs/<id>/rerun-failed-jobs`,
+which returns 403 "already running" while any job in that run is in flight.
