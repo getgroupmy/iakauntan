@@ -14254,6 +14254,79 @@ A sweep and a hand-run of the same suite cannot share a cluster. Wait
 for `restored:`, or give the second one its own `IAK_PGPORT`. Written
 into `scripts/mutate_sql.py`.
 
+## 5 October: A CREDITED PLATE DOES NOT PUT THE MODIFIER BACK — reported, not fixed
+
+The second defect of the day, found the same way as the first: by
+reading the two halves of a symmetric pair against each other rather
+than by mutating either. **Reproduced, and waiting on the user**, because
+the fix contains a real design decision.
+
+`app.pos_deplete_recipes` (migration **0424**) takes a dish's
+ingredients off the shelf when a counter sale is settled, and it takes
+the MODIFIERS' ingredients too — there is a whole `union all` branch
+over `pos_sale_line_modifiers` → `pos_modifiers.recipe_item_id`.
+
+`app.pos_return_recipes` (migration **0269**, 155 migrations earlier)
+puts them back when the sale is credited, and **it has no reference to
+any modifier table at all.** Its loop reads the credit note's
+`sales_document_lines` through
+`app.pos_recipe_components(l.item_id, l.quantity)` — and that function
+takes an item and a quantity. It reads `pos_recipes` and
+`pos_recipe_lines` and nothing else, so it *cannot* know which modifiers
+a particular sale line chose.
+
+The `least(..., consumed - returned)` clamp does not save it: that is an
+upper bound on what may come back, so it can cap a return but never add
+to one.
+
+### Reproduced
+
+On `pos_recipes.sql`'s own section-7 fixture — a plate of nasi with one
+egg in its recipe, plus a "Telur tambahan" modifier the customer pays
+RM2.00 for, which is a second egg:
+
+```
+eggs before credit = 26, after = 27, consumed = 2, returned = 1
+```
+
+Two eggs left the shelf for that sale. Crediting the whole sale put
+**one** back. The extra egg the customer paid for, and which the kitchen
+really used, is gone from stock for ever.
+
+`pos_recipes.sql` already asserts the depletion half of this — "an extra
+egg is an egg off the shelf", 28 down to 26 — and never credits that
+sale. So the asymmetry is not merely untested: **the file tests exactly
+one direction of the one thing that differs between the two halves.**
+That is the fourth instance of "the two halves of a symmetric thing do
+not get symmetric coverage" in this sweep, and the first where the
+halves are 155 migrations apart.
+
+### What it costs
+
+Every modifier ingredient is permanently understated by whatever is
+credited — systematically, in the direction of showing less stock than
+the shop has, so it never trips a negative-stock guard and never looks
+wrong. And the food cost released on the credit is short by the
+modifier's cost, so cost of sales stays overstated against a sale that
+did not happen.
+
+### Why it is not fixed here
+
+The repair is not mechanical, which is the difference between this and
+the reversal finding above. Giving `pos_return_recipes` the same
+`union all` branch needs an answer to a question the code has never been
+asked: **when a PARTIAL credit is taken, how much of a modifier comes
+back?** The modifier is attached to a sale LINE, the credit is taken
+against document lines by quantity, and the obvious answer — pro-rata on
+the credited share of that line's quantity — is a policy choice about
+food cost, not a bug fix. It wants the user's word.
+
+A second, unverified instance of the same asymmetry is worth looking at
+in the same breath: `pos_deplete_recipes` clamps a lot-tracked
+ingredient to `app.lot_available(item, warehouse)` and
+`pos_return_recipes` has no lot logic at all, because 0269 predates the
+lot work.
+
 ## 5 October: reverse_gl_entry — the file named after the function was not its best coverage
 
 34 mutants (33 plus a control) in
