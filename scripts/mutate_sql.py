@@ -145,11 +145,35 @@ def run(test: str) -> str | None:
             else first.split("ERROR:", 1)[-1].strip())[:70]
 
 
-def live(name: str) -> str:
-    return subprocess.run(
+# `\x1e`, the ASCII record separator: a byte that cannot occur in SQL
+# source, so the overloads can be split apart again afterwards.
+SEP = "\x1e"
+
+
+def live(name: str) -> list[str]:
+    """Every OVERLOAD's source for `name`, one per entry.
+
+    This returned a single string until 5 October, concatenating the
+    overloads -- and `public.create_contra` has two: the 5-argument one
+    in `0421` and a 6-argument idempotent wrapper in `0734`. The body
+    comparison below could therefore never match, and reported
+
+        A LATER migration almost certainly redefines it
+
+    which is wrong and sends the reader hunting a migration that does
+    not exist. **Forty-six functions in this schema are overloaded**, so
+    the bug was waiting for any of them.
+
+    Applying a mutant was never affected: the `create or replace` comes
+    from the migration and carries its own argument list, so it replaces
+    the right overload. Only the check was wrong.
+    """
+    out = subprocess.run(
         ["psql", DB, "-tAc",
-         f"select prosrc from pg_proc where proname = '{name}'"],
+         f"select string_agg(prosrc, '{SEP}') from pg_proc "
+         f"where proname = '{name}'"],
         capture_output=True, text=True).stdout
+    return [part for part in out.split(SEP) if part.strip()]
 
 
 def latest_defining(name: str) -> pathlib.Path | None:
@@ -276,10 +300,16 @@ def main() -> int:
 
     for _, name, *_ in mutants:
         body = body_of(block(original, name))
-        got = live(name)
-        if body and got.strip() and squash(body) != squash(got):
+        overloads = live(name)
+        # ANY overload matching is enough: the migration defines one of
+        # them, and the others are wrappers with their own bodies.
+        if body and overloads and not any(
+                squash(body) == squash(one) for one in overloads):
             print(f"HARNESS ERROR: {name} in the database does not match "
                   f"{migration}.", file=sys.stderr)
+            if len(overloads) > 1:
+                print(f"  ({len(overloads)} overloads of {name} exist; none "
+                      f"of them matches this file)", file=sys.stderr)
             print("A LATER migration almost certainly redefines it, so this "
                   "file is superseded. Find it CASE-INSENSITIVELY:",
                   file=sys.stderr)
@@ -287,7 +317,9 @@ def main() -> int:
                   f'supabase/migrations/*.sql | tail -3', file=sys.stderr)
             print("Running anyway would restore the OLD body and leave the "
                   "database wrong for every later run.", file=sys.stderr)
-            for line in differing(body, got)[:3]:
+            closest = max(overloads, key=lambda one: len(
+                set(squash(one).split()) & set(squash(body).split())))
+            for line in differing(body, closest)[:3]:
                 print(f"  {line}", file=sys.stderr)
             return 2
 
@@ -302,15 +334,49 @@ def main() -> int:
         keep = grants(original, name)
         if keep:
             source += "\n" + keep
+
+        def bail(why: str, _name: str = name, _keep: str = keep) -> None:
+            """Put the function back, THEN stop.
+
+            Every exit inside this loop goes through here. On 5 October
+            the landed-check below exited directly, after a mutant had
+            already been applied -- so `create_contra` was left carrying
+            `-- purchases guard dropped` in the live database, under a
+            message that began "applied cleanly". The next run's body
+            comparison caught it, which is the defence working, but the
+            message it printed blamed a later migration and sent the
+            reader looking for one that does not exist.
+
+            An error path that leaves the subject broken is the one
+            failure this harness exists to prevent, so it may not have
+            one.
+            """
+            back = block(original, _name)
+            if _keep:
+                back += "\n" + _keep
+            psql(back)
+            sys.exit(f"HARNESS ERROR: {why}\n"
+                     f"  ({_name} was put back before stopping)")
+
         if old not in source:
-            sys.exit(f"HARNESS ERROR: {label} -- the anchor is not in {name}")
+            bail(f"{label} -- the anchor is not in {name}")
         applied = psql(source.replace(old, new, 1))
         if applied.returncode != 0:
-            sys.exit(f"HARNESS ERROR: {label} -- "
-                     f"{applied.stderr.strip().splitlines()[0][:120]}")
-        if marker not in live(name):
-            sys.exit(f"HARNESS ERROR: {label} -- applied cleanly and the "
-                     f"marker {marker!r} is not in the live function")
+            # The apply failed, so nothing was replaced -- PostgreSQL
+            # refuses a `create or replace` atomically. Restoring anyway
+            # costs one statement and removes the need to reason about
+            # it.
+            bail(f"{label} -- "
+                 f"{applied.stderr.strip().splitlines()[0][:120]}")
+        # `any(... in one ...)`, not `marker not in live(name)`: since
+        # live() began returning one entry per OVERLOAD, a bare `in`
+        # tests list MEMBERSHIP -- is the marker equal to a whole body
+        # -- which is false for every real marker. That turned the first
+        # mutant of an overloaded function into a spurious
+        # "applied cleanly and the marker is not in the live function".
+        if not any(marker in one for one in live(name)):
+            bail(f"{label} -- applied cleanly and the marker {marker!r} "
+                 f"is not in the live function")
 
         verdict = run(test)
         print(f"{'killed  ' if verdict else 'SURVIVED'}  {label}"

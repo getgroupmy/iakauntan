@@ -13022,3 +13022,89 @@ functions in the schema: `public.create_deposit` (five definitions),
 and `reopen_fiscal_year`. The sweep is less than half done, not nearly
 finished — which is the useful correction, since the previous entry read
 as though the money movers were almost covered.
+
+### create_contra: nothing in the suite had ever contra'd two records of one party
+
+First target from the nineteen functions that were invisible until the
+ranking tool's dead signature was fixed. **25 mutants, fourteen killed,
+ten survived**; `allocation_party.sql` killed nothing new. 23 of 25
+after the work, the two left proven equivalent.
+
+**The largest gap is a fixture collapse of a kind worth naming.** Every
+contra in the suite used ONE contact for both sides. `app.same_party`
+allows two — the whole point of
+`0272_the_customer_who_is_also_the_supplier` is that a party may be kept
+as two records carrying one TIN — and with one contact:
+
+```
+the customer IS the supplier
+so the receivable line's contact IS the payable line's contact
+and the note's customer_contact_id IS its supplier_contact_id
+```
+
+Three separate claims with the same value, none of them testable. And
+**nothing in the suite contra'd two records of one party at all** — the
+case the function's hardest condition exists for. A contra between
+`BJ-C` and `BJ-S`, same TIN, each with its own control account, closes
+four mutants at once.
+
+**The two module rights had to be defeated by different means**, which
+is a nice illustration of why a shared `if` needs two fixtures.
+`create_contra` requires write on sales AND on purchases. `sales` is a
+CORE module a company always holds; `purchases` is not. So one guard is
+defeated by a company that does not hold purchases, and the other only
+by a clerk whose access type sets sales to `read` — a stranger is
+refused whichever guard survives, and proves neither.
+
+The rest: the credit-note-as-invoice half of a shared `if`, the
+contact's own control accounts, and the no-control-accounts refusal.
+
+#### An assertion that cannot kill its mutant, and is right anyway
+
+Dropping `deleted_at is null` from the SEED lookup is **equivalent**:
+the loop below looks every invoice up again with the filter, including
+the first, and raises the same `No such invoice.` with the same P0002.
+An assertion that a deleted invoice is refused was added regardless —
+the behaviour is worth pinning — and it does not kill the mutant. That
+is the clearest demonstration in this sweep of what an equivalent
+mutant is: **a correct, valuable assertion whose subject the mutation
+does not change.**
+
+The second equivalent is the journal built from `v_bill_tot` instead of
+`v_inv_tot`, where the equal-sides check has already raised. Proven the
+same way as record_group_payment's currency case: the mutant that
+DISABLES that check is killed, so the check demonstrably fires.
+
+#### Two defects in my own harness, one of which left the database wrong
+
+`mutate_sql.py` refused to run at all, reporting that a later migration
+redefines `create_contra`. No migration does. **`public.create_contra`
+is OVERLOADED** — the 5-argument one in `0421` and a 6-argument
+idempotent wrapper in `0734` — and `live(name)` selected
+`prosrc from pg_proc where proname = '<name>'`, concatenating every
+overload into one string that could never match one migration's body.
+**Forty-six functions in this schema are overloaded**, so this was
+waiting for any of them. `live()` now returns one entry per overload and
+the check passes if any matches; applying a mutant was never affected,
+because the `create or replace` carries its own argument list.
+
+Fixing that exposed a worse one. The "did the mutant land" check used
+`marker not in live(name)`, which after the type change tested list
+MEMBERSHIP, so it failed for every marker. Its error path called
+`sys.exit` **after the mutant had already been applied** — so
+`create_contra` was left carrying `-- purchases guard dropped` in the
+live database, under a message beginning *"applied cleanly"*.
+
+The next run's body comparison caught it, which is the defence working
+as designed — but the message it printed blamed a later migration and
+sent the reader hunting one that does not exist. **An error path that
+leaves the subject broken is the one failure this harness exists to
+prevent, so it may not have one.** Every exit inside the mutate loop now
+goes through a `bail()` that restores the function first and says it
+did.
+
+Worth noting what caught what: the overload bug was caught by the body
+guard, the landed-check bug by the body guard on the NEXT run, and the
+mutated database by reading `pg_proc` for the marker rather than
+trusting either message. Three layers, and the top two both reported the
+wrong cause.

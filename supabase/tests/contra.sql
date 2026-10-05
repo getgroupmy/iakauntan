@@ -845,5 +845,352 @@ begin
   raise notice 'ok   contra: the nine a sweep found';
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The eight a mutation run found neither file could see
+-- ---------------------------------------------------------------------
+--
+-- `public.create_contra` was mutated 25 ways on 5 October. Fourteen
+-- died against the assertions above, ten survived, and
+-- `allocation_party.sql` -- the only other file reaching it -- killed
+-- nothing new. Two of the ten are equivalent; eight were gaps.
+--
+--     python3 scripts/mutate_sql.py \
+--       supabase/migrations/0421_what_day_the_money_moved.sql \
+--       supabase/tests/contra.sql \
+--       supabase/tests/mutants/create_contra.py
+--
+-- THE TWO EQUIVALENTS, proven rather than argued:
+--
+--   * dropping `deleted_at is null` from the SEED lookup. The loop
+--     below it looks every invoice up again WITH that filter, including
+--     the first, and raises the same `No such invoice.` with the same
+--     P0002. The seed can only reach a deleted invoice far enough to
+--     insert a contra note that the loop's exception then rolls back.
+--   * building the journal from `v_bill_tot` instead of `v_inv_tot`. By
+--     that line `v_inv_tot <> v_bill_tot` has already raised, so the
+--     two are the same number by construction.
+--
+-- THE EIGHT GAPS fell into the three families this sweep keeps finding,
+-- and the largest was a fixture collapse of a kind worth naming: every
+-- contra above uses ONE contact for both sides. `app.same_party` allows
+-- two -- the whole point of `0272_the_customer_who_is_also_the_supplier`
+-- is that a party may be kept as two records carrying one TIN -- and
+-- with one contact,
+--
+--   the customer IS the supplier
+--   so the receivable contact IS the payable contact
+--   and the note's customer_contact_id IS its supplier_contact_id
+--
+-- so three separate claims had the same value and none could be tested.
+-- Nothing in the suite contra'd two records of one party at all, which
+-- is the case the function's hardest condition exists for.
+do $$
+declare
+  v_owner uuid := pg_temp.test_user();
+  v_org   uuid;
+  v_poor  uuid;
+  v_nopur uuid;
+  v_clerk uuid;
+  v_type  uuid;
+  v_cust  uuid;
+  v_sup   uuid;
+  v_ar    uuid;
+  v_ap    uuid;
+  v_item  uuid;
+  v_inv   uuid;
+  v_bill  uuid;
+  v_cn    uuid;
+  v_ctr   uuid;
+  v_entry uuid;
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.allow_many_companies();
+
+  -- ==================================================================
+  -- One party, two records, two control accounts of their own
+  -- ==================================================================
+  v_org := pg_temp.test_org('Dua Rekod Satu Pihak Sdn Bhd');
+  perform public.create_fiscal_year(v_org,
+    date_trunc('year', pg_temp.today())::date);
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_org, m, true from unnest(array['sales', 'purchases', 'accounting']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+
+  -- The customer record and the supplier record, same TIN. This is what
+  -- `app.same_party` is for, and nothing above exercises it.
+  insert into public.accounts
+    (org_id, code, name, account_type, account_subtype, is_group)
+  values (v_org, '1215', 'Receivable - Bina Jaya', 'asset', 'accounts_receivable',
+          false) returning id into v_ar;
+  insert into public.accounts
+    (org_id, code, name, account_type, account_subtype, is_group)
+  values (v_org, '2115', 'Payable - Bina Jaya', 'liability', 'accounts_payable',
+          false) returning id into v_ap;
+
+  insert into public.contacts
+    (org_id, code, name, contact_type, tin, receivable_account_id)
+  values (v_org, 'BJ-C', 'Bina Jaya (sales)', 'customer', 'T-999', v_ar)
+  returning id into v_cust;
+  insert into public.contacts
+    (org_id, code, name, contact_type, tin, payable_account_id)
+  values (v_org, 'BJ-S', 'Bina Jaya (purchases)', 'supplier', 'T-999', v_ap)
+  returning id into v_sup;
+
+  perform pg_temp.check_true('two records, and the schema agrees they are '
+    'one party',
+    app.same_party(v_cust, v_sup) and v_cust <> v_sup);
+
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, unit_price)
+  values (v_org, 'SVC', 'Kerja', 'service', false, 100)
+  returning id into v_item;
+
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'invoice', 'INV-P', pg_temp.today(), pg_temp.today(),
+          v_cust, 'MYR', 1, 'draft') returning id into v_inv;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price)
+  values (v_org, v_inv, 1, 'item', v_item, 'Kerja', 10, 100);
+  perform public.post_sales_document(v_inv);
+
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'bill', 'BILL-P', pg_temp.today(), pg_temp.today(),
+          v_sup, 'MYR', 1, 'draft') returning id into v_bill;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price)
+  values (v_org, v_bill, 1, 'item', v_item, 'Kerja', 10, 100);
+  perform public.post_purchase_document(v_bill);
+
+  v_ctr := public.create_contra(v_org, pg_temp.today(),
+    jsonb_build_array(jsonb_build_object('document', v_inv, 'amount', 1000)),
+    jsonb_build_array(jsonb_build_object('document', v_bill, 'amount', 1000)),
+    'Two records, one party');
+  perform pg_temp.check_true('a contra between two records of one party '
+    'goes through', v_ctr is not null);
+  select n.gl_entry_id into v_entry
+    from public.contra_notes n where n.id = v_ctr;
+
+  -- Each side lands on the CONTACT's own control account, not the
+  -- chart's. With one contact and no account of its own, 1210/2110 and
+  -- these two were the same answer.
+  perform pg_temp.check_eq(
+    'the payable side is the supplier record''s OWN account, not 2110',
+    (select round(sum(l.debit - l.credit), 2) from public.gl_lines l
+      where l.entry_id = v_entry and l.account_id = v_ap), 1000.00);
+  perform pg_temp.check_eq(
+    'the receivable side is the customer record''s OWN account, not 1210',
+    (select round(sum(l.credit - l.debit), 2) from public.gl_lines l
+      where l.entry_id = v_entry and l.account_id = v_ar), 1000.00);
+  perform pg_temp.check_eq('and the chart''s 1210 and 2110 are untouched',
+    (select count(*)::integer from public.gl_lines l
+      join public.accounts a on a.id = l.account_id
+     where l.entry_id = v_entry and a.code in ('1210', '2110')), 0);
+
+  -- Each journal line names the record it belongs to. With one contact
+  -- on both sides this could not be told from naming the other one.
+  perform pg_temp.check_eq('the payable line names the SUPPLIER record',
+    (select l.contact_id from public.gl_lines l
+      where l.entry_id = v_entry and l.account_id = v_ap), v_sup);
+  perform pg_temp.check_eq('and the receivable line the CUSTOMER record',
+    (select l.contact_id from public.gl_lines l
+      where l.entry_id = v_entry and l.account_id = v_ar), v_cust);
+
+  -- The note is seeded with the customer in BOTH contact columns and an
+  -- amount of 1, because the allocations need a row to point at and
+  -- neither column is nullable. Both are corrected at the end, and with
+  -- one contact the supplier correction was invisible.
+  perform pg_temp.check_eq('the note names the customer record',
+    (select n.customer_contact_id from public.contra_notes n
+      where n.id = v_ctr), v_cust);
+  perform pg_temp.check_eq('and the SUPPLIER record, not the seed',
+    (select n.supplier_contact_id from public.contra_notes n
+      where n.id = v_ctr), v_sup);
+  perform pg_temp.check_eq('and is for what it settled, not the seeded 1',
+    (select n.amount from public.contra_notes n where n.id = v_ctr),
+    1000.00);
+
+  -- ==================================================================
+  -- A credit note is not an invoice
+  -- ==================================================================
+  -- `doc_type <> 'invoice'` and the status check share one `if`, so a
+  -- fixture that only ever offers a draft invoice proves the status
+  -- half and nothing about the type half.
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'credit_note', 'CN-P', pg_temp.today(), pg_temp.today(),
+          v_cust, 'MYR', 1, 'draft') returning id into v_cn;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price)
+  values (v_org, v_cn, 1, 'item', v_item, 'Kerja', 1, 100);
+  perform public.post_sales_document(v_cn);
+  perform pg_temp.check_refused(
+    'a posted CREDIT NOTE cannot be contra''d as though it were an invoice',
+    format('select public.create_contra(%L, %L, %s, %s)', v_org,
+           pg_temp.today(),
+           quote_literal(jsonb_build_array(jsonb_build_object(
+             'document', v_cn, 'amount', 100))::text) || '::jsonb',
+           quote_literal(jsonb_build_array(jsonb_build_object(
+             'document', v_bill, 'amount', 100))::text) || '::jsonb'),
+    '%only an outstanding posted invoice%', '23514');
+
+  -- ==================================================================
+  -- A company with no control accounts
+  -- ==================================================================
+  v_poor := pg_temp.test_org('Tiada Kawalan Sdn Bhd');
+  perform public.create_fiscal_year(v_poor,
+    date_trunc('year', pg_temp.today())::date);
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_poor, m, true from unnest(array['sales', 'purchases', 'accounting']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+  insert into public.contacts (org_id, code, name, contact_type, tin)
+  values (v_poor, 'P-C', 'Pihak (jual)', 'customer', 'T-888')
+  returning id into v_cust;
+  insert into public.contacts (org_id, code, name, contact_type, tin)
+  values (v_poor, 'P-S', 'Pihak (beli)', 'supplier', 'T-888')
+  returning id into v_sup;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, unit_price)
+  values (v_poor, 'SVC', 'Kerja', 'service', false, 100)
+  returning id into v_item;
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_poor, 'invoice', 'INV-Q', pg_temp.today(), pg_temp.today(),
+          v_cust, 'MYR', 1, 'draft') returning id into v_inv;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price)
+  values (v_poor, v_inv, 1, 'item', v_item, 'Kerja', 1, 100);
+  perform public.post_sales_document(v_inv);
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_poor, 'bill', 'BILL-Q', pg_temp.today(), pg_temp.today(),
+          v_sup, 'MYR', 1, 'draft') returning id into v_bill;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price)
+  values (v_poor, v_bill, 1, 'item', v_item, 'Kerja', 1, 100);
+  perform public.post_purchase_document(v_bill);
+  -- Renamed AFTER the documents were posted, so posting them had its
+  -- control accounts and only the contra is left without.
+  update public.accounts set code = '1219'
+   where org_id = v_poor and code = '1210';
+  update public.accounts set code = '2119'
+   where org_id = v_poor and code = '2110';
+  perform pg_temp.check_refused(
+    'with no control accounts and none on the contacts, a contra is refused',
+    format('select public.create_contra(%L, %L, %s, %s)', v_poor,
+           pg_temp.today(),
+           quote_literal(jsonb_build_array(jsonb_build_object(
+             'document', v_inv, 'amount', 100))::text) || '::jsonb',
+           quote_literal(jsonb_build_array(jsonb_build_object(
+             'document', v_bill, 'amount', 100))::text) || '::jsonb'),
+    '%no control accounts%', 'P0002');
+
+  -- ==================================================================
+  -- Both module rights, separately
+  -- ==================================================================
+  -- A contra writes on both sides of the books, so it needs write on
+  -- SALES and on PURCHASES. The two guards share one `if`, and a
+  -- fixture with both rights or neither cannot tell them apart -- a
+  -- stranger is refused whichever guard survives.
+  --
+  -- They have to be defeated by different means, because `sales` is a
+  -- CORE module and `purchases` is not: a company can simply not hold
+  -- purchases, while sales has to be taken away from the person.
+  v_nopur := pg_temp.test_org('Jual Sahaja Sdn Bhd');
+  perform public.create_fiscal_year(v_nopur,
+    date_trunc('year', pg_temp.today())::date);
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_nopur, m, true from unnest(array['sales', 'accounting']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+  update public.org_modules set is_enabled = false
+   where org_id = v_nopur and module_code = 'purchases';
+  perform pg_temp.check_true('the company holds sales and not purchases',
+    app.can_write_module(v_nopur, 'sales')
+    and not app.can_write_module(v_nopur, 'purchases'));
+  perform pg_temp.check_refused(
+    'a company without the purchases module cannot contra',
+    format('select public.create_contra(%L, %L, %s, %s)', v_nopur,
+           pg_temp.today(),
+           quote_literal(jsonb_build_array(jsonb_build_object(
+             'document', gen_random_uuid(), 'amount', 100))::text)
+             || '::jsonb',
+           quote_literal(jsonb_build_array(jsonb_build_object(
+             'document', gen_random_uuid(), 'amount', 100))::text)
+             || '::jsonb'),
+    '%not permitted to write%', '42501');
+
+  -- And the other way round: a clerk with purchases but only READ on
+  -- sales. `sales` being core, the company always holds it, so this is
+  -- the only way that guard can be the one refusing.
+  v_clerk := pg_temp.another_user('kerani-contra@example.test');
+  insert into public.org_members (org_id, user_id, role)
+  values (v_org, v_clerk, 'sales');
+  insert into public.access_types (org_id, name)
+  values (v_org, 'Purchases, and sales read only') returning id into v_type;
+  insert into public.access_type_modules (access_type_id, module_code, access)
+  values (v_type, 'sales', 'read'), (v_type, 'purchases', 'write');
+  update public.org_members set access_type_id = v_type
+   where org_id = v_org and user_id = v_clerk;
+
+  perform pg_temp.sign_in_as(v_clerk);
+  perform pg_temp.check_true('the clerk may write purchases and only read '
+    'sales',
+    app.can_write_module(v_org, 'purchases')
+    and not app.can_write_module(v_org, 'sales'));
+  perform pg_temp.check_refused(
+    'and so cannot contra, though the purchases half of the right is there',
+    format('select public.create_contra(%L, %L, %s, %s)', v_org,
+           pg_temp.today(),
+           quote_literal(jsonb_build_array(jsonb_build_object(
+             'document', gen_random_uuid(), 'amount', 100))::text)
+             || '::jsonb',
+           quote_literal(jsonb_build_array(jsonb_build_object(
+             'document', gen_random_uuid(), 'amount', 100))::text)
+             || '::jsonb'),
+    '%not permitted to write%', '42501');
+  perform pg_temp.sign_in_as(v_owner);
+
+  -- ==================================================================
+  -- A deleted invoice, and why this assertion does NOT kill its mutant
+  -- ==================================================================
+  -- The SEED lookup and the loop both filter `deleted_at is null`.
+  -- Dropping it from the seed leaves the loop to refuse, with the same
+  -- sentence and the same P0002 -- so the mutant is EQUIVALENT and this
+  -- assertion cannot kill it. It is here because the behaviour is worth
+  -- pinning on its own account: a deleted invoice must not be
+  -- contra'able, whichever of the two lines says so.
+  --
+  -- What proves the equivalence is not this assertion but the shape:
+  -- the loop looks up EVERY invoice including the first, with the
+  -- filter, and raises before anything is committed. The contra note
+  -- the seed inserts is rolled back by that exception.
+  update public.sales_documents set deleted_at = now() where id = v_inv;
+  perform pg_temp.check_refused(
+    'a deleted invoice cannot be contra''d',
+    format('select public.create_contra(%L, %L, %s, %s)', v_poor,
+           pg_temp.today(),
+           quote_literal(jsonb_build_array(jsonb_build_object(
+             'document', v_inv, 'amount', 100))::text) || '::jsonb',
+           quote_literal(jsonb_build_array(jsonb_build_object(
+             'document', v_bill, 'amount', 100))::text) || '::jsonb'),
+    'No such invoice.', 'P0002');
+  perform pg_temp.check_eq('and no contra note was left behind',
+    (select count(*)::integer from public.contra_notes
+      where org_id = v_poor), 0);
+
+  perform pg_temp.sign_out();
+end $$;
+
 
 rollback;

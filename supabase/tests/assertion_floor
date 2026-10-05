@@ -152,4 +152,17 @@
 # The other two: the 1310 guard, and the movement-to-journal link that
 # nothing asserted at all. Measured:
 # `all SQL assertions passed (384 files, 14435 assertions executed)`.
-14435
+#
+# 14453, +18: contra.sql. create_contra scored 14 of 25 on the first run,
+# 23 of 25 after, two proven equivalent. The largest gap: every contra
+# in the suite used ONE contact for both sides, but app.same_party
+# allows TWO records carrying one TIN -- so the customer WAS the
+# supplier, the receivable line's contact WAS the payable line's, and
+# the note's customer_contact_id WAS its supplier_contact_id. Three
+# claims with one value. Nothing had ever contra'd two records of one
+# party, the case the function's hardest condition exists for. Also: the
+# two module rights needed DIFFERENT fixtures, because `sales` is a core
+# module a company always holds and `purchases` is not -- a stranger is
+# refused whichever guard survives and proves neither. Measured:
+# `all SQL assertions passed (384 files, 14453 assertions executed)`.
+14453
