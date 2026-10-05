@@ -79,4 +79,16 @@
 # written as `0 = 0` (both counts zero once the only warehouse is
 # retired) and repaired on the spot. Measured:
 # `all SQL assertions passed (384 files, 14360 assertions executed)`.
-14360
+#
+# 14377, +17: matter_transfer.sql, after `transfer_between_matters` was
+# mutated nineteen ways and EIGHT survived -- the worst first-run score
+# of any function measured, and with one calling file nothing else could
+# rescue them. Five were missing assertions (a deleted matter, another
+# COMPANY's matter, no legal module, a stranger, and a VOID receipt
+# counting as money held); three were the one-bank-account fixture
+# collapse; and chasing the last of those found a real defect, fixed in
+# 0743 -- `order by is_default desc` with no tiebreak, so a firm with no
+# default client account picked one by physical row order. 18 of 18
+# killed afterwards. Measured:
+# `all SQL assertions passed (384 files, 14377 assertions executed)`.
+14377

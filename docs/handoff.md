@@ -12375,3 +12375,116 @@ Also recorded in passing: the first draft of the mutants header said
 `group_payment.sql` has 69 assertions, from grepping occurrences of
 `check_eq|check_true|check_refused`, which also counts the helper
 definitions. The run prints 61. Ask the run, not the text.
+
+### transfer_between_matters: the worst score of the session, and a real defect
+
+Client money, moved between two of the same client's matters. Chosen as
+the riskiest target left on three signals, all of which proved right:
+the function has been redefined **five** times (0358, 0690, 0696, 0698,
+0739), exactly **one** test file calls it, and what it governs is
+regulated.
+
+Nineteen mutants. **Ten killed, EIGHT survived** — the worst first-run
+score of any function measured this session, and with one calling file
+nothing else in the suite could rescue them. After the work: 18 of 18
+killed, control survived.
+
+**Five were plain missing assertions**, and the list is uncomfortable for
+a client-money function:
+
+| survivor | what it means |
+| --- | --- |
+| `deleted_at` dropped | a deleted matter can be moved from, and to |
+| `org_id` dropped on the destination lookup | client money crosses from one COMPANY's matter to another's |
+| `has_module(...,'legal')` dropped | a company with no legal module moves client money |
+| `can_post` dropped | **a stranger moves a firm's client money** |
+| `status <> 'void'` dropped | a BOUNCED cheque counts as money the matter holds |
+
+**Three were the one-bank-account fixture collapse.** The fixture had
+exactly one bank account — the client account `setup_legal_module`
+creates — so "a client account", "an active account" and "the default
+account" were all the same row, and no assertion could say which rule
+picked it. The twelfth entry in `docs/widget-tests.md`, in SQL, again.
+
+#### Enriching the fixture was not enough, and that is the interesting part
+
+The four bank-account rules **cannot all be observed in one company.**
+`0741` gives `bank_accounts` a unique index on
+`(org_id) where is_default and is_active`, so a company has at most one
+default active account. To show that `is_client_account` is what keeps
+client money out of the office account, the office account has to be the
+default — and then no client account is the default, so
+`order by is_default desc` has nothing to order. The two requirements
+exclude each other. Hence two firms in the fixture, each configured so
+that a different pair of rules disagree.
+
+Chasing the last of them found a real defect. The bank is chosen with
+
+```sql
+   order by is_default desc limit 1;
+```
+
+with **no tiebreak**, so when no client account is the default the choice
+is made by physical row order. Demonstrated, not argued: a firm with two
+open client accounts and neither marked default returned account A, and
+after account A's NAME was rewritten — which moves the row and changes
+nothing about the ORDER BY — the same query returned account B.
+
+And that is the ORDINARY configuration, not a corner case: a firm whose
+company default is its office current account has no default client
+account at all, so every transfer between matters picks whichever of its
+client accounts the plan reaches first. Nothing is lost from the client
+bank — both legs are the same two accounts with the signs reversed — but
+which account the firm's own client ledger says the money sits in is
+arbitrary, and reconciliation is done per account.
+
+`0743_which_client_account_when_there_are_two.sql` makes the ordering
+total: `order by is_default desc, created_at, id`. `created_at` alone is
+not a total order — it defaults to `now()`, the transaction timestamp, so
+two accounts created by one statement share it — which is why `id`
+follows. It cannot change an answer that was already determinate.
+
+The fixture pins it the only way that works: firm B's second client
+account is inserted SECOND and dated EARLIER, so the correct row and the
+first row are different ones. A fixture where the right account is also
+the first account cannot tell a total ordering from no ordering at all.
+
+#### `%privileges%` let the security mutant live
+
+The first version of the stranger assertion matched `'%privileges%'`.
+The mutant that deletes `can_post` **survived it**: with the guard gone
+the stranger gets further and is turned away by a different guard whose
+message also contains the word, so the assertion passed either way. The
+whole message — `Insufficient privileges to move client money` — kills
+it.
+
+`bank_transfers.sql` already records this trap, in almost these words:
+*"the same SQLSTATE and one word less, so the message is what says which
+of the two turned them away. Whole message, not a fragment."* It was read
+during this very session, while looking up how the suite writes a
+no-rights refusal, and the fragment was written anyway.
+
+#### Defence in depth, found by accident
+
+The office-account mutant is killed by a message nobody here wrote:
+`Bank account "Akaun pejabat" is not a client account.` That is `0740`
+refusing downstream, so `transfer_between_matters` was never the only
+thing standing between client money and the office account. The new
+fixture is what makes that second door fire, and prove it fires.
+
+#### A migration of mine was missing its semicolon, and psql did not mind
+
+`0743`'s body was extracted from `0739` programmatically, and the
+extraction stopped at the closing `$function$` — dropping the
+statement's `;`. `psql -f` applied it and printed `CREATE FUNCTION`,
+because psql flushes its buffer at EOF. The mutation harness refused it:
+its pattern requires `\1\s*;`. **The stricter tool caught a malformed
+migration that the real one accepted.**
+
+Sweeping the directory for the same shape found one more:
+`0540_a_counter_sale_of_dated_stock.sql` ends `end;\n$function$` with no
+semicolon. It is applied, so append-only says leave it — recorded here
+instead. It is latent rather than live: migrations are applied one file
+at a time, and only a tool that CONCATENATED them would produce
+`end $function$ CREATE TABLE ...` and fail. Six other migrations end in a
+comment, which is fine.
