@@ -14254,16 +14254,90 @@ A sweep and a hand-run of the same suite cannot share a cluster. Wait
 for `restored:`, or give the second one its own `IAK_PGPORT`. Written
 into `scripts/mutate_sql.py`.
 
-**33 of 45 money movers now have a mutants file** — `python3
+## 5 October: the depreciation run, and the strongest opening figure yet
+
+`public.run_depreciation` is the period's charge: a run row, one entry
+per asset, each asset's book value moved on, and ONE journal grouped by
+the pair of accounts each asset posts to. 43 mutants (42 and a control)
+in `supabase/tests/mutants/run_depreciation.py`, against all five files
+that reach it.
+
+| file | killed |
+| --- | --- |
+| `depreciation_shapes.sql` | **35**, then **40** |
+| `depreciation_schedule.sql` | 16, two of them new |
+| `fixed_assets.sql` | 20, none new |
+| `asset_disposal_shapes.sql` | 9, none new |
+| `idempotency.sql` | 11, none new |
+
+**37 of 42 before the work; 41 of 41 killable after it, with one
+equivalent and the control alive. 35 of 42 on one file is the strongest
+opening figure of any function in this sweep**, and the reason is that `depreciation_shapes.sql` was
+itself written out of an earlier mutation sweep. Its own header says
+that sweep "killed 19 of 42" across four functions — and **left no
+mutants file**, so that figure cannot be re-measured. `run_depreciation`
+now has one.
+
+### The three things that lived
+
+* **THE FIRST MONTH.** `app.months_held(d, d)` is **one**, not zero: its
+  `case when p_to >= p_from then 1` counts the month of acquisition. So
+  a company that buys a van on the last day of May owes one month of it
+  in May — and `acquisition_date <= p_as_at` could be narrowed to `<`
+  with nothing to say, because no fixture in the suite had an asset
+  acquired exactly on the date being run.
+* **`opening_accumulated`.** `depreciation_entries` records where the
+  asset stood before the charge and where it stands after.
+  `depreciation_schedule.sql` reads the closing figure; nothing read the
+  opening one, so it could be written as zero on every run of every
+  asset for ever. The same finding as every other sweep here, on the
+  two columns a charge is reconstructed from.
+* **THE PROVENANCE.** The journal's `source` and `source_id` were read
+  by nothing. A depreciation charge that calls itself a manual journal
+  is not findable from the run; a run whose journal names no source is
+  not findable from the ledger. Either way the one posting in the
+  accounts that nobody enters by hand becomes the one posting nobody
+  can trace.
+
+### A FOURTH way an equivalence gets proven: the guard is in the callee
+
+Dropping `acquisition_date <= p_as_at` entirely is **equivalent** in the
+run, and could not be killed by any file.
+`app.accumulated_depreciation_at` opens with
+`if p_as_at < p_asset.acquisition_date then return 0`, so an asset
+bought in June enters a March run, is handed a target of zero, and is
+thrown straight out again by `if v_charge <= 0 then continue`.
+
+The three kinds of equivalence proof this sweep had already found were
+the code's own shape, a table constraint, and a trigger. This is a
+fourth: **the guard is in the function being called.**
+
+And `depreciation_shapes.sql` had a comment that was precise, confident
+and wrong about it — "Running March with an asset bought in June charges
+three months of an asset the company does not own yet". That is true of
+`depreciation_preview`, which the same fixture does catch, and false of
+the run. Corrected in place, with the measurement beside it. **That is
+the third time in this sweep a comment has been right about one half of
+a pair and wrong about which half it proved.**
+
+### Reported and NOT fixed, again
+
+The 6400/1590 lookups in `run_depreciation` have no `deleted_at is
+null`, so a **retired account is still posted to** — the same finding
+`dispose_fixed_asset` and `post_client_transaction` gave earlier today.
+It changes what a statutory posting resolves to, so it stays the user's
+call and not a sweep's.
+
+**34 of 45 money movers now have a mutants file** — `python3
 scripts/mutation_targets.py` prints that line itself, so ask it rather
-than this file. The twelve with none, as that tool ranks them:
+than this file. The eleven with none, as that tool ranks them:
 
 * the four demo builders — `app.demo_legal_guaman`,
   `app.demo_sinar_bank`, `app.demo_purchases`,
   `app.demo_practice_books`. Reached by the demo files, which assert
   existence rather than arithmetic, so a sweep of them measures a
   different kind of claim and should be read as such.
-* `public.run_depreciation` (9 files), `public.reverse_gl_entry` (16),
+* `public.reverse_gl_entry` (16 files),
   `app.post_purchase_document_internal` (53) and
   `public.create_gl_entry` (122). These are the opposite problem: they
   are reached by so much of the suite that the sweep is expensive, and

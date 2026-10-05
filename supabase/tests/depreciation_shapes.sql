@@ -194,9 +194,23 @@ begin
           'straight_line', 12, now())
   returning id into v_gone;
 
-  -- MUTANT: `acquisition_date <= p_as_at` dropped, in the run AND in the
-  -- preview. Running March with an asset bought in June charges three
-  -- months of an asset the company does not own yet.
+  -- MUTANT: `acquisition_date <= p_as_at` dropped. In the PREVIEW that
+  -- is a real defect and this fixture catches it -- the preview lists
+  -- the asset and the count below goes to two.
+  --
+  -- In `run_depreciation` it is EQUIVALENT, and the earlier version of
+  -- this comment said otherwise ("charges three months of an asset the
+  -- company does not own yet"). It does not:
+  -- `app.accumulated_depreciation_at` opens with
+  -- `if p_as_at < p_asset.acquisition_date then return 0`, so the asset
+  -- enters the loop, is handed a target of zero, and is thrown out again
+  -- by `if v_charge <= 0 then continue`. Measured: the mutant survives
+  -- every file that reaches the run.
+  --
+  -- That is a FOURTH way an equivalence gets proven in this sweep,
+  -- after the code's own shape, a table constraint and a trigger: the
+  -- guard is in the function being CALLED. Keep the fixture -- it is
+  -- the preview's -- and do not spend another one hunting the run's.
   insert into public.fixed_assets
     (org_id, asset_no, name, acquisition_date, cost, method,
      useful_life_months)
@@ -572,5 +586,125 @@ begin
 
   raise notice 'ok   the preview and the run agree';
 end $$;
+
+-- =====================================================================
+-- 7. The first month, the two accumulated columns, and the provenance
+-- =====================================================================
+-- Sections 1-6 came out of a sweep of the four functions behind the
+-- charge and left `supabase/tests/mutants/run_depreciation.py`
+-- unwritten, so its "19 of 42" cannot be re-measured. That file now
+-- exists for `public.run_depreciation`: 43 mutants, 42 and a control,
+-- against this file and the four others that reach the function.
+-- Sections 1-6 kill 35 of 42 on their own, which is the strongest
+-- opening figure of any file in this sweep.
+--
+-- What lived divides into three, and only one of them is arithmetic.
+--
+-- THE FIRST MONTH. `app.months_held(d, d)` is ONE, not zero -- it
+-- counts the month of acquisition, and its `case when p_to >= p_from`
+-- says so. So a company that buys a van on the last day of May owes one
+-- month of it in May, and `acquisition_date <= p_as_at` could be
+-- narrowed to `<` with nothing to say, because no fixture had an asset
+-- acquired exactly on the date being run.
+--
+-- THE TWO ACCUMULATED COLUMNS. `depreciation_entries` records where the
+-- asset stood before the charge and where it stands after.
+-- `closing_accumulated` is read by `depreciation_schedule.sql`;
+-- `opening_accumulated` was read by nothing, so it could be written as
+-- zero on every run of every asset for ever. That is the same finding
+-- as every other sweep here: a file that watches the money does not
+-- watch the state, and these two columns are the audit trail a charge
+-- is reconstructed from.
+--
+-- THE PROVENANCE. The journal's `source` and `source_id` were read by
+-- nothing. A depreciation charge that calls itself a manual journal is
+-- not findable from the run, and a run whose journal names no source is
+-- not findable from the ledger -- in either direction, the one posting
+-- in the accounts that nobody enters by hand becomes the one posting
+-- nobody can trace.
+do $$
+declare
+  v_org     uuid;
+  v_sameday uuid;
+  v_r1      uuid;
+  v_r2      uuid;
+  v_j2      uuid;
+begin
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.ds_org('Bulan Pertama Sdn Bhd');
+
+  -- Bought on the last day of May, and May is the month being run.
+  insert into public.fixed_assets
+    (org_id, asset_no, name, acquisition_date, cost, method,
+     useful_life_months)
+  values (v_org, 'FA-SD', 'Bought on the day', date '2026-05-31', 12000,
+          'straight_line', 12)
+  returning id into v_sameday;
+
+  v_r1 := public.run_depreciation(v_org, date '2026-05-31');
+
+  -- MUTANT: `acquisition_date <= p_as_at` -> `<`. One month of twelve on
+  -- a 12,000 van: 1,000. Narrowed to `<`, the asset is not in the run at
+  -- all and `v_r1` is null, so this assertion is also the one that says
+  -- the run happened.
+  perform pg_temp.check_eq(
+    'an asset bought ON the run date is charged its first month',
+    (select amount from public.depreciation_entries
+      where run_id = v_r1 and asset_id = v_sameday), 1000);
+  -- MUTANT: `opening_accumulated` -> 0. Indistinguishable on a first
+  -- run, which is why the second run below is the one that matters --
+  -- but stated here too, because a mutant that wrote the TARGET into
+  -- the opening column would show up on this one.
+  perform pg_temp.check_eq('opening at nothing, because it is new',
+    (select opening_accumulated from public.depreciation_entries
+      where run_id = v_r1 and asset_id = v_sameday), 0);
+
+  -- A month on. This is where the opening column has a value that is
+  -- neither zero nor the closing figure, so all three of amount,
+  -- opening and closing are separable for the first time.
+  v_r2 := public.run_depreciation(v_org, date '2026-06-30');
+
+  -- MUTANT: `opening_accumulated` -> 0.
+  perform pg_temp.check_eq('the second entry opens where the first one closed',
+    (select opening_accumulated from public.depreciation_entries
+      where run_id = v_r2 and asset_id = v_sameday), 1000);
+  -- MUTANT: `closing_accumulated` -> `a.accumulated_depreciation`.
+  perform pg_temp.check_eq('and closes a month further on',
+    (select closing_accumulated from public.depreciation_entries
+      where run_id = v_r2 and asset_id = v_sameday), 2000);
+  -- MUTANT: `v_charge := round(v_target, 2)`. The charge is the
+  -- DIFFERENCE, which on the second run is 1,000 and not 2,000.
+  perform pg_temp.check_eq('charging exactly the difference between the two',
+    (select amount from public.depreciation_entries
+      where run_id = v_r2 and asset_id = v_sameday), 1000);
+  perform pg_temp.check_eq('and the register agrees with the closing figure',
+    (select accumulated_depreciation from public.fixed_assets
+      where id = v_sameday), 2000);
+
+  -- --- the provenance of the journal ---------------------------------
+  select gl_entry_id into v_j2 from public.depreciation_runs where id = v_r2;
+  perform pg_temp.check_true('the second run posted a journal', v_j2 is not null);
+
+  -- MUTANT: `'depreciation'::app.journal_source` -> `'manual'`.
+  perform pg_temp.check_eq('which is marked as a depreciation posting',
+    (select source::text from public.gl_entries where id = v_j2),
+    'depreciation');
+  -- MUTANT: `p_source_id => v_run_id` -> null. Without it the ledger
+  -- cannot be walked back to the run that made it.
+  perform pg_temp.check_eq('and says which run made it',
+    (select source_id from public.gl_entries where id = v_j2), v_r2);
+  perform pg_temp.check_eq('and what kind of thing that run is',
+    (select source_table from public.gl_entries where id = v_j2),
+    'depreciation_runs');
+  -- MUTANT: `p_as_at` -> `app.today()`. A June charge dated the night
+  -- the job ran lands in the wrong period.
+  perform pg_temp.check_eq('and is dated the date depreciated to',
+    (select entry_date::text from public.gl_entries where id = v_j2),
+    date '2026-06-30'::text);
+
+  raise notice
+    'ok   the first month, the two accumulated columns, and the provenance';
+end $$;
+
 
 rollback;

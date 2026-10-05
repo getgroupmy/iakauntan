@@ -723,4 +723,38 @@
 # under the wrong key -- which posts an entry with NO LINES and
 # balances. Measured:
 # `all SQL assertions passed (384 files, 14769 assertions executed)`.
-14769
+#
+# 14769 -> 14781: public.run_depreciation, the period's charge. 43
+# mutants: 37 of 42 before the work, 41 of 41 killable after, one
+# equivalent, control alive. depreciation_shapes.sql killed 35 of 42 on
+# its own -- the strongest opening figure of any function in this sweep,
+# because that file was itself written out of an earlier one. Its header
+# claims that sweep "killed 19 of 42" across four functions and left NO
+# mutants file, so the figure cannot be re-measured; run_depreciation's
+# share now can be.
+#
+# THE FIRST MONTH: app.months_held(d, d) is ONE, not zero -- its
+# `case when p_to >= p_from then 1` counts the month of acquisition --
+# so a van bought on the last day of May owes a month of it in May, and
+# `acquisition_date <= p_as_at` could be narrowed to `<` with nothing to
+# say. No fixture had an asset acquired on the date being run.
+#
+# opening_accumulated: depreciation_schedule.sql reads the CLOSING
+# figure and nothing read the opening one, so it could be written as
+# zero on every run of every asset for ever.
+#
+# THE PROVENANCE: the journal's source and source_id were read by
+# nothing, so the one posting nobody enters by hand was the one posting
+# nobody could trace, in either direction.
+#
+# A FOURTH KIND OF EQUIVALENCE PROOF -- THE GUARD IS IN THE CALLEE.
+# Dropping `acquisition_date <= p_as_at` cannot be killed:
+# app.accumulated_depreciation_at opens with
+# `if p_as_at < p_asset.acquisition_date then return 0`, so the asset
+# enters the loop, is handed zero, and leaves by `if v_charge <= 0 then
+# continue`. depreciation_shapes.sql had a comment that was precise,
+# confident and wrong about exactly that -- true of depreciation_preview,
+# false of the run -- now corrected with the measurement beside it.
+# Measured:
+# `all SQL assertions passed (384 files, 14781 assertions executed)`.
+14781
