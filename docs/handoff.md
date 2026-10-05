@@ -12886,3 +12886,45 @@ rather than the argument. It now says `no such migration: <path>`.
 worked exactly once per company and the second call died on the
 constraint. Every existing caller used it once, so nothing had noticed.
 Now suffixed like the item code beside it.
+
+### send_stock_transfer: 19 of 23, and an off-by-one on a boundary nobody stood on
+
+**23 mutants, nineteen killed on the first run, four survived.** Across
+all three files that reach it, 23 of 23 die; nothing is equivalent.
+
+| file | kills |
+| --- | --- |
+| `stock_transfers.sql` | 19, then 22 |
+| `lot_allocation_shapes.sql` | 7 |
+| `lots_across_the_new_sources.sql` | 7 |
+
+Four survivors in one file against **three** in the union, and here the
+difference is instructive rather than arithmetic. Both lot files
+transfer BATCH-TRACKED items, so they reach the `app.lot_available`
+check that `stock_transfers.sql`'s untracked items skip entirely — and
+the mutant pointing that check at the DESTINATION warehouse is killed
+only there. The fixture was deliberately not given a tracked item for
+it: two files already own that case, and a third copy is upkeep without
+cover. **The right answer to a survivor is sometimes "another file
+already kills this", and that is worth writing down rather than
+duplicating.**
+
+The three real gaps:
+
+1. **`< v_qty` mutated to `<=` on the stock check.** Sending a store's
+   ENTIRE holding is the ordinary last transfer of a line, and no
+   fixture emptied a store completely — every one left a remainder, so
+   "not enough" and "exactly enough" were never distinguished. The
+   cheapest gap to leave open and the easiest to miss: an off-by-one on
+   a boundary **nobody's fixture stood on.** Closed with thirty out of
+   thirty going, and thirty-one refused.
+2. **The 1310 guard**, which no company in the suite was without.
+3. **The movement-to-journal link**, which nothing asserted at all —
+   without it a stock movement and the journal that priced it cannot be
+   reconciled to each other.
+
+That first one generalises past this function. Every guard of the form
+`x < y` has three cases and most fixtures exercise one: comfortably
+under, and that is all. The boundary is where off-by-one lives, and a
+suite can assert a refusal thoroughly without ever asserting the
+permission next to it.

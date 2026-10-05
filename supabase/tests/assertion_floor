@@ -141,4 +141,15 @@
 # source_line_id is per line and only this function writes such a
 # movement. Measured:
 # `all SQL assertions passed (384 files, 14426 assertions executed)`.
-14426
+#
+# 14435, +9: stock_transfers.sql. send_stock_transfer scored 19 of 23 on
+# the first run; the union across its three files is 23 of 23, nothing
+# equivalent. The gap worth keeping: `< v_qty` on the stock check,
+# mutated to `<=`. Sending a store's ENTIRE holding is the ordinary last
+# transfer of a line, and no fixture emptied a store -- every one left a
+# remainder, so "not enough" and "exactly enough" were never
+# distinguished. An off-by-one on a boundary nobody's fixture stood on.
+# The other two: the 1310 guard, and the movement-to-journal link that
+# nothing asserted at all. Measured:
+# `all SQL assertions passed (384 files, 14435 assertions executed)`.
+14435

@@ -886,4 +886,166 @@ begin
       where sl.item_id = v_item and sl.warehouse_id = v_a), 12);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The three a mutation run found no file could see
+-- ---------------------------------------------------------------------
+--
+-- `public.send_stock_transfer` was mutated 23 ways on 5 October.
+-- Nineteen died against the assertions above and four survived; running
+-- the other two files that reach it -- `lot_allocation_shapes.sql` and
+-- `lots_across_the_new_sources.sql` -- killed one more, because both
+-- transfer BATCH-TRACKED items and so reach the `app.lot_available`
+-- check this file's items skip entirely.
+--
+--     python3 scripts/mutate_sql.py \
+--       supabase/migrations/0267_the_batch_that_went_in_the_van.sql \
+--       supabase/tests/stock_transfers.sql \
+--       supabase/tests/mutants/send_stock_transfer.py
+--
+-- Four survivors in one file against three in the union, which is the
+-- same arithmetic as every other function in this sweep: a per-file
+-- score understates what the suite as a whole asserts.
+--
+-- The three that survived everywhere:
+--
+--   * `< v_qty` on the stock check, mutated to `<=`. Sending a store's
+--     ENTIRE holding is the ordinary last transfer of a line, and no
+--     fixture above empties a store completely -- every one leaves a
+--     remainder, so "not enough" and "exactly enough" were never
+--     distinguished.
+--   * the 1310 guard, which no company in the suite is without.
+--   * the movement-to-journal link, which nothing asserted at all.
+do $$
+declare
+  v_owner uuid := pg_temp.test_user();
+  v_org   uuid;
+  v_poor  uuid;
+  v_from  uuid;
+  v_to    uuid;
+  v_item  uuid;
+  v_t     uuid;
+  v_entry uuid;
+  v_n     integer;
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.allow_many_companies();
+
+  -- ------------------------------------------------------------------
+  -- Emptying a store is allowed; a gram more is not
+  -- ------------------------------------------------------------------
+  v_org := pg_temp.test_org('Pindah Habis Sdn Bhd');
+  perform public.create_fiscal_year(v_org,
+    date_trunc('year', pg_temp.today())::date);
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_org, m, true from unnest(array['inventory']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+  insert into public.warehouses (org_id, code, name, is_default)
+  values (v_org, 'A', 'Store A', true) returning id into v_from;
+  insert into public.warehouses (org_id, code, name)
+  values (v_org, 'B', 'Store B') returning id into v_to;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, cost_price)
+  values (v_org, 'TIN', 'Tin susu', 'stock', true, 'C62', 5.00)
+  returning id into v_item;
+  insert into public.stock_movements
+    (org_id, movement_no, movement_date, movement_type, item_id,
+     warehouse_id, quantity, unit_cost)
+  values (v_org, 'OPEN-TIN', pg_temp.today(), 'opening_balance', v_item,
+          v_from, 30, 5.00);
+  perform pg_temp.check_eq('store A holds thirty',
+    (select sl.quantity from public.stock_levels sl
+      where sl.item_id = v_item and sl.warehouse_id = v_from), 30);
+
+  -- One more than it holds: refused.
+  insert into public.stock_transfers
+    (org_id, transfer_no, transfer_date, from_warehouse_id, to_warehouse_id,
+     status)
+  values (v_org, 'TR-31', pg_temp.today(), v_from, v_to, 'draft')
+  returning id into v_t;
+  insert into public.stock_transfer_lines
+    (org_id, transfer_id, line_no, item_id, quantity, uom_code)
+  values (v_org, v_t, 1, v_item, 31, 'C62');
+  perform pg_temp.check_refused(
+    'thirty-one out of thirty is refused',
+    format('select public.send_stock_transfer(%L)', v_t),
+    '%not that much%', '23514');
+
+  -- Exactly what it holds: allowed. This is the assertion the mutation
+  -- run was missing -- every fixture above leaves a remainder behind,
+  -- so `< v_qty` and `<= v_qty` gave the same answer throughout.
+  insert into public.stock_transfers
+    (org_id, transfer_no, transfer_date, from_warehouse_id, to_warehouse_id,
+     status)
+  values (v_org, 'TR-30', pg_temp.today(), v_from, v_to, 'draft')
+  returning id into v_t;
+  insert into public.stock_transfer_lines
+    (org_id, transfer_id, line_no, item_id, quantity, uom_code)
+  values (v_org, v_t, 1, v_item, 30, 'C62');
+  v_entry := public.send_stock_transfer(v_t);
+  perform pg_temp.check_true('but exactly thirty goes, emptying the store',
+    v_entry is not null);
+  perform pg_temp.check_eq('and store A is empty',
+    (select coalesce(sl.quantity, 0) from public.stock_levels sl
+      where sl.item_id = v_item and sl.warehouse_id = v_from), 0);
+
+  -- ------------------------------------------------------------------
+  -- The movements name the journal they went with
+  -- ------------------------------------------------------------------
+  -- Nothing asserted this at all, so the mutant that writes a null
+  -- there survived every file. Without the link a stock movement and
+  -- the journal that priced it cannot be reconciled to one another.
+  select count(*)::integer into v_n from public.stock_movements
+   where source_table = 'stock_transfers' and source_id = v_t;
+  perform pg_temp.check_eq('the send wrote one movement', v_n, 1);
+  perform pg_temp.check_eq('and it names the journal it was priced in',
+    (select sm.gl_entry_id from public.stock_movements sm
+      where sm.source_table = 'stock_transfers' and sm.source_id = v_t),
+    v_entry);
+  perform pg_temp.check_eq('which the transfer remembers too',
+    (select t.send_entry_id from public.stock_transfers t where t.id = v_t),
+    v_entry);
+
+  -- ------------------------------------------------------------------
+  -- A company with no 1310 cannot send stock into transit
+  -- ------------------------------------------------------------------
+  v_poor := pg_temp.test_org('Tiada 1310 Pindah Sdn Bhd');
+  perform public.create_fiscal_year(v_poor,
+    date_trunc('year', pg_temp.today())::date);
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_poor, m, true from unnest(array['inventory']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+  insert into public.warehouses (org_id, code, name, is_default)
+  values (v_poor, 'A', 'Store A', true) returning id into v_from;
+  insert into public.warehouses (org_id, code, name)
+  values (v_poor, 'B', 'Store B') returning id into v_to;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, cost_price)
+  values (v_poor, 'TIN', 'Tin susu', 'stock', true, 'C62', 5.00)
+  returning id into v_item;
+  insert into public.stock_movements
+    (org_id, movement_no, movement_date, movement_type, item_id,
+     warehouse_id, quantity, unit_cost)
+  values (v_poor, 'OPEN-TIN', pg_temp.today(), 'opening_balance', v_item,
+          v_from, 10, 5.00);
+  update public.accounts set code = '1311'
+   where org_id = v_poor and code = '1310';
+  insert into public.stock_transfers
+    (org_id, transfer_no, transfer_date, from_warehouse_id, to_warehouse_id,
+     status)
+  values (v_poor, 'TR-NO1310', pg_temp.today(), v_from, v_to, 'draft')
+  returning id into v_t;
+  insert into public.stock_transfer_lines
+    (org_id, transfer_id, line_no, item_id, quantity, uom_code)
+  values (v_poor, v_t, 1, v_item, 4, 'C62');
+  perform pg_temp.check_refused(
+    'with no 1310 in the chart the send is refused',
+    format('select public.send_stock_transfer(%L)', v_t),
+    '%inventory account (1310)%', 'P0002');
+  perform pg_temp.check_eq('and the transfer is still a draft',
+    (select t.status::text from public.stock_transfers t where t.id = v_t),
+    'draft');
+
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;
