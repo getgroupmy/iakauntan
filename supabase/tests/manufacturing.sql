@@ -209,6 +209,99 @@ begin
     (select quantity_on_hand from public.items where id = v_board), 76);
   perform pg_temp.check_eq('a chair still costs what a chair costs',
     (select average_cost from public.items where id = v_chair), 82);
+
+  -- ------------------------------------------------------------------
+  -- What the short run WROTE, rather than what it totalled
+  -- ------------------------------------------------------------------
+  -- The three figures above are the order's own totals. A sweep found
+  -- that the per-component line and the finished movement were not
+  -- read at all, and both carry the ratio independently: the order
+  -- could total 312 while its component lines each claimed the full
+  -- recipe, and a shop reading `mo_components` for a variance report
+  -- would see ten chairs' worth issued against six chairs' output.
+  perform pg_temp.check_eq('the board line records SIX chairs'' worth issued',
+    (select quantity_issued from public.mo_components
+      where mo_id = v_mo and item_id = v_board), 24);
+  perform pg_temp.check_eq('and the screw line its own six chairs'' worth',
+    (select quantity_issued from public.mo_components
+      where mo_id = v_mo and item_id = v_screw), 48);
+  perform pg_temp.check_eq('with what that cost on the line',
+    (select total_cost from public.mo_components
+      where mo_id = v_mo and item_id = v_board), 288);
+  perform pg_temp.check_eq('and on the other',
+    (select total_cost from public.mo_components
+      where mo_id = v_mo and item_id = v_screw), 24);
+  perform pg_temp.check_eq('which is the order''s total between them',
+    (select sum(total_cost) from public.mo_components where mo_id = v_mo),
+    312);
+
+  -- The finished movement takes the quantity MADE. Carrying ten units
+  -- in at the cost of six is a stock figure that is wrong in units and
+  -- right in money, which no balance check can see.
+  perform pg_temp.check_eq('six chairs came in, not ten',
+    (select quantity from public.stock_movements
+      where source_id = v_mo and movement_type = 'assembly_in'), 6);
+
+  -- And every movement says which order made it, which is how
+  -- `report_stock_movements` and a variance report find them.
+  perform pg_temp.check_eq('both component issues name the order',
+    (select count(*) from public.stock_movements
+      where source_id = v_mo and movement_type = 'assembly_out'), 2);
+  perform pg_temp.check_eq('in the table the order lives in',
+    (select count(distinct source_table) from public.stock_movements
+      where source_id = v_mo), 1);
+  perform pg_temp.check_eq('and the journal names it too',
+    (select source_id from public.gl_entries
+      where id = (select gl_entry_id from public.manufacturing_orders
+                   where id = v_mo)), v_mo);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- An order already on the line, and a recipe line that needs nothing
+-- ---------------------------------------------------------------------
+-- `v_mo.status not in ('confirmed', 'in_progress')` is two values in
+-- one list, and every order in this file is posted straight from
+-- `confirmed` -- so narrowing the list to `('confirmed')` refused a
+-- shop that had started the work, which is the ordinary case for
+-- anything taking more than a shift.
+--
+-- WHAT THIS BLOCK DELIBERATELY DOES NOT TEST:
+-- `case when v_row.quantity_required = 0 then 0`, the guard against
+-- dividing by nothing, is an EQUIVALENT mutation target -- and it is
+-- the TABLE that proves it, not the code.
+-- `mo_components_quantity_required_check` is `quantity_required > 0`,
+-- so a recipe line needing none of something cannot exist: the first
+-- version of this block inserted one and was refused by the
+-- constraint. The guard is belt-and-braces against a row the schema
+-- will not hold, right to keep, and unobservable by any fixture. The
+-- same shape as remit_withholding's `coalesce(exchange_rate, 1)` on a
+-- NOT NULL DEFAULT 1 column -- the second time this sweep has had a
+-- constraint settle the question.
+do $$
+declare
+  v_org uuid := pg_temp.mfg_org('Dalam Kerja Sdn Bhd');
+  v_board uuid := pg_temp.stocked(v_org, 'BOARD', 100, 12);
+  v_screw uuid := pg_temp.stocked(v_org, 'SCREW', 1000, 0.5);
+  v_chair uuid := pg_temp.stocked(v_org, 'CHAIR', 0, 0);
+  v_bom uuid := pg_temp.chair_bom(v_org, v_board, v_screw, v_chair);
+  v_mo uuid := pg_temp.order_for(v_org, v_bom, v_chair, 10);
+  v_entry uuid;
+begin
+  perform public.confirm_manufacturing_order(v_mo);
+
+  -- On the line rather than merely confirmed.
+  update public.manufacturing_orders set status = 'in_progress'
+   where id = v_mo;
+
+  v_entry := public.post_manufacturing_order(v_mo);
+  perform pg_temp.check_true('an order already on the line still posts',
+    v_entry is not null);
+  perform pg_temp.check_eq('and is done when it is',
+    (select status::text from public.manufacturing_orders where id = v_mo),
+    'done');
+  perform pg_temp.check_eq('and the order costs what its two components came to',
+    (select component_cost from public.manufacturing_orders where id = v_mo),
+    520);
 end $$;
 
 -- ---------------------------------------------------------------------

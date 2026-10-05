@@ -591,4 +591,35 @@
 # found and still posted to, exactly as recorded in docs/handoff.md for
 # dispose_fixed_asset's 1510/1590/6400. Measured:
 # `all SQL assertions passed (384 files, 14688 assertions executed)`.
-14688
+#
+# 14700, +12: manufacturing.sql. post_manufacturing_order scored THIRTY
+# of 38 on the first run -- the best of the sweep -- and the reason is
+# that the file already had the fixture the collapse needed: a short
+# run, six chairs off an order of ten, so `v_ratio` is 0.6 and every
+# `* v_ratio` in the body means something. The ratio is the subject of
+# the function's own comment ("costing the whole recipe against half an
+# output is how a finished item ends up carried at twice what it is
+# worth") and the file stood on it. 36 of 37 after, one proven
+# equivalent.
+#
+# WHAT IT DID NOT STAND ON was the difference between the order's
+# TOTALS and what the short run WROTE. The three figures asserted are
+# component_cost, conversion_cost and quantity_done on the ORDER; the
+# per-component line and the finished movement carry the ratio
+# INDEPENDENTLY, and neither was read. The order could total 312 while
+# each component line claimed the full recipe, and a shop reading
+# mo_components for a variance report would see ten chairs' worth
+# issued against six chairs' output -- with every total right.
+#
+# And `status not in ('confirmed', 'in_progress')` is two values in one
+# list, with every order in the file posted straight from `confirmed`.
+# Narrowing it refused a shop that had started the work -- the ordinary
+# case for anything taking more than a shift.
+#
+# The equivalent is settled by the TABLE for the second time in this
+# sweep: `case when v_row.quantity_required = 0` guards a division, and
+# `mo_components_quantity_required_check` is `quantity_required > 0`, so
+# the row cannot exist. The first version of the new block inserted one
+# and the constraint refused it. Measured:
+# `all SQL assertions passed (384 files, 14700 assertions executed)`.
+14700

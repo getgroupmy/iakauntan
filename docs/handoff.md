@@ -13978,3 +13978,52 @@ call. The list of lookups that would need the same treatment is now
 `app.run_recurring_journals`, `post_purchase_payment`
 (flagged by the survey for `posted_at`/`posted_by`), and the four demo
 builders.
+
+### post_manufacturing_order: thirty of thirty-eight, because the fixture was already right
+
+**The best first-run score of the sweep**, and the reason is worth more
+than the number: `manufacturing.sql` already had the fixture the
+collapse needed. **Six chairs off an order of ten**, so `v_ratio` is
+0.6 and every `* v_ratio` in the body means something.
+
+The ratio is the subject of the function's own comment — "costing the
+whole recipe against half an output is how a finished item ends up
+carried at twice what it is worth" — and unlike the comments in entry
+15 of `docs/widget-tests.md`, this one was *backed*. A fixture that
+always produced the whole ordered quantity would have `v_ratio = 1`,
+where four separate rules are the identity at once. Somebody saw that
+and built the short run.
+
+**36 of 37 after the work, one proven equivalent.**
+
+**What the file did not stand on was the difference between the order's
+TOTALS and what the short run WROTE.** The three figures asserted are
+`component_cost`, `conversion_cost` and `quantity_done` — all on the
+**order**. The per-component line and the finished stock movement carry
+the ratio *independently*, and neither was read:
+
+- the order could total 312 while each `mo_components` line claimed the
+  full recipe, so a shop reading those lines for a variance report
+  would see ten chairs' worth issued against six chairs' output — with
+  every total on the order correct;
+- the finished movement could take in **ten** units at the cost of six:
+  a stock figure wrong in units and right in money, which no balance
+  check can see.
+
+And `status not in ('confirmed', 'in_progress')` is two values in one
+list, with every order in the file posted straight from `confirmed`.
+Narrowing it to `('confirmed')` refused a shop that had started the
+work — the ordinary case for anything taking more than a shift.
+
+**A constraint settled the last one, for the second time in this
+sweep.** `case when v_row.quantity_required = 0 then 0` guards a
+division by nothing, and `mo_components_quantity_required_check` is
+`quantity_required > 0` — so the row cannot exist. The first version of
+the new block inserted one and was refused by the constraint. Same
+shape as `remit_withholding`'s `coalesce(exchange_rate, 1)` on a NOT
+NULL DEFAULT 1 column.
+
+**30 of 45 money movers now have a mutants file.** Next with none:
+`import_opening_balances`, `post_purchase_payment` (the survey flags
+`posted_at`/`posted_by`), `app.run_recurring_journals`, and the four
+demo builders.
