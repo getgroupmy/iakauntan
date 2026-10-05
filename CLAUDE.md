@@ -56,10 +56,22 @@ the next push. Do not poll with `sleep` — schedule it.
 
 CI is where the SQL assertions in `supabase/tests/` are authoritative, so a red
 run is the project's real failure signal, not a formality. `supabase/tests/run_locally.sh`
-runs the same list against a throwaway Postgres on this machine in about two
-minutes — use it to find a broken assertion before pushing, not to skip the
-push. It stubs Supabase's `auth` and `storage` schemas, and its own header says
-where the stubs stop being the real thing.
+runs the same list against a throwaway Postgres on this machine — use it to
+find a broken assertion before pushing, not to skip the push. It stubs
+Supabase's `auth` and `storage` schemas, and its own header says where the
+stubs stop being the real thing.
+
+**Budget TWELVE MINUTES OR MORE, and do not give it a shorter timeout.**
+This said "about two minutes" until 5 October, when it was timed: still
+running at 681 seconds and finishing inside a 900-second limit, for
+`383 files, 14330 assertions executed` over 742 migrations. Two minutes
+was wrong by a factor of six, and the cost of the wrong number is not
+patience — it is that a correct run looks like a hung one. Give it
+`timeout 1800`, and do NOT pipe it through `tail`, which buffers the lot
+and leaves you watching an empty file with no way to tell progress from a
+hang. The honest check while it runs is
+`ps -eo pid,etimes,args | grep postgres`: a live cluster on its port means
+it is working.
 
 **It needs no Docker, and a session has already concluded otherwise and gone
 without it.** The cluster is built with `initdb` directly; what it wants is

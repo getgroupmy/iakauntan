@@ -11434,3 +11434,44 @@ invisible from the code alone.
 That is the twelfth way a green test covers a broken thing, in a new
 costume: **adding a check EARLIER in a function can make a later check
 unreachable, and the test for the later one goes on passing.**
+
+### The SQL suite was run, and it is not a two-minute job
+
+`supabase/tests/run_locally.sh` on `edd464d2`, with no Docker, in this
+container:
+
+```
+migrations applied
+all SQL assertions passed (383 files, 14330 assertions executed)
+schema and client agree
+[exited with code 0]
+```
+
+That is the whole branch verified locally — 742 migrations applied in order,
+383 assertion files, **14,330 assertions**, and the schema/client comparison
+that catches drift. Nothing on this branch since `0740` touches
+`supabase/migrations`, so this also confirms the yesterday's displaced and
+skipped migrate jobs cost nothing.
+
+**It took over eleven minutes, not the two `CLAUDE.md` claimed.** Measured
+rather than estimated: the process was still running at 681 seconds and
+finished inside a 900-second limit. `CLAUDE.md` is corrected, because the
+cost of that number being wrong is not patience — a correct run looks
+exactly like a hung one, and this one was nearly killed on that belief at the
+eleven-minute mark.
+
+Two things that made it worse and are avoidable:
+
+- **Do not pipe it through `tail`.** `... | tail -30` buffers every line
+  until the process exits, so the output file sits at 0 bytes for the whole
+  run and there is no way to tell progress from a hang.
+- The honest liveness check is
+  `ps -eo pid,etimes,args | grep postgres`. A cluster on its own port
+  (`/usr/lib/postgresql/16/bin/postgres -D /var/tmp/pgdata -k /var/tmp -p
+  5599`) with a checkpointer and a walwriter beside it means it is working.
+  That is what settled it here.
+
+It also prints `pg_ctl: another server might be running; trying to start
+server anyway` and a page of `NOTICE: role ... has already been granted`
+lines when a cluster from an earlier run is still up. Noise, not failure —
+the run above carried all of it and still exited 0.
