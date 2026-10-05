@@ -13706,3 +13706,56 @@ checked rather than assumed; the undo everywhere is another reversal.
 `receive_stock_transfer`, `import_open_bills`,
 `import_opening_balances`, `import_open_invoices`,
 `post_manufacturing_order`, `post_client_transaction`.
+
+### receive_stock_transfer: the pair did not get symmetric coverage
+
+**35 mutants plus a control. 20 killed on `stock_transfers.sql`,
+32 of 34 across its four files, two proven equivalent.**
+
+`send_stock_transfer` scored 19 of 23 and 23 of 23 across its files.
+Its other half scored **20 of 35.** Same file, same fixture, same
+afternoon's work — and the lesson `revalue_foreign_balances` had given
+an hour earlier held again: **the two halves of a symmetric thing do
+not get symmetric coverage.**
+
+Receiving has one rule sending does not: a **shortfall**. Sending is
+one quantity per line; receiving is two — what was sent and what turned
+up — so the journal has three shapes, and all three balance:
+
+| what happened | the journal |
+| --- | --- |
+| all arrived | 1310 + 1320, two lines |
+| some arrived | 1310 + 5900 + 1320, three lines |
+| none arrived | 5900 + 1320, two lines |
+
+**Nothing in the suite had ever counted a line in at nought**, so the
+third shape was unreachable — and `if v_got < 0` widened to `<= 0`
+refused a van that never got there, which is an ordinary event, not a
+corner one. A count matched to the wrong LINE survived too, because the
+fixtures counted one line or counted two the same; 8 of 10 and 15 of 20
+on two lines is what distinguishes "the count for THIS line" from "a
+count".
+
+**The fifth zero-value finding of the sweep, and the first where the
+right answer is NO JOURNAL AT ALL.** A promotional case taken into
+stock at nought — a supplier's free sample, a competition prize — moves
+between warehouses like anything else: the quantity is real and the
+value is not, so both totals are zero and the function posts nothing.
+Every item in the suite had a cost, so the test was always true and
+`if true` in its place changed nothing observable. The fixture now
+transfers twelve of something worth nothing and asserts that the
+quantity arrives and the journal does not exist.
+
+One equivalent is proven by the **sender** rather than by this
+function: `send_stock_transfer` links every unvalued movement of the
+transfer with no type filter at all, so by the time a receipt runs the
+outbound movements already carry the send journal and
+`and sm.gl_entry_id is null` excludes them on its own. The receipt's
+`movement_type = 'transfer_in'` can never exclude anything — right to
+keep, and the only thing between the two journals if the sender's
+filter is ever tightened.
+
+**26 of 45 money movers now have a mutants file.** Next with none:
+`import_open_bills`, `import_opening_balances`, `import_open_invoices`,
+`post_manufacturing_order`, `post_client_transaction`,
+`app.run_recurring_journals`.

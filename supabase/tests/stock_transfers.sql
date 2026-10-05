@@ -1048,4 +1048,305 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- receive_stock_transfer: the fourteen the sender's sweep did not cover
+--
+-- `send_stock_transfer` scored 19 of 23 on this file and 23 of 23
+-- across its three. Its PAIR scored 20 of 35, and the difference is
+-- the one `revalue_foreign_balances` had an hour earlier: the two
+-- halves of a symmetric thing do not get symmetric coverage.
+--
+-- Receiving has one rule sending does not: a SHORTFALL. Sending is one
+-- quantity per line; receiving is two -- what was sent and what turned
+-- up -- so the journal has three shapes (all arrived, some arrived,
+-- none arrived) and each puts a different set of legs on it. All three
+-- balance, so the only thing that tells them apart is which accounts
+-- appear and how many lines there are.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org    uuid;
+  v_owner  uuid := pg_temp.test_user();
+  v_from   uuid; v_to uuid;
+  v_a      uuid; v_b uuid;
+  v_t      uuid; v_la uuid; v_lb uuid;
+  v_entry  uuid; v_send uuid;
+  v_1310   uuid; v_5900 uuid; v_1320 uuid;
+  v_other  uuid; v_ot uuid; v_ol uuid; v_oi uuid; v_ow uuid; v_ow2 uuid;
+  v_free   uuid;
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  v_org := pg_temp.test_org('Pindah Celah Sdn Bhd');
+  perform pg_temp.allow_many_companies();
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_org, m, true from unnest(array['inventory']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+  perform pg_temp.sign_in_as(v_owner);
+
+  insert into public.warehouses (org_id, code, name, is_default)
+  values (v_org, 'GUD1', 'Store one', true) returning id into v_from;
+  insert into public.warehouses (org_id, code, name)
+  values (v_org, 'GUD2', 'Store two') returning id into v_to;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, cost_price)
+  values (v_org, 'ITEM-A', 'Barang A', 'stock', true, 'C62', 10.00)
+  returning id into v_a;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, cost_price)
+  values (v_org, 'ITEM-B', 'Barang B', 'stock', true, 'C62', 7.00)
+  returning id into v_b;
+  insert into public.stock_movements
+    (org_id, movement_no, movement_date, movement_type, item_id,
+     warehouse_id, quantity, unit_cost)
+  values (v_org, 'OPEN-A', pg_temp.today(), 'opening_balance', v_a, v_from, 100, 10.00),
+         (v_org, 'OPEN-B', pg_temp.today(), 'opening_balance', v_b, v_from, 100, 7.00);
+
+  select id into v_1310 from public.accounts where org_id = v_org and code = '1310';
+  select id into v_5900 from public.accounts where org_id = v_org and code = '5900';
+  v_1320 := app.goods_in_transit_account(v_org);
+
+  -- ------------------------------------------------------------------
+  -- 1. TWO LINES, TWO DIFFERENT COUNTS
+  -- ------------------------------------------------------------------
+  -- The count is matched to its line by id. With one line, or with two
+  -- lines counted the same, "the count for THIS line" and "a count"
+  -- are the same number.
+  v_t := public.upsert_stock_transfer(
+    null, v_org, v_from, v_to, pg_temp.today(),
+    jsonb_build_array(
+      jsonb_build_object('item', v_a, 'quantity', 10, 'uom', 'C62'),
+      jsonb_build_object('item', v_b, 'quantity', 20, 'uom', 'C62')),
+    'two lines, two counts');
+  perform public.send_stock_transfer(v_t);
+  select id into v_la from public.stock_transfer_lines
+   where transfer_id = v_t and item_id = v_a;
+  select id into v_lb from public.stock_transfer_lines
+   where transfer_id = v_t and item_id = v_b;
+  select gl_entry_id into v_send from public.stock_movements
+   where source_id = v_t and movement_type = 'transfer_out' limit 1;
+
+  v_entry := public.receive_stock_transfer(v_t, jsonb_build_array(
+    jsonb_build_object('line', v_la, 'quantity', 8),
+    jsonb_build_object('line', v_lb, 'quantity', 15)));
+
+  perform pg_temp.check_eq('line A is received at ITS count',
+    (select received_quantity from public.stock_transfer_lines where id = v_la),
+    8);
+  perform pg_temp.check_eq('and line B at ITS OWN, which is a different number',
+    (select received_quantity from public.stock_transfer_lines where id = v_lb),
+    15);
+  perform pg_temp.check_eq('the shop holds eight of A',
+    (select sum(quantity) from public.stock_movements
+      where source_id = v_t and item_id = v_a
+        and movement_type = 'transfer_in'), 8);
+  perform pg_temp.check_eq('and fifteen of B',
+    (select sum(quantity) from public.stock_movements
+      where source_id = v_t and item_id = v_b
+        and movement_type = 'transfer_in'), 15);
+
+  -- The journal: 8 at 10 plus 15 at 7 arrived = 185; 2 at 10 plus 5 at
+  -- 7 short = 55; transit out = 240, which is what was sent.
+  perform pg_temp.check_eq('inventory takes what arrived',
+    (select debit from public.gl_lines
+      where entry_id = v_entry and account_id = v_1310), 185);
+  perform pg_temp.check_eq('5900 takes what did not',
+    (select debit from public.gl_lines
+      where entry_id = v_entry and account_id = v_5900), 55);
+  perform pg_temp.check_eq('and transit is emptied of everything that left',
+    (select credit from public.gl_lines
+      where entry_id = v_entry and account_id = v_1320), 240);
+
+  -- THE MOVEMENT LINKS, in both directions. The receipt journal values
+  -- the INBOUND movements; the outbound ones belong to the send
+  -- journal and must not be relinked, or the send's own valuation
+  -- points at the wrong entry and `report_stock_valuation` double-reads
+  -- it.
+  perform pg_temp.check_eq('every inbound movement is valued by this journal',
+    (select count(*) from public.stock_movements
+      where source_id = v_t and movement_type = 'transfer_in'
+        and gl_entry_id = v_entry), 2);
+  perform pg_temp.check_eq('and no inbound movement is left unvalued',
+    (select count(*) from public.stock_movements
+      where source_id = v_t and movement_type = 'transfer_in'
+        and gl_entry_id is null), 0);
+  perform pg_temp.check_true('while the OUTBOUND ones keep the send journal',
+    v_send is not null and (select bool_and(gl_entry_id = v_send)
+       from public.stock_movements
+      where source_id = v_t and movement_type = 'transfer_out'));
+
+  -- AND THE THREE STAMPS, none of which anything read back.
+  perform pg_temp.check_true('the transfer records when it arrived',
+    (select received_at is not null from public.stock_transfers where id = v_t));
+  perform pg_temp.check_true('and who signed for it',
+    (select received_by from public.stock_transfers where id = v_t) = v_owner);
+  perform pg_temp.check_eq('and the journal that received it',
+    (select receipt_entry_id from public.stock_transfers where id = v_t),
+    v_entry);
+
+  -- ------------------------------------------------------------------
+  -- 2. RECEIVED IN FULL: no shortfall leg at all
+  -- ------------------------------------------------------------------
+  v_t := public.upsert_stock_transfer(
+    null, v_org, v_from, v_to, pg_temp.today(),
+    jsonb_build_array(
+      jsonb_build_object('item', v_a, 'quantity', 5, 'uom', 'C62')),
+    'all of it arrives');
+  perform public.send_stock_transfer(v_t);
+  v_entry := public.receive_stock_transfer(v_t);
+  perform pg_temp.check_eq('a transfer that arrives in full is two lines',
+    (select count(*) from public.gl_lines where entry_id = v_entry), 2);
+  perform pg_temp.check_eq('and writes NOTHING off to 5900',
+    (select count(*) from public.gl_lines
+      where entry_id = v_entry and account_id = v_5900), 0);
+
+  -- ------------------------------------------------------------------
+  -- 3. NOTHING ARRIVED: a shortfall-only receipt
+  -- ------------------------------------------------------------------
+  -- A van that never got there. Every quantity counted as ZERO, which
+  -- is also the boundary of `if v_got < 0` -- nothing in the suite had
+  -- ever counted a line in at nought, so widening that guard to
+  -- `<= 0` refused a real and ordinary count.
+  v_t := public.upsert_stock_transfer(
+    null, v_org, v_from, v_to, pg_temp.today(),
+    jsonb_build_array(
+      jsonb_build_object('item', v_a, 'quantity', 6, 'uom', 'C62')),
+    'none of it arrives');
+  perform public.send_stock_transfer(v_t);
+  select id into v_la from public.stock_transfer_lines where transfer_id = v_t;
+  v_entry := public.receive_stock_transfer(v_t, jsonb_build_array(
+    jsonb_build_object('line', v_la, 'quantity', 0)));
+
+  perform pg_temp.check_true('a count of NOUGHT is a count', v_entry is not null);
+  perform pg_temp.check_eq('it makes no stock movement at all',
+    (select count(*) from public.stock_movements
+      where source_id = v_t and movement_type = 'transfer_in'), 0);
+  perform pg_temp.check_eq('the whole load is written off',
+    (select debit from public.gl_lines
+      where entry_id = v_entry and account_id = v_5900), 60);
+  perform pg_temp.check_eq('and NOTHING is debited to inventory',
+    (select count(*) from public.gl_lines
+      where entry_id = v_entry and account_id = v_1310), 0);
+  perform pg_temp.check_eq('so the journal is the loss and the transit, and no more',
+    (select count(*) from public.gl_lines where entry_id = v_entry), 2);
+  perform pg_temp.check_eq('with transit emptied of what left',
+    (select credit from public.gl_lines
+      where entry_id = v_entry and account_id = v_1320), 60);
+
+  -- ------------------------------------------------------------------
+  -- 4. A CHART WITH NO 5900
+  -- ------------------------------------------------------------------
+  -- Refused in words. Without the guard the shortfall leg has a null
+  -- account and `gl_lines` refuses it with a not-null violation, which
+  -- is a database error where a sentence belongs -- and a company that
+  -- renamed its chart meets it on an ordinary short delivery.
+  v_other := pg_temp.test_org('Carta Tanpa 5900 Sdn Bhd');
+  perform pg_temp.allow_many_companies();
+  perform public.create_fiscal_year(v_other, date_trunc('year', pg_temp.today())::date);
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_other, m, true from unnest(array['inventory']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+  perform pg_temp.sign_in_as(v_owner);
+  insert into public.warehouses (org_id, code, name, is_default)
+  values (v_other, 'W1', 'One', true) returning id into v_ow;
+  insert into public.warehouses (org_id, code, name)
+  values (v_other, 'W2', 'Two') returning id into v_ow2;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, cost_price)
+  values (v_other, 'X', 'Barang X', 'stock', true, 'C62', 3.00)
+  returning id into v_oi;
+  insert into public.stock_movements
+    (org_id, movement_no, movement_date, movement_type, item_id,
+     warehouse_id, quantity, unit_cost)
+  values (v_other, 'OPEN-X', pg_temp.today(), 'opening_balance', v_oi, v_ow, 50, 3.00);
+
+  v_ot := public.upsert_stock_transfer(
+    null, v_other, v_ow, v_ow2, pg_temp.today(),
+    jsonb_build_array(
+      jsonb_build_object('item', v_oi, 'quantity', 10, 'uom', 'C62')),
+    'short, with no account to lose it to');
+  perform public.send_stock_transfer(v_ot);
+  select id into v_ol from public.stock_transfer_lines where transfer_id = v_ot;
+  delete from public.accounts where org_id = v_other and code = '5900';
+  perform pg_temp.check_refused(
+    'a shortfall with no 5900 in the chart is refused in words',
+    format($q$select public.receive_stock_transfer(%L,
+              jsonb_build_array(jsonb_build_object('line', %L, 'quantity', 4)))$q$,
+           v_ot, v_ol),
+    'No inventory adjustment account (5900) in the chart.', 'P0002');
+  perform pg_temp.check_eq('and the transfer is still on its way',
+    (select status::text from public.stock_transfers where id = v_ot), 'sent');
+
+  -- ------------------------------------------------------------------
+  -- 5. STOCK THAT IS WORTH NOTHING
+  -- ------------------------------------------------------------------
+  -- `if round(v_arrived, 2) <> 0 or round(v_short, 2) <> 0` is what
+  -- keeps a journal of nothing off the ledger, and every item in this
+  -- suite has a cost, so the test was always true. A promotional case
+  -- taken into stock at nought -- a supplier's free sample, a
+  -- competition prize -- moves between warehouses like anything else,
+  -- and the movement is real while the VALUE is not. The quantity has
+  -- to arrive; the journal must not exist.
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, cost_price)
+  values (v_org, 'ITEM-FREE', 'Sampel percuma', 'stock', true, 'C62', 0)
+  returning id into v_free;
+  insert into public.stock_movements
+    (org_id, movement_no, movement_date, movement_type, item_id,
+     warehouse_id, quantity, unit_cost)
+  values (v_org, 'OPEN-FREE', pg_temp.today(), 'opening_balance',
+          v_free, v_from, 30, 0);
+
+  v_t := public.upsert_stock_transfer(
+    null, v_org, v_from, v_to, pg_temp.today(),
+    jsonb_build_array(
+      jsonb_build_object('item', v_free, 'quantity', 12, 'uom', 'C62')),
+    'twelve of something worth nothing');
+  perform public.send_stock_transfer(v_t);
+  v_entry := public.receive_stock_transfer(v_t);
+
+  perform pg_temp.check_true(
+    'a transfer of stock worth nothing posts NO journal at all',
+    v_entry is null);
+  perform pg_temp.check_eq('and none exists for it',
+    (select count(*) from public.gl_entries
+      where org_id = v_org and source_table = 'stock_transfers'
+        and source_id = v_t), 0);
+  -- The quantity still moved, which is the half that matters to a
+  -- stocktake. A journal of two zeroes would balance and tell nobody
+  -- anything; the movement is the record.
+  perform pg_temp.check_eq('while the twelve really arrived',
+    (select sum(quantity) from public.stock_movements
+      where source_id = v_t and movement_type = 'transfer_in'), 12);
+  perform pg_temp.check_eq('and the transfer is received',
+    (select status::text from public.stock_transfers where id = v_t),
+    'received');
+
+  -- What this block does NOT prove, said here so the next sweep does
+  -- not re-chase it.
+  --
+  -- The receipt's `and sm.movement_type = 'transfer_in'` is an
+  -- EQUIVALENT mutation target, proven by the SENDER's own update:
+  -- `send_stock_transfer` links every unvalued movement of the transfer
+  -- with no type filter at all, so by the time a receipt runs the
+  -- outbound movements already carry the send journal and
+  -- `and sm.gl_entry_id is null` excludes them on its own. The only
+  -- state where they are unvalued is a transfer worth nothing -- the
+  -- case just above -- and there the receipt posts no journal either,
+  -- so the update does not run. Right to keep: it says what the
+  -- statement means, and it is the only thing standing between the two
+  -- journals if the sender's filter is ever tightened.
+  --
+  -- And putting an `order by a.is_group desc` on the 1310
+  -- lookup is an EQUIVALENT mutation. The chart holds ONE account per
+  -- code -- `accounts` is unique on (org_id, code), which is why
+  -- `app.cheque_account` revives a retired row rather than inserting a
+  -- second -- so that select returns at most one row and no ordering
+  -- can change which. The 1310 heading trap that `0727`/`0728` closed
+  -- was a FALLBACK to the parent, not an ordering, and there is no
+  -- fallback here.
+  raise notice 'ok   receiving: two counts, all of it, none of it, and no account to lose it to';
+end $$;
+
+
 rollback;

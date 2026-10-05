@@ -462,4 +462,37 @@
 # is no longer posted, and this schema has no function that unposts or
 # voids a gl_entry -- checked rather than assumed. Measured:
 # `all SQL assertions passed (384 files, 14632 assertions executed)`.
-14632
+#
+# 14660, +28: stock_transfers.sql. receive_stock_transfer scored 20 of
+# 35 on its own file; 32 of 34 across its four, two proven equivalent.
+#
+# THE PAIR DID NOT GET SYMMETRIC COVERAGE, which is the lesson
+# revalue_foreign_balances gave an hour earlier. send_stock_transfer
+# scored 19 of 23 and 23 of 23 across its files; its other half scored
+# 20 of 35. Receiving has one rule sending does not -- a SHORTFALL --
+# so its journal has three shapes and all three balance:
+#
+#   all arrived    1310 + 1320, two lines
+#   some arrived   1310 + 5900 + 1320, three lines
+#   none arrived   5900 + 1320, two lines
+#
+# Nothing had ever counted a line in at NOUGHT, so the third shape was
+# unreachable -- and `if v_got < 0` widened to `<= 0` refused a van
+# that never got there, which is an ordinary event. A count matched to
+# the wrong LINE survived too, because the fixtures counted one line or
+# counted two the same; 8 of 10 and 15 of 20 on two lines is what
+# distinguishes "the count for THIS line" from "a count".
+#
+# THE FIFTH ZERO-VALUE FINDING OF THE SWEEP, and the first where the
+# right answer is NO JOURNAL AT ALL. A promotional case taken into
+# stock at nought moves between warehouses like anything else: the
+# quantity is real and the value is not, so both totals are zero and
+# the function posts nothing. Every item in the suite had a cost, so
+# the test was always true.
+#
+# One equivalent is proven by the SENDER rather than by this function:
+# send_stock_transfer links every unvalued movement with no type filter
+# at all, so the receipt's own `movement_type = 'transfer_in'` can
+# never exclude anything. Measured:
+# `all SQL assertions passed (384 files, 14660 assertions executed)`.
+14660
