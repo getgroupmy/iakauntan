@@ -1264,4 +1264,186 @@ begin
       'public.update_recurring_template(uuid, uuid)', 'execute'));
 end $$;
 
+-- ---------------------------------------------------------------------
+-- 8b. What the standing-journal runner WRITES, and what it does when a
+--     template will not post
+--
+-- Section 8 above closed the `where` clause and the entry date. A
+-- mutation sweep then found ten more, and they fall into one group:
+-- **everything inside the loop was unasserted.** The run's return value
+-- and the posted entry's date and description were checked; the three
+-- columns the loop writes on its way out -- `last_run_date`,
+-- `next_run_date`, `last_error` -- were not, except as `is null` on the
+-- two schedules that did NOT run.
+--
+-- That is the same finding `clear_pdc` gave an hour earlier: a file
+-- that watches the money does not watch the state. Here it is worse,
+-- because this loop SWALLOWS ITS OWN ERRORS on purpose -- a template
+-- that will not post records the reason and the run carries on -- so
+-- `last_error` is the only evidence a standing journal has stopped
+-- working, and nothing had ever read it.
+--
+-- And one survivor was an EMPTY JOURNAL. Reading the template under the
+-- wrong key gives null lines, `app.create_gl_entry_internal` posts an
+-- entry with no lines at all, and it BALANCES: nothing counted the
+-- lines, so a month-end accrual that accrued nothing passed every
+-- assertion in section 8.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.rs_org('Jurnal Tetap Dua Sdn Bhd');
+  v_exp uuid; v_ap uuid;
+  v_tpl jsonb; v_broken jsonb;
+  v_due uuid; v_review uuid; v_lastday uuid; v_quarterly uuid; v_bad uuid;
+  v_entry uuid; v_ran integer;
+begin
+  select id into v_exp from public.accounts
+   where org_id = v_org and code = '6100' order by code limit 1;
+  select id into v_ap from public.accounts
+   where org_id = v_org and code = '2110' order by code limit 1;
+  v_tpl := jsonb_build_object('lines', jsonb_build_array(
+    jsonb_build_object('account_id', v_exp, 'debit', 1200, 'credit', 0),
+    jsonb_build_object('account_id', v_ap,  'debit', 0, 'credit', 1200)));
+  -- An account id that is not an account. The posting raises, the loop
+  -- catches it, and the schedule has to say so.
+  v_broken := jsonb_build_object('lines', jsonb_build_array(
+    jsonb_build_object('account_id', gen_random_uuid(), 'debit', 50, 'credit', 0),
+    jsonb_build_object('account_id', v_ap, 'debit', 0, 'credit', 50)));
+
+  -- ------------------------------------------------------------------
+  -- The one that runs: what it posts, and what it writes
+  -- ------------------------------------------------------------------
+  -- Carrying a STALE error from a previous failed run, because
+  -- `last_error = null, last_error_at = null` on the success path is
+  -- the only thing that clears it -- and a schedule that reads as
+  -- broken for ever after one bad month is a schedule somebody turns
+  -- off.
+  insert into public.recurring_journals
+    (org_id, name, description, frequency, interval_count, start_date,
+     next_run_date, auto_post, is_active, template,
+     last_error, last_error_at)
+  values (v_org, 'Month-end accrual', 'Accrued utilities', 'monthly', 1,
+          date '2026-01-31', date '2026-01-31', true, true, v_tpl,
+          'something went wrong last month', now() - interval '31 days')
+  returning id into v_due;
+
+  -- auto_post FALSE: the bookkeeper wants to look at it first. The
+  -- schedule still moves on -- the month happened -- but nothing is
+  -- posted. Nothing in this suite had a schedule set to review.
+  insert into public.recurring_journals
+    (org_id, name, frequency, interval_count, start_date,
+     next_run_date, auto_post, is_active, template)
+  values (v_org, 'For review first', 'monthly', 1, date '2026-01-31',
+          date '2026-01-31', false, true, v_tpl)
+  returning id into v_review;
+
+  -- Due on EXACTLY its end date, which is the last day it may run.
+  -- Section 8 has one past its end and one with none; nothing stood on
+  -- the boundary itself.
+  insert into public.recurring_journals
+    (org_id, name, frequency, interval_count, start_date, end_date,
+     next_run_date, auto_post, is_active, template)
+  values (v_org, 'Lease ending today', 'monthly', 1, date '2025-02-28',
+          date '2026-01-31', date '2026-01-31', true, true, v_tpl)
+  returning id into v_lastday;
+
+  -- Every schedule in the suite is monthly with an interval of ONE, so
+  -- `r.interval_count` and the literal 1 are the same number. Three
+  -- months is not.
+  insert into public.recurring_journals
+    (org_id, name, frequency, interval_count, start_date,
+     next_run_date, auto_post, is_active, template)
+  values (v_org, 'Quarterly management fee', 'monthly', 3, date '2026-01-31',
+          date '2026-01-31', true, true, v_tpl)
+  returning id into v_quarterly;
+
+  insert into public.recurring_journals
+    (org_id, name, frequency, interval_count, start_date,
+     next_run_date, auto_post, is_active, template)
+  values (v_org, 'Broken template', 'monthly', 1, date '2026-01-31',
+          date '2026-01-31', true, true, v_broken)
+  returning id into v_bad;
+
+  v_ran := public.run_recurring_journals_for(v_org, date '2026-02-03');
+
+  -- FOUR of the five ran. The broken one did not, and that is the whole
+  -- point of the count: a run that reports five when one failed is a
+  -- nightly job nobody looks at twice.
+  perform pg_temp.check_eq(
+    'the run counts the schedules that worked and not the one that did not',
+    v_ran, 4);
+
+  -- THE LINES. Reading the template under the wrong key gives null, and
+  -- an entry with no lines balances perfectly.
+  select id into v_entry from public.gl_entries
+   where org_id = v_org and source_id = v_due limit 1;
+  perform pg_temp.check_eq('the accrual posts the template''s two lines',
+    (select count(*) from public.gl_lines where entry_id = v_entry), 2);
+  perform pg_temp.check_eq('debiting the expense the template names',
+    (select debit from public.gl_lines
+      where entry_id = v_entry and account_id = v_exp), 1200);
+  perform pg_temp.check_eq('and crediting the payable',
+    (select credit from public.gl_lines
+      where entry_id = v_entry and account_id = v_ap), 1200);
+  -- The reference is how a ledger reader gets from the entry back to
+  -- the schedule that keeps making it.
+  perform pg_temp.check_eq('and names the schedule it came from',
+    (select reference from public.gl_entries where id = v_entry),
+    'Month-end accrual');
+
+  -- THE THREE COLUMNS THE LOOP WRITES.
+  perform pg_temp.check_eq(
+    'the schedule records the day it was DUE as its last run',
+    (select last_run_date from public.recurring_journals where id = v_due)::text,
+    '2026-01-31');
+  perform pg_temp.check_eq('and is next due a month after that',
+    (select next_run_date from public.recurring_journals where id = v_due)::text,
+    '2026-02-28');
+  perform pg_temp.check_true('and its stale error is cleared',
+    (select last_error is null and last_error_at is null
+       from public.recurring_journals where id = v_due));
+
+  -- THE INTERVAL. Three months on, not one.
+  perform pg_temp.check_eq('a schedule of every three months moves three',
+    (select next_run_date from public.recurring_journals
+      where id = v_quarterly)::text, '2026-04-30');
+
+  -- AUTO_POST FALSE: the schedule moves, the ledger does not.
+  perform pg_temp.check_eq('a schedule set to review posts nothing',
+    (select count(*) from public.gl_entries
+      where org_id = v_org and source_id = v_review), 0);
+  perform pg_temp.check_eq('but it is still marked as having run',
+    (select last_run_date from public.recurring_journals
+      where id = v_review)::text, '2026-01-31');
+
+  -- THE END-DATE BOUNDARY: due exactly on its end date, so it runs.
+  perform pg_temp.check_eq('a lease ending today accrues one last time',
+    (select count(*) from public.gl_entries
+      where org_id = v_org and source_id = v_lastday), 1);
+  -- And then it is past its end and never runs again, which is the
+  -- other side of the same rule.
+  perform pg_temp.check_eq('and then stops',
+    public.run_recurring_journals_for(v_org, date '2026-12-31'),
+    (select count(*)::integer from public.recurring_journals
+      where org_id = v_org and id <> v_lastday and id <> v_bad));
+
+  -- THE FAILURE, which is the only thing that tells anybody a standing
+  -- journal has stopped working.
+  perform pg_temp.check_true('a template that will not post says why',
+    (select last_error is not null and last_error_at is not null
+       from public.recurring_journals where id = v_bad));
+  perform pg_temp.check_eq('and its schedule did NOT move on',
+    (select next_run_date from public.recurring_journals where id = v_bad)::text,
+    '2026-01-31');
+  perform pg_temp.check_true('nor was it marked as having run',
+    (select last_run_date is null
+       from public.recurring_journals where id = v_bad));
+  perform pg_temp.check_eq('and it posted nothing',
+    (select count(*) from public.gl_entries
+      where org_id = v_org and source_id = v_bad), 0);
+
+  raise notice 'ok   standing journals: the lines, the three columns, and the one that broke';
+end $$;
+
+
 rollback;

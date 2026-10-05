@@ -328,4 +328,35 @@
 # the same shape. Twice in three functions is not a coincidence -- a
 # status column is what a file about MONEY never looks at. Measured:
 # `all SQL assertions passed (384 files, 14565 assertions executed)`.
-14565
+#
+# 14583, +18: recurring_shapes.sql. run_recurring_journals_for scored
+# 11 of 25 on its own file; 24 of 24 across its three files, nothing
+# equivalent.
+#
+# ALL THIRTEEN SURVIVORS WERE INSIDE THE LOOP. The run's return value
+# and the posted entry's date and description were asserted; the three
+# columns the loop writes on its way out -- last_run_date,
+# next_run_date, last_error -- were not, except as `is null` on the two
+# schedules that did NOT run. Same finding clear_pdc gave an hour
+# earlier: a file that watches the money does not watch the state.
+#
+# AND THE ERROR PATH WAS ASSERTED -- FOR THE OTHER RUNNER. The file has
+# four assertions on last_error after a failed run and every one is
+# about recurring_DOCUMENTS. Its own section-8 comment says "two
+# runners with two where clauses", and the half it wrote that comment
+# for was still the half with no coverage of the error path, the
+# interval, the review flag or the template.
+#
+# ONE SURVIVOR WAS AN EMPTY JOURNAL, the fifth of that shape in this
+# sweep. `r.template -> 'lines'` under the wrong key is NULL,
+# create_gl_entry_internal posts an entry with no lines, and it
+# balances -- so a month-end accrual that accrued nothing passed every
+# assertion in section 8, including "the accrual is dated the month it
+# accrues".
+#
+# And auto_post, which nothing had ever set to FALSE. A schedule the
+# bookkeeper wants to review must advance and post nothing; with every
+# fixture auto-posting, "it posted" and "it ran" were one claim.
+# Measured:
+# `all SQL assertions passed (384 files, 14583 assertions executed)`.
+14583

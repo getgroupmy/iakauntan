@@ -13461,3 +13461,56 @@ another company.
 `run_recurring_journals_for`, `import_open_bills`,
 `dispose_fixed_asset`, `revalue_foreign_balances`,
 `receive_stock_transfer`, `import_opening_balances`.
+
+### The standing journals: all thirteen survivors were inside the loop
+
+`run_recurring_journals_for` — the monthly standing journals (rent,
+depreciation, a management fee) posted on their due date and
+rescheduled.
+
+**25 mutants plus a control. 11 killed on `recurring_shapes.sql`,
+24 of 24 across its three files, nothing equivalent.**
+
+**All thirteen survivors were inside the loop.** The run's return value
+and the posted entry's date and description were asserted; the three
+columns the loop writes on its way out — `last_run_date`,
+`next_run_date`, `last_error` — were not, except as `is null` on the
+two schedules that did *not* run. **This is the same finding
+`clear_pdc` gave an hour earlier: a file that watches the money does
+not watch the state.** Two for two, so it is now the first thing to
+check on every remaining money mover.
+
+**And the error path WAS asserted — for the other runner.**
+`recurring_shapes.sql` has four assertions on `last_error` after a
+failed run, and every one of them is about `recurring_documents`. Its
+own section-8 comment says "recurring journals and recurring documents
+are two runners with two `where` clauses, and the journal one had
+almost nothing on it" — and the half it wrote that comment for was
+still the half with no coverage of the error path, the interval, the
+review flag or the template. **A comment naming the gap is not the
+assertion that closes it.**
+
+**One survivor was an empty journal — the fifth of that shape in this
+sweep.** `r.template -> 'lines'` read under the wrong key is NULL,
+`app.create_gl_entry_internal` posts an entry with **no lines at all**,
+and it balances. A month-end accrual that accrued nothing passed every
+assertion in section 8, including "the accrual is dated the month it
+accrues" — because an entry with no lines still has a date.
+
+**And `auto_post`, which nothing in the suite had ever set to false.**
+A schedule the bookkeeper wants to review first must advance and post
+NOTHING. With every fixture auto-posting, "it posted" and "it ran" were
+one claim.
+
+The error path now has its own fixture: a template naming an
+`account_id` that is not an account. The run posts four of five, the
+broken schedule keeps its `next_run_date`, records `last_error` and
+`last_error_at`, is not marked as having run, and posts nothing — and a
+schedule carrying a STALE error from a previous month has it cleared on
+the run that works, which is the only thing stopping a schedule reading
+as broken for ever after one bad month.
+
+**22 of 45 money movers now have a mutants file.** Next with none:
+`import_open_bills`, `dispose_fixed_asset`, `revalue_foreign_balances`,
+`receive_stock_transfer`, `import_opening_balances`,
+`import_open_invoices`.
