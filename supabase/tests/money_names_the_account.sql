@@ -569,4 +569,108 @@ begin
   raise notice 'the 1120 allow-list holds % functions', cardinality(v_found);
 end $$;
 
+-- =====================================================================
+-- The tiebreak, where the default is NOT also the oldest
+-- =====================================================================
+-- `0731` resolves an unnamed account in three tiers: the gateway's
+-- settlement account, else the company's default ACTIVE one, else the
+-- OLDEST active one. The block above proves the default beats a closed
+-- account -- but in its fixture the default is also the oldest active
+-- account, so `order by ... b.is_default desc, b.created_at` and
+-- `order by ... b.created_at` pick the same row.
+--
+-- Added 5 October from a mutation run. Dropping `b.is_default desc`
+-- survived SEVEN test files, and so did reversing `b.created_at` to
+-- `desc`. Both were masked by the same fixture: two orderings that
+-- agree cannot say which one was used. That is `docs/widget-tests.md`'s
+-- twelfth way, in a bank-account fixture rather than a 1120 one.
+--
+-- So: an ordinary account FIRST, the default SECOND. Now the two
+-- orderings disagree and only the right one passes.
+do $$
+declare
+  v_org   uuid;
+  v_cust  uuid;
+  v_older uuid;
+  v_deflt uuid;
+  v_rcp   uuid;
+  v_today date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
+begin
+  v_org := pg_temp.test_org('Tiebreak Sdn Bhd');
+  perform public.create_fiscal_year(v_org,
+                                    date_trunc('year', v_today)::date);
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-1', 'Pelanggan', 'customer') returning id into v_cust;
+
+  -- Oldest, active, NOT the default.
+  v_older := pg_temp.test_bank_account(
+    v_org, 'Akaun pertama', 'current', 'MYR', 0, 0, '8001', 'RHB',
+    false, false, true);
+  -- Newer, active, AND the default.
+  v_deflt := pg_temp.test_bank_account(
+    v_org, 'Akaun pilihan', 'current', 'MYR', 0, 0, '8002', 'Maybank',
+    false, true, true);
+
+  -- `created_at` DEFAULTS TO now(), which in Postgres is the
+  -- TRANSACTION timestamp -- so every account a test fixture creates
+  -- has the SAME created_at, and `order by b.created_at` orders nothing.
+  -- That is why reversing it to `desc` survived seven files: with equal
+  -- keys the two orderings are the same ordering. The positive control
+  -- below caught this on the first run of this very block.
+  --
+  -- So the timestamps are set apart by hand. Nothing else in the suite
+  -- does, which means no other test can say anything about this tier.
+  update public.bank_accounts
+     set created_at = now() - interval '2 days' where id = v_older;
+  update public.bank_accounts
+     set created_at = now() - interval '1 day'  where id = v_deflt;
+
+  perform pg_temp.check_true(
+    'the default is not the oldest, so the two orderings disagree',
+    (select b.created_at > (select created_at from public.bank_accounts
+                             where id = v_older)
+       from public.bank_accounts b where b.id = v_deflt));
+
+  insert into public.receipts
+    (org_id, receipt_no, receipt_date, contact_id, amount,
+     unapplied_amount, currency, exchange_rate)
+  values (v_org, 'RCP-TB1', v_today, v_cust, 300, 300, 'MYR', 1)
+  returning id into v_rcp;
+  perform public.post_receipt(v_rcp);
+
+  perform pg_temp.check_true(
+    'the DEFAULT account wins, not merely the oldest active one',
+    (select bank_account_id = v_deflt from public.receipts
+      where id = v_rcp));
+
+  -- And with no default at all, the OLDEST active one -- which is what
+  -- reversing `b.created_at` breaks.
+  update public.bank_accounts set is_default = false where id = v_deflt;
+  insert into public.receipts
+    (org_id, receipt_no, receipt_date, contact_id, amount,
+     unapplied_amount, currency, exchange_rate)
+  values (v_org, 'RCP-TB2', v_today, v_cust, 150, 150, 'MYR', 1)
+  returning id into v_rcp;
+  perform public.post_receipt(v_rcp);
+
+  perform pg_temp.check_true(
+    'and with no default, the OLDEST active account, not the newest',
+    (select bank_account_id = v_older from public.receipts
+      where id = v_rcp));
+
+  -- And it cannot be posted a second time. `post_receipt_internal`
+  -- opens with `if v_rcp.gl_entry_id is not null then raise`, and
+  -- NOTHING in the suite asked for that refusal: dropping the guard
+  -- survived every file that posts a receipt. A receipt posted twice
+  -- banks the same money twice and doubles the customer's credit.
+  begin
+    perform public.post_receipt(v_rcp);
+    raise exception 'FAIL: a posted receipt was posted again';
+  exception
+    when sqlstate 'P0001' then
+      if position('FAIL' in sqlerrm) > 0 then raise; end if;
+      raise notice 'ok   a posted receipt refuses to post again';
+  end;
+end $$;
+
 rollback;
