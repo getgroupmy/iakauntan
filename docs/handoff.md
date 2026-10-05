@@ -14027,3 +14027,63 @@ NULL DEFAULT 1 column.
 `import_opening_balances`, `post_purchase_payment` (the survey flags
 `posted_at`/`posted_by`), `app.run_recurring_journals`, and the four
 demo builders.
+
+### post_purchase_payment: fourteen files, nineteen kills, eighteen survivors
+
+The most-reached money mover in the schema, and **the sharpest version
+of this sweep's central finding.**
+
+**38 mutants plus a control. The union of all FOURTEEN files killed
+nineteen of thirty-seven on the first run. Eighteen survived every
+file.** 34 of 37 after the work, three proven equivalent.
+
+Per file on the first run: `payment_methods` 6, `multicurrency` 11,
+`money_names_the_account` 6, `bank_reconciliation` 6, `aged_balances`
+5, `group_payment` 5 — and **3 each** from `settlement_discount`,
+`financial_statements`, `group_payment_shapes`, `statutory_charges`,
+`aging_shapes` and `demo_modules`.
+
+**Those three are the same three every time**, and they are exactly the
+three a balance check kills: the payable credited instead of debited,
+the bank debited instead of credited, and a null account. **Eleven of
+the fourteen files killed only those.** Adding a file added another
+copy of them.
+
+What eighteen files' worth of coverage never touched: both guards at
+the top, the supplier's own payable account, the contact on either
+money leg, every FX rule but one, `base_amount`, the reference, the
+status, and `posted_at`/`posted_by` — the last two flagged mechanically
+by `state_write_coverage.py` before the sweep ran, **its third real
+hit.**
+
+**The FX half needed the other direction.** Everything in
+`multicurrency.sql` was a GAIN, so `app.fx_account(org, false)` was
+never chosen on the purchase side — and swapping the two accounts put
+the right number in the wrong one for a loss with nothing noticing.
+That is the failure the file's *own comment* warns about ("a sign flip
+puts the right number in the wrong one and the ledger still balances"),
+in the half it did not build. And a bank charge is in the payment's
+**currency**: every charge in the suite was on a ringgit payment at
+rate 1, where `round(bank_charges * v_rate, 2)` and `bank_charges` are
+one number. A bill at 4.50 paid at 4.70 with USD 50 of fee closes both.
+
+**All three equivalents are the schema, not the code**, and two
+fixtures were *refused by the database* while trying to build the
+states those `coalesce`s guard:
+
+| equivalent | what settles it |
+| --- | --- |
+| `coalesce(exchange_rate, 1)` | NOT NULL DEFAULT 1 |
+| `coalesce(bank_charges, 0)` | NOT NULL DEFAULT 0 |
+| `if v_bank_acct is null` refusal | `bank_accounts.account_id` NOT NULL + FK |
+
+**That is now five of this kind across the sweep**, after
+`remit_withholding`'s `exchange_rate` and `mo_components`'
+`quantity_required`. A `coalesce` or null-check over a column the
+schema will not leave null is belt-and-braces worth keeping and
+impossible to test — and it is cheaper to check the column definition
+than to build a fixture the database will refuse.
+
+**31 of 45 money movers now have a mutants file.** Next with none:
+`import_opening_balances`, `app.run_recurring_journals`,
+`import_opening_stock`'s siblings, and the four demo builders.

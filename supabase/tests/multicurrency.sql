@@ -320,6 +320,24 @@ begin
   perform pg_temp.check_eq('and it is recorded on the payment',
     (select fx_gain_loss from public.purchase_payments where id=v_pay), 2000);
 
+  -- THE PAYMENT'S OWN VALUE IN RINGGIT, which nothing read. A sweep of
+  -- post_purchase_payment found `base_amount` unasserted across all
+  -- fourteen files that reach it: USD 10,000 at 4.50 is RM 45,000, and
+  -- without the conversion the row says 10,000 while the ledger says
+  -- 45,000.
+  perform pg_temp.check_eq('the payment is worth its ringgit on the row',
+    (select base_amount from public.purchase_payments where id=v_pay), 45000);
+
+  -- AND THE GAIN IS ATTRIBUTED TO THE SUPPLIER IT AROSE ON. The fx
+  -- pair's payable-side leg carries a contact and the gain-account leg
+  -- does not, which is right -- a statement is per party and the gain
+  -- account is not -- and neither was read.
+  perform pg_temp.check_eq('the gain''s payable leg names the supplier',
+    (select g.contact_id from public.gl_lines g
+      where g.entry_id = (select gl_entry_id from public.purchase_payments
+                           where id = v_pay)
+        and g.account_id = v_ap and g.debit = 2000), v_sup);
+
   -- And the refusal, which the receipt side asserts and this one did
   -- not: a ringgit payment cannot settle a dollar bill.
   insert into public.purchase_documents
@@ -347,6 +365,78 @@ begin
   exception when sqlstate '22023' then
     raise notice 'ok   a ringgit payment cannot settle a dollar bill';
   end;
+
+  -- ------------------------------------------------------------------
+  -- The other direction, and a charge in dollars
+  -- ------------------------------------------------------------------
+  -- Everything above is a GAIN, so `app.fx_account(org, false)` -- the
+  -- loss account -- was never chosen on the purchase side: swapping the
+  -- two accounts put the right number in the wrong one for a loss and
+  -- nothing noticed, which is the failure the comment above warns
+  -- about, in the half the file did not build.
+  --
+  -- And a bank charge is in the payment's CURRENCY, so it converts too.
+  -- Every charge in the suite was on a ringgit payment at rate 1, where
+  -- `round(bank_charges * v_rate, 2)` and `bank_charges` are the same
+  -- number.
+  --
+  -- A bill at 4.50 paid at 4.70: the company owed dollars and the
+  -- dollars got DEARER, which is a loss of RM 200 on USD 1,000. Plus
+  -- USD 50 of telegraphic transfer fee, RM 235 at 4.70.
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
+     subtotal, total_amount, balance_amount, status)
+  values (v_org,'bill','FX-BILL-3', pg_temp.today() - 10, v_sup,'USD',4.50,
+          1000,1000,1000,'draft')
+  returning id into v_bill;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, description, quantity, unit_price,
+     line_subtotal, line_total)
+  values (v_org, v_bill, 1, 'Goods that got dearer', 1, 1000, 1000, 1000);
+  perform public.post_purchase_document(v_bill);
+
+  insert into public.purchase_payments
+    (org_id, payment_no, payment_date, contact_id, amount, unapplied_amount,
+     currency, exchange_rate, bank_account_id, bank_charges)
+  values (v_org,'FX-PAY-3', pg_temp.today(), v_sup, 1000, 1000,'USD',4.70,
+          v_bank, 50)
+  returning id into v_pay;
+  insert into public.payment_allocations (org_id, payment_id, bill_id, amount)
+  values (v_org, v_pay, v_bill, 1000);
+  perform public.post_purchase_payment(v_pay);
+
+  perform pg_temp.check_eq('a dollar that got dearer is a LOSS of two hundred',
+    (select sum(g.debit - g.credit) from public.gl_lines g
+       join public.gl_entries e on e.id = g.entry_id
+      where e.source_id = v_pay
+        and g.account_id = (select id from public.accounts
+                             where org_id = v_org and code = '6500')), 200);
+  perform pg_temp.check_eq('and nothing reaches the gain account',
+    coalesce((select sum(g.credit - g.debit) from public.gl_lines g
+                join public.gl_entries e on e.id = g.entry_id
+               where e.source_id = v_pay
+                 and g.account_id = (select id from public.accounts
+                                      where org_id = v_org and code = '4920')),
+             0), 0);
+  perform pg_temp.check_eq('the loss is recorded on the payment as negative',
+    (select fx_gain_loss from public.purchase_payments where id = v_pay), -200);
+  perform pg_temp.check_eq('and the payment is worth its ringgit on the row',
+    (select base_amount from public.purchase_payments where id = v_pay), 4700);
+
+  -- The charge, converted: USD 50 at 4.70.
+  perform pg_temp.check_eq('a charge in dollars is expensed in ringgit',
+    (select sum(g.debit) from public.gl_lines g
+       join public.gl_entries e on e.id = g.entry_id
+       join public.accounts a on a.id = g.account_id
+      where e.source_id = v_pay and a.code = '6300'), 235);
+  -- And the bank is credited the payment AND the charge, both
+  -- converted: (1000 + 50) * 4.70.
+  perform pg_temp.check_eq('and the bank is credited gross and converted',
+    (select sum(g.credit) from public.gl_lines g
+       join public.gl_entries e on e.id = g.entry_id
+      where e.source_id = v_pay
+        and g.account_id = (select account_id from public.bank_accounts
+                             where id = v_bank)), 4935);
 
   perform pg_temp.sign_out();
 end $$;

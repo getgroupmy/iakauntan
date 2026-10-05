@@ -622,4 +622,40 @@
 # the row cannot exist. The first version of the new block inserted one
 # and the constraint refused it. Measured:
 # `all SQL assertions passed (384 files, 14700 assertions executed)`.
-14700
+#
+# 14725, +25: payment_methods.sql and multicurrency.sql.
+# post_purchase_payment is the most-reached money mover in the schema --
+# FOURTEEN files -- and the union of all fourteen killed NINETEEN of 37
+# on the first run. EIGHTEEN survived every file. 34 of 37 after, three
+# proven equivalent and all three settled by the SCHEMA.
+#
+# THAT IS THE SHARPEST VERSION OF THIS SWEEP'S CENTRAL FINDING. Between
+# them the fourteen files assert THREE things: the journal balances, the
+# payable clears, and the bank moves. Those three are exactly the three
+# a BALANCE CHECK kills -- payable credited instead of debited, bank
+# debited instead of credited, a null account -- and eleven of the
+# fourteen killed only those. Adding a file added another copy of the
+# same three.
+#
+# Never touched: both guards at the top, the supplier's own payable
+# account, the contact on either money leg, every FX rule but one,
+# base_amount, the reference, the status, and posted_at/posted_by --
+# the last two flagged mechanically by state_write_coverage.py before
+# the sweep ran, its third real hit.
+#
+# THE FX HALF NEEDED THE OTHER DIRECTION. Everything in
+# multicurrency.sql was a GAIN, so app.fx_account(org, false) was never
+# chosen on the purchase side and swapping the two accounts put the
+# right number in the wrong one for a loss with nothing noticing -- the
+# failure that file's own comment warns about, in the half it did not
+# build. And a bank charge is in the payment's CURRENCY: every charge in
+# the suite was on a ringgit payment at rate 1, where
+# `round(bank_charges * v_rate, 2)` and `bank_charges` are one number.
+# A bill at 4.50 paid at 4.70 with USD 50 of fee closes both.
+#
+# All three equivalents are NOT NULL columns or a foreign key:
+# exchange_rate (DEFAULT 1), bank_charges (DEFAULT 0), and
+# bank_accounts.account_id. Two fixtures were refused by the schema
+# while trying to build the states those coalesces guard. Measured:
+# `all SQL assertions passed (384 files, 14725 assertions executed)`.
+14725

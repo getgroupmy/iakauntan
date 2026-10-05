@@ -558,6 +558,208 @@ begin
         and action = 'insert') >= 1);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- post_purchase_payment: eighteen of thirty-seven survived FOURTEEN
+-- files
+--
+-- The most-reached money mover in the schema, and the sharpest version
+-- of the finding this sweep keeps producing. Fourteen test files reach
+-- it, and between them they assert THREE things: the journal balances,
+-- the payable clears, and the bank moves. Those three kill nineteen
+-- mutants. The other eighteen survived every one of the fourteen.
+--
+-- The three that every file kills are the three a BALANCE CHECK kills:
+-- the payable credited instead of debited, the bank debited instead of
+-- credited, and a null account. Add a file and you add another copy of
+-- the same three.
+--
+-- What nothing asserted: both guards at the top, the two refusals
+-- below them, the supplier's own payable account, the contact on either
+-- money leg, `base_amount`, the reference, the status, and
+-- `posted_at`/`posted_by` -- the last two flagged mechanically by
+-- `scripts/state_write_coverage.py` before this sweep was run.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid;
+  v_owner uuid := pg_temp.test_user();
+  v_supp  uuid; v_supp2 uuid;
+  v_bank  uuid; v_bank_ac uuid;
+  v_ap    uuid; v_own_ap uuid;
+  v_pay   uuid; v_entry uuid; v_msg text;
+  v_nocharge uuid;
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  v_org := pg_temp.test_org('Bayar Celah Sdn Bhd');
+  perform pg_temp.allow_many_companies();
+  perform public.create_fiscal_year(v_org, date '2026-01-01');
+  perform pg_temp.sign_in_as(v_owner);
+
+  v_bank    := pg_temp.test_bank_account(v_org, 'Maybank current');
+  v_bank_ac := pg_temp.bank_gl(v_bank);
+  select id into v_ap from public.accounts where org_id = v_org and code = '2110';
+
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'S-1', 'Pembekal Biasa', 'supplier') returning id into v_supp;
+
+  -- A supplier with a payable account OF ITS OWN -- a trade creditor
+  -- the firm reports separately. Every supplier in fourteen files falls
+  -- back to the chart's 2110, so `coalesce(c.payable_account_id, 2110)`
+  -- had nothing on the other side of it.
+  insert into public.accounts
+    (org_id, code, name, account_type, account_subtype)
+  values (v_org, '2115', 'Trade creditors - group', 'liability',
+          'accounts_payable')
+  returning id into v_own_ap;
+  insert into public.contacts
+    (org_id, code, name, contact_type, payable_account_id)
+  values (v_org, 'S-2', 'Pembekal Kumpulan', 'supplier', v_own_ap)
+  returning id into v_supp2;
+
+  -- ------------------------------------------------------------------
+  -- 1. WHO may pay, and not twice
+  -- ------------------------------------------------------------------
+  insert into public.purchase_payments
+    (org_id, payment_no, payment_date, contact_id, bank_account_id,
+     currency, exchange_rate, amount, base_amount, bank_charges,
+     reference, status)
+  values (v_org, 'PAYX-1', date '2026-03-04', v_supp, v_bank,
+          'MYR', 1, 400, 400, 6, 'EFT 9981', 'draft')
+  returning id into v_pay;
+
+  perform pg_temp.sign_in_as(pg_temp.another_user('luar-bayar@iakauntan.test'));
+  begin
+    perform public.post_purchase_payment(v_pay);
+    v_msg := null;
+  exception when others then get stacked diagnostics v_msg = message_text;
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+  -- The WHOLE message: two other refusals in this function are 23514
+  -- and P0002 and both talk about an account.
+  perform pg_temp.check_eq('somebody who may not post cannot pay a supplier',
+    v_msg, 'Insufficient privileges to post');
+  perform pg_temp.check_true('and the payment is still a draft',
+    (select gl_entry_id is null and status = 'draft'
+       from public.purchase_payments where id = v_pay));
+
+  v_entry := public.post_purchase_payment(v_pay);
+  perform pg_temp.check_refused('and a payment is posted once',
+    format('select public.post_purchase_payment(%L)', v_pay),
+    'Payment PAYX-1 is already posted');
+
+  -- ------------------------------------------------------------------
+  -- 2. WHAT THE POSTING WROTE, none of which was read
+  -- ------------------------------------------------------------------
+  perform pg_temp.check_eq('a posted payment says so',
+    (select status::text from public.purchase_payments where id = v_pay),
+    'posted');
+  perform pg_temp.check_true('and records when it was posted',
+    (select posted_at is not null from public.purchase_payments
+      where id = v_pay));
+  perform pg_temp.check_eq('and who posted it',
+    (select posted_by from public.purchase_payments where id = v_pay),
+    v_owner);
+  perform pg_temp.check_eq('and the journal names the payment',
+    (select source_id from public.gl_entries where id = v_entry), v_pay);
+  perform pg_temp.check_eq('and carries the reference it was paid under',
+    (select reference from public.gl_entries where id = v_entry), 'EFT 9981');
+
+  -- WHO was paid, on BOTH money legs. `report_contact_statement` reads
+  -- gl_lines.contact_id, so a payment missing it on the bank leg shows
+  -- on no supplier's statement from that side -- and the two legs are
+  -- two separate jsonb_build_object calls.
+  perform pg_temp.check_eq('the payable leg names the supplier',
+    (select contact_id from public.gl_lines
+      where entry_id = v_entry and account_id = v_ap), v_supp);
+  perform pg_temp.check_eq('and so does the bank leg',
+    (select contact_id from public.gl_lines
+      where entry_id = v_entry and account_id = v_bank_ac), v_supp);
+
+  -- ------------------------------------------------------------------
+  -- 3. THE SUPPLIER'S OWN PAYABLE ACCOUNT
+  -- ------------------------------------------------------------------
+  insert into public.purchase_payments
+    (org_id, payment_no, payment_date, contact_id, bank_account_id,
+     currency, exchange_rate, amount, base_amount, bank_charges, status)
+  values (v_org, 'PAYX-2', date '2026-03-05', v_supp2, v_bank,
+          'MYR', 1, 700, 700, 0, 'draft')
+  returning id into v_pay;
+  v_entry := public.post_purchase_payment(v_pay);
+  perform pg_temp.check_eq(
+    'a group supplier is paid off ITS OWN payable account',
+    (select debit from public.gl_lines
+      where entry_id = v_entry and account_id = v_own_ap), 700);
+  perform pg_temp.check_eq('and not off the chart''s 2110',
+    (select count(*) from public.gl_lines
+      where entry_id = v_entry and account_id = v_ap), 0);
+
+  -- ------------------------------------------------------------------
+  -- 4. A PAYMENT WITH NO CHARGES, and one with NONE RECORDED
+  -- ------------------------------------------------------------------
+  -- `if coalesce(v_pay.bank_charges, 0) > 0` is what keeps a charge
+  -- line of nothing off the journal, and `coalesce(..., 0)` is what
+  -- keeps a null from making the whole bank total null. Every payment
+  -- in this file carries a charge, so both had nothing on the other
+  -- side of them. PAYX-2 above has a charge of zero; this one has none
+  -- at all.
+  perform pg_temp.check_eq(
+    'a payment with no charge is two lines and no more',
+    (select count(*) from public.gl_lines where entry_id = v_entry), 2);
+
+  -- A payment whose charge column was never filled in. And the
+  -- `coalesce(v_pay.bank_charges, 0)` that guards it turns out to be
+  -- an EQUIVALENT mutation target, settled by the TABLE:
+  -- `purchase_payments.bank_charges` is NOT NULL with DEFAULT 0, so it
+  -- can never be null and the coalesce can never fire. The first
+  -- version of this asserted `bank_charges is null` and the column
+  -- came back 0. Belt-and-braces, right to keep, and unobservable --
+  -- the third time a constraint or default has settled one of these,
+  -- after remit_withholding's exchange_rate and mo_components'
+  -- quantity_required.
+  insert into public.purchase_payments
+    (org_id, payment_no, payment_date, contact_id, bank_account_id,
+     currency, exchange_rate, amount, base_amount, status)
+  values (v_org, 'PAYX-3', date '2026-03-06', v_supp, v_bank,
+          'MYR', 1, 250, 250, 'draft')
+  returning id into v_nocharge;
+  perform pg_temp.check_eq(
+    'a payment whose charge was never filled in carries nought, not null',
+    (select bank_charges from public.purchase_payments where id = v_nocharge),
+    0);
+  v_entry := public.post_purchase_payment(v_nocharge);
+  perform pg_temp.check_eq('and the bank is credited the payment alone',
+    (select credit from public.gl_lines
+      where entry_id = v_entry and account_id = v_bank_ac), 250);
+  perform pg_temp.check_eq('with no charge line',
+    (select count(*) from public.gl_lines where entry_id = v_entry), 2);
+
+  -- ------------------------------------------------------------------
+  -- 5. THE REFUSAL THAT CANNOT BE REACHED
+  -- ------------------------------------------------------------------
+  -- `if v_bank_acct is null then raise 'That account is not on this
+  -- company's chart.'` is an EQUIVALENT mutation target, and the
+  -- SCHEMA is what proves it: `bank_accounts.account_id` is NOT NULL
+  -- with a foreign key to `accounts`, so the join behind that lookup
+  -- cannot come back empty for a bank account that exists -- and
+  -- `purchase_payments_bank_account_same_org` guarantees the id on the
+  -- row is a bank account of this company's. The first version of this
+  -- block tried to build the state by nulling `account_id` and the
+  -- not-null constraint refused it.
+  --
+  -- Right to keep, and the function's own comment explains why it does
+  -- not need the org scope either: "an id on this row is this
+  -- company's or the insert never happened". That is the schema doing
+  -- the work, and this refusal is the sentence a person would get if it
+  -- ever stopped.
+  --
+  -- Fourth of its kind in this sweep, after remit_withholding's
+  -- exchange_rate, mo_components' quantity_required and this table's
+  -- own bank_charges.
+  perform pg_temp.sign_out();
+  raise notice 'ok   paying a supplier: who, when, whose account, and what was charged';
+end $$;
+
+
 rollback;
 
 \echo 'payment_methods.sql passed'
