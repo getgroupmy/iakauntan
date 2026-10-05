@@ -200,6 +200,26 @@ jobs:
           python3 scripts/check_default_readers_test.py
           python3 scripts/check_default_readers.py
 
+      # `0743`'s body was extracted from `0739` programmatically and the
+      # extraction stopped at the closing `$function$`, dropping the
+      # statement's `;`. `psql -f` applied it and printed CREATE
+      # FUNCTION anyway, because psql flushes its buffer at EOF -- so
+      # the tool that applies migrations cannot see this, and nor could
+      # a green run of this workflow. It was caught by
+      # scripts/mutate_sql.py, whose function-block pattern requires the
+      # semicolon: the stricter tool noticed what the real one accepted.
+      #
+      # Latent rather than live, and worth keeping the distinction:
+      # migrations are applied one file at a time, so nothing is broken.
+      # A tool that concatenated them would run the next file's first
+      # statement into this one. 0540 is allowed by name, because it is
+      # already applied and this directory is append-only.
+      - name: Every migration ends where it says it does
+        working-directory: .
+        run: |
+          python3 scripts/check_migration_terminators_test.py
+          python3 scripts/check_migration_terminators.py
+
       - run: flutter analyze --fatal-infos --fatal-warnings
 
       # `- run: flutter test` was this step for 2251 runs, and a bare

@@ -12488,3 +12488,75 @@ instead. It is latent rather than live: migrations are applied one file
 at a time, and only a tool that CONCATENATED them would produce
 `end $function$ CREATE TABLE ...` and fail. Six other migrations end in a
 comment, which is fine.
+
+### The terminator gate, and the nine false positives it opened with
+
+`scripts/check_migration_terminators.py` (task #85) asks two structural
+questions of every file in `supabase/migrations/`:
+
+- does the last line that is not blank and not a comment end in `;`?
+- does every dollar-quote tag appear an even number of times, so no
+  function body is left open?
+
+745 migrations, one allowed by name. The allowance is
+`0540_a_counter_sale_of_dated_stock.sql`, which ends `end;\n$function$`
+with no semicolon and is already applied; this directory is append-only,
+so it is named with its reason rather than edited. The gate also refuses
+to run if an allowlisted file has since become clean or disappeared --
+an excuse nobody is using reads to the next person as a rule.
+
+**It opened with nine findings and all nine were correct code.** Every
+one was a `comment on ... is` whose prose contains a double dash:
+
+```sql
+comment on function public.void_pos_sale(...) is
+  '... the lines are kept -- they are what was written off.';
+```
+
+`re.sub(r"--.*$", "", line)` throws away the closing quote and the
+semicolon with it. The stripper is now quote-aware (and treats `''` as
+an escaped quote, not the end of a literal), and both shapes are pinned
+in `NOT_FAULTS` as must-not-report, checked by `main()` before the floor.
+Same discipline as the four `update ... set is_default = false` writers
+pinned in `check_default_readers_test.py`, and for the same reason: **a
+gate that flags correct code is a gate somebody turns off.** Two gates
+in a row have now had that failure on their first run, both from a
+regex applied without regard to what it was inside.
+
+Four mutations, each verified to have APPLIED before being believed:
+
+| mutation | result |
+| --- | --- |
+| strip the `;` off `0743` | gate exit 1, naming the file |
+| revert the stripper to the naive regex | gate exit 1, on the must-not-report canary |
+| empty the allowlist | gate exit 1, naming 0540 |
+| make the dollar-quote balance check return `[]` | **gate stays green**; one unit test fails |
+
+The fourth row again: no migration at HEAD has an unbalanced tag, so the
+live sweep does not exercise that half at all, and
+`test_an_unclosed_body_is_reported` is the only thing holding it. That is
+the second capability in two gates kept alive solely by its unit test --
+the first was `is_primary`/`is_lead` in `check_default_readers.py`.
+Worth stating rather than burying in a count.
+
+#### `git checkout --` does not revert an untracked file
+
+The mutation run was done with `git checkout -- <gate>` between mutants,
+and the gate was a NEW file -- untracked. `git checkout` printed
+`error: pathspec ... did not match any file(s) known to git` and changed
+nothing, so mutant two stayed applied, mutant three was measured on top
+of it, and **the control ran against a doubly-broken gate.** The control
+is what caught it: it came back red, which a control may never do.
+
+Three things follow, and the first is the one to keep:
+
+1. **The control earns its place on the harness as well as the subject.**
+   `mutate_sql.py` and `mutate.py` both demand one; this run had one by
+   habit rather than by the tool, and it still did the job.
+2. Revert with a file copy taken before the first mutation, not with
+   version control, whenever the subject may be untracked.
+3. Assert the mutation APPLIED. The earlier `sed` attempt at the same
+   mutation matched nothing — `grep -c` said `0` — and the tests failed
+   anyway for an unrelated reason, which read exactly like a kill. Every
+   mutation in this stretch now goes through a Python replace with
+   `assert s != before, "MUTATION DID NOT APPLY"`.
