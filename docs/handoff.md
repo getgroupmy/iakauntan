@@ -14254,6 +14254,87 @@ A sweep and a hand-run of the same suite cannot share a cluster. Wait
 for `restored:`, or give the second one its own `IAK_PGPORT`. Written
 into `scripts/mutate_sql.py`.
 
+## 5 October: the harness got a pre-flight, and it found three bad mutants
+
+`scripts/mutate_sql.py` had a HARNESS ERROR guard that worked and came
+dear: it fires one mutant at a time, mid-run, and **a HARNESS ERROR
+aborts the whole file**, so everything after it goes unmeasured. One
+malformed mutant in each half of the POS recipe pair cost ten
+file-runs. `preflight()` now asks the same questions about every mutant
+before the cluster is touched and prints all the answers at once; there
+is a self-test (`scripts/mutate_sql_test.py`, 17 tests, wired into
+`ci.yml`) because **the check itself was wrong three times**.
+
+### The check's own three bugs, all pinned by tests now
+
+1. `re.search('--[^\n]*$', new)` — Python's `$` also matches just
+   BEFORE a trailing newline, so a replacement ending `-- marker\n`,
+   which is the FIX for the problem, was reported as having it.
+2. Comparing bracket COUNTS instead of asking whether the two deltas
+   agree. A mutant that drops a subquery removes an open and a close
+   together; seven good mutants were flagged.
+3. Quote PARITY for "is this boundary inside a string literal" —
+   defeated by **an apostrophe in a prose comment**, of which this
+   schema has hundreds ("another company's rows"). Five
+   already-measured files were reported hazardous twice over before
+   that was the obvious answer. It now scans properly, skipping `--`,
+   `/* */` and `''`.
+
+### Then it was run over all 39 mutants files, and found three real ones
+
+None had ever surfaced as a HARNESS ERROR, because in each case the
+swallowed text was valid to remove. **They simply measured something
+other than what they claimed.**
+
+* **`year_end_close.py` — a real gap was masked, and the figure is
+  corrected.** "A profit and loss account with NO movement gets a line
+  of nothing" was swallowing `order by p.code`, so the mutant did two
+  things and was recorded as KILLED. Re-measured with the marker
+  terminated: **it survives.** The kill had been the ordering's.
+
+  And it survives because it cannot be killed: `report_profit_loss`
+  ends with `having sum(l.debit - l.credit) <> 0`, so it never returns
+  a nil account and `where p.amount <> 0` can never be false. **The
+  fourth kind of equivalence proof — the guard is in the CALLEE — and
+  its second instance**, after `run_depreciation`'s acquisition-date
+  filter standing behind `accumulated_depreciation_at`. The file goes
+  from "30 of 31, one equivalent" to **29 of 30 killable with two
+  equivalent**.
+
+  The lesson is not about a newline. A double mutant had hidden the
+  question that mattered, which was not "is this condition asserted"
+  but "can it ever fire".
+
+* **`fx_revaluation.py` — one anchor, two matches.** This function's
+  sales and purchase blocks have character-for-character identical
+  `where` clauses, so the short anchor dropped the org scope from
+  **both** and a double mutant's kill proves neither half. The anchor
+  now carries `from public.sales_documents d`.
+
+  **And I got the diagnosis wrong first.** A commit message said the
+  purchase side "had no mutant at all"; it had one all along, further
+  down the file, with a longer purchase-specific anchor. I inferred the
+  absence from the short anchor instead of looking, added a duplicate
+  on that premise, and corrected both in `2225175c`. Re-measured: both
+  sides' org scopes die on their own, so each really is asserted.
+  `fx_shapes.sql` alone kills 28 of 33.
+
+* **`opening_balances.py`** — `v_acct_id := null;` shares a line with
+  `v_acct_type := null;`, so the mutant also stopped resetting the
+  account type between rows. Re-measured: still killed. That figure
+  held.
+
+### What to carry forward
+
+An earlier message in this session said these files' sweeps had
+"aborted early and may be partial". **They had not** — the runs
+completed. The real defect is subtler and worth more than an abort
+would have been: a mutant that does two things attributes its kill to
+whichever one you labelled it, and nothing in the output says so.
+
+The pre-flight is cheap and it is now the first thing the harness does.
+Run it over any mutants file you inherit before trusting its header.
+
 ## 5 October: A CREDITED PLATE DOES NOT PUT THE MODIFIER BACK — reported, not fixed
 
 The second defect of the day, found the same way as the first: by
