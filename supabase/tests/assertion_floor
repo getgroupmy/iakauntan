@@ -787,4 +787,33 @@
 # assertion. A writing function belongs on the left of an assignment.
 # Measured:
 # `all SQL assertions passed (384 files, 14804 assertions executed)`.
-14804
+#
+# 14804 -> 14831: the POS recipe PAIR -- app.pos_deplete_recipes (0424)
+# and app.pos_return_recipes (0269), 61 mutants across two files.
+#
+# deplete 13 of 31. return 8 of 28 BEFORE and 18 of 28 after, with
+# three proven equivalent, so 18 of 25 killable. The return half moved
+# because pos_recipes.sql -- the file named for recipes -- had NEVER
+# CREDITED A SALE. Four of the five files reaching it killed nothing at
+# all on that half; pos_fnb.sql kills nothing on EITHER, because it
+# sells food with no recipe behind it.
+#
+# THE TWO THINGS THE RETURN HALF DOCUMENTS WERE BOTH UNASSERTED. 0269
+# writes them into the body in prose -- "A credit note posted twice ...
+# must not return the food twice" and "Never more than went out" -- and
+# the mutants for both lived. A rule in a comment is not a rule.
+#
+# THE SIGN IS ASSERTED AND THE TYPE IS NOT: `-v_qty` flipped dies,
+# 'assembly_out' changed to 'assembly_in' LIVES. Every assertion in the
+# suite reads quantity-on-hand, which the sign alone moves, so a
+# depletion filed as a receipt is invisible to all of them.
+#
+# AND THE DATE FIXTURE WAS COLLAPSED. The new block's first version
+# asserted that a return is dated the credit and not the sale, and both
+# date mutants survived it, because the fixture settles and credits on
+# the SAME DAY. CLAUDE.md's first trap, met while writing a block that
+# cites it. The duplicate credit note is now dated the day after, and
+# the fixture opens next year's fiscal year so `today + 1` is postable
+# on 31 December. Measured:
+# `all SQL assertions passed (384 files, 14831 assertions executed)`.
+14831
