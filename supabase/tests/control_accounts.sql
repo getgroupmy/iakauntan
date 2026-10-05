@@ -157,6 +157,44 @@ begin
        join public.accounts a on a.id = l.account_id
       where l.entry_id = v_entry and a.code = '1210'), 250.00);
 
+  -- ------------------------------------------------------------------
+  -- A debit note goes the SAME way round as an invoice
+  -- ------------------------------------------------------------------
+  -- `app.post_sales_document_internal` computes
+  --   v_sign := case when doc_type in ('credit_note', 'refund_note')
+  --                  then -1 else 1 end
+  -- so a debit note is a 1: it ADDS to what the customer owes, which is
+  -- what a debit note is for.
+  --
+  -- Added 5 October because a mutation run proved nothing checked it.
+  -- Adding 'debit_note' to that list -- a one-word edit that reverses
+  -- the journal -- survived TWELVE test files. The type is handled by
+  -- the function and required by the e-Invoice rules, and the two
+  -- places that build one never get a journal out of it: credit_control
+  -- posts one only to watch the credit limit REFUSE it, and sst_summary
+  -- inserts a row already marked 'posted' without going through the
+  -- function at all.
+  --
+  -- A reversed debit note moves a customer's balance the wrong way by
+  -- twice its value and still balances perfectly.
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, contact_id, doc_date, status)
+  values (v_org, 'debit_note', 'DN-R1', v_plain, date '2026-03-04', 'draft')
+  returning id into v_doc;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, item_id, description, quantity, unit_price)
+  values (v_org, v_doc, 1, v_item, 'Short-billed last month', 1, 60);
+  v_entry := public.post_sales_document(v_doc);
+
+  perform pg_temp.check_eq('a debit note DEBITS the receivable, like an invoice',
+    (select coalesce(sum(l.debit), 0) from public.gl_lines l
+       join public.accounts a on a.id = l.account_id
+      where l.entry_id = v_entry and a.code = '1210'), 60.00);
+  perform pg_temp.check_eq('and credits it nothing',
+    (select coalesce(sum(l.credit), 0) from public.gl_lines l
+       join public.accounts a on a.id = l.account_id
+      where l.entry_id = v_entry and a.code = '1210'), 0.00);
+
   perform pg_temp.sign_out();
 end $$;
 
