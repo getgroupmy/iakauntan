@@ -31,4 +31,13 @@
 #
 # The bare integer below is the value. Anything else in this file is a
 # comment; both readers anchor on `^[0-9]+$`.
-14330
+#
+# 5 October: 14330 -> 14332. Two assertions added to
+# payroll_engine_sweep.sql, because a mutation run proved nothing
+# asserted that `app.age_at` treats a MISSING date of birth as thirty --
+# and that number decides an EPF rate, since `app.epf_category` flips at
+# 60. RAISED IN THE SAME COMMIT AS THE ASSERTIONS, and from the measured
+# figure (`all SQL assertions passed (383 files, 14332 assertions
+# executed)`) rather than from 14330 + 2, because a floor that trails the
+# count is a floor with room in it.
+14332
