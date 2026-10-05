@@ -905,6 +905,20 @@ begin
   -- The receipt carries a single rate, so two currencies under one
   -- company and one contact would have to strike an average nobody
   -- agreed. Refused rather than averaged.
+  --
+  -- This assertion is also what makes the loop's
+  -- `group by org_id, contact_id, currency` unreachable as a
+  -- discriminator: by the time the loop runs, this guard has already
+  -- refused every payment where one (org, contact) carries two
+  -- currencies, so dropping `currency` from the GROUP BY cannot change
+  -- the groups. Mutation on 5 October: widening that GROUP BY survives
+  -- all three files that call record_group_payment, and it is an
+  -- EQUIVALENT mutant rather than a gap -- proven by this refusal
+  -- firing, since the mutant that disables THIS guard is killed here.
+  -- The `currency` in the GROUP BY is defensive and dead; left alone,
+  -- because removing dead defence from a money function is not worth
+  -- the edit. `supabase/tests/mutants/record_group_payment.py` carries
+  -- the full result: 17 mutants, 15 killed, 2 equivalent, no gaps.
   -- ==================================================================
   v_myr := pg_temp.gp_invoice(v_a, 'INV-Z3', 500);
   insert into public.sales_documents

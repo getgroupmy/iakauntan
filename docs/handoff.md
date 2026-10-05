@@ -11624,11 +11624,23 @@ su postgres -c "/usr/lib/postgresql/16/bin/pg_ctl -D /var/tmp/pgdata \
   -l /var/tmp/pg.log -o '-k /var/tmp -p 5599' start"
 ```
 
-Then confirm the schema is really there before trusting a baseline —
-`select count(*) from pg_proc join pg_namespace ... where nspname='app'`
-should read 518, and `public` should hold 381 tables. There is no
-`supabase_migrations.schema_migrations` in a locally-built cluster, so its
-absence is not evidence of an empty database.
+Then confirm the schema is really there before trusting a baseline. Do
+NOT do it by comparing counts against numbers written here — **the 381
+public tables this paragraph used to name was wrong**, a correctly
+rebuilt cluster holds 379, and two minutes went on hunting two tables
+that had never gone missing. Ask the instrument that cannot be stale:
+
+```
+python3 scripts/generate_api_description.py --check "$DB"
+# ok   the API description matches the schema (842 functions, 367 tables, version 0742)
+```
+
+It diffs the live schema against the committed description, so it is
+right by construction and names the migration version it is at. (The
+`app` function count, 518, has held — but a count in prose is a
+documentation number that rots, and this one did.) There is no
+`supabase_migrations.schema_migrations` in a locally-built cluster, so
+its absence is not evidence of an empty database.
 
 ## 5 October: PCB is 10 of 10, and the harness downgraded the database twice
 
@@ -12279,3 +12291,87 @@ file and read it afterwards, which is what the corrected check does.
 The first instance was read as a bug in `check_self_tests_run.py` --
 "it reports a problem and exits 0" -- and briefly nearly written down as
 one. It was not; the gate was right and the measurement was wrong.
+
+### record_group_payment: 15 of 17, and no gaps
+
+The widest single money mover in the schema -- one payment across
+several companies, writing a receipt or a purchase payment per (company,
+contact, currency), allocating every document and posting each one.
+Seventeen mutants in
+`supabase/tests/mutants/record_group_payment.py`, attacking three kinds
+of claim separately: the eight refusals, the grouping, and the figures.
+
+**15 killed, 2 proven equivalent, NO GAPS.** That is the strongest result
+of any function mutated in this session; the earlier ten averaged better
+than one real gap each. Nothing was added to the suite because there was
+nothing missing -- the assertion floor is unchanged.
+
+| file | kills |
+| --- | --- |
+| `group_payment.sql` (61 assertions, 27 calls) | 13 of 17 |
+| `group_payment_shapes.sql` (62, 30) | 10, four of them the ones the first file missed |
+| `money_names_the_account.sql` (40, 1) | **none** |
+
+**The per-file survivor counts were 4 and 7. The union is 2.** That is
+the whole argument for running every file that calls the function,
+in one line of evidence: either file alone would have reported five or
+six gaps that the other file closes. The third file kills nothing at all,
+and that is not a defect in it -- its single call sits in a section
+asserting where the money lands, which none of these mutations move.
+
+The two equivalents, both proven rather than argued:
+
+1. **Widening the loop's `group by org_id, contact_id, currency`** cannot
+   change the groups, because an earlier guard already refuses a payment
+   where one (org, contact) appears in two currencies. The proof is that
+   the mutant which DISABLES that guard is killed by
+   `group_payment.sql` -- so the guard demonstrably fires, so the loop
+   can never see two currencies for one pair. The `currency` in the
+   GROUP BY is defensive and dead. Same shape as the canary check that
+   made its own floor test unreachable earlier today. Left in place:
+   removing dead defence from a money function is not worth the edit.
+2. **`nullif(l.discount, 0)` -> `l.discount`.** Both 5-arg allocators
+   (`0385` sales, `0386` purchase) use `p_discount` in exactly ONE place,
+   `v_discount := round(coalesce(p_discount, 0), 2)`, and nowhere else in
+   either body -- established by listing every line that mentions it, not
+   by reading the top of the function. The `coalesce` absorbs the
+   difference. Worth noting the 6-arg idempotent overloads in `0734` DO
+   put `p_discount` into the idempotency fingerprint, where 0 and null
+   differ; `record_group_payment` calls the 5-arg form, so that path is
+   not reached from here.
+
+#### A mutant that was a no-op, and was nearly a finding
+
+The grouping mutant's first version was
+`group by org_id, contact_id, currency, currency` -- a DUPLICATE column,
+which changes nothing whatsoever. It "survived" 61 assertions because
+there was nothing to survive, and the write-up of it as a gap in the
+suite had already begun. **A mutant has to be checked for being a no-op
+before its survival means anything**, which is the same discipline the
+CONTROL entry enforces for the harness as a whole, applied one mutant at
+a time.
+
+#### The health-check numbers in this file were wrong
+
+This file has recorded the local cluster's health check as
+"518 `app` functions / 381 public tables". After the worker restarted and
+the cluster was rebuilt, it read **518 and 379** -- and 379 is correct.
+The authoritative check is
+
+```
+python3 scripts/generate_api_description.py --check "$DB"
+# ok   the API description matches the schema (842 functions, 367 tables, version 0742)
+```
+
+which diffs the live schema against the committed description and so
+cannot be stale by construction. Two remembered counts can; one of them
+already was, and two minutes were spent looking for two tables that had
+never gone missing. **A health check whose expected value is written in
+prose is a documentation number that rots** -- the same lesson as "about
+two minutes" for the SQL suite and the deno test count, arriving this
+time in the instrument meant to detect rot.
+
+Also recorded in passing: the first draft of the mutants header said
+`group_payment.sql` has 69 assertions, from grepping occurrences of
+`check_eq|check_true|check_refused`, which also counts the helper
+definitions. The run prints 61. Ask the run, not the text.
