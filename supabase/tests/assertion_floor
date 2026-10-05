@@ -359,4 +359,42 @@
 # fixture auto-posting, "it posted" and "it ran" were one claim.
 # Measured:
 # `all SQL assertions passed (384 files, 14583 assertions executed)`.
-14583
+#
+# 14607, +24: asset_disposal_shapes.sql. dispose_fixed_asset -- up to
+# six journal legs, four of them conditional on `> 0` -- scored 19 of
+# 38 on its own file; 36 of 37 across its four files, one proven
+# equivalent.
+#
+# TWO SURVIVORS WERE RULES 0729 ADDED AND NOTHING EVER TESTED. That
+# migration closed two holes in this function and its own comment
+# describes both: proceeds that named no account used to be debited to
+# the 1120 heading, and `and b.org_id = a.org_id` on the bank lookup
+# "is new and is a cross-tenant fix, not tidying", because
+# p_bank_account_id is an ARGUMENT that no composite foreign key
+# covers. Both shipped unasserted.
+#
+# AND money_names_the_account.sql -- the file whose whole subject is
+# the 1120 heading, which NAMES this function twice -- kills nothing of
+# it, because it names it in a COMMENT and in a static sweep of
+# function BODIES. It never calls it. A file that checks the source
+# text of a fix is not a file that checks the fix, and that is the
+# cheapest lesson in this sweep so far.
+#
+# Three `> 0` legs were measured at once on LAND, which is never
+# depreciated: carried at its residual value it has no accumulated
+# charge and no catch-up, and sold at cost no gain either, so the
+# journal is two lines and any `>= 0` adds a visible third. The first
+# attempt used an asset bought and sold on the SAME DAY and expected
+# two lines; it got six, because app.months_held counts the month of
+# acquisition as a whole month. A fixture built to make three things
+# zero made none of them.
+#
+# A SEPARATE FINDING, recorded in docs/handoff.md rather than changed:
+# the 1510/1590/6400 fallback lookups have no `deleted_at is null`, so
+# a retired account of those codes is still posted to -- unlike
+# app.cheque_account, which filters and then revives the row, the shape
+# 0532 established. Found because the first version of the
+# chart-missing assertion soft-deleted 1590 and was not refused at all.
+# Measured:
+# `all SQL assertions passed (384 files, 14607 assertions executed)`.
+14607

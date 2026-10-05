@@ -13514,3 +13514,82 @@ as broken for ever after one bad month.
 `import_open_bills`, `dispose_fixed_asset`, `revalue_foreign_balances`,
 `receive_stock_transfer`, `import_opening_balances`,
 `import_open_invoices`.
+
+### dispose_fixed_asset: two of 0729's own fixes had no test at all
+
+Up to six journal legs, four of them conditional on `> 0`.
+**38 mutants plus a control. 19 killed on
+`asset_disposal_shapes.sql`, 36 of 37 across its four files, one
+proven equivalent.**
+
+**Two survivors were rules `0729` added and nothing ever tested.** That
+migration closed two holes in this function and its own comment
+describes both:
+
+- proceeds that named no account used to be debited to **1120 Bank
+  Accounts**, the heading the real accounts hang under — so the asset
+  read as sold, the gain was right, the journal balanced, and no bank
+  balance moved;
+- `and b.org_id = a.org_id` on the bank lookup, which the comment calls
+  "a cross-tenant fix, not tidying", because `p_bank_account_id` is an
+  **argument** and none of `0160`'s composite foreign keys cover it.
+
+Both shipped unasserted. **And `money_names_the_account.sql` — the file
+whose entire subject is the 1120 heading, and which names this function
+twice — kills nothing of it, because it names it in a COMMENT and in a
+static sweep of function BODIES. It never calls it.** A file that
+checks the source text of a fix is not a file that checks the fix.
+Worth re-reading that file's allow-list with this in mind: the sweep it
+runs proves no *new* function mentions `code = '1120'`, which is a real
+and useful gate, and it proves nothing about whether the nine it names
+behave correctly.
+
+**Three `> 0` legs were measured at once, on land.** Land is never
+depreciated — `app.accumulated_depreciation_at` returns 0 when
+`cost - residual_value <= 0` — so a plot carried at its residual value
+has no accumulated charge and no catch-up, and sold at cost no gain
+either. All three conditions absent together, journal of two lines, and
+any `>= 0` adds a visible third.
+
+**The first attempt at that fixture was wrong in a way worth keeping.**
+It used an asset bought and sold on the SAME DAY and expected two
+lines. It got six: `app.months_held` counts the month of acquisition as
+a whole month — the Malaysian convention, and right — so a same-day
+disposal accumulates one month's charge, posts a catch-up, and strikes
+a gain of exactly that. **A fixture built to make three things zero
+made none of them**, and only the line count said so.
+
+The equivalent is `greatest(v_accum - a.accumulated_depreciation, 0)`,
+proven by the line directly above it: `v_accum` is itself a `greatest`
+over `a.accumulated_depreciation`, so the subtraction can never be
+negative. Two floors, the second unreachable because the first fires.
+
+#### A separate finding, NOT changed: a retired 1510/1590/6400 is still posted to
+
+The three fallback lookups in `dispose_fixed_asset` are
+
+```sql
+(select id from public.accounts where org_id = a.org_id and code = '1590')
+```
+
+with **no `deleted_at is null`**. So an account somebody retired is
+still found and still posted to. `app.cheque_account` does it the other
+way: it filters on `deleted_at is null` and then calls
+`app.revive_account` rather than posting to a retired row — which is
+the shape `0532` established and the comment in `cheque_account` spells
+out ("a retired account of this code is brought back rather than posted
+to. The chart holds one account per code, so there is no third
+option").
+
+Found by accident: the first version of the chart-missing assertion
+soft-deleted 1590 and **was not refused at all**. Left as a finding
+rather than a migration, because what a statutory disposal posts to is
+the user's call, not a test's. If it should change, the pattern already
+exists in `app.cheque_account` and the same three codes appear in
+`run_depreciation` and `depreciation_preview`, which would need the
+same treatment or they would disagree with each other.
+
+**23 of 45 money movers now have a mutants file.** Next with none:
+`revalue_foreign_balances`, `receive_stock_transfer`,
+`import_open_bills`, `import_opening_balances`, `import_open_invoices`,
+`post_manufacturing_order`.

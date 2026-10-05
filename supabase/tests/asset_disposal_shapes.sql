@@ -588,4 +588,284 @@ begin
     '%privileges to read the ledger%');
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The thirteen a SECOND sweep found, including two of 0729's own fixes
+--
+-- The sweep in this file's header mutated the note and the accounts.
+-- This one mutated `dispose_fixed_asset` itself -- 37 mutants across
+-- the four files that reach it -- and 24 died. The thirteen that lived
+-- divide cleanly, and the first group is the one that matters.
+--
+-- **TWO OF THEM ARE RULES `0729` ADDED AND NOTHING EVER TESTED.** That
+-- migration's own comment says it: proceeds that named no account used
+-- to be debited to the 1120 heading, and `and b.org_id = a.org_id` on
+-- the bank lookup "is new and is a cross-tenant fix, not tidying,
+-- because p_bank_account_id is an ARGUMENT, so none of 0160's composite
+-- foreign keys cover it". Both were shipped and neither was asserted.
+-- `money_names_the_account.sql` names this function in a comment and in
+-- a static sweep of function BODIES, and never calls it.
+--
+-- The rest: the two guards at the top (who may, and not twice), both
+-- sides of the acquisition-date boundary, the catch-up floor, the
+-- cents, three `> 0` conditions whose `>= 0` form posts a leg of two
+-- zeroes, the missing-chart refusal, the link back to the asset, and
+-- the depreciation run's own figure.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org    uuid;
+  v_owner  uuid := pg_temp.test_user();
+  v_other  uuid;
+  v_bank   uuid; v_bank_ac uuid; v_their_bank uuid;
+  v_a      uuid; v_b uuid; v_c uuid; v_d uuid; v_e uuid;
+  v_entry  uuid; v_msg text;
+  v_1510   uuid; v_1590 uuid;
+  v_runs   integer;
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  v_org := pg_temp.ad_org('Alat Lupus Sdn Bhd');
+  perform pg_temp.allow_many_companies();
+  v_bank    := pg_temp.test_bank_account(v_org, 'Maybank current');
+  v_bank_ac := pg_temp.bank_gl(v_bank);
+  select id into v_1510 from public.accounts
+   where org_id = v_org and code = '1510';
+  select id into v_1590 from public.accounts
+   where org_id = v_org and code = '1590';
+
+  -- ------------------------------------------------------------------
+  -- 1. PROCEEDS THAT NAME NO ACCOUNT -- 0729's first fix
+  -- ------------------------------------------------------------------
+  -- Before 0729 this debited 1120 Bank Accounts, the heading the real
+  -- accounts hang under: the asset read as sold, the gain was right,
+  -- the journal balanced, and no bank balance moved and no
+  -- reconciliation could ever match it.
+  v_a := pg_temp.ad_asset(v_org, 'FA-NOBANK', 'Lathe', 'plant',
+                          date '2026-01-01', 12000);
+  perform pg_temp.check_refused(
+    'proceeds have to be received into a named account',
+    format('select public.dispose_fixed_asset(%L, %L, 5000, null)',
+           v_a, date '2026-06-30'),
+    'Say which account the FA-NOBANK proceeds were received into. Without '
+    'one there is nothing for a reconciliation to match.', '23514');
+  perform pg_temp.check_eq('and the asset is still in service',
+    (select status::text from public.fixed_assets where id = v_a),
+    'active');
+
+  -- But a disposal for NOTHING adds no cash leg and needs no account,
+  -- which is the other side of the same `> 0`. Scrapping a worn-out
+  -- machine is the commonest disposal there is.
+  v_b := pg_temp.ad_asset(v_org, 'FA-SCRAP', 'Old press', 'plant',
+                          date '2026-01-01', 6000);
+  v_entry := public.dispose_fixed_asset(v_b, date '2026-06-30', 0, null);
+  perform pg_temp.check_true('an asset scrapped for nothing needs no account',
+    v_entry is not null);
+  perform pg_temp.check_eq('and no leg touches any bank account',
+    (select count(*) from public.gl_lines l
+       join public.bank_accounts ba on ba.account_id = l.account_id
+      where l.entry_id = v_entry), 0);
+
+  -- ------------------------------------------------------------------
+  -- 2. ANOTHER COMPANY'S BANK ACCOUNT -- 0729's second fix
+  -- ------------------------------------------------------------------
+  -- The reach an ARGUMENT has that a composite foreign key cannot see.
+  -- Without the check, the proceeds are debited to THEIR ledger account
+  -- inside THIS company's journal.
+  v_other := pg_temp.ad_org('Syarikat Seberang Lupus Sdn Bhd');
+  perform pg_temp.sign_in_as(v_owner);
+  v_their_bank := pg_temp.test_bank_account(v_other, 'Their account');
+  perform pg_temp.sign_in_as(v_owner);
+  v_c := pg_temp.ad_asset(v_org, 'FA-THEIRS', 'Van', 'motor_vehicle',
+                          date '2026-01-01', 30000);
+  perform pg_temp.check_refused(
+    'the proceeds cannot be banked into another company''s account',
+    format('select public.dispose_fixed_asset(%L, %L, 9000, %L)',
+           v_c, date '2026-06-30', v_their_bank),
+    'That bank account is not this company''s.', '42501');
+  perform pg_temp.check_eq('and nothing reached their ledger',
+    (select count(*) from public.gl_lines l
+      where l.account_id = (select account_id from public.bank_accounts
+                             where id = v_their_bank)), 0);
+
+  -- ------------------------------------------------------------------
+  -- 3. WHO MAY, AND NOT TWICE
+  -- ------------------------------------------------------------------
+  perform pg_temp.sign_in_as(pg_temp.another_user('luar-lupus@iakauntan.test'));
+  begin
+    perform public.dispose_fixed_asset(v_c, date '2026-06-30', 0, null);
+    v_msg := null;
+  exception when others then get stacked diagnostics v_msg = message_text;
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+  -- The WHOLE message: three other refusals in this function are 42501
+  -- or 23514 and say different things.
+  perform pg_temp.check_eq('somebody who may not post cannot dispose',
+    v_msg, 'Insufficient privileges to post');
+  perform pg_temp.check_eq('and the van is still in service',
+    (select status::text from public.fixed_assets where id = v_c),
+    'active');
+
+  perform public.dispose_fixed_asset(v_c, date '2026-06-30', 9000, v_bank);
+  perform pg_temp.check_refused(
+    'an asset is disposed of once',
+    format('select public.dispose_fixed_asset(%L, %L, 1, %L)',
+           v_c, date '2026-07-31', v_bank),
+    'Asset FA-THEIRS has already been disposed of', '23514');
+
+  -- ------------------------------------------------------------------
+  -- 4. BOTH SIDES OF THE ACQUISITION-DATE BOUNDARY
+  -- ------------------------------------------------------------------
+  -- `p_date < a.acquisition_date`. An asset bought and sold on the SAME
+  -- day is a real thing -- a machine delivered wrong and returned the
+  -- same afternoon -- and it is the first date that is allowed.
+  v_b := pg_temp.ad_asset(v_org, 'FA-SAMEDAY', 'Wrong press', 'plant',
+                          date '2026-03-15', 4000);
+  perform pg_temp.check_true(
+    'an asset can be disposed of on the very day it was acquired',
+    public.dispose_fixed_asset(v_b, date '2026-03-15', 4000, v_bank)
+      is not null);
+  v_e := pg_temp.ad_asset(v_org, 'FA-EARLY', 'Not yet ours', 'plant',
+                          date '2026-03-15', 4000);
+  perform pg_temp.check_refused(
+    'but not on the day before it',
+    format('select public.dispose_fixed_asset(%L, %L, 0, null)',
+           v_e, date '2026-03-14'),
+    'Asset FA-EARLY was acquired on 2026-03-15, after the disposal '
+    'date 2026-03-14', '23514');
+
+  -- ------------------------------------------------------------------
+  -- 5. THE THREE `> 0` LEGS, WHICH BALANCE AT ZERO
+  -- ------------------------------------------------------------------
+  -- LAND, which is never depreciated. `app.accumulated_depreciation_at`
+  -- returns 0 when `cost - residual_value <= 0`, so a plot carried at
+  -- its residual value has NO accumulated charge and NO catch-up; sold
+  -- at exactly what it cost, it has no gain or loss either. All three
+  -- of the function's `> 0` legs are absent at once, and the journal is
+  -- two lines: the cash in and the asset out.
+  --
+  -- The first version of this used an asset bought and sold on the SAME
+  -- DAY and expected two lines. It got six: `app.months_held` counts
+  -- the month of acquisition as a whole month -- which is the Malaysian
+  -- convention and right -- so a same-day disposal accumulates one
+  -- month's charge, posts a catch-up, and strikes a gain of exactly
+  -- that. A fixture built to make three things zero made none of them.
+  insert into public.fixed_assets
+    (org_id, asset_no, name, category, acquisition_date, cost,
+     residual_value, method, useful_life_months)
+  values (v_org, 'FA-LAND', 'Plot in Rawang', 'land',
+          date '2026-01-01', 80000, 80000, 'straight_line', 60)
+  returning id into v_d;
+  v_entry := public.dispose_fixed_asset(v_d, date '2026-06-30', 80000, v_bank);
+
+  perform pg_temp.check_eq(
+    'land sold at cost is exactly two lines, and no leg of two zeroes',
+    (select count(*) from public.gl_lines where entry_id = v_entry), 2);
+  perform pg_temp.check_eq('the cash in',
+    (select debit from public.gl_lines
+      where entry_id = v_entry and account_id = v_bank_ac), 80000);
+  perform pg_temp.check_eq('and the asset out, at cost',
+    (select credit from public.gl_lines
+      where entry_id = v_entry and account_id = v_1510), 80000);
+  perform pg_temp.check_eq(
+    'with nothing at all on accumulated depreciation',
+    (select count(*) from public.gl_lines
+      where entry_id = v_entry and account_id = v_1590), 0);
+  perform pg_temp.check_eq('nor on gain or loss on disposal',
+    (select count(*) from public.gl_lines l
+       join public.accounts ac on ac.id = l.account_id
+      where l.entry_id = v_entry and ac.code in ('4930', '6510')), 0);
+  -- And no depreciation run was recorded for a catch-up of nothing.
+  perform pg_temp.check_eq('and no depreciation run for a charge of nothing',
+    (select count(*) from public.depreciation_runs
+      where gl_entry_id = v_entry), 0);
+
+  -- ------------------------------------------------------------------
+  -- 6. THE CENTS, AND THE CATCH-UP's OWN FIGURE
+  -- ------------------------------------------------------------------
+  -- Every disposal in this suite is a round thousand, so
+  -- `round(proceeds - nbv, 2)` had no cents to lose. And the
+  -- depreciation RUN the catch-up writes carries `v_catchup`, the
+  -- months since the last run -- not `v_accum`, the whole charge since
+  -- the asset was bought. With one run and no history those are the
+  -- same number; with a prior run they are not.
+  v_a := pg_temp.ad_asset(v_org, 'FA-SEN', 'Server', 'computer',
+                          date '2026-01-01', 11111.11, 60);
+  -- Three months of charge posted the ordinary way first, so the
+  -- catch-up has something to be measured FROM.
+  perform public.run_depreciation(v_org, date '2026-03-31');
+  v_entry := public.dispose_fixed_asset(v_a, date '2026-06-30', 9999.99, v_bank);
+  -- Cost 11111.11 over 60 months is 185.19 a month; six months of that
+  -- against proceeds of 9999.99 cannot come out in whole ringgit. The
+  -- figure is not written here because the point is not the figure --
+  -- it is that `round(..., 2)` and `round(..., 0)` differ, which they
+  -- cannot for any disposal in the rest of this suite.
+  perform pg_temp.check_true('the gain or loss keeps its sen',
+    (select round(sum(l.debit - l.credit), 2) <> round(sum(l.debit - l.credit), 0)
+       from public.gl_lines l
+       join public.accounts ac on ac.id = l.account_id
+      where l.entry_id = v_entry and ac.code in ('4930', '6510')));
+
+  -- The run the disposal wrote carries THREE months, not six: the
+  -- quarter already posted is not the disposal's to charge again.
+  perform pg_temp.check_eq(
+    'the disposal''s own run charges only the months since the last one',
+    (select r.total_amount from public.depreciation_runs r
+      where r.gl_entry_id = v_entry),
+    (select sum(l.debit) from public.gl_lines l
+       join public.accounts ac on ac.id = l.account_id
+      where l.entry_id = v_entry and ac.code = '6400'));
+  perform pg_temp.check_true(
+    'which is LESS than everything the asset ever accumulated',
+    (select r.total_amount from public.depreciation_runs r
+      where r.gl_entry_id = v_entry)
+    < (select accumulated_depreciation from public.fixed_assets where id = v_a));
+
+  -- ------------------------------------------------------------------
+  -- 7. THE LINK BACK TO THE ASSET
+  -- ------------------------------------------------------------------
+  -- `report_depreciation_history` and the fixed asset note both find a
+  -- disposal by its source. Without it the journal is in the ledger and
+  -- belongs to nothing.
+  perform pg_temp.check_eq('the disposal journal names the asset it sold',
+    (select source_id from public.gl_entries where id = v_entry), v_a);
+  perform pg_temp.check_eq('in the table that asset lives in',
+    (select source_table from public.gl_entries where id = v_entry),
+    'fixed_assets');
+
+  -- ------------------------------------------------------------------
+  -- 8. A CHART WITH NO 1510 OR 1590
+  -- ------------------------------------------------------------------
+  -- Refused in words rather than posted somewhere arbitrary. A company
+  -- that has renamed its chart is the case, and the refusal names both
+  -- codes because either can be the missing one.
+  -- A company of its own, because the account has to be really GONE
+  -- and this one has posted to 1590 several times above.
+  --
+  -- SOFT-DELETING IT IS NOT ENOUGH, AND THAT IS A FINDING RATHER THAN A
+  -- FIXTURE DETAIL. The fallback is
+  -- `(select id from public.accounts where org_id = ... and code =
+  -- '1590')` with NO `deleted_at is null`, so an account somebody
+  -- retired is still found and still posted to. `app.cheque_account`
+  -- filters on `deleted_at is null` and then REVIVES the row rather
+  -- than posting to a retired one, which is the shape `0532`
+  -- established; these three fallbacks (1510, 1590, 6400) do not. The
+  -- first version of this assertion soft-deleted 1590 and was not
+  -- refused at all, which is how the difference was found. Recorded in
+  -- docs/handoff.md; not changed here, because what a disposal posts to
+  -- is not a test's decision to make.
+  v_other := pg_temp.ad_org('Carta Kurang Sdn Bhd');
+  perform pg_temp.sign_in_as(v_owner);
+  v_b := pg_temp.ad_asset(v_other, 'FA-NOCHART', 'Press', 'plant',
+                          date '2026-01-01', 5000);
+  delete from public.accounts where org_id = v_other and code = '1590';
+  perform pg_temp.check_refused(
+    'a chart with no accumulated depreciation account refuses the disposal',
+    format('select public.dispose_fixed_asset(%L, %L, 0, null)',
+           v_b, date '2026-06-30'),
+    'No fixed asset (1510) or accumulated depreciation (1590) account in '
+    'the chart. Add them, or name accounts on the asset.', 'P0002');
+
+  raise notice 'ok   disposal: 0729''s two fixes, the boundary, the sen and the zero legs';
+end $$;
+
+
 rollback;
