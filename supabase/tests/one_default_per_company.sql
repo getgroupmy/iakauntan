@@ -2,6 +2,13 @@
 -- Two defaults is the same as none
 -- =====================================================================
 --
+-- `0742` then closed what 0741's header said it was leaving open: a
+-- CHECK on `warehouses` and `pipelines` that a row cannot be default
+-- while inactive, so that `where is_default` and
+-- `where is_default and is_active` select the same rows and the thirteen
+-- readers that omit `is_active` become correct without any of them being
+-- rewritten. Asserted at the bottom of this file.
+--
 -- `0741` gave eight tables the partial unique index that `0092` gave
 -- `contact_addresses` and `contact_persons`: bank_accounts, branches,
 -- payment_terms, pipelines, price_levels, tax_codes, warehouses and
@@ -200,6 +207,67 @@ begin
   perform pg_temp.check_eq(
     'and with no default, the OLDEST active warehouse, not the newest',
     app.default_warehouse(v_org), v_older);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- 0742: a closed warehouse is nobody's default
+-- ---------------------------------------------------------------------
+--
+-- The point is not the constraint, it is what the constraint buys:
+-- thirteen functions pick a default warehouse or pipeline with
+-- `where is_default limit 1` and no `is_active`. If a closed row could
+-- hold the flag, those thirteen could deplete stock from a warehouse
+-- that was shut. The last assertion here is the one that would catch a
+-- regression -- that the two predicates cannot disagree.
+do $$
+declare
+  v_org uuid;
+  v_wh  uuid;
+  v_pl  uuid;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_org := pg_temp.test_org('Gudang Tutup Sdn Bhd', array['inventory', 'crm']);
+  insert into public.warehouses (org_id, code, name, is_default, is_active)
+  values (v_org, 'W1', 'Gudang', true, true) returning id into v_wh;
+  insert into public.pipelines (org_id, name, is_default, is_active)
+  values (v_org, 'Jualan', true, true) returning id into v_pl;
+
+  perform pg_temp.check_refused(
+    'a warehouse cannot be retired while it is still the default',
+    format('update public.warehouses set is_active = false where id = %L',
+           v_wh),
+    '%warehouses_default_is_active%', '23514');
+  perform pg_temp.check_refused(
+    'nor a pipeline',
+    format('update public.pipelines set is_active = false where id = %L',
+           v_pl),
+    '%pipelines_default_is_active%', '23514');
+
+  -- And the way the app does it -- both columns together, which is what
+  -- `retireWarehouse` writes -- is accepted.
+  update public.warehouses set is_active = false, is_default = false
+   where id = v_wh;
+  perform pg_temp.check_true('retiring it and clearing the flag together works',
+    (select not is_active and not is_default
+       from public.warehouses where id = v_wh));
+
+  -- The consequence, stated as the thirteen readers would observe it.
+  -- A fresh default is inserted first, because with the only warehouse
+  -- retired both counts are zero and `0 = 0` is not an assertion -- the
+  -- twelfth entry in docs/widget-tests.md, which this file's own header
+  -- cites. The non-zero check below is what stops it passing that way.
+  insert into public.warehouses (org_id, code, name, is_default, is_active)
+  values (v_org, 'W2', 'Gudang baharu', true, true);
+  perform pg_temp.check_eq(
+    'so `where is_default` and `where is_default and is_active` agree',
+    (select count(*)::integer from public.warehouses
+      where org_id = v_org and is_default),
+    (select count(*)::integer from public.warehouses
+      where org_id = v_org and is_default and is_active));
+  perform pg_temp.check_eq(
+    'and they agree on ONE row, not on zero of them',
+    (select count(*)::integer from public.warehouses
+      where org_id = v_org and is_default and is_active), 1);
 end $$;
 
 rollback;

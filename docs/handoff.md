@@ -12095,3 +12095,118 @@ cannot change an answer that was already determinate. It is deliberately
 NOT applied here in bulk: each function needs a `create or replace`, and
 re-defining a function to fix one line is how `0029` reverted `0404`'s
 `calc_statutory` earlier in this same session.
+
+### 0742: fix the premise, not the thirteen bodies
+
+0741's header named what it left open, and task #84 closed it the same
+day. Thirteen functions pick a default WAREHOUSE or PIPELINE with
+
+```sql
+where org_id = ... and is_default limit 1
+```
+
+and no `is_active` -- eleven of them with no `order by` either, so not
+even a stable arbitrary answer. 0741's index is
+`(org_id) where is_default and is_active`, which makes the ten readers
+that DO filter `is_active` provably single-rowed and does nothing for
+these thirteen: a warehouse that is closed but still flagged default is a
+second matching row, and whichever one the plan reaches first is where a
+sale gets depleted from.
+
+**The obvious fix was the wrong fix.** The thirteen are
+`app.post_sales_document_internal` (10,902 characters),
+`public.complete_pos_sale` (27,407) and eleven more. Adding one word to
+each means thirteen `create or replace` statements carrying ~80KB of
+re-emitted body -- and re-emitting a body to change one line is exactly
+how, earlier the same week, re-applying `0029` to restore one function
+reverted `0404`'s `calc_statutory`. Thirteen of those is thirteen
+chances at the same accident, for a one-word edit each.
+
+So `0742_a_closed_warehouse_is_nobodys_default.sql` fixes the premise
+instead. If a row cannot be default while inactive, then
+`where is_default` and `where is_default and is_active` select the same
+rows, all thirteen become correct **as written**, and no function is
+touched:
+
+```sql
+alter table public.warehouses
+  add constraint warehouses_default_is_active
+  check (not (is_default and not is_active));
+```
+
+The app has always behaved as though it were there -- `retireWarehouse`
+writes `is_active = false, is_default = false` together -- so this makes
+a convention into a guarantee, which is the same move 0092 made. Live
+was checked read-only first: zero stale defaults in warehouses,
+pipelines or any of the other six, so the repair ahead of the CHECK is
+expected to update nothing and is there because a CHECK validates
+existing rows as it is added.
+
+`bank_accounts` deliberately does NOT get this constraint, for the reason
+0741 learned the hard way: `money_names_the_account.sql` builds a closed
+account that still carries `is_default`, on purpose, because all seven
+`bank_accounts` readers filter `is_active` and what the fixture tests is
+that they skip it. The same argument covers branches, tax_codes,
+price_levels, payment_terms and work_shifts -- their readers all filter
+`is_active`, so the constraint would buy them nothing and could only
+forbid a fixture.
+
+Five more assertions in `one_default_per_company.sql` (19 now), each
+proved by mutation: dropping either CHECK, and inverting the warehouse
+one to `check (is_default or is_active)` -- which forbids the state the
+app actually writes -- all three turn it red, control clean.
+
+One of those five was written as `0 = 0` and had to be repaired on the
+spot. After retiring the only warehouse, both
+`where is_default` and `where is_default and is_active` count zero, and
+an assertion that they agree is satisfied by nothing existing. A fresh
+default is now inserted first and a second assertion pins the count at
+ONE. **This is the twelfth lesson being walked into within the hour of
+writing it up** -- the fixture collapsed the two things under test into
+the same value, and the trap does not announce itself just because you
+have read about it.
+
+#### The gate, and the four false positives that shaped it
+
+`scripts/check_default_readers.py` keeps the rule as a disjunction rather
+than a ban:
+
+> a function may read `is_default` without a liveness filter ONLY IF that
+> table carries a `<table>_default_is_active` CHECK.
+
+Either the query asks the question or the schema answers it in advance.
+Dropping the CHECK while the bare readers remain fails it too, which is
+the half a migration-only review would miss, and is pinned by a test
+(`gate.offenders(allowed=set())` must name `app.pos_deplete_recipes`,
+`public.complete_pos_sale` and at least nine more).
+
+**The first version reported five findings and four were wrong**, all one
+shape: `update <table> set is_default = false where ... and is_default`,
+the clear-the-old-default half of a setter. There, NOT filtering on
+liveness is the correct behaviour -- a retired row holding a stale flag
+is exactly what wants clearing. The fifth,
+`app.bank_charge_account`, was also not a defect: it filters
+`deleted_at is null`, because a payment method can be switched off
+without being deleted and its charge account is still needed for last
+year's postings.
+
+So the gate judges `from`/`join` and never `update`, accepts any of four
+liveness spellings, and requires the pick to be of ONE row (`limit 1`, or
+a `select ... into`, which takes the first row whether it says so or
+not). All four false positives are pinned as must-not-report in
+`check_default_readers_test.py`, because the shape is easy to
+reintroduce while "tightening" the pattern, and **a gate that flags
+correct code is a gate somebody turns off.**
+
+Three things it is deliberately blind to, each because it would need
+judgement: which liveness column is right, whether some other unique
+index makes a pick single-rowed anyway, and anything about writes. This
+file records four gates thrown away on 4 October for needing judgement;
+the unique-index-implication version would have been the fifth.
+
+1354 function definitions checked, from the LATEST definition of each --
+`scripts/mutate_sql.py`'s rule, because a case-sensitive grep for
+`create or replace function` named `0446` as the latest `app.calc_pcb`
+and was wrong by RM6,000 of relief, twice. 19 self-tests. The gate count
+`check_sweeps_look.py` sees is 69, still 0 passing over nothing, and
+`check_self_tests_run.py` named the missing ci.yml line before CI had to.

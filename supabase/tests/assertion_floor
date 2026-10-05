@@ -69,4 +69,14 @@
 # two; neither was caught by these fourteen, both by the full suite
 # (`pos_fnb.sql` and `money_names_the_account.sql`). Measured:
 # `all SQL assertions passed (384 files, 14355 assertions executed)`.
-14355
+#
+# 14360, +5: 0742's section in the same file. A CHECK that a warehouse or
+# pipeline cannot be default while inactive, so `where is_default` and
+# `where is_default and is_active` select the same rows and the thirteen
+# readers that omit `is_active` become correct without one of them being
+# rewritten -- re-emitting a 27,407-character body to add one word is how
+# re-applying 0029 reverted 0404's calc_statutory. One of the five was
+# written as `0 = 0` (both counts zero once the only warehouse is
+# retired) and repaired on the spot. Measured:
+# `all SQL assertions passed (384 files, 14360 assertions executed)`.
+14360

@@ -180,6 +180,26 @@ jobs:
           python3 scripts/check_temp_cleanup_test.py
           python3 scripts/check_temp_cleanup.py
 
+      # Thirteen functions picked a default warehouse or pipeline with
+      # `where is_default limit 1` and no `is_active`, so a warehouse
+      # that was CLOSED but still flagged default was a second matching
+      # row and whichever one the plan reached first was where a sale got
+      # depleted from. `0742` fixed the premise rather than the thirteen
+      # bodies -- a CHECK that a row cannot be default while inactive, so
+      # the two predicates select the same rows -- because re-emitting a
+      # 27,407-character function to add one word is how re-applying
+      # `0029` reverted `0404`'s calc_statutory the same week.
+      #
+      # So the rule is a disjunction, not a ban: a bare `is_default` pick
+      # is allowed only on a table carrying the CHECK. Dropping the CHECK
+      # while the readers remain fails this too, which is the half a
+      # migration-only review would miss.
+      - name: A default is not read without asking if the row is live
+        working-directory: .
+        run: |
+          python3 scripts/check_default_readers_test.py
+          python3 scripts/check_default_readers.py
+
       - run: flutter analyze --fatal-infos --fatal-warnings
 
       # `- run: flutter test` was this step for 2251 runs, and a bare
