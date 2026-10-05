@@ -11342,3 +11342,74 @@ Where the disk ended up, across the whole exercise:
 `-mindepth 1` matters: without it `-name 'tmp*'` matches `/tmp` itself, which
 made an earlier `du` report the whole of `/tmp` as the set's size and put the
 count out by one.
+
+## 5 October: the gate that passed over nothing
+
+The `mkdtemp` gate added the day before went green locally, green in its
+own 12 self-tests, and turned **CI red** — on "Statutory engine and ledger
+rules", a job with nothing to do with temp directories, and red again on the
+docs-only commit after it, which is what identified the cause as the gate
+rather than anything statutory.
+
+`check_sweeps_look.py` drives **every** gate in a tree holding a full copy of
+`scripts/` and empty source directories, and requires each to FAIL, because
+"looked and found nothing" and "could not look" are the same output. The new
+gate globbed `scripts/` only — which the skeleton supplies for real, and
+which was by then clean — so it ticked:
+
+```
+FAIL: test_every_gate_is_in_some_bucket_now_that_the_backlog_is_empty
+      [check_temp_cleanup]
+AssertionError: 'passed_over_nothing' != 'reported'
+ : check_temp_cleanup is in no bucket and did not report over an empty tree
+```
+
+**A gate written to catch vacuous success, committing vacuous success.**
+Fourteen seconds to reproduce locally, which is the whole argument for
+running the meta-gate before pushing a new one.
+
+### The excuse that was not taken
+
+The first instinct was an excuse bucket, and it is wrong. Every excuse in
+`check_sweeps_look.py` names the behaviour it expects and **fails both
+ways**: `NEEDS_A_DATABASE` wants a `usage:` line, `NEEDS_A_FILE` wants a
+`FileNotFoundError`, and a gate excused on either ground that PASSES instead
+is reported as "the excuse is wrong and the gate is not looking". There is
+no bucket for "passed because the skeleton handed it the real thing", and
+adding one would have been adding a hole to the gate that exists to close
+them.
+
+The right fix is the CANARY shape that file's own docstring already
+prescribes for a census gate: floor what was read, and name a place the
+sweep must still reach. So `check_temp_cleanup.py` now sweeps every
+first-party python file in the repository with canaries on `scripts/` and
+`brand/`. Over the skeleton `brand/` is absent and it exits 2 — "nothing
+python found under brand/ … this gate cannot tick over a tree it cannot
+see". Over the real tree it reads **124 files, five more than before, and
+still finds no leaks**, so widening it found nothing new.
+
+### If you add a gate, run this before pushing
+
+```
+python3 scripts/check_sweeps_look_test.py     # ~15s
+python3 scripts/check_sweeps_look.py          # ~2min, drives all 68
+```
+
+It now says *"49 of 68 gates report a problem over an empty source tree, as
+they must. 10 exit on a missing database URL, 8 raise on a missing named
+file, 1 exits on a missing argument, and 0 still pass over nothing."* A new
+gate joins the 49 or it is named with a reason, and the reason has to be one
+of the three shapes that file already knows how to verify.
+
+### And one of its own tests had to be repaired
+
+The floor test stubbed `python_files` to return nothing. Once canaries
+existed the canary check fired first, so the floor was never reached and the
+test asserted nothing about the thing it names. Its stub now satisfies both
+canaries and still falls short, and a new test pins which of the two
+sentences a stripped tree gets — they are both exit 2, so the order is
+invisible from the code alone.
+
+That is the twelfth way a green test covers a broken thing, in a new
+costume: **adding a check EARLIER in a function can make a later check
+unreachable, and the test for the later one goes on passing.**
