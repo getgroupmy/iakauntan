@@ -757,4 +757,34 @@
 # false of the run -- now corrected with the measurement beside it.
 # Measured:
 # `all SQL assertions passed (384 files, 14781 assertions executed)`.
-14781
+#
+# 14781 -> 14804: public.reverse_gl_entry, the contra that cancels a
+# posted journal. 34 mutants against ALL SIXTEEN callers: 19 of 33
+# before the work, 33 of 33 on reversal.sql alone after it, nothing
+# equivalent, control alive everywhere.
+#
+# THE FILE NAMED AFTER THE FUNCTION WAS NOT ITS BEST COVERAGE --
+# ledger.sql killed 16 and reversal.sql 13, and exchange_rate_feed.sql
+# killed none at all. reversal.sql's own header says why, accurately:
+# "one assertion, made three times against the three callers: a reversal
+# has to come to nothing." That comment is RIGHT, and the sweep is what
+# it cost. A file can state its own limit plainly and still leave two
+# thirds of a function unasserted; only a measurement says which thirds.
+#
+# Every one of the 14 survivors was something that does not move a
+# balance: all four guards; 0059's locked period (fx_revaluation.sql had
+# the closed one); two of 0421's three DATE mutants, in the migration
+# called "what day the money moved"; and the whole provenance -- the
+# contra could call itself a manual journal, forget which document it
+# reverses, drop the reference, post a USD journal in ringgit at a rate
+# of one, lose the word "Reversal" from every line, and forget who and
+# what each line was for.
+#
+# A BUG OF THE SESSION'S OWN, worth knowing: the first no-date assertion
+# put `public.reverse_gl_entry(v_e2)` inside a WHERE clause. It is
+# VOLATILE and it WRITES, so it ran once per row the scan compared and
+# the second call was refused as "already reversed" from inside the
+# assertion. A writing function belongs on the left of an assignment.
+# Measured:
+# `all SQL assertions passed (384 files, 14804 assertions executed)`.
+14804
