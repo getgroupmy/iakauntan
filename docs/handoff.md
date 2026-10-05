@@ -14254,6 +14254,83 @@ A sweep and a hand-run of the same suite cannot share a cluster. Wait
 for `restored:`, or give the second one its own `IAK_PGPORT`. Written
 into `scripts/mutate_sql.py`.
 
+## 5 October: reverse_gl_entry — the file named after the function was not its best coverage
+
+34 mutants (33 plus a control) in
+`supabase/tests/mutants/reverse_gl_entry.py`, against **all sixteen**
+files that call it.
+
+| file | killed | | file | killed |
+| --- | --- | --- | --- | --- |
+| `ledger.sql` | **16** | | `deposits.sql` | 5 |
+| `reversal.sql` | 13 → **33** | | `post_dated_cheques.sql` | 5 |
+| `fx_shapes.sql` | 11 | | `property.sql` | 5 |
+| `fx_revaluation.sql` | 10 | | `ledger_append_only.sql` | 4 |
+| `bank_reconciliation.sql` | 9 | | `statement_of_account.sql` | 3 |
+| `bank_transfers.sql` | 9 | | `exchange_rate_feed.sql` | **0** |
+| `bank_balance_resync.sql` | 9 | | | |
+| `void_an_invoice.sql` | 8 | | | |
+| `opening_trial_balance.sql` | 8 | | | |
+| `contra.sql` | 5 | | | |
+
+**19 of 33 before the work. 33 of 33 on `reversal.sql` alone after it**,
+nothing equivalent, control alive on every file.
+
+### The honest reading of a modest comment
+
+`reversal.sql`'s header says, accurately, "one assertion, made three
+times against the three callers: a reversal has to come to nothing." The
+sweep priced that at 20 of 33 — and `ledger.sql`, which reverses things
+on the way to asserting something else, killed more than it did.
+
+This is not the "comment that was wrong" family. The comment was right.
+**A file can state its own limit plainly and still leave two thirds of a
+function unasserted, and only a measurement says which two thirds.**
+
+### Every survivor was something that does not move a balance
+
+Sixteen files reverse something; all sixteen net to zero; a balance is
+one number whichever way the contra is written.
+
+* **All four guards** — a journal that is not there, a stranger, a
+  draft, and a reversal that was itself voided.
+* **`0059`'s period machinery.** `fx_revaluation.sql` took the closed
+  period and the missing fiscal year; the LOCKED period was open, so
+  `v_status <> 'open'` could be narrowed to `= 'closed'`.
+* **`0421`'s DATE machinery.** The migration is called *what day the
+  money moved*, and two of its three date mutants lived — including
+  `coalesce(p_date, app.today())` collapsing to `p_date`, which leaves a
+  reversal called with no date refusing instead of landing today.
+* **The provenance.** The contra could call itself a manual journal,
+  forget which document it reverses, drop the reference, post a USD
+  journal in ringgit at a rate of one, lose the word "Reversal" from
+  every line, and forget who and what each line was for.
+
+### A bug of this session's own, worth keeping
+
+The first version of the no-date assertion read
+
+```sql
+(select entry_date::text from public.gl_entries
+  where id = public.reverse_gl_entry(v_e2))
+```
+
+`reverse_gl_entry` is VOLATILE and it WRITES, and a volatile function in
+a `WHERE` clause is re-evaluated once per row the scan compares. So the
+first call posted a reversal and the second was refused with "has
+already been reversed" — from inside the assertion, naming a journal the
+reader would have to go and look up. **A writing function belongs on the
+left of an assignment, never in a WHERE clause.** Fixed, with the reason
+written beside it.
+
+### And a tool change the sweep needed
+
+`scripts/mutate_sql.py` hardcoded port 5599 while its own docstring told
+you to give a second run its own `IAK_PGPORT` — advice that could not be
+followed. It now reads `IAK_PGPORT` and `IAK_PGSOCK`, which is how this
+function's section was validated on a second cluster while the sweep
+still held the first.
+
 ## 5 October: A REVERSAL THAT DOES NOT REVERSE — reported, not fixed
 
 Found while picking the next sweep target, reproduced by hand rather
@@ -14396,17 +14473,16 @@ null`, so a **retired account is still posted to** — the same finding
 It changes what a statutory posting resolves to, so it stays the user's
 call and not a sweep's.
 
-**34 of 45 money movers now have a mutants file** — `python3
+**35 of 45 money movers now have a mutants file** — `python3
 scripts/mutation_targets.py` prints that line itself, so ask it rather
-than this file. The eleven with none, as that tool ranks them:
+than this file. The ten with none, as that tool ranks them:
 
 * the four demo builders — `app.demo_legal_guaman`,
   `app.demo_sinar_bank`, `app.demo_purchases`,
   `app.demo_practice_books`. Reached by the demo files, which assert
   existence rather than arithmetic, so a sweep of them measures a
   different kind of claim and should be read as such.
-* `public.reverse_gl_entry` (16 files),
-  `app.post_purchase_document_internal` (53) and
+* `app.post_purchase_document_internal` (53 files) and
   `public.create_gl_entry` (122). These are the opposite problem: they
   are reached by so much of the suite that the sweep is expensive, and
   the last of them is the function almost every other sweep has been

@@ -153,12 +153,21 @@ same question answers faster than the fixture fails.
 
 from __future__ import annotations
 
+import os
 import pathlib
 import re
 import subprocess
 import sys
 
-DB = "postgresql://postgres@/postgres?host=/var/tmp&port=5599"
+# The cluster `supabase/tests/run_locally.sh` builds, and the same three
+# environment variables it reads -- because the section above tells you
+# to give a second run its own `IAK_PGPORT`, and until 5 October this
+# line was hardcoded, so that advice could not be followed.
+DB = (
+    "postgresql://postgres@/postgres"
+    f"?host={os.environ.get('IAK_PGSOCK', '/var/tmp')}"
+    f"&port={os.environ.get('IAK_PGPORT', '5599')}"
+)
 MIGRATIONS = pathlib.Path(__file__).resolve().parent.parent / "supabase" / "migrations"
 
 

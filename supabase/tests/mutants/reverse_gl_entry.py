@@ -31,7 +31,53 @@
 # it breaks what is there -- which is why this one was found by reading
 # the insert against the table and is recorded here rather than below.
 #
-# RESULT: see the kill sheet appended when this has been run.
+# RESULT, 5 October: 34 mutants (33 plus a control), against ALL
+# SIXTEEN callers.
+#
+#   ledger.sql                 16      deposits.sql                5
+#   reversal.sql               13      post_dated_cheques.sql      5
+#   fx_shapes.sql              11      property.sql                5
+#   fx_revaluation.sql         10      ledger_append_only.sql      4
+#   bank_reconciliation.sql     9      statement_of_account.sql    3
+#   bank_transfers.sql          9      exchange_rate_feed.sql      0
+#   bank_balance_resync.sql     9
+#   void_an_invoice.sql         8
+#   opening_trial_balance.sql   8
+#   contra.sql                  5
+#
+# 19 of 33 before the work. 33 of 33 on `reversal.sql` ALONE after it,
+# nothing equivalent, control alive on every file.
+#
+# THE FILE NAMED AFTER THE FUNCTION IS NOT ITS BEST COVERAGE.
+# `ledger.sql` kills 16 and `reversal.sql` 13, and `reversal.sql`'s own
+# header says why, accurately and modestly: "one assertion, made three
+# times against the three callers: a reversal has to come to nothing."
+# This sweep is what that modesty cost -- 20 of 33 -- and the honest
+# reading is not that the comment was wrong. It was right. A file can
+# state its own limit plainly and still leave two thirds of a function
+# unasserted, and only a measurement says which two thirds.
+#
+# EVERY ONE OF THE 14 SURVIVORS WAS SOMETHING THAT DOES NOT MOVE A
+# BALANCE. Sixteen files reverse something, every one of them nets to
+# zero, and a balance is one number whichever way the contra is written:
+#
+#   * all four guards -- a journal that is not there, a stranger, a
+#     draft, and a reversal that was itself voided;
+#   * `0059`'s period machinery: a locked period, taken by
+#     `fx_revaluation.sql` for the closed one and nothing else;
+#   * `0421`'s DATE machinery. This migration is called "what day the
+#     money moved" and two of its three date mutants lived -- including
+#     `coalesce(p_date, app.today())` collapsing to `p_date`, which
+#     leaves a reversal called with no date refusing instead of landing
+#     today;
+#   * the provenance: the contra could call itself a manual journal,
+#     forget which document it reverses, drop the reference, post a USD
+#     journal in ringgit at a rate of one, lose the word "Reversal" from
+#     every line, and forget who and what each line was for.
+#
+# NOT A MUTANT -- A DEFECT, reported in `docs/handoff.md` and NOT fixed
+# here: the line copy names twelve columns and `gl_lines` has six more
+# that carry meaning. See the note below the header.
 
 # ------------------------------------------------------------ the guards
 
