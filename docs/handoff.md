@@ -14087,3 +14087,60 @@ than to build a fixture the database will refuse.
 **31 of 45 money movers now have a mutants file.** Next with none:
 `import_opening_balances`, `app.run_recurring_journals`,
 `import_opening_stock`'s siblings, and the four demo builders.
+
+### import_opening_balances: nine conditions in one chain, and the chain's order
+
+The most validation-heavy function swept. **40 mutants plus a control.
+13 killed on `opening_import_shapes.sql`, 29 across its five files, and
+39 of 39 after the work — nothing equivalent.**
+
+**The eleven real gaps were mostly rows nobody had put in a file:** no
+account code at all, a heading, something that is not an amount, both
+columns on one line, and 3900 itself. A changeover file arrives from
+somebody else's system with exactly those in it — a stray blank row, a
+footnote in a money column, a subtotal line — which is *why* the chain
+has nine links, and why each needs a row that trips exactly one of
+them.
+
+**And a comment in the file had the direction backwards.** The
+duplicate check is `lower(v_code) = any (v_seen)` with `v_seen` holding
+lowered codes. The file tested `'FX-1'` then `'fx-1'` under a comment
+saying "the order here is the assertion". It is not: with the upper
+spelling seen **first**, the second row is already lower case and
+matches whether or not the comparison lowers it — so dropping the
+`lower()` passed. Lower-then-upper is the order that distinguishes
+them. The comment is corrected and the other order added.
+
+That is the **fifth** thing this sweep has found that looked like
+coverage and was not, and the second where a comment was precise,
+confident and wrong about which half it proved — after
+`withholding_shapes.sql`'s four annotated assertions on the guard next
+to the untested one.
+
+**The control-account comparison had neither of its two halves.** A
+receivable or payable row is never posted — the open items already did
+— so it is *compared*, and the verdict is `ok` when it agrees and a
+`warning` naming both figures when it does not. Neither was asserted,
+and the **sign of the comparison depends on the account type**, so an
+asset and a liability read the two columns opposite ways. Three mutants
+lived in those two sentences.
+
+#### A false failure worth recording
+
+The first version of the no-code assertion used `check_eq` with the
+expected value `'error: No account code.'` — and **`check_eq` prints
+its expected value in the success notice.** `run_locally.sh` decides a
+file failed by grepping its output for `^psql.*[Ee]rror:`, so a
+*passing* assertion reported the whole file as FAILED.
+
+The runner's own comment calls that out in advance: "A notice that
+happens to contain the word would be a false failure, which is the safe
+direction to be wrong in." It is, and the fix belongs in the test —
+`check_true` with a comparison echoes nothing, which is what every
+other refusal in that file already uses. **Worth knowing before writing
+an assertion whose expected value is an error message.**
+
+**32 of 45 money movers now have a mutants file.** Next with none:
+`app.run_recurring_journals`, and the four demo builders — which
+between them are most of what is left, since the demo builders are
+reached by the demo files and assert existence rather than arithmetic.

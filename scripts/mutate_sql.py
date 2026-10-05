@@ -66,6 +66,40 @@ CANNOT alter behaviour -- a comment inside the function block, not one
 in the migration's header, because only the block is applied. If the
 control is reported killed, the harness is broken and every other line
 of the output is worthless.
+
+## Read the column before writing a mutant for a `coalesce`
+
+By 5 October this sweep had proven FIVE equivalent mutants of one
+shape, and two of them cost a fixture the database then refused:
+
+    purchase_payments.exchange_rate   NOT NULL DEFAULT 1
+    purchase_payments.bank_charges    NOT NULL DEFAULT 0
+    withholding_certificates.exchange_rate
+                                      NOT NULL DEFAULT 1, check (> 0)
+    mo_components.quantity_required   check (quantity_required > 0)
+    bank_accounts.account_id          NOT NULL, references accounts
+
+Every one of those sits under a `coalesce(col, x)` or an
+`if <lookup> is null then raise`, and every one of those guards is
+unreachable: the schema will not hold the row the guard is for. The
+guards are belt-and-braces and right to keep -- a later migration that
+relaxed the column would make them load-bearing the same day -- but no
+fixture can distinguish them, and trying to build one gets a not-null
+violation rather than a survivor.
+
+So before writing a mutant that removes a `coalesce` fallback or a
+null-check, ask the column:
+
+    select is_nullable, column_default
+      from information_schema.columns
+     where table_name = '<t>' and column_name = '<c>';
+    select pg_get_constraintdef(oid) from pg_constraint
+     where conrelid = 'public.<t>'::regclass;
+
+If it is NOT NULL, or a CHECK already excludes the value, write the
+mutant anyway -- the kill sheet should record WHY it cannot die -- but
+note the equivalence beside it and do not spend a fixture on it. The
+same question answers faster than the fixture fails.
 """
 
 from __future__ import annotations

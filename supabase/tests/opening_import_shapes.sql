@@ -106,11 +106,13 @@ begin
   -- The same code twice in one file, spelt two ways. Without lowering
   -- on BOTH sides the second one posts as well, and the account is
   -- doubled.
-  -- The upper-case spelling FIRST, which is what tells the two halves
-  -- of the check apart: the code is lowered on the way INTO the list of
-  -- what has been seen as well as on the way out of it. Lowering only
-  -- one end still catches 'fx-1' after 'FX-1' -- or the other way about,
-  -- depending which end -- so the order here is the assertion.
+  -- The upper-case spelling FIRST. This order does NOT tell the two
+  -- halves of the check apart, and the comment here used to say it did:
+  -- `v_seen` holds the LOWERED code, so with 'FX-1' seen first the
+  -- second row 'fx-1' matches whether or not the comparison lowers it.
+  -- A mutation sweep dropped the `lower()` from the comparison and this
+  -- assertion passed. The other order is the one that distinguishes
+  -- them, and it is added further down.
   v_rows := jsonb_build_array(
     jsonb_build_object('account_code', 'FX-1', 'debit', '500'),
     jsonb_build_object('account_code', 'fx-1', 'debit', '500'),
@@ -481,5 +483,289 @@ begin
                and conrelid = 'public.stock_movements'::regclass
                and contype = 'f'));
 end $$;
+
+-- =====================================================================
+-- The eleven a sweep found, and the elsif chain's own ORDER
+-- =====================================================================
+-- `import_opening_balances` was mutated forty ways across the five
+-- files that reach it. 13 died on this one, 29 across all five. The
+-- eleven that lived are mostly rows this file never put in a file --
+-- and three of them are about the ORDER of the validation chain, which
+-- is the one shape where moving a condition is the mutation worth
+-- writing.
+--
+-- The function's own comment says the order is load-bearing: "Before
+-- the existence check, not after: 3900 is created on demand, so in a
+-- company that has imported nothing yet it does not exist, and the
+-- wrong branch answers '3900 is not an account in this company's
+-- chart' -- true, unhelpful, and not the reason it is being refused."
+-- A fixture meeting two conditions at once cannot say which answered,
+-- so each row below meets exactly one.
+do $$
+declare
+  v_boss uuid := pg_temp.another_user('rantai@oimport.test');
+  v_org  uuid;
+  v_rows jsonb;
+  v_said text;
+  v_n    integer;
+begin
+  v_org := pg_temp.oi_org('Rantai Semak Sdn Bhd', v_boss);
+
+  -- ------------------------------------------------------------------
+  -- 1. The first link: NO CODE AT ALL
+  -- ------------------------------------------------------------------
+  -- A spreadsheet with a stray blank row in it, which is how every
+  -- changeover file arrives.
+  v_rows := jsonb_build_array(
+    jsonb_build_object('debit', '100'),
+    jsonb_build_object('account_code', '1110', 'debit', '100'),
+    jsonb_build_object('account_code', '3100', 'credit', '200'));
+  select x.status || ': ' || x.message into v_said
+    from public.import_opening_balances(v_org, v_rows, date '2026-08-01') x
+   where x.row_no = 1;
+  -- `check_true` and not `check_eq`, deliberately. `check_eq` prints the
+  -- EXPECTED VALUE in its success notice, and `run_locally.sh` decides a
+  -- file failed by grepping its output for `^psql.*[Ee]rror:` -- so an
+  -- assertion whose expected value is the string "error: ..." reports
+  -- the whole file as FAILED while passing. The runner's own comment
+  -- names this as the safe direction to be wrong in, and it is: the fix
+  -- belongs here. Every other refusal in this file already uses
+  -- `check_true` with a `like`, which echoes nothing.
+  perform pg_temp.check_true('a row with no account code says so',
+    v_said = 'error: No account code.');
+
+  -- ------------------------------------------------------------------
+  -- 2. A DUPLICATE in the other order
+  -- ------------------------------------------------------------------
+  -- The file above catches 'FX-1' then 'fx-1'. That order cannot tell
+  -- `lower(v_code) = any (v_seen)` from `v_code = any (v_seen)`,
+  -- because `v_seen` holds the LOWERED code and the second row is
+  -- already lower case -- so the comparison matches either way. The
+  -- other order is the discriminator: lower first, upper second, where
+  -- only a comparison that lowers BOTH ends catches it.
+  insert into public.accounts
+    (org_id, code, name, account_type, account_subtype)
+  values (v_org, 'FX-9', 'Another foreign account', 'asset', 'current_asset');
+  v_rows := jsonb_build_array(
+    jsonb_build_object('account_code', 'fx-9', 'debit', '500'),
+    jsonb_build_object('account_code', 'FX-9', 'debit', '500'),
+    jsonb_build_object('account_code', '3100', 'credit', '1000'));
+  select x.status || ': ' || x.message into v_said
+    from public.import_opening_balances(v_org, v_rows, date '2026-08-01') x
+   where x.row_no = 2;
+  perform pg_temp.check_true(
+    'a code written LOWER then UPPER is still caught the second time',
+    v_said like 'error: FX-9 is in this file more than once.%');
+
+  -- ------------------------------------------------------------------
+  -- 3. 3900 -- and the branch ORDER that answers for it
+  -- ------------------------------------------------------------------
+  -- In a company that has imported nothing, 3900 does not exist yet, so
+  -- the existence check below would answer "3900 is not an account in
+  -- this company's chart" -- true and useless. The assertion is on the
+  -- WORDS, because that is the whole of what the ordering buys.
+  perform pg_temp.check_true(
+    'this company has no 3900 yet, so the order of the chain matters',
+    not exists (select 1 from public.accounts
+                 where org_id = v_org and code = '3900'));
+  v_rows := jsonb_build_array(
+    jsonb_build_object('account_code', '3900', 'credit', '400'),
+    jsonb_build_object('account_code', '1110', 'debit', '400'));
+  perform pg_temp.check_true(
+    'a file naming 3900 is told it is what the import balances TO',
+    pg_temp.oi_says(v_org, v_rows, '3900')
+      like 'error: Opening Balance Equity is what this import balances %');
+
+  -- ------------------------------------------------------------------
+  -- 4. A HEADING
+  -- ------------------------------------------------------------------
+  -- 1100 is "Current Assets" in the seeded chart: its total is the
+  -- accounts under it, and posting to it doubles them.
+  perform pg_temp.check_true('1100 really is a heading',
+    (select is_group from public.accounts
+      where org_id = v_org and code = '1100'));
+  v_rows := jsonb_build_array(
+    jsonb_build_object('account_code', '1100', 'debit', '700'),
+    jsonb_build_object('account_code', '3100', 'credit', '700'));
+  perform pg_temp.check_true('a heading cannot take an opening balance',
+    pg_temp.oi_says(v_org, v_rows, '1100')
+      like 'error: 1100 is a heading, not an account.%');
+
+  -- ------------------------------------------------------------------
+  -- 5. SOMETHING THAT IS NOT AN AMOUNT
+  -- ------------------------------------------------------------------
+  -- `app.import_number(..., 0)` returns null on a value it cannot read,
+  -- and the chain says which column it was. A file with "n/a" or a
+  -- footnote in a money column is ordinary; read as nought it imports a
+  -- balance of nothing and says the file balanced.
+  v_rows := jsonb_build_array(
+    jsonb_build_object('account_code', '1110', 'debit', 'n/a'),
+    jsonb_build_object('account_code', '3100', 'credit', '100'));
+  perform pg_temp.check_true('a debit that is not a number says so',
+    pg_temp.oi_says(v_org, v_rows, '1110') like 'error: "n/a" is not an amount.%');
+  v_rows := jsonb_build_array(
+    jsonb_build_object('account_code', '1110', 'debit', '100'),
+    jsonb_build_object('account_code', '3100', 'credit', 'see note 4'));
+  perform pg_temp.check_true('and so does a credit',
+    pg_temp.oi_says(v_org, v_rows, '3100')
+      like 'error: "see note 4" is not an amount.%');
+
+  -- ------------------------------------------------------------------
+  -- 6. BOTH COLUMNS ON ONE LINE
+  -- ------------------------------------------------------------------
+  -- A trial balance line is on one side or the other. Both filled is
+  -- two spellings of a net figure, and whichever way the import read it
+  -- would be a guess.
+  v_rows := jsonb_build_array(
+    jsonb_build_object('account_code', '1110', 'debit', '900', 'credit', '400'),
+    jsonb_build_object('account_code', '3100', 'credit', '500'));
+  perform pg_temp.check_true('a line in both columns is refused',
+    pg_temp.oi_says(v_org, v_rows, '1110')
+      like 'error: A trial balance line is on one side or the other%');
+
+  -- ------------------------------------------------------------------
+  -- 7. A ROW WITH NO DESCRIPTION, and a WARNING that is not "imported"
+  -- ------------------------------------------------------------------
+  -- Every row in the suite until now carried a description, so the
+  -- fallback to 'Opening balance' was unreachable. And the relabel at
+  -- the end sets 'ok' rows to 'imported' and leaves a WARNING alone --
+  -- an inventory figure with nothing behind it is still a warning after
+  -- the commit, which is the only place anybody will see it again.
+  v_rows := jsonb_build_array(
+    jsonb_build_object('account_code', '1110', 'debit', '1000'),
+    jsonb_build_object('account_code', '1310', 'debit', '600'),
+    jsonb_build_object('account_code', '3100', 'credit', '1600'));
+  select count(*) into v_n
+    from public.import_opening_balances(v_org, v_rows, date '2026-08-01', true) x
+   where x.status = 'warning';
+  perform pg_temp.check_eq(
+    'a warning survives the commit rather than reading as imported',
+    v_n, 1);
+  perform pg_temp.check_eq('while the plain rows read as imported',
+    (select count(*) from public.import_opening_balances(
+       v_org, v_rows, date '2026-08-01', false) x
+      where x.status = 'ok'), 2);
+  perform pg_temp.check_eq(
+    'and a row that said nothing about itself is named for what it is',
+    (select l.description from public.gl_lines l
+       join public.accounts a on a.id = l.account_id
+      where a.org_id = v_org and a.code = '1110'
+        and l.debit = 1000),
+    'Opening balance');
+
+  raise notice 'ok   the chain, in order, one condition at a time';
+end $$;
+
+-- =====================================================================
+-- The control-account comparison, in BOTH directions
+-- =====================================================================
+-- A receivable or payable row is never posted: the open invoices and
+-- bills brought across already did that, so the row is COMPARED with
+-- what they came to. The verdict has two halves and this file had
+-- neither -- and the sign of the comparison depends on the account
+-- TYPE, so an asset and a liability read the two columns the opposite
+-- way round. Three mutants lived in those two sentences.
+do $$
+declare
+  v_boss uuid := pg_temp.another_user('kawalan@oimport.test');
+  v_org  uuid; v_cust uuid; v_sup uuid; v_rows jsonb;
+begin
+  v_org := pg_temp.oi_org('Akaun Kawalan Sdn Bhd', v_boss);
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-1', 'Pelanggan', 'customer') returning id into v_cust;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'S-1', 'Pembekal', 'supplier') returning id into v_sup;
+
+  -- Open items brought across first: a 1,000 invoice and a 400 bill.
+  perform public.import_open_invoices(v_org, jsonb_build_array(
+    jsonb_build_object('doc_no','INV-OLD-1','contact_code','C-1',
+      'doc_date','2026-07-01','outstanding_amount','1000')),
+    date '2026-08-01', true);
+  perform public.import_open_bills(v_org, jsonb_build_array(
+    jsonb_build_object('doc_no','BILL-OLD-1','contact_code','S-1',
+      'doc_date','2026-07-01','outstanding_amount','400')),
+    date '2026-08-01', true);
+
+  -- AGREEING: the file says exactly what the open items came to. The
+  -- receivable is an ASSET, so it is a debit of 1,000; the payable is a
+  -- LIABILITY, so it is a credit of 400. Reading either the other way
+  -- round is what the type-dependent sign exists for.
+  v_rows := jsonb_build_array(
+    jsonb_build_object('account_code', '1210', 'debit', '1000'),
+    jsonb_build_object('account_code', '2110', 'credit', '400'));
+  perform pg_temp.check_true(
+    'a receivable that agrees with the open invoices says so, and is not posted',
+    pg_temp.oi_says(v_org, v_rows, '1210')
+      like 'ok: Not posted — the open invoices already did, and they agree at 1000.00%');
+  perform pg_temp.check_true('and a payable that agrees with the bills likewise',
+    pg_temp.oi_says(v_org, v_rows, '2110')
+      like 'ok: Not posted — the open bills already did, and they agree at 400.00%');
+
+  -- OUT: the file says something else. A warning rather than an error,
+  -- because the file is not wrong -- one of the two sides is, and the
+  -- operator is told by how much so they can find out which.
+  v_rows := jsonb_build_array(
+    jsonb_build_object('account_code', '1210', 'debit', '1500'),
+    jsonb_build_object('account_code', '2110', 'credit', '400'),
+    jsonb_build_object('account_code', '3100', 'credit', '1100'));
+  perform pg_temp.check_true(
+    'a receivable that does NOT agree is a warning naming both figures',
+    pg_temp.oi_says(v_org, v_rows, '1210')
+      like 'warning: Not posted. This file says 1500.00 and the open invoices brought across come to 1000.00.%');
+
+  -- And the sign by TYPE, which is the half a same-signed fixture
+  -- cannot see: the payable's 400 is a CREDIT, and reading it as
+  -- `debit - credit` makes it -400 against a ledger of 400.
+  v_rows := jsonb_build_array(
+    jsonb_build_object('account_code', '2110', 'credit', '400'),
+    jsonb_build_object('account_code', '1110', 'debit', '400'));
+  perform pg_temp.check_true(
+    'a payable is compared as a liability and not as an asset',
+    pg_temp.oi_says(v_org, v_rows, '2110')
+      like 'ok: Not posted — the open bills already did, and they agree at 400.00%');
+
+  raise notice 'ok   the control accounts, agreeing and not, on both signs';
+end $$;
+
+-- =====================================================================
+-- A company whose only stocked item has been RETIRED
+-- =====================================================================
+-- `select exists (... where it.track_inventory and it.deleted_at is
+-- null)` decides which of the two inventory warnings a 1310 balance
+-- gets, and the two say different things: one says there are no
+-- quantities behind the figure at all, the other says the quantities
+-- are a separate import. A company that USED to track stock and has
+-- retired the item is in the first state, not the second, and
+-- `deleted_at is null` is the only thing that knows it.
+do $$
+declare
+  v_boss uuid := pg_temp.another_user('simpan@oimport.test');
+  v_org  uuid; v_item uuid; v_rows jsonb;
+begin
+  v_org := pg_temp.oi_org('Stok Bersara Sdn Bhd', v_boss);
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code)
+  values (v_org, 'LAMA', 'Barang lama', 'stock', true, 'C62')
+  returning id into v_item;
+
+  v_rows := jsonb_build_array(
+    jsonb_build_object('account_code', '1310', 'debit', '900'),
+    jsonb_build_object('account_code', '3100', 'credit', '900'));
+  perform pg_temp.check_true(
+    'while the item is live, a 1310 balance is told the quantities are a '
+    'separate import',
+    pg_temp.oi_says(v_org, v_rows, '1310')
+      like 'warning: Brought in as a figure. Opening stock quantities are a separate import%');
+
+  update public.items set deleted_at = now() where id = v_item;
+  perform pg_temp.check_true(
+    'and once it is retired, that nothing in the company is stock-tracked '
+    'at all',
+    pg_temp.oi_says(v_org, v_rows, '1310')
+      like 'warning: Brought in as a figure. Nothing in this company is stock-tracked%');
+
+  raise notice 'ok   a retired item is not a company that tracks stock';
+end $$;
+
 
 rollback;

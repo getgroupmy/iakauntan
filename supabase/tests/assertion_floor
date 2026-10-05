@@ -658,4 +658,41 @@
 # bank_accounts.account_id. Two fixtures were refused by the schema
 # while trying to build the states those coalesces guard. Measured:
 # `all SQL assertions passed (384 files, 14725 assertions executed)`.
-14725
+#
+# 14746, +21: opening_import_shapes.sql. import_opening_balances -- the
+# most VALIDATION-heavy function swept, nine conditions in one ordered
+# elsif chain -- scored 13 of 40 on the shapes file and 29 across its
+# five. 39 of 39 after, nothing equivalent.
+#
+# THE ELEVEN REAL GAPS WERE MOSTLY ROWS NOBODY HAD PUT IN A FILE: no
+# account code at all, a heading, something that is not an amount, both
+# columns on one line, 3900 itself. A changeover file arrives from
+# somebody else's system with exactly those in it -- a stray blank row,
+# a footnote in a money column, a subtotal line -- which is why the
+# chain has nine links and why each needs a row that trips exactly one.
+#
+# AND A COMMENT IN THE FILE HAD THE DIRECTION BACKWARDS. The duplicate
+# check is `lower(v_code) = any (v_seen)` with v_seen holding lowered
+# codes, and the file tested 'FX-1' then 'fx-1' under a comment saying
+# "the order here is the assertion". It is not: with the upper spelling
+# seen FIRST the second row is already lower case and matches whether or
+# not the comparison lowers it, so dropping the lower() passed. Lower
+# then upper is the order that distinguishes them; the comment is
+# corrected and the other order added.
+#
+# THE CONTROL-ACCOUNT COMPARISON had neither of its two halves -- the
+# `ok` when the file agrees with the open items and the `warning`
+# naming both figures when it does not -- and the SIGN of that
+# comparison depends on the account TYPE, so an asset and a liability
+# read the two columns opposite ways. Three mutants lived in those two
+# sentences.
+#
+# A FALSE FAILURE WORTH RECORDING: the first version of the no-code
+# assertion used check_eq with the expected value 'error: No account
+# code.', and check_eq PRINTS its expected value. run_locally.sh decides
+# a file failed by grepping for `^psql.*[Ee]rror:`, so a passing notice
+# reported the whole file as FAILED. The runner's own comment calls that
+# the safe direction to be wrong in, and it is -- the fix belongs in the
+# test. check_true with a comparison echoes nothing. Measured:
+# `all SQL assertions passed (384 files, 14746 assertions executed)`.
+14746
