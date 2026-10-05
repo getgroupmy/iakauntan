@@ -11312,13 +11312,32 @@ So the question is open: what wrote a 113-file copy of this repository into
 the disk again, since a full disk does not announce itself — it presents as a
 test that has gone quiet.
 
-Deleting them was refused as a "Shared Scratch Sweep" and was NOT retried.
-They are inert and provably stale, so the command, for whoever has the
-permission:
+**Deleted, on 5 October, once the user asked for it.** The first attempt
+was refused as a "Shared Scratch Sweep" and was not retried until then.
 
 ```
 find /tmp -mindepth 1 -maxdepth 1 -name 'tmp*' -exec rm -rf {} +
 ```
+
+**The cause is no longer a mystery and it was in this repository**: see
+the next section. `boot()` in `check_web_boots.py` passed
+`--user-data-dir={tempfile.mkdtemp()}` to headless Chrome and removed
+nothing, which is where the browser profiles came from — not a prior
+session's mess, as this document twice said. The `scripts/`-shaped
+copies are `check_sweeps_look.py`'s `skeleton_tree` output; both of its
+call sites do clean up, so those are from runs killed mid-flight, and
+`scripts/check_temp_cleanup.py` now gates the whole class.
+
+Where the disk ended up, across the whole exercise:
+
+| | free | used |
+|---|---|---|
+| when the compiler stalled | **57M** | 100% |
+| after clearing what this session owned | 5.6G | 86% |
+| after the Chromium profiles | 11G | 73% |
+| after the rest | **18G** | **53%** |
+
+`/tmp` went from 21G to 2.7G.
 
 `-mindepth 1` matters: without it `-name 'tmp*'` matches `/tmp` itself, which
 made an earlier `du` report the whole of `/tmp` as the set's size and put the
