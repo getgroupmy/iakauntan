@@ -1145,4 +1145,190 @@ begin
 end $$;
 
 
+-- ---------------------------------------------------------------------
+-- clear_pdc: the fourteen a sweep found nothing standing on
+--
+-- `record_pdc` and `bounce_pdc` scored 27 of 27 (see
+-- `supabase/tests/mutants/post_dated_cheques.py`). `clear_pdc` --
+-- the third of the trio, and the one where the money actually moves --
+-- scored 9 of 26 on this file, 11 across all four that reach it.
+--
+-- The cause is that every clearing in this file asserts the BANK
+-- BALANCE and little else. A balance is one number, and it is the same
+-- number whether the cheque's own holding account was emptied or the
+-- other direction's was, whether the journal says which cheque it was
+-- for, whether the cheque remembers what settled it, and whether
+-- anybody is named on either leg. All of those still balance.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid;
+  v_owner uuid := pg_temp.test_user();
+  v_cust  uuid; v_sup uuid;
+  v_bank  uuid; v_bank_a uuid;
+  v_1140  uuid; v_2115 uuid;
+  v_in    uuid; v_out uuid; v_in2 uuid;
+  v_entry uuid; v_on date; v_msg text; v_no text;
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  v_org := pg_temp.test_org('Cek Celah Sdn Bhd');
+  perform pg_temp.allow_many_companies();
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_org, m, true from unnest(array['sales','purchases','accounting']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+  perform pg_temp.sign_in_as(v_owner);
+
+  v_bank   := pg_temp.test_bank_account(v_org, 'Maybank current');
+  v_bank_a := pg_temp.bank_gl(v_bank);
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'PEL', 'Encik Jamil', 'customer') returning id into v_cust;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'PEM', 'Pembekal Murni', 'supplier') returning id into v_sup;
+
+  -- ------------------------------------------------------------------
+  -- An INCOMING cheque, cleared on a day that is not today
+  -- ------------------------------------------------------------------
+  -- With cents, because every cheque in this file is a round thousand;
+  -- and on an explicit date, because `v_on := coalesce(p_on,
+  -- app.today())` and `app.today()` are the same value when the fixture
+  -- always clears today.
+  v_on := pg_temp.today() + 5;
+  v_in := public.record_pdc(v_org, 'incoming', v_cust, '770001',
+                            pg_temp.today() + 3, 1234.56, '[]'::jsonb, v_bank);
+  v_entry := public.clear_pdc(v_in, v_on, v_bank);
+
+  select id into v_1140 from public.accounts
+   where org_id = v_org and code = '1140';
+  perform pg_temp.check_eq('the journal is dated the day the cheque cleared',
+    (select entry_date from public.gl_entries where id = v_entry)::text,
+    v_on::text);
+  perform pg_temp.check_eq('and the cheque records that day as well',
+    (select cleared_on from public.post_dated_cheques where id = v_in)::text,
+    v_on::text);
+
+  -- WHO, on both legs. `report_contact_statement` reads
+  -- gl_lines.contact_id, and the two legs are two separate
+  -- jsonb_build_object calls, so either can lose it on its own.
+  perform pg_temp.check_eq('the bank''s leg says whose cheque it was',
+    (select contact_id from public.gl_lines
+      where entry_id = v_entry and account_id = v_bank_a), v_cust);
+  perform pg_temp.check_eq('and so does the leg that empties 1140',
+    (select contact_id from public.gl_lines
+      where entry_id = v_entry and account_id = v_1140), v_cust);
+
+  -- WHICH cheque, on the lines and on the journal. A bank statement
+  -- shows a cheque number and nothing else; a journal line that does
+  -- not carry it cannot be matched to one by anybody.
+  perform pg_temp.check_eq('each line names the cheque by its number',
+    (select count(*) from public.gl_lines
+      where entry_id = v_entry and description like '%770001%'), 2);
+  select pdc_no into v_no from public.post_dated_cheques where id = v_in;
+  perform pg_temp.check_eq('and the journal names the cheque record',
+    (select description from public.gl_entries where id = v_entry),
+    'Cheque ' || v_no || ' cleared');
+  perform pg_temp.check_eq('and points back at it',
+    (select source_id from public.gl_entries where id = v_entry), v_in);
+  perform pg_temp.check_eq('in the table it lives in',
+    (select source_table from public.gl_entries where id = v_entry),
+    'post_dated_cheques');
+
+  -- And the cheque's own three stamps, none of which was read back.
+  perform pg_temp.check_eq('the cheque remembers what settled it',
+    (select settle_entry_id from public.post_dated_cheques where id = v_in),
+    v_entry);
+  perform pg_temp.check_eq('and which account it cleared through',
+    (select bank_account_id from public.post_dated_cheques where id = v_in),
+    v_bank);
+  perform pg_temp.check_eq('with its cents intact',
+    (select debit from public.gl_lines
+      where entry_id = v_entry and account_id = v_bank_a), 1234.56);
+
+  -- ------------------------------------------------------------------
+  -- An OUTGOING cheque, which empties the OTHER holding account
+  -- ------------------------------------------------------------------
+  -- `app.cheque_account(org, direction)` is 1140 Cheques on Hand for
+  -- an incoming cheque and 2115 Cheques Issued for an outgoing one --
+  -- an asset and a liability. Fixing the direction to 'incoming' leaves
+  -- the bank balance exactly right and empties an asset account that
+  -- was never filled, while the liability the company really owes sits
+  -- there for ever. Nothing in this file asserted the outgoing
+  -- clearing's journal at all.
+  v_out := public.record_pdc(v_org, 'outgoing', v_sup, '770002',
+                             pg_temp.today() + 3, 700, '[]'::jsonb, v_bank);
+  v_entry := public.clear_pdc(v_out, pg_temp.today() + 6, v_bank);
+  select id into v_2115 from public.accounts
+   where org_id = v_org and code = '2115';
+  perform pg_temp.check_eq(
+    'presenting an outgoing cheque DEBITS the liability it created',
+    (select debit from public.gl_lines
+      where entry_id = v_entry and account_id = v_2115), 700);
+  perform pg_temp.check_eq('and credits the bank',
+    (select credit from public.gl_lines
+      where entry_id = v_entry and account_id = v_bank_a), 700);
+  perform pg_temp.check_eq(
+    'leaving 1140, which is the other direction''s account, untouched',
+    (select count(*) from public.gl_lines
+      where entry_id = v_entry and account_id = v_1140), 0);
+  -- And the words differ: a cheque the company wrote is PRESENTED, not
+  -- cleared. One is what the bank did to us and the other what we did
+  -- to them, and a reconciliation is read by a person.
+  perform pg_temp.check_eq('an outgoing cheque is presented, not cleared',
+    (select count(*) from public.gl_lines
+      where entry_id = v_entry and description like '%presented%'), 2);
+
+  -- ------------------------------------------------------------------
+  -- Who may clear, and which right each direction needs
+  -- ------------------------------------------------------------------
+  -- Two claims in one call again:
+  -- `can_write_module(org, case direction when incoming then sales else
+  -- purchases end)`. A stranger proves the guard exists; only a company
+  -- holding one module and not the other proves the derivation.
+  v_in2 := public.record_pdc(v_org, 'incoming', v_cust, '770003',
+                             pg_temp.today() + 3, 300, '[]'::jsonb, v_bank);
+  perform pg_temp.sign_in_as(pg_temp.another_user('luar-cek@iakauntan.test'));
+  begin
+    perform public.clear_pdc(v_in2, pg_temp.today(), v_bank);
+    v_msg := null;
+  exception when others then get stacked diagnostics v_msg = message_text;
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+  -- The WHOLE message: the foreign-bank guard below it raises 42501 too.
+  perform pg_temp.check_eq('somebody outside the company cannot clear a cheque',
+    v_msg, 'not permitted to write for this organization');
+  perform pg_temp.check_eq('and the cheque is still held',
+    (select status::text from public.post_dated_cheques where id = v_in2),
+    'held');
+
+  -- Purchases off: an OUTGOING cheque cannot be presented, and an
+  -- INCOMING one still clears on core Sales. Swap the derivation and
+  -- the incoming one asks for purchases and is refused -- the half a
+  -- stranger can never prove.
+  v_out := public.record_pdc(v_org, 'outgoing', v_sup, '770004',
+                             pg_temp.today() + 3, 200, '[]'::jsonb, v_bank);
+  update public.org_modules set is_enabled = false
+   where org_id = v_org and module_code = 'purchases';
+  perform pg_temp.check_refused(
+    'a company that gave up Purchases cannot present its own cheque',
+    format('select public.clear_pdc(%L, %L, %L)',
+           v_out, pg_temp.today(), v_bank),
+    'not permitted to write for this organization', '42501');
+  perform pg_temp.check_true(
+    'while an incoming cheque still clears, on core Sales',
+    public.clear_pdc(v_in2, pg_temp.today(), v_bank) is not null);
+  update public.org_modules set is_enabled = true
+   where org_id = v_org and module_code = 'purchases';
+
+  -- What this block does NOT prove, said here so the next sweep does
+  -- not re-chase it: the ledger lookup's own `and b.org_id =
+  -- v_c.org_id` is an EQUIVALENT mutation target, for the same reason
+  -- as create_deposit's. By the time that select runs, v_bid has been
+  -- refused if null and refused if it belongs to another company, so
+  -- the conjunct cannot exclude a row the id would not have missed.
+  -- Belt-and-braces, and the function's own comment says why it is
+  -- there: the balance update and the cheque row both used v_bid raw.
+  raise notice 'ok   clearing: the date, the party, the cheque, and which account held it';
+end $$;
+
+
 rollback;

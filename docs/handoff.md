@@ -13416,3 +13416,48 @@ comment records that the row written and the balance updated once used
 `clear_pdc`, `run_recurring_journals_for`, `import_open_bills`,
 `dispose_fixed_asset`, `revalue_foreign_balances`,
 `receive_stock_transfer`.
+
+### clear_pdc: nine of twenty-six, and a balance is one number
+
+The third of the cheque trio, after `record_pdc` and `bounce_pdc`
+(which scored 27 of 27). This is the one where the money actually
+moves, and it scored **nine of twenty-six on its own dedicated file —
+the worst first-run score of the sweep.** 24 of 25 across its four
+files, one proven equivalent.
+
+**The cause is one sentence: every clearing in
+`post_dated_cheques.sql` asserts the BANK BALANCE and little else.** A
+balance is one number, and it is the same number whether
+
+- the cheque's own holding account was emptied or the other
+  direction's — **1140 Cheques on Hand is an asset and 2115 Cheques
+  Issued is a liability**, and fixing the direction to `'incoming'`
+  empties an asset that was never filled while the liability the
+  company really owes sits there for ever;
+- the journal says which cheque it was for;
+- the cheque remembers what settled it, or through which account;
+- anybody is named on either leg;
+- it cleared on the day it cleared or the day it was typed.
+
+All of it balances. **The outgoing clearing's journal was not asserted
+at all** — only that the balance fell by 8,000.
+
+**And the status write is the second of its kind in this trio.**
+`set status = 'cleared'` survives the whole dedicated file and dies in
+`idempotency.sql`, which asserts nothing about clearing: a cheque left
+`held` can be cleared twice, so a generic refuses-a-repeat check
+catches a specific defect in a status write. `bounce_pdc` had exactly
+the same shape. **Twice in three functions is not a coincidence — a
+status column is what a file about MONEY never looks at.** Worth
+checking first on every remaining money mover: is the state change
+asserted anywhere but the idempotency file?
+
+The equivalent is the ledger lookup's `and b.org_id = v_c.org_id`, the
+same shape as `create_deposit`'s and proven the same way — by the time
+it runs, `v_bid` has been refused if null and refused if it belongs to
+another company.
+
+**21 of 45 money movers now have a mutants file.** Next with none:
+`run_recurring_journals_for`, `import_open_bills`,
+`dispose_fixed_asset`, `revalue_foreign_balances`,
+`receive_stock_transfer`, `import_opening_balances`.

@@ -303,4 +303,29 @@
 # nothing. An SGD company is what makes "the base one" assertable.
 # Measured:
 # `all SQL assertions passed (384 files, 14545 assertions executed)`.
-14545
+#
+# 14565, +20: post_dated_cheques.sql. clear_pdc -- the third of the
+# cheque trio and the one where the money actually moves -- scored
+# NINE of 26 on its own dedicated file, the worst first-run score of
+# this sweep. 24 of 25 across its four files, one proven equivalent.
+#
+# The cause is one sentence: every clearing in the file asserts the
+# BANK BALANCE and little else. A balance is one number, and it is the
+# same number whether the cheque's own holding account was emptied or
+# the other direction's (1140 Cheques on Hand, an asset, against 2115
+# Cheques Issued, a liability), whether the journal says which cheque
+# it was for, whether the cheque remembers what settled it or through
+# which account, whether anybody is named on either leg, and whether it
+# cleared on the day it cleared or the day it was typed. All of it
+# balances. The OUTGOING clearing's journal was not asserted at all --
+# only that the balance fell by 8,000.
+#
+# AND THE STATUS WRITE IS THE SECOND OF ITS KIND IN THIS TRIO.
+# `set status = 'cleared'` survives the whole dedicated file and dies
+# in idempotency.sql, which asserts nothing about clearing: a cheque
+# left `held` can be cleared twice, so a generic refuses-a-repeat check
+# catches a specific defect in a status write. bounce_pdc had exactly
+# the same shape. Twice in three functions is not a coincidence -- a
+# status column is what a file about MONEY never looks at. Measured:
+# `all SQL assertions passed (384 files, 14565 assertions executed)`.
+14565
