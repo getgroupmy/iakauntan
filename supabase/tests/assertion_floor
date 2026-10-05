@@ -236,4 +236,39 @@
 # to look for everywhere a posting function resolves what its caller
 # left null. Measured:
 # `all SQL assertions passed (384 files, 14500 assertions executed)`.
-14500
+#
+# 14527, +27: year_end_close.sql. close_fiscal_year and
+# reopen_fiscal_year -- the sweep that empties every profit and loss
+# account into Current Year Earnings, and the reversal that puts it
+# back. 15 of 32 on the file itself; `idempotency.sql` kills one more;
+# 30 of 31 across the union with one proven equivalent.
+#
+# ONE CAUSE ACCOUNTED FOR MOST OF THE SIXTEEN SURVIVORS: every block in
+# the file closed exactly ONE year. Both ordering rules have three
+# conjuncts -- the company, the status, the date comparison -- and only
+# the date comparison can be stood on by a fixture that never closes a
+# second year. Dropping `status = 'open'` from the close's earlier-year
+# rule means a company can never close its SECOND year, since the first
+# one being properly shut still blocks it; and the reopen's later-year
+# rule was unasserted in all three of its parts. Two years, closed in
+# order and reopened in the other order, plus a stranger's open 2024
+# and closed 2027 to make the org scopes observable -- every other
+# company in the file has a year starting on the same day as ours, and
+# `<` is strict.
+#
+# AND A BREAK-EVEN YEAR, which nothing had ever closed. `if v_profit
+# <> 0` is the whole of "no result line when there is no result": the
+# widened test posts a line of two zeroes to equity, the journal still
+# balances, and every figure asserted elsewhere is unchanged. Only the
+# LINE COUNT sees it -- the same lesson stock_adjustments.sql gave for
+# a zero-cost stocktake line.
+#
+# The equivalent is a COUPLING worth knowing: close_fiscal_year's
+# `where p.amount <> 0` can never exclude anything, because
+# report_profit_loss already ends in
+# `having sum(l.debit - l.credit) <> 0` and its `amount` is that sum
+# with the sign flipped for revenue. Remove the `having` and the filter
+# starts mattering the same day, which is what the new line-count
+# assertion would notice. Measured:
+# `all SQL assertions passed (384 files, 14527 assertions executed)`.
+14527

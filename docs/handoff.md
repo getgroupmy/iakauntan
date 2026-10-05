@@ -13291,3 +13291,73 @@ The two equivalents, both proven by shape rather than reasoned:
 **17 of 45 money movers now have a mutants file.** Next with none:
 `close_fiscal_year`, `reopen_fiscal_year`, `create_deposit` (five
 definitions), `clear_pdc`, `run_recurring_journals_for`.
+
+### The year-end close: every block closed exactly one year
+
+`close_fiscal_year` and `reopen_fiscal_year`, the two halves of the
+largest journal this application posts — one line per profit and loss
+account with movement, plus the result.
+
+**32 mutants plus a control. 15 killed on `year_end_close.sql`,
+`idempotency.sql` kills one more, 30 of 31 across the union with one
+proven equivalent.**
+
+**One cause accounted for most of the sixteen survivors: every block in
+the file closed exactly ONE year.** Both ordering rules are three
+conjuncts — the company, the status, the date comparison — and only the
+date comparison can be stood on by a fixture that never closes a
+second:
+
+```
+close:  no EARLIER year of THIS company may still be OPEN
+reopen: no LATER   year of THIS company may still be CLOSED
+```
+
+Dropping `status = 'open'` from the close's rule means **a company can
+never close its second year** — the first one being properly shut still
+blocks it. That is a total loss of the feature, and no assertion in 384
+files noticed, because nothing had ever closed two consecutive years in
+order. The reopen's rule was unasserted in all three of its parts.
+
+**The two org scopes needed a stranger with a year on a DIFFERENT
+day.** Every company in the file has a year starting 2025-01-01, and
+`y.start_date < f.start_date` is strict — so another company's open
+2025 is not earlier than ours, and dropping the org scope found
+nothing. A stranger's open 2024 and closed 2027 are what make both
+scopes observable.
+
+**And a break-even year, which nothing had ever closed.**
+`if v_profit <> 0` is the whole of "no result line when there is no
+result". Widening it posts a line of two zeroes to equity; the journal
+still balances and every figure asserted elsewhere is unchanged. Only
+the line count sees it — the same lesson `stock_adjustments.sql` gave
+for a zero-cost stocktake line, and the fourth time in this sweep that
+counting a journal's lines caught what checking its balance could not.
+
+The rest were stamps and shapes that balance: the closing journal's
+date and description, `closed_at`, `closed_by`, the three fields a
+reopen has to CLEAR, and the reversal's date. Five of them are
+invisible to any figure at all.
+
+**The equivalent is a coupling worth knowing about.**
+`close_fiscal_year`'s `where p.amount <> 0` can never exclude anything:
+`report_profit_loss` already ends in
+`having sum(l.debit - l.credit) <> 0`, and its `amount` column is that
+same sum with the sign flipped for revenue — a flip that cannot change
+whether a value is zero. The filter is belt-and-braces resting on a
+property of a *different* function. Remove the `having` and the filter
+starts mattering the same day, which is what the new line-count
+assertion would notice.
+
+**A near-miss worth recording.** The line-count assertion first read
+`report_profit_loss` *after* the close, where it returns nothing, and
+asserted `0 + 1` against a journal of three lines. It failed loudly
+rather than passing over nothing — but had the arithmetic been
+`v_moved` alone instead of `v_moved + 1`, it would have passed. A
+report read after the thing that empties it is a fixture that measures
+its own aftermath.
+
+**19 of 45 money movers now have a mutants file.** Next with none:
+`create_deposit` (five definitions), `clear_pdc`,
+`run_recurring_journals_for`, `import_open_bills`,
+`dispose_fixed_asset`.
