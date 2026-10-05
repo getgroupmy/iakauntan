@@ -97,11 +97,16 @@ locked-down network refuses, but Deno is published to npm as well, and
 under `$TMPDIR/iakauntan-deno`; `DENO_SKIP_NPM=1` goes straight to the
 fallback.
 
-It then runs **every `deno test` file CI runs** — seventeen of them now, and
-the number is not worth keeping in prose — reading their names and flags out of
-`ci.yml` so the list cannot drift, and refusing to start if the count it
+It then runs **every `deno test` file CI runs**, reading their names and flags
+out of `ci.yml` so the list cannot drift, and refusing to start if the count it
 matched disagrees with the count the workflow names. Those tests had never run
 anywhere but CI.
+
+No count is given here on purpose. This said "seventeen of them now" in the
+same breath as "the number is not worth keeping in prose", and by 5 October it
+was **40 files and 503 tests** — the prose outlived its own advice. The run
+prints the real figures and floors them (`503 tests ran, floor 503`), so ask
+the check, not this file.
 
 Only where npm cannot supply one either does it hand over to
 `check_with_tsc.sh` — same entry points, same supabase-js stub, plus a narrow

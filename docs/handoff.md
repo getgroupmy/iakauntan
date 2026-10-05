@@ -11475,3 +11475,27 @@ It also prints `pg_ctl: another server might be running; trying to start
 server anyway` and a page of `NOTICE: role ... has already been granted`
 lines when a cluster from an earlier run is still up. Noise, not failure —
 the run above carried all of it and still exited 0.
+
+### And the edge functions, which are the other half of that pair
+
+`supabase/functions/_local_check/check_locally.sh` on the same branch:
+
+```
+Checked locally, and the 40 deno tests CI runs passed too
+(503 tests ran, floor 503).
+[exited with code 0]
+```
+
+Every edge function type-checked and **40 test files, 503 tests** run, with
+the supabase-js client stubbed — so green here is not green in CI, which
+checks it against the real package. Red here is still red in CI.
+
+**`CLAUDE.md` said "seventeen of them now".** It is 40. The sentence carrying
+that number also said "the number is not worth keeping in prose", which is
+exactly right and was exactly the problem; the number is now gone from
+`CLAUDE.md` and the run's own floored output (`503 tests ran, floor 503`) is
+the thing to read.
+
+Both local runners therefore pass on `a8c585d8`: 383 SQL files with 14,330
+assertions, and 40 deno files with 503 tests. That is as much of CI as can be
+reproduced in this container.
