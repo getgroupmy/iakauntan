@@ -52,4 +52,10 @@
 # sign list in `app.post_sales_document_internal` -- a one-word edit
 # that REVERSES the journal -- survived twelve test files. Measured:
 # `all SQL assertions passed (383 files, 14337 assertions executed)`.
-14337
+#
+# 5 October, fourth time: 14337 -> 14341. Four assertions added to
+# money_names_the_account.sql for three gaps in
+# `app.post_receipt_internal` -- the default-account tiebreak, the
+# oldest-active tiebreak, and the repost guard. Measured:
+# `all SQL assertions passed (383 files, 14341 assertions executed)`.
+14341

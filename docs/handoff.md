@@ -11846,3 +11846,83 @@ Every gap was a thing the eye slides over: a default nobody states, two
 adjacent account codes, one word in a list of document types. None was a
 weak assertion — they were absent ones, in paths that either nothing drives
 or nothing looks at after driving.
+
+### Where money lands: three gaps, and a timestamp that orders nothing
+
+`app.post_receipt_internal` is the function `0728` found holding the LAST
+surviving `code = '1120'` fallback, and `0731` replaced it with a
+three-tier resolution: a gateway's settlement account, else the company's
+default ACTIVE account, else the OLDEST active one, never a closed or client
+account, and the answer written back onto the receipt. Ten mutants, one per
+rule.
+
+All ten accounted for, and **three were real gaps.**
+
+| mutant | killed by |
+|---|---|
+| a CLOSED account receives the money | `money_names_the_account.sql` |
+| a CLIENT account receives the firm's money | same |
+| the gateway's settlement account loses priority | same |
+| a company with no bank account posts silently | same |
+| the contact's own receivable account ignored | `control_accounts.sql` |
+| the bank charge not taken off the net | `bank_reconciliation.sql`, on a balance failure |
+| the exchange rate ignored | `multicurrency.sql` |
+| **`b.is_default desc` dropped from the tiebreak** | **nothing, until 5 Oct** |
+| **`b.created_at` reversed to `desc`** | **nothing, until 5 Oct** |
+| **the repost guard deleted** | **nothing, until 5 Oct** |
+
+**The first two gaps shared one cause.** In the fixture the default account
+was ALSO the oldest active one, so `order by is_default desc, created_at`
+and `order by created_at` pick the same row — and two orderings that agree
+cannot say which was used. That is the twelfth way, in a bank-account
+fixture instead of a 1120 one. Fixed by creating an ordinary account FIRST
+and the default SECOND, so the orderings disagree.
+
+#### `created_at` DEFAULTS TO `now()`, WHICH IS THE TRANSACTION TIMESTAMP
+
+The thing worth carrying out of this whole exercise, and the new block's own
+positive control is what found it: **every row a test fixture inserts has
+the SAME `created_at`**, because `now()` in Postgres is the transaction
+timestamp and the suite runs each file in one transaction. So
+
+```sql
+order by b.is_default desc, b.created_at
+```
+
+orders nothing among fixture rows, and `created_at` versus `created_at desc`
+is not a difference any single-transaction test can see. The assertion "the
+default is not the oldest, so the two orderings disagree" FAILED on its
+first run and said so, which is exactly what a positive control is for.
+
+The block now sets them apart by hand:
+
+```sql
+update public.bank_accounts
+   set created_at = now() - interval '2 days' where id = v_older;
+```
+
+**Nothing else in the suite does this.** Any ordering, window function or
+"most recent" rule that tiebreaks on `created_at` is untested by
+construction, everywhere in `supabase/tests/`. That is a general hole, not a
+local one, and it is the best lead left for anyone continuing this work.
+
+**The third gap** is the repost guard: `if v_rcp.gl_entry_id is not null
+then raise` could be deleted and every file that posts a receipt stayed
+green. A receipt posted twice banks the same money twice and doubles the
+customer's credit.
+
+### SQL mutation, the whole of 5 October
+
+| function | mutants | outcome |
+|---|---|---|
+| `app.calc_statutory` | 8 | all killed |
+| `app.calc_pcb` | 10 | all killed |
+| `app.annual_tax` | 10 | 9 killed, 1 equivalent proved |
+| `round_statutory`, `epf_category`, `age_at` | 8 | 7 killed, **1 gap** |
+| `public.post_payroll_run` | 12 | 11 killed, **1 gap** |
+| `app.post_sales_document_internal` | 8 | 7 killed, **1 gap** |
+| `app.post_receipt_internal` | 10 | 7 killed, **3 gaps** |
+
+**66 mutants over ten functions, SIX real gaps found and closed, one
+equivalent proved.** Floor: 14330 → 14332 → 14335 → 14337 → 14341, measured
+every time.
