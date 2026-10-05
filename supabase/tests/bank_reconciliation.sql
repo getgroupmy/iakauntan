@@ -1481,4 +1481,189 @@ begin
 end $$;
 
 
+-- ---------------------------------------------------------------------
+-- The nine things a mutation sweep found nothing standing on
+--
+-- `scripts/mutation_targets.py` puts post_bank_transaction at the top
+-- of forty-five money movers because only two files reach it, and the
+-- sweep then killed 18 of 27 mutants across both. These are the other
+-- nine, each with the mutant it exists to kill named beside it.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid;
+  v_owner uuid;
+  v_clerk uuid;
+  v_bank  uuid; v_gl uuid;
+  v_sales uuid; v_rent uuid; v_dead uuid;
+  v_cust  uuid;
+  v_cents uuid; v_ref uuid; v_blank uuid; v_bare uuid; v_shut uuid;
+  v_entry uuid; v_msg text; v_rec uuid;
+begin
+  v_org   := pg_temp.br_org('Nine Gaps Sdn Bhd');
+  v_owner := (select user_id from public.org_members
+               where org_id = v_org and role = 'owner' limit 1);
+  v_clerk := pg_temp.another_user('clerk@ninegaps.test');
+  v_bank  := pg_temp.test_bank_account(
+    v_org, 'Maybank current', 'current', 'MYR', 0, 0, '7004');
+  v_gl    := pg_temp.bank_gl(v_bank);
+  select id into v_sales from public.accounts where org_id = v_org and code = '4100';
+  select id into v_rent  from public.accounts where org_id = v_org and code = '6200';
+
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-9', 'Puan Salmah', 'customer') returning id into v_cust;
+
+  -- A line with CENTS, a line with a REFERENCE, a line whose own
+  -- description is blank, and one to shut a reconciliation over. Every
+  -- other fixture in this file posts round hundreds with a description,
+  -- which is why four of the nine mutants below had nothing to kill
+  -- them.
+  perform public.import_bank_transactions(v_bank, jsonb_build_array(
+    jsonb_build_object('transaction_date','2026-05-02','description','Odd sum',
+                       'amount',123.45,'running_balance',123.45),
+    jsonb_build_object('transaction_date','2026-05-03','description','Rent',
+                       'reference','CHQ-80241','amount',-60,
+                       'running_balance',63.45),
+    jsonb_build_object('transaction_date','2026-05-04',
+                       'amount',40,'running_balance',103.45),
+    jsonb_build_object('transaction_date','2026-05-05','description','Shut me',
+                       'amount',10,'running_balance',113.45),
+    jsonb_build_object('transaction_date','2026-05-06','description','Not yours',
+                       'amount',20,'running_balance',133.45)));
+  select id into v_cents from public.bank_transactions
+   where bank_account_id = v_bank and amount = 123.45;
+  select id into v_ref   from public.bank_transactions
+   where bank_account_id = v_bank and amount = -60;
+  select id into v_bare  from public.bank_transactions
+   where bank_account_id = v_bank and amount = 40;
+  select id into v_shut  from public.bank_transactions
+   where bank_account_id = v_bank and amount = 10;
+  select id into v_blank from public.bank_transactions
+   where bank_account_id = v_bank and amount = 20;
+
+  -- 1. THE PERMISSION GUARD, which neither file asserted. A statement
+  --    line posted straight to the ledger is a posting, and
+  --    `app.can_post` is what says who may make one. Kills "anybody can
+  --    post a statement line to the ledger".
+  insert into public.org_members (org_id, user_id, role)
+  values (v_org, v_clerk, 'purchaser');
+  perform pg_temp.sign_in_as(v_clerk);
+  begin
+    perform public.post_bank_transaction(v_blank, v_sales);
+    v_msg := null;
+  exception when others then get stacked diagnostics v_msg = message_text;
+  end;
+  -- A caught exception unwinds the sign-in with it.
+  perform pg_temp.sign_in_as(v_owner);
+  -- The WHOLE message. A fragment would be satisfied by any of the four
+  -- other guards above it that also say "privileges" somewhere.
+  perform pg_temp.check_eq('somebody who may not post may not post a line',
+    v_msg, 'Insufficient privileges');
+  perform pg_temp.check_true('and the line is untouched',
+    (select not is_reconciled and gl_entry_id is null
+       from public.bank_transactions where id = v_blank));
+
+  -- 2. THE CENTS. `round(t.amount, 2)` is a no-op on a numeric(18,2)
+  --    column, so the boundary worth standing on is not the rounding
+  --    but an amount that HAS cents to lose. Kills "the amount is
+  --    rounded to whole ringgit, losing the cents".
+  v_entry := public.post_bank_transaction(v_cents, v_sales);
+  perform pg_temp.check_eq('a line with cents keeps them on the bank leg',
+    (select debit from public.gl_lines
+      where entry_id = v_entry and account_id = v_gl), 123.45);
+  perform pg_temp.check_eq('and on the account chosen',
+    (select credit from public.gl_lines
+      where entry_id = v_entry and account_id = v_sales), 123.45);
+
+  -- 3. THE REFERENCE. A cheque number off the statement is how a
+  --    bookkeeper finds the journal again, and nothing read it back.
+  --    Kills "the statement's own reference is not carried onto the
+  --    journal".
+  -- 4. THE CONTACT, on the chosen account's leg only -- the argument
+  --    exists so an unmatched payment can still name who it was to.
+  --    Kills "the contact is not recorded on the posting".
+  v_entry := public.post_bank_transaction(
+    v_ref, v_rent, 'April rent', v_cust);
+  perform pg_temp.check_eq('the statement reference reaches the journal',
+    (select reference from public.gl_entries where id = v_entry), 'CHQ-80241');
+  perform pg_temp.check_eq('and the contact named reaches the line',
+    (select contact_id from public.gl_lines
+      where entry_id = v_entry and account_id = v_rent), v_cust);
+
+  -- 5. WHEN it was reconciled. The stamp is what a reconciliation
+  --    screen sorts and filters on, and a null one reads as never.
+  --    Kills "WHEN the line was reconciled is not recorded".
+  perform pg_temp.check_true('posting stamps when the line was reconciled',
+    (select reconciled_at is not null
+       from public.bank_transactions where id = v_ref));
+
+  -- 6. A DESCRIPTION OF NOTHING BUT SPACES must fall through to the
+  --    line's own, not be written as the journal's description. Kills
+  --    "a description of nothing but spaces is used as the
+  --    description".
+  v_entry := public.post_bank_transaction(v_blank, v_sales, '   ');
+  perform pg_temp.check_eq('spaces are not a description',
+    (select description from public.gl_entries where id = v_entry),
+    'Not yours');
+
+  -- 7. A LINE WITH NO DESCRIPTION AT ALL -- which an MT940 import
+  --    produces routinely -- falls to the literal. The third step of a
+  --    three-step fallback, which every other fixture in this file
+  --    skips by always giving the line a description. Kills "a line
+  --    with no description of its own gets a null one".
+  perform pg_temp.check_true('the imported line really has none',
+    (select description is null
+       from public.bank_transactions where id = v_bare));
+  v_entry := public.post_bank_transaction(v_bare, v_sales);
+  perform pg_temp.check_eq('so the journal says what it is',
+    (select description from public.gl_entries where id = v_entry),
+    'Bank statement line');
+  perform pg_temp.check_eq('on both its legs',
+    (select count(*) from public.gl_lines
+      where entry_id = v_entry and description = 'Bank statement line'), 2);
+
+  -- 8. A DELETED ACCOUNT is not an account. Soft-deleting is how this
+  --    schema retires a code that has history, and the lookup's
+  --    `deleted_at is null` is the only thing keeping it off the
+  --    picker's results. Kills "a DELETED account is still offered to
+  --    post against".
+  insert into public.accounts
+    (org_id, code, name, account_type, account_subtype, is_group, deleted_at)
+  values (v_org, '4199', 'Retired sales code', 'revenue', 'sales',
+          false, now())
+  returning id into v_dead;
+  perform pg_temp.check_refused(
+    'a retired account cannot be posted to',
+    format('select public.post_bank_transaction(%L, %L)', v_shut, v_dead),
+    'No such account in this company.', 'P0002');
+
+  -- 9. A LINE INSIDE A COMPLETED RECONCILIATION. The guard is FIRST in
+  --    the body, ahead of the already-matched one, and both raise
+  --    23514 -- so only the whole message tells them apart, and with
+  --    the first one cut the second answers in its place. That is the
+  --    shape this sweep keeps finding: two guards, one code, one
+  --    fixture, and no way to say which fired.
+  --
+  --    `unmatch_bank_transaction` refuses a line in a closed
+  --    reconciliation too, so there is no route to a line that is
+  --    stamped with one and not matched. Both guards therefore always
+  --    hold together here, which is exactly why the message matters.
+  perform public.post_bank_transaction(v_shut, v_sales);
+  v_rec := public.complete_bank_reconciliation(v_bank, date '2026-05-31',
+    (select coalesce(sum(amount), 0) from public.bank_transactions
+      where bank_account_id = v_bank and is_reconciled));
+  perform pg_temp.check_true('the reconciliation closes', v_rec is not null);
+  perform pg_temp.check_true('and stamps the line it closed over',
+    (select reconciliation_id = v_rec
+       from public.bank_transactions where id = v_shut));
+  perform pg_temp.check_refused(
+    'a line in a closed reconciliation cannot be posted again',
+    format('select public.post_bank_transaction(%L, %L)', v_shut, v_rent),
+    'That line belongs to a reconciliation that has been completed.',
+    '23514');
+
+  raise notice 'ok   nine gaps a mutation sweep found, now stood on';
+end $$;
+
+
 rollback;

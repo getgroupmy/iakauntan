@@ -178,4 +178,31 @@
 # nothing stood on TOMORROW, the first valid date) and bounce_pdc's own
 # can_write_module. Measured:
 # `all SQL assertions passed (384 files, 14456 assertions executed)`.
-14456
+#
+# 14472, +16: bank_reconciliation.sql. post_bank_transaction is the top
+# of `mutation_targets.py`'s forty-five -- the money mover with the
+# FEWEST files reaching it (two) and the one a bookkeeper uses most,
+# since every imported line that matches no receipt or bill ends up
+# here. It scored 15 of 27 on `bank_reconciliation.sql` and 5 of 27 on
+# `matter_on_a_bank_line.sql`, for a union of 24: the sharpest
+# per-file understatement of the sweep so far. 27 of 27 afterwards,
+# nothing equivalent.
+#
+# The nine gaps were one per family, and two are worth reading twice.
+# The BOUNDARY was not in the code: `round(t.amount, 2)` is a no-op on
+# a numeric(18,2) column, so the mutant that matters is `round(..., 0)`
+# -- and it survived because every amount in both files is a round
+# hundred. The boundary was in the FIXTURE, which had no cents to
+# lose. And three of the nine -- the contact, the statement reference,
+# `reconciled_at` -- are fields with nothing to do with debit or
+# credit: a journal missing all three balances perfectly and
+# reconciles, so no balance assertion anywhere could see them.
+#
+# The two-guards-one-code shape appeared for the fifth time:
+# `reconciliation_id is not null` and `matched_table is not null` sit
+# one after the other, both raise 23514, and both always hold together
+# -- so cutting the first lets the second answer in its place with a
+# different sentence and the same code, and only the WHOLE message
+# tells them apart. Measured:
+# `all SQL assertions passed (384 files, 14472 assertions executed)`.
+14472

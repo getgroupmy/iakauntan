@@ -13152,3 +13152,67 @@ The two real gaps:
 - **`bounce_pdc`'s own `can_write_module`**, which nothing asserted. A
   bounce writes a journal and deletes the allocations, so it is as much
   a posting as taking the cheque in was.
+
+### post_bank_transaction: the sharpest per-file understatement yet
+
+Top of `scripts/mutation_targets.py`'s forty-five — the money mover
+with the FEWEST test files reaching it (two) of all of them, and at the
+same time the one a bookkeeper touches most. Every line a bank import
+cannot match to a receipt or a bill ends up here, which in a small
+company's first month is most of them.
+
+**27 mutants plus a control. 15 killed on `bank_reconciliation.sql`,
+5 on `matter_on_a_bank_line.sql`, 24 across the union; 27 of 27 after
+the work, nothing equivalent.**
+
+| file | kills |
+| --- | --- |
+| `bank_reconciliation.sql` | 15, then 24 |
+| `matter_on_a_bank_line.sql` | the three matter mutants, 2 shared |
+
+15 and 5 against a union of 24 is the widest gap this sweep has
+measured. The matter file reaches the same function and kills three
+mutants the bank file cannot see, while missing nineteen it does.
+**Run every file that reaches the function, every time.**
+
+Nine gaps, one per family, two worth reading twice.
+
+**The boundary was not in the code. It was in the fixture.**
+`round(t.amount, 2)` is a no-op on a `numeric(18,2)` column, so the
+mutant worth writing is not a wider rounding but `round(..., 0)` — and
+it survived because **every amount in both files is a round hundred**.
+There were no cents anywhere to lose. A line of 123.45 kills it. This
+is a new shape for the list: the previous boundary gaps were all a `<`
+that no fixture stood on, where the rule itself was the thing with two
+sides. Here the rule has no sides at all until a fixture gives the
+input some.
+
+**Three of the nine are fields that cannot unbalance a journal.** The
+contact on the chosen leg, the statement's own reference, and
+`reconciled_at`. A journal missing all three balances perfectly, posts
+cleanly, reconciles, and reads as correct to every balance assertion in
+384 files. The only way to see them is to name them.
+
+**And the two-guards-one-code shape, for the fifth time.**
+`reconciliation_id is not null` and `matched_table is not null` sit one
+after the other, both raise `23514`, and both always hold together —
+`unmatch_bank_transaction` refuses a line in a closed reconciliation,
+so there is no route to a line stamped with one and not matched.
+Cutting the first lets the second answer in its place, with a different
+sentence and the same code. The file caught `23514` generically and
+could not tell them apart; only the WHOLE message does.
+
+The rest: `app.can_post` (neither file ever signed in as somebody who
+may not post — a statement line posted straight to the ledger IS a
+posting); `deleted_at is null` on the account lookup, which is how this
+schema retires a code that has history; and two of the three steps of
+the description fallback, because every fixture in both files gave its
+line a description, so `'Bank statement line'` was unreachable and
+"blank is a description" was indistinguishable from the correct
+behaviour. A line with no description at all — which MT940 imports
+produce routinely — and a `p_description` of nothing but spaces
+separate all three steps.
+
+**16 of 45 money movers now have a mutants file.** Next in the ranking
+with none: `settle_shared_payment`, `close_fiscal_year`,
+`reopen_fiscal_year`, `create_deposit` (five definitions), `clear_pdc`.
