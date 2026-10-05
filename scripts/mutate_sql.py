@@ -67,6 +67,55 @@ in the migration's header, because only the block is applied. If the
 control is reported killed, the harness is broken and every other line
 of the output is worthless.
 
+## The number of files that CALL a function is not its coverage
+
+`app.run_recurring_journals` is called from FIVE test files, which
+looks like the best-covered money mover in the schema. Two of the five
+cannot kill a single mutant of it:
+
+  * `scheduled_work.sql` asserts that something SCHEDULES it. It walks
+    `cron.job` commands and function source text and never runs the
+    function at all.
+  * `app_writers_are_not_a_client_surface.sql` asserts that a stranger
+    cannot EXECUTE it. The refusal comes from the EXECUTE privilege,
+    not from the body, so every mutant raises the same
+    `insufficient_privilege`.
+
+Both are good files and neither is about what the function DOES. Zero
+of 34 mutants died in `scheduled_work.sql`; measured, not assumed.
+
+So when picking the files to sweep a function against, read what each
+one asserts about it, and expect a reachability check or a privilege
+check to contribute nothing. The sweep still has to be run against
+them -- a file that cannot kill anything is a fact worth having in the
+kill sheet -- but a count of callers is not a coverage figure.
+
+## While this runs, it OWNS the database -- do not read the test in
+## another window
+
+The harness replaces the live function with a mutant, runs the file,
+and puts the original back; between those two moments `pg_proc` holds
+code that is deliberately wrong. Anything else connected to the same
+cluster is therefore running against a broken function and does not
+know it.
+
+That is not a theoretical hazard. On 5 October a sweep of
+`app.run_recurring_journals` was still working through its fourth test
+file in the background while the same session ran
+`recurring_shapes.sql` by hand to check a block it had just written.
+The new block passed; a block ABOVE it, untouched for days, failed with
+
+    FAIL the schedule that ran moved on: expected 2026-02-28,
+         got 2026-03-31
+
+which is exactly what the mutant "advanced from the run day" does, and
+reads like a test this session had just broken. Three more runs gave
+three different answers, because each one landed on whichever mutant
+was live at that second.
+
+A sweep and a hand-run of the same suite cannot share a cluster. Wait
+for `restored:`, or give the second one its own `IAK_PGPORT`.
+
 ## Read the column before writing a mutant for a `coalesce`
 
 By 5 October this sweep had proven FIVE equivalent mutants of one

@@ -47,6 +47,22 @@ suggestive and not conclusive, in both directions:
   * A column can be named without being asserted. `status` appears in
     nearly every file.
 
+    **Measured, and worth more than the sentence above.**
+    `app.run_recurring_journals` has never appeared in this report,
+    and a mutation sweep of it on 5 October found FOUR state gaps:
+    `last_run_date` could be left null or stamped with the night of
+    the sweep instead of the day the journal fell due; `interval_count`
+    could be forced to one; `last_error` could be left stale on a
+    schedule that has since run clean; `last_error_at` could be left
+    null on one that just failed. Every one of those column names
+    appears in a file that reaches the function -- `last_run_date` in
+    `recurring_shapes.sql`, which reads it only as `is null` on the
+    three schedules that did NOT run, and `last_error` in `ledger.sql`,
+    which reads it only as `is not null`. **An assertion in the wrong
+    DIRECTION satisfies this tool completely.** It asks whether a
+    column is named, which is the cheapest question that is worth
+    anything; it cannot ask whether the naming pins the value.
+
 **Its measured precision, since a tool nobody can calibrate is a tool
 nobody should believe.** On the first full run it reported 25 columns
 across 16 functions. Checked against the mutation sweeps already done:

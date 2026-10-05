@@ -14140,7 +14140,139 @@ direction to be wrong in." It is, and the fix belongs in the test —
 other refusal in that file already uses. **Worth knowing before writing
 an assertion whose expected value is an error message.**
 
-**32 of 45 money movers now have a mutants file.** Next with none:
-`app.run_recurring_journals`, and the four demo builders — which
-between them are most of what is left, since the demo builders are
-reached by the demo files and assert existence rather than arithmetic.
+## 5 October: the sweep nobody is watching, and the tenant it has to cross
+
+`app.run_recurring_journals` is the cron-wide standing-journal run:
+every organization in the database, in one call, no org argument, no
+permission guard, because the thing that calls it is `pg_cron` and not
+a person. `public.run_recurring_journals_for` is the same function with
+a guard and `org_id = p_org_id` bolted on — `0739`'s own comment says
+"Same body, one org" — and that twin was swept earlier the same day to
+24 of 24.
+
+**A kill sheet for one is worth nothing for the other.** The harness
+applies ONE function, and the five test files that reach the cron one
+are a different set from the three that reach the per-org one. Measured:
+`supabase/tests/mutants/run_recurring_journals.py`, 35 mutants, against
+all five callers.
+
+| file | killed |
+| --- | --- |
+| `recurring_shapes.sql` | 14 |
+| `ledger.sql` | 11, five of them new |
+| `recurring_documents.sql` | 7, three of them new |
+| `scheduled_work.sql` | **0** |
+| `app_writers_are_not_a_client_surface.sql` | **0** |
+
+**22 of 34 before the work. Nothing equivalent was assumed; one was
+proven.**
+
+### Two of the five callers cannot kill anything, and that is not a flaw in them
+
+Five test files call this function, which reads like the best-covered
+money mover in the schema. `scheduled_work.sql` asserts that something
+*schedules* it — it walks `cron.job` commands and function source text
+and never runs the function. `app_writers_are_not_a_client_surface.sql`
+asserts that a stranger cannot *execute* it — and that refusal comes
+from the EXECUTE privilege, not from the body, so all 34 mutants raise
+the same `insufficient_privilege`. Both files are right and neither is
+about what the function does. **A count of callers is not a coverage
+figure**, and that is now written into `scripts/mutate_sql.py` next to
+the measurement.
+
+### The tenant boundary, which this one function crosses on purpose
+
+Every other money mover in this schema is wrong if it touches another
+company's rows. This one is wrong if it does NOT. No fixture anywhere
+had two companies with a journal due on the same night, so a mutant
+that narrows the sweep to a single tenant — leaving every other
+tenant's rent unposted and every other tenant's schedule un-advanced,
+for a month, silently, behind a return value that still looks like a
+number of journals — changed nothing any assertion read.
+
+That is the usual cross-tenant mutant **inverted**, and it is the one
+mutant in this whole sweep whose kill requires two organizations in one
+fixture.
+
+### What else lived
+
+* **The two inclusive boundaries.** `next_run_date <= p_on` and
+  `next_run_date <= end_date`. Nothing was ever due exactly on the
+  night of the sweep, or exactly on the last day of its lease. Both
+  could be narrowed to `<`.
+* **`last_run_date`, read only in the wrong direction.** Asserted as
+  `is null` on the three schedules that did NOT run, and nowhere as a
+  value — so it could be left null, or stamped with the night of the
+  sweep rather than the day the journal fell due.
+* **`interval_count`.** Every fixture in the suite was `monthly, 1`, so
+  "every third month" could mean every month.
+* **`last_error` left stale** on a schedule that has since run clean,
+  and **`last_error_at` left null** on one that just failed.
+  `ledger.sql` reads the reason; nothing read the clock.
+* **`source_table` and `reference`** on the posted entry: read by
+  nothing at all.
+* **`template -> 'lines'` under the wrong key**, which posts an entry
+  with NO LINES — the sixth zero-value journal in this sweep that
+  balances, because nothing counted lines.
+
+### One equivalent mutant, proven by the column and not by a fixture
+
+Deleting `and next_run_date is not null` cannot be killed by any
+fixture: `recurring_journals.next_run_date` is **NOT NULL** in the
+table, so the conjunct can never be false and the row that would
+distinguish the two forms cannot be inserted. That is the sixth
+schema-proven equivalent in this sweep and the reason
+`scripts/mutate_sql.py` now says to ask the column first.
+
+### The state survey reported this function clean, and it was not
+
+`scripts/state_write_coverage.py` has never named
+`app.run_recurring_journals`, and the sweep found four state gaps in
+it. Every one of those column names does appear in a file that reaches
+the function — `last_run_date` in `recurring_shapes.sql` as `is null`,
+`last_error` in `ledger.sql` as `is not null`. **An assertion in the
+wrong direction satisfies that survey completely.** It asks whether a
+column is named, which is the cheapest question worth anything; it
+cannot ask whether the naming pins the value. Now written into the
+script, with this instance named.
+
+### A false failure that cost twenty minutes: the harness owns the database
+
+While the sweep's fourth file was still running in the background, the
+same session ran `recurring_shapes.sql` by hand to check the block it
+had just written. The new block passed; a block **above** it, untouched
+for days, failed with
+
+    FAIL the schedule that ran moved on: expected 2026-02-28, got 2026-03-31
+
+which is precisely what the mutant "advanced from the run day" does,
+and reads exactly like a test this session had just broken. Three more
+runs gave three different answers, because each landed on whichever
+mutant happened to be live that second.
+
+A sweep and a hand-run of the same suite cannot share a cluster. Wait
+for `restored:`, or give the second one its own `IAK_PGPORT`. Written
+into `scripts/mutate_sql.py`.
+
+**33 of 45 money movers now have a mutants file** — `python3
+scripts/mutation_targets.py` prints that line itself, so ask it rather
+than this file. The twelve with none, as that tool ranks them:
+
+* the four demo builders — `app.demo_legal_guaman`,
+  `app.demo_sinar_bank`, `app.demo_purchases`,
+  `app.demo_practice_books`. Reached by the demo files, which assert
+  existence rather than arithmetic, so a sweep of them measures a
+  different kind of claim and should be read as such.
+* `public.run_depreciation` (9 files), `public.reverse_gl_entry` (16),
+  `app.post_purchase_document_internal` (53) and
+  `public.create_gl_entry` (122). These are the opposite problem: they
+  are reached by so much of the suite that the sweep is expensive, and
+  the last of them is the function almost every other sweep has been
+  mutating *through*.
+* four reached only by a TRIGGER, where the tool cannot count files:
+  `app.create_gl_entry_internal`, `app.pos_deplete_recipes`,
+  `app.move_document_bundles`, `app.pos_return_recipes`.
+
+An earlier draft of this paragraph said what was left was "almost
+entirely the demo builders". It is not, and the tool says so in one
+command.

@@ -39,6 +39,48 @@ begin
 end;
 $$;
 
+-- Two helpers for section 8c, which stands up nine standing journals
+-- across two companies and would be unreadable as nine inserts of
+-- eleven columns each. `rs_jtpl` is the two-line expense
+-- accrual every one of them posts; `rs_sched` is one standing journal,
+-- defaulting its anchor to its own next run so a fixture only names the
+-- column it is about.
+create or replace function pg_temp.rs_jtpl(
+  p_org uuid, p_amount numeric default 700, p_dr_account uuid default null)
+returns jsonb language plpgsql as $$
+declare v_exp uuid; v_ap uuid;
+begin
+  select id into v_exp from public.accounts
+   where org_id = p_org and code = '6100' order by code limit 1;
+  select id into v_ap from public.accounts
+   where org_id = p_org and code = '2110' order by code limit 1;
+  return jsonb_build_object('lines', jsonb_build_array(
+    jsonb_build_object('account_id', coalesce(p_dr_account, v_exp),
+                       'debit', p_amount, 'credit', 0),
+    jsonb_build_object('account_id', v_ap, 'debit', 0, 'credit', p_amount)));
+end;
+$$;
+
+create or replace function pg_temp.rs_sched(
+  p_org uuid, p_name text, p_next date,
+  p_freq text default 'monthly', p_interval integer default 1,
+  p_start date default null, p_end date default null,
+  p_auto boolean default true, p_desc text default null,
+  p_tpl jsonb default null)
+returns uuid language plpgsql as $$
+declare v_id uuid;
+begin
+  insert into public.recurring_journals
+    (org_id, name, description, frequency, interval_count, start_date,
+     end_date, next_run_date, auto_post, is_active, template)
+  values (p_org, p_name, p_desc, p_freq, p_interval,
+          coalesce(p_start, p_next), p_end, p_next, p_auto, true,
+          coalesce(p_tpl, pg_temp.rs_jtpl(p_org)))
+  returning id into v_id;
+  return v_id;
+end;
+$$;
+
 create or replace function pg_temp.rs_customer(
   p_org uuid, p_code text, p_name text, p_email text default null)
 returns uuid language plpgsql as $$
@@ -1034,6 +1076,224 @@ begin
   perform pg_temp.check_eq('the schedule that ran moved on',
     (select next_run_date::text from public.recurring_journals
       where id = v_due), date '2026-02-28'::text);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- 8c. The nightly sweep: the tenants it crosses, and the state it writes
+-- ---------------------------------------------------------------------
+-- 8b put `app.run_recurring_journals` under assertion for the first
+-- time and closed its four `where` conditions. A mutation sweep of the
+-- function against all five files that call it -- this one,
+-- `ledger.sql`, `recurring_documents.sql`, `scheduled_work.sql` and
+-- `app_writers_are_not_a_client_surface.sql` -- then killed 22 of 34,
+-- and what lived divides into three groups.
+--
+-- ONE: THE TENANT BOUNDARY, WHICH THIS FUNCTION CROSSES ON PURPOSE.
+-- Every other money mover in this schema is wrong if it touches another
+-- company's rows. This one is wrong if it does NOT: it is the cron
+-- sweep, it takes no org argument, and `0739`'s own comment says the
+-- per-org twin exists precisely "because a signed-in user may only post
+-- in their own". No fixture anywhere had two companies with a journal
+-- due on the same night, so narrowing the sweep to a single tenant --
+-- which leaves every other tenant's rent unposted and every other
+-- tenant's schedule un-advanced, for a month, silently, behind a return
+-- value that still looks like a number of journals -- changed nothing
+-- any assertion read. Hence two organizations below, and an assertion
+-- on each.
+--
+-- TWO: THE BOUNDARIES NO FIXTURE STOOD ON. `next_run_date <= p_on` and
+-- `next_run_date <= end_date` are both inclusive, and nothing was ever
+-- due exactly on the night of the sweep or exactly on its last day. Both
+-- could be narrowed to `<`.
+--
+-- THREE: THE STATE, AGAIN. `last_run_date` was asserted only as `is
+-- null` on the schedules that did NOT run, so it could be left null, or
+-- set to the night of the sweep instead of the day the journal fell
+-- due, with nothing to say. `interval_count` could be forced to one.
+-- `last_error` could be left stale on a schedule that has since run
+-- clean. `last_error_at` could be left null on one that just failed.
+-- The posted entry's `source_table` and `reference` were read by
+-- nothing. And `template -> 'lines'` could be read under the wrong key,
+-- which posts an entry with NO LINES AT ALL -- the sixth zero-value
+-- journal in this sweep that balances, because nothing counted lines.
+--
+-- One mutant is EQUIVALENT and cannot be killed by any fixture:
+-- deleting `and next_run_date is not null`. `recurring_journals
+-- .next_run_date` is NOT NULL in the table, so the conjunct can never
+-- be false and no row can be inserted that would distinguish the two
+-- forms. It is proven by the column definition, not by a test.
+--
+-- TWO OF THE FIVE CALLERS CANNOT KILL ANYTHING, measured: zero of 34
+-- in `scheduled_work.sql`, which asserts that something SCHEDULES this
+-- function and never runs it, and zero of 34 in
+-- `app_writers_are_not_a_client_surface.sql`, where the refusal comes
+-- from the EXECUTE privilege rather than from the body so every mutant
+-- raises the same `insufficient_privilege`. Both files are right and
+-- neither is about what the function does. A count of callers is not a
+-- coverage figure.
+--
+-- The sweep is run to 5 March so that an anchored monthly schedule can
+-- be observed crossing February and RECOVERING its day of the month in
+-- March; run to February it collapses to the 28th either way and the
+-- anchor cannot be seen at all.
+--
+-- With this block: 32 of 34 on this file alone, and 33 of 33 killable
+-- across the five. The kill sheet is in
+-- `supabase/tests/mutants/run_recurring_journals.py`.
+do $$
+declare
+  v_a uuid := pg_temp.rs_org('Jurnal Malam A Sdn Bhd');
+  v_b uuid := pg_temp.rs_org('Jurnal Malam B Sdn Bhd');
+  v_on date := date '2026-03-05';
+  v_jan uuid; v_today uuid; v_endtoday uuid; v_review uuid;
+  v_every3 uuid; v_anchor uuid; v_stale uuid; v_broken uuid; v_jb uuid;
+  v_foreign uuid;
+  v_n integer;
+  v_i integer;
+begin
+  -- The count this block asserts is the WHOLE PLATFORM's, because that
+  -- is what the function returns, and the blocks above leave journals
+  -- standing due in other companies. So drain them first, and say so
+  -- as an assertion rather than an assumption -- stated first, because
+  -- if the drain silently failed to settle, every count below would be
+  -- measuring somebody else's rent. Bounded, because a mutant that
+  -- counts a failure as a run would spin here for ever otherwise.
+  for v_i in 1 .. 50 loop
+    v_n := app.run_recurring_journals(v_on);
+    exit when v_n = 0;
+  end loop;
+  perform pg_temp.check_eq(
+    'nothing is left standing due before the nightly sweep is measured',
+    v_n, 0);
+
+  -- --- company A, nine schedules ---------------------------------------
+  -- Due at the end of January; the job does not reach it until March.
+  v_jan := pg_temp.rs_sched(v_a, 'Sewa Januari', date '2026-01-31',
+             p_desc => 'Accrued January rent');
+  -- Due exactly tonight. The `<=` boundary.
+  v_today := pg_temp.rs_sched(v_a, 'Due tonight', v_on);
+  -- Due tonight AND ending tonight. The other `<=` boundary: a lease
+  -- whose last charge falls on its last day must still be charged.
+  v_endtoday := pg_temp.rs_sched(v_a, 'Last charge of the lease', v_on,
+                  p_end => v_on);
+  -- The bookkeeper wants to look at this one first. It must advance and
+  -- post NOTHING.
+  v_review := pg_temp.rs_sched(v_a, 'Hold for review', date '2026-01-31',
+                p_auto => false);
+  -- Every third month, not every month.
+  v_every3 := pg_temp.rs_sched(v_a, 'Quarterly insurance',
+                date '2026-01-31', p_interval => 3);
+  -- Anchored on the 31st and currently sitting on the 28th, because
+  -- February rounded it down. March has 31 days, so an anchored
+  -- schedule goes back to the 31st and an unanchored one stays on the
+  -- 28th for ever.
+  v_anchor := pg_temp.rs_sched(v_a, 'Anchored on the 31st',
+                date '2026-02-28', p_start => date '2026-01-31');
+  -- Failed last month and has since been repaired.
+  v_stale := pg_temp.rs_sched(v_a, 'Repaired since', date '2026-01-31');
+  update public.recurring_journals
+     set last_error = 'something that was wrong last month',
+         last_error_at = timestamptz '2026-02-01 03:00+08'
+   where id = v_stale;
+  -- A template pointing at ANOTHER company's account. `gl_lines` has a
+  -- same-org foreign key, so this cannot post -- which is the point:
+  -- one broken standing journal must not stop the rest, and must leave
+  -- its own schedule standing due so it retries once repaired.
+  select id into v_foreign from public.accounts
+   where org_id = v_b and code = '6100' order by code limit 1;
+  v_broken := pg_temp.rs_sched(v_a, 'Broken template', date '2026-01-31',
+                p_tpl => pg_temp.rs_jtpl(v_a, 700, v_foreign));
+
+  -- --- company B, one schedule -----------------------------------------
+  v_jb := pg_temp.rs_sched(v_b, 'Sewa B', date '2026-01-31');
+
+  v_n := app.run_recurring_journals(v_on);
+
+  -- --- the tenant boundary ---------------------------------------------
+  -- Eight of the nine ran: seven in A (the broken one did not) and the
+  -- one in B. A sweep narrowed to one organization cannot produce this
+  -- number whichever tenant it narrows to.
+  perform pg_temp.check_eq('the nightly sweep counts every tenant it ran for',
+    v_n, 8);
+  perform pg_temp.check_true('company A''s rent was posted',
+    (select count(*) = 1 from public.gl_entries
+      where org_id = v_a and source_id = v_jan));
+  perform pg_temp.check_true('and so was the OTHER company''s, on the same night',
+    (select count(*) = 1 from public.gl_entries
+      where org_id = v_b and source_id = v_jb));
+  perform pg_temp.check_true('and both schedules moved on',
+    (select bool_and(last_run_date is not null)
+       from public.recurring_journals where id in (v_jan, v_jb)));
+
+  -- --- the two inclusive boundaries ------------------------------------
+  perform pg_temp.check_eq('a journal due tonight is run tonight',
+    (select last_run_date::text from public.recurring_journals
+      where id = v_today), v_on::text);
+  perform pg_temp.check_eq('and one on the last day of its lease is charged',
+    (select last_run_date::text from public.recurring_journals
+      where id = v_endtoday), v_on::text);
+
+  -- --- what the posting says about itself ------------------------------
+  -- A journal read under the wrong template key posts an entry with no
+  -- lines, which balances. Only a count says otherwise.
+  perform pg_temp.check_eq('the posted accrual has the template''s two lines',
+    (select count(*)::integer from public.gl_lines l
+      join public.gl_entries e on e.id = l.entry_id
+     where e.org_id = v_a and e.source_id = v_jan), 2);
+  perform pg_temp.check_eq('and carries the template''s amount',
+    (select sum(debit) from public.gl_lines l
+      join public.gl_entries e on e.id = l.entry_id
+     where e.org_id = v_a and e.source_id = v_jan), 700);
+  perform pg_temp.check_eq('the entry says what kind of thing made it',
+    (select source_table from public.gl_entries
+      where org_id = v_a and source_id = v_jan), 'recurring_journals');
+  perform pg_temp.check_eq('and references the schedule by name',
+    (select reference from public.gl_entries
+      where org_id = v_a and source_id = v_jan), 'Sewa Januari');
+
+  -- --- the state the loop writes ---------------------------------------
+  -- The day it fell due, not the night of the sweep. Nothing read this
+  -- column except as `is null` on the schedules that never ran, so it
+  -- could be left null or stamped 5 March with nothing to say.
+  perform pg_temp.check_eq('the schedule records the day it fell due',
+    (select last_run_date::text from public.recurring_journals
+      where id = v_jan), date '2026-01-31'::text);
+  perform pg_temp.check_eq('every third month means three months',
+    (select next_run_date::text from public.recurring_journals
+      where id = v_every3), date '2026-04-30'::text);
+  perform pg_temp.check_eq('and an anchored schedule recovers its 31st',
+    (select next_run_date::text from public.recurring_journals
+      where id = v_anchor), date '2026-03-31'::text);
+  perform pg_temp.check_true('a repaired schedule''s old error is cleared',
+    (select last_error is null and last_error_at is null
+       from public.recurring_journals where id = v_stale));
+
+  -- --- the one the bookkeeper holds ------------------------------------
+  perform pg_temp.check_eq('a schedule held for review posts nothing',
+    (select count(*)::integer from public.gl_entries
+      where org_id = v_a and source_id = v_review), 0);
+  perform pg_temp.check_eq('and still moves on, so it is offered once',
+    (select next_run_date::text from public.recurring_journals
+      where id = v_review), date '2026-02-28'::text);
+
+  -- --- the broken one -------------------------------------------------
+  perform pg_temp.check_eq('a broken template posts nothing',
+    (select count(*)::integer from public.gl_entries
+      where org_id = v_a and source_id = v_broken), 0);
+  perform pg_temp.check_true('and records why',
+    (select last_error is not null from public.recurring_journals
+      where id = v_broken));
+  perform pg_temp.check_true('and WHEN -- `ledger.sql` reads the reason, not the clock',
+    (select last_error_at is not null from public.recurring_journals
+      where id = v_broken));
+  perform pg_temp.check_eq('and stays due, so repairing it is enough',
+    (select next_run_date::text from public.recurring_journals
+      where id = v_broken), date '2026-01-31'::text);
+  perform pg_temp.check_true('and never records a run it did not make',
+    (select last_run_date is null from public.recurring_journals
+      where id = v_broken));
+  raise notice
+    'ok   the nightly sweep: two tenants, two boundaries, and the state it writes';
 end $$;
 
 -- ---------------------------------------------------------------------
