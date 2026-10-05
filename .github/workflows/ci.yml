@@ -232,6 +232,17 @@ jobs:
       # false, and the self-test pins all three shapes as
       # must-not-report. The survey's own line runs for the log, so the
       # list is in front of whoever reads a failing run.
+      # The SQL mutation harness is run by hand, not by CI -- it needs a
+      # cluster and twelve minutes per file. Its PRE-FLIGHT is pure, and
+      # it was wrong twice in both directions on the afternoon it was
+      # written, so the self-test runs here where everything else is
+      # checked. A pre-flight that is wrong is worse than none: it either
+      # passes a mutant that aborts a whole file mid-run, or it refuses a
+      # mutant that was fine.
+      - name: The mutation harness's own pre-flight
+        working-directory: .
+        run: python3 scripts/mutate_sql_test.py
+
       - name: Which state a money mover writes that no test names
         working-directory: .
         run: |

@@ -145,10 +145,17 @@ m("the food comes back at the LATEST cost rather than the one it left at",
   "     order by sm.created_at desc limit 1;  -- unit cost read off the newest",
   "-- unit cost read off the newest")
 
+# The replacement KEEPS the trailing newline. Without it the marker
+# comment ran straight into `order by sm.created_at limit 1;` on the
+# following line and commented it out, which the harness reported as a
+# HARNESS ERROR ("syntax error at or near insert") and then aborted the
+# whole file on -- so every mutant after this one went unmeasured in all
+# five files. See the pre-flight note in the header.
 m("the cost it left at is read off a movement that PUT FOOD BACK",
   "pos_return_recipes",
   "       and sm.item_id = v_row.item_id and sm.quantity < 0\n",
-  "       and sm.item_id = v_row.item_id\n  -- outbound filter dropped from the cost read",
+  "       and sm.item_id = v_row.item_id"
+  "  -- outbound filter dropped from the cost read\n",
   "-- outbound filter dropped from the cost read")
 
 m("THE FOOD COMES BACK OFF THE SHELF INSTEAD OF ONTO IT",
@@ -183,8 +190,8 @@ m("a credit that cost nothing posts a journal of nothing",
   "pos_return_recipes",
   "  if round(v_cost, 2) = 0 then\n    return null;\n  end if;\n\n"
   "  select a.id into v_cogs",
-  "  if false then\n    return null;\n  end if;\n\n"
-  "  select a.id into v_cogs  -- zero-cost return short circuit dropped",
+  "  if false then  -- zero-cost return short circuit dropped\n    return null;\n  end if;\n\n"
+  "  select a.id into v_cogs",
   "-- zero-cost return short circuit dropped")
 
 m("the credited food cost is released from the wrong account",

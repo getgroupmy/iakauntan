@@ -332,6 +332,86 @@ def differing(body: str, got: str) -> list[str]:
                    "check whitespace and the dollar-quote tag"]
 
 
+def preflight(original: str, mutants: list[tuple]) -> list[str]:
+    """Every way a mutant can be malformed, found BEFORE anything runs.
+
+    The HARNESS ERROR guard below is the backstop, and it works -- it
+    reports a mutant that did not land and puts the function back. What
+    it cannot do is come cheap. It fires one mutant at a time, in the
+    middle of a run, and **a HARNESS ERROR aborts the whole file**, so
+    the mutants after it go unmeasured. On 5 October a single malformed
+    mutant in each half of the POS recipe pair cost ten file-runs: five
+    per half, every one of them stopping early and reporting a partial
+    kill sheet that looked complete.
+
+    So the same questions are asked up front, about every mutant, and
+    all the answers are printed together.
+
+    ## The marker must not swallow the rest of the line
+
+    Both of that day's failures had one shape: the replacement stopped
+    in the MIDDLE of a source line and the marker comment was appended
+    there, so it commented out whatever followed. In one case that was
+    two call arguments and a closing bracket:
+
+        'Recipe consumption ' || v_sale.sale_no, 'pos_sales', p_sale);
+
+    replaced up to `sale_no,` -- "mismatched parentheses at or near ;".
+    In the other it was the `order by` of the query above it. Two more
+    of the same shape were then found in the same pair by this check,
+    before they could cost anything:
+
+        select a.id into v_cogs from public.accounts a
+
+    So: if the character after `old` in the source is not a newline, the
+    replacement must not end in a comment.
+
+    ## The brackets must BALANCE, which is not the same as counting them
+
+    The first version of this flagged seven good mutants because it
+    compared bracket COUNTS: a mutant that drops a subquery removes an
+    open and a close together and is perfectly well formed. What matters
+    is whether the two deltas agree.
+    """
+    problems: list[str] = []
+    for label, name, old, new, marker in mutants:
+        try:
+            source = block(original, name)
+        except SystemExit:
+            problems.append(f"{label}: names {name}, which is not in this "
+                            f"migration -- the pair may live in two")
+            continue
+        count = source.count(old)
+        if count != 1:
+            problems.append(f"{label}: its `old` matches {count} times")
+            continue
+        after = source[source.index(old) + len(old):][:1]
+        # Not `re.search('--[^\n]*$', new)`: in Python `$` also matches
+        # just before a trailing newline, so a replacement that ENDS
+        # `-- marker\n` -- which is the fix for this very problem --
+        # was reported as hazardous and the fix looked like it had not
+        # taken.
+        tail = new.rsplit("\n", 1)[-1]
+        if after != "\n" and not new.endswith("\n") and "--" in tail:
+            rest = source[source.index(old) + len(old):]
+            problems.append(
+                f"{label}: the marker would comment out the rest of the "
+                f"line -- {rest.split(chr(10))[0]!r}")
+        mutated = source.replace(old, new)
+        if marker in source:
+            problems.append(f"{label}: its marker is in the ORIGINAL, so "
+                            f"the landed check cannot fail")
+        if marker not in mutated:
+            problems.append(f"{label}: its marker is not in the mutant, so "
+                            f"the landed check cannot pass")
+        opened = mutated.count("(") - source.count("(")
+        closed = mutated.count(")") - source.count(")")
+        if opened != closed:
+            problems.append(f"{label}: brackets unbalanced, "
+                            f"{opened:+d} open and {closed:+d} close")
+    return problems
+
+
 def main() -> int:
     if len(sys.argv) != 4:
         print(__doc__)
@@ -351,6 +431,16 @@ def main() -> int:
         sys.exit("HARNESS ERROR: no mutants")
     if not mutants[-1][0].startswith("CONTROL"):
         sys.exit("HARNESS ERROR: the last mutant must be the CONTROL")
+
+    # Before the cluster is touched at all. See `preflight` for what a
+    # malformed mutant costs when it is found mid-run instead.
+    malformed = preflight(original, mutants)
+    if malformed:
+        print(f"HARNESS ERROR: {len(malformed)} malformed mutant(s), and "
+              f"nothing has been run:", file=sys.stderr)
+        for one in malformed:
+            print(f"  {one}", file=sys.stderr)
+        return 2
 
     carried = {name: grants(original, name)
                for _, name, *_ in mutants}

@@ -206,8 +206,8 @@ m("a sale that consumed nothing posts a journal of nothing",
   "pos_deplete_recipes",
   "  if round(v_cost, 2) = 0 then\n    return null;\n  end if;\n\n"
   "  select a.id into v_cogs",
-  "  if false then\n    return null;\n  end if;\n\n"
-  "  select a.id into v_cogs  -- zero-cost short circuit dropped",
+  "  if false then  -- zero-cost short circuit dropped\n    return null;\n  end if;\n\n"
+  "  select a.id into v_cogs",
   "-- zero-cost short circuit dropped")
 
 m("the food cost is charged to the wrong account",
@@ -242,11 +242,19 @@ m("a NEGATIVE recipe cost is posted on the same side as a positive one",
   "      'debit', 0, 'credit', v_cost),  -- cogs sign clamp dropped",
   "-- cogs sign clamp dropped")
 
+# The marker goes after `v_lines,`, which is the END of its line. An
+# earlier version put it after `v_sale.sale_no,` -- and in this source
+# that is the MIDDLE of a line, `'Recipe consumption ' || v_sale.sale_no,
+# 'pos_sales', p_sale);`, so the comment swallowed the two remaining
+# arguments and the closing bracket. The harness caught it as a HARNESS
+# ERROR ("mismatched parentheses at or near ;") and put the function
+# back, which is exactly what that guard is for -- but a HARNESS ERROR
+# ABORTS THE WHOLE FILE, so every mutant after it went unmeasured in all
+# five files. See the pre-flight note in the header.
 m("the recipe journal is not marked as a stock movement",
   "pos_deplete_recipes",
-  "    'stock_movement', v_lines,\n    'Recipe consumption ' || v_sale.sale_no,",
-  "    'manual', v_lines,\n    'Recipe consumption ' || v_sale.sale_no,"
-  "  -- depletion journal source lied about",
+  "    'stock_movement', v_lines,",
+  "    'manual', v_lines,  -- depletion journal source lied about",
   "-- depletion journal source lied about")
 
 m("the movements are never linked to the journal that costed them",
