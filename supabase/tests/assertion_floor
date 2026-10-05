@@ -695,4 +695,32 @@
 # the safe direction to be wrong in, and it is -- the fix belongs in the
 # test. check_true with a comparison echoes nothing. Measured:
 # `all SQL assertions passed (384 files, 14746 assertions executed)`.
-14746
+#
+# 14746 -> 14769: app.run_recurring_journals, the CRON-WIDE standing
+# journal run, swept for the first time. Same body as
+# public.run_recurring_journals_for (0739's own comment says "Same body,
+# one org"), and a kill sheet for one is worth nothing for the other --
+# the harness applies ONE function and the five files that reach the
+# cron one are a different set. 35 mutants: 22 of 34 before the work,
+# 33 of 33 killable after, one equivalent, control alive.
+#
+# TWO OF THE FIVE CALLERS KILL NOTHING, measured: scheduled_work.sql
+# asserts something SCHEDULES it and never runs it;
+# app_writers_are_not_a_client_surface.sql asserts a stranger cannot
+# EXECUTE it, and that refusal is the EXECUTE privilege rather than the
+# body. Zero of 34 each. A count of callers is not a coverage figure.
+#
+# THE CROSS-TENANT MUTANT, INVERTED: this is the one money mover that is
+# wrong if it does NOT cross the tenant boundary, and no fixture had two
+# companies with a journal due the same night. Section 8c of
+# recurring_shapes.sql now stands up nine schedules across two.
+#
+# Also closed: both inclusive boundaries (nothing was ever due exactly
+# on the night of the sweep or on the last day of its lease),
+# last_run_date read only as `is null`, interval_count (every fixture
+# was monthly/1), a stale last_error and a null last_error_at, the
+# posted entry's source_table and reference, and `template -> 'lines'`
+# under the wrong key -- which posts an entry with NO LINES and
+# balances. Measured:
+# `all SQL assertions passed (384 files, 14769 assertions executed)`.
+14769
