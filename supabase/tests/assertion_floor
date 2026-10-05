@@ -397,4 +397,36 @@
 # chart-missing assertion soft-deleted 1590 and was not refused at all.
 # Measured:
 # `all SQL assertions passed (384 files, 14607 assertions executed)`.
-14607
+#
+# 14621, +14: withholding_shapes.sql. remit_withholding scored 10 of 23
+# on its own file, 19 of 22 across both, with THREE proven equivalent.
+#
+# IT WAS SWEPT BECAUSE OF WHAT THE DISPOSAL SWEEP FOUND, not because
+# the ranking put it high. `0729` closed the 1120 fallback in exactly
+# two live posting paths and this is the other one -- and a grep of all
+# 384 files for the refusal it added ("nothing for a reconciliation to
+# match") found it in ONE file, written an hour earlier for the
+# disposal. The same fix shipped untested twice.
+#
+# AND THE BLOCK THAT TESTS THIS FUNCTION'S BANK ACCOUNT IS THOROUGH:
+# four assertions on the cross-tenant guard, each naming the mutant it
+# kills. The fallback six lines below it was never touched. A sweep that
+# measured one guard carefully left the one beside it at zero -- the
+# same failure the function's own header describes about 0506 ("its
+# header's 'neither needed changing' was about that guard and said
+# nothing about the fallback").
+#
+# The other real gap was the FOREIGN CURRENCY, which for a withholding
+# certificate is the ordinary case -- the tax exists because the payee
+# is a non-resident. Every certificate in the file is MYR at rate 1,
+# where `tax_amount * coalesce(rate, 1)`, `tax_amount` and
+# `round(x, 0)` are all the same number. USD 7,333.33 at 4.2135 is
+# 30,898.99, which is none of the three.
+#
+# ONE EQUIVALENT WAS PROVEN BY THE TABLE RATHER THAN THE CODE, which is
+# a new kind of proof for this sweep: `coalesce(c.exchange_rate, 1)`
+# can never see a null because the column is NOT NULL, defaults to 1
+# and carries `check (exchange_rate > 0)`. No fixture can build the
+# state the coalesce guards, because the schema refuses it. Measured:
+# `all SQL assertions passed (384 files, 14621 assertions executed)`.
+14621

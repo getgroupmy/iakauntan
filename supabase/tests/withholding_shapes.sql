@@ -622,4 +622,166 @@ begin
   raise notice 'ok   somebody who may look but not post';
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The eight a sweep found on remit_withholding, one of them 0729's
+--
+-- `dispose_fixed_asset`'s sweep found that two of `0729`'s own fixes
+-- had no behavioural test. This is the other of the two functions that
+-- migration touched, and the same fix is missing here: a grep of all
+-- 384 assertion files for the refusal it added -- "nothing for a
+-- reconciliation to match" -- found it in ONE file, the one written for
+-- the disposal.
+--
+-- The function's own header already says why it survived:
+--
+--   "`0506` read this function and left it alone, correctly, for the
+--    cross-tenant guard above. Its header's 'neither needed changing'
+--    was about that guard and said nothing about the fallback; it was
+--    read as a verdict on the whole function."
+--
+-- The block above tests the cross-tenant guard thoroughly -- four
+-- assertions, each naming the mutant it kills. The fallback beside it
+-- was never touched.
+--
+-- The rest were the FOREIGN-currency arithmetic (every certificate in
+-- this file is in ringgit at rate 1, where `tax_amount * rate`,
+-- `tax_amount` and `round(x, 0)` are all the same number), the
+-- journal's reference, and the link back to the certificate.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid;
+  v_supp  uuid; v_bill uuid;
+  v_acct  uuid; v_bank uuid;
+  v_id    uuid; v_entry uuid; v_wht uuid;
+begin
+  perform pg_temp.allow_many_companies();
+  v_org  := pg_temp.ws_org('Remit Celah Sdn Bhd');
+  v_supp := pg_temp.ws_supplier(v_org, 'S-9', 'Hong Kong Consultants Ltd');
+
+  insert into public.accounts
+    (org_id, code, name, account_type, account_subtype)
+  values (v_org, '1131', 'Maybank current account', 'asset', 'bank')
+  returning id into v_acct;
+  insert into public.bank_accounts
+    (org_id, name, bank_name, account_number, account_id, current_balance)
+  values (v_org, 'Maybank', 'Maybank Berhad', '5141', v_acct, 500000)
+  returning id into v_bank;
+
+  -- ------------------------------------------------------------------
+  -- 1. 0729's FIX: a remittance that names no account
+  -- ------------------------------------------------------------------
+  -- Before 0729 this credited 1120 Bank Accounts, the heading the real
+  -- accounts hang under: the certificate read as remitted, the journal
+  -- balanced, and no bank balance moved and no reconciliation could
+  -- match it. The assertion above proves the company's own account is
+  -- used when one is named; this proves there is no second path.
+  v_bill := pg_temp.ws_bill(v_org, v_supp, 'BILL-NB', 100000);
+  v_id := public.create_withholding(v_bill, 'S107A_A',
+            p_gross_amount => 100000);
+  perform public.post_withholding(v_id);
+  perform pg_temp.check_refused(
+    'a remittance has to say which account it was paid from',
+    format('select public.remit_withholding(%L, %L, null)',
+           v_id, date '2026-03-15'),
+    'Say which account the remittance was paid from. Without one there '
+    'is no bank balance to move and nothing for a reconciliation to '
+    'match.', '23514');
+  perform pg_temp.check_true('and the certificate is not remitted',
+    (select remitted_on is null from public.withholding_certificates
+      where id = v_id));
+  perform pg_temp.check_eq('and no bank balance moved',
+    (select current_balance from public.bank_accounts where id = v_bank),
+    500000);
+
+  -- ------------------------------------------------------------------
+  -- 2. A FOREIGN-currency certificate, which is the ordinary case
+  -- ------------------------------------------------------------------
+  -- Withholding tax exists because the payee is a non-resident, so a
+  -- bill in the payee's own currency is not a corner case -- and every
+  -- certificate in this file is MYR at rate 1, where `tax_amount *
+  -- coalesce(rate, 1)`, `tax_amount`, and `round(x, 0)` are all the
+  -- same number. Three mutants lived in that one collapse.
+  --
+  -- USD 7,333.33 of tax at 4.2135 is 30,898.99 in ringgit: not a round
+  -- figure, not equal to the foreign amount, and not what `rate = 1`
+  -- would give.
+  v_bill := pg_temp.ws_bill(v_org, v_supp, 'BILL-USD', 100000);
+  v_id := public.create_withholding(v_bill, 'S107A_A',
+            p_gross_amount => 100000);
+  update public.withholding_certificates
+     set currency = 'USD', exchange_rate = 4.2135, tax_amount = 7333.33
+   where id = v_id;
+  perform public.post_withholding(v_id);
+
+  v_entry := public.remit_withholding(v_id, date '2026-04-20', v_bank);
+  select id into v_wht from public.accounts
+   where id = app.withholding_account(v_org);
+  perform pg_temp.check_eq(
+    'the remittance clears the liability in RINGGIT, at the rate on the '
+    'certificate',
+    (select debit from public.gl_lines
+      where entry_id = v_entry and account_id = v_wht), 30898.99);
+  perform pg_temp.check_eq('and the same figure leaves the bank',
+    (select credit from public.gl_lines
+      where entry_id = v_entry and account_id = v_acct), 30898.99);
+  perform pg_temp.check_true('which is neither the foreign amount',
+    (select debit <> 7333.33 from public.gl_lines
+      where entry_id = v_entry and account_id = v_wht));
+  perform pg_temp.check_true('nor a whole number of ringgit',
+    (select round(debit, 2) <> round(debit, 0) from public.gl_lines
+      where entry_id = v_entry and account_id = v_wht));
+
+  -- ------------------------------------------------------------------
+  -- 3. THE JOURNAL'S REFERENCE, both sides of the coalesce
+  -- ------------------------------------------------------------------
+  -- `coalesce(p_reference, c.form_code)`. The block above passes a
+  -- reference and reads it back off the CERTIFICATE; nothing read the
+  -- journal's. A remittance with no reference of its own carries the
+  -- form code -- CP37D, CP37 -- which is what somebody reconciling a
+  -- bank statement against LHDN receipts has to go on.
+  perform pg_temp.check_eq(
+    'a remittance given no reference carries the form code on its journal',
+    (select reference from public.gl_entries where id = v_entry),
+    (select form_code from public.withholding_certificates where id = v_id));
+  perform pg_temp.check_true('and that form code is really there to carry',
+    (select coalesce(form_code, '') <> ''
+       from public.withholding_certificates where id = v_id));
+
+  v_bill := pg_temp.ws_bill(v_org, v_supp, 'BILL-REF', 50000);
+  v_id := public.create_withholding(v_bill, 'S107A_A',
+            p_gross_amount => 50000);
+  perform public.post_withholding(v_id);
+  v_entry := public.remit_withholding(v_id, date '2026-05-10', v_bank,
+                                      'CP37D/2026/05');
+  perform pg_temp.check_eq(
+    'and a reference given is the one on the journal, not the form code',
+    (select reference from public.gl_entries where id = v_entry),
+    'CP37D/2026/05');
+
+  -- ------------------------------------------------------------------
+  -- 4. THE LINK BACK, in both directions
+  -- ------------------------------------------------------------------
+  perform pg_temp.check_eq('the journal names the certificate it remitted',
+    (select source_id from public.gl_entries where id = v_entry), v_id);
+  perform pg_temp.check_eq('in the table that certificate lives in',
+    (select source_table from public.gl_entries where id = v_entry),
+    'withholding_certificates');
+  perform pg_temp.check_eq('and the certificate remembers the journal',
+    (select remittance_gl_entry_id from public.withholding_certificates
+      where id = v_id), v_entry);
+
+  -- What this block does NOT prove, said here so the next sweep does
+  -- not re-chase it: the two further `org_id = c.org_id` conjuncts --
+  -- on the ledger lookup and on the balance update -- are EQUIVALENT
+  -- mutation targets. The cross-tenant guard thirty lines above has
+  -- already refused any p_bank_account_id outside this company, and the
+  -- null guard has refused a missing one, so neither conjunct can
+  -- exclude a row the id would not have missed anyway. Belt-and-braces,
+  -- and right to keep: the guard above is what makes them redundant,
+  -- and a later edit to it would make them load-bearing again.
+  raise notice 'ok   remitting: 0729''s fix, the rate, the sen, the reference and the link';
+end $$;
+
+
 rollback;

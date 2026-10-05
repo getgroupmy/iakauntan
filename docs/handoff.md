@@ -13593,3 +13593,66 @@ same treatment or they would disagree with each other.
 `revalue_foreign_balances`, `receive_stock_transfer`,
 `import_open_bills`, `import_opening_balances`, `import_open_invoices`,
 `post_manufacturing_order`.
+
+### remit_withholding: the same fix, untested for the second time
+
+Swept because of what the disposal sweep found, not because the ranking
+put it high. **`0729` closed the 1120 fallback in exactly TWO live
+posting paths, and this is the other one** — and a grep of all 384
+assertion files for the refusal it added ("nothing for a reconciliation
+to match") found it in **one** file: the one written an hour earlier
+for the disposal. The same fix shipped untested twice.
+
+**23 mutants plus a control. 10 killed on `withholding_shapes.sql`,
+19 of 22 across both files, three proven equivalent.**
+
+**And the block that tests this function's bank account is thorough.**
+`withholding_shapes.sql` has four assertions on the cross-tenant guard,
+each one naming the mutant it kills — "MUTANT: the cross-organization
+guard removed", "MUTANT: `v_bank := null`", and so on. **The fallback
+six lines below it was never touched.** A sweep that measured one guard
+carefully left the one beside it at zero, which is the same failure the
+function's own header describes about `0506`: "its header's 'neither
+needed changing' was about that guard and said nothing about the
+fallback; it was read as a verdict on the whole function."
+
+Three for three now, in three different shapes:
+
+| what was mistaken for coverage | where |
+| --- | --- |
+| a comment naming the gap | `recurring_shapes.sql` section 8 |
+| a static sweep of function source text | `money_names_the_account.sql` |
+| a careful sweep of the guard *next to* it | `withholding_shapes.sql` |
+
+**The other real gap was the foreign currency, which for a withholding
+certificate is the ordinary case** — the tax exists *because* the payee
+is a non-resident. Every certificate in the file is MYR at rate 1,
+where `tax_amount * coalesce(rate, 1)`, `tax_amount` and
+`round(x, 0)` are all the same number: three mutants in one collapse.
+USD 7,333.33 at 4.2135 is 30,898.99, which is none of the three.
+
+**One equivalent was proven by the TABLE rather than the code**, which
+is a new kind of proof for this sweep.
+`coalesce(c.exchange_rate, 1)` can never see a null, because
+`withholding_certificates.exchange_rate` is NOT NULL, defaults to 1 and
+carries `check (exchange_rate > 0)`. No fixture can build the state the
+`coalesce` guards, because the schema refuses it. The other two are the
+usual shape: a cross-tenant guard thirty lines up makes two later
+`org_id` conjuncts unreachable.
+
+#### Where the 1120 programme actually stands
+
+Asked properly, rather than from memory: **three functions in `public`
+and `app` still contain `code = '1120'`, and all three are demo
+builders** — `app.demo_assets_harta`, `app.demo_sinar_assets`,
+`app.demo_sinar_payroll`. No live posting path has the fallback left.
+The five functions carrying the *bankless refusal* that replaced it are
+`clear_pdc`, `create_deposit`, `dispose_fixed_asset`,
+`remit_withholding` and `settle_deposit`; the first four now have a
+behavioural assertion on it, and `settle_deposit`'s is covered by
+`money_names_the_account.sql`, which does call that one.
+
+**24 of 45 money movers now have a mutants file.** Next with none:
+`revalue_foreign_balances`, `receive_stock_transfer`,
+`import_open_bills`, `import_opening_balances`, `import_open_invoices`,
+`post_manufacturing_order`.
