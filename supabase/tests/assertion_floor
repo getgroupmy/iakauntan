@@ -271,4 +271,36 @@
 # starts mattering the same day, which is what the new line-count
 # assertion would notice. Measured:
 # `all SQL assertions passed (384 files, 14527 assertions executed)`.
-14527
+#
+# 14545, +18: deposits.sql. create_deposit -- five definitions, the
+# most-redefined money mover in the schema -- scored 13 of 26 on its own
+# file; the union across its three files is 24 of 25 with one proven
+# equivalent.
+#
+# SEVEN OF THE TWELVE SURVIVORS WERE ONE FIXTURE PROBLEM. Every deposit
+# in the file is a round hundred or thousand taken TODAY, with no
+# payment mode and no reference. So `round(p_amount, 2)` had no cents to
+# lose, `coalesce(p_date, app.today())` had nothing to tell from today,
+# and p_mode, p_reference, p_notes and the journal's contact_id on each
+# leg were never read back at all. One deposit -- 1234.56, nine days
+# ago, mode '02', reference 'CHQ 900241' -- closes seven mutants at
+# once. The three arguments a deposit carries purely so a person can
+# find the money later are exactly the three nothing asserted, and none
+# of them can unbalance a journal.
+#
+# THE MODULE DERIVATION NEEDED TWO FIXTURES, the lesson contra.sql paid
+# for first. can_write_module(p_org, v_module) with v_module derived
+# from the kind is two claims in one call. A stranger proves only that
+# the guard exists -- they are refused whichever module is named. The
+# second claim needs a company holding one side and not the other, and
+# only `purchases` can be switched off because `sales` is core: so
+# purchases off must refuse a SUPPLIER deposit and still allow a
+# CUSTOMER one.
+#
+# And one needed a company whose BASE CURRENCY is not the suite's.
+# `v_cur := app.base_currency(p_org)` reads the company; every company
+# in 384 files is MYR, so hardcoding 'MYR' in its place changed
+# nothing. An SGD company is what makes "the base one" assertable.
+# Measured:
+# `all SQL assertions passed (384 files, 14545 assertions executed)`.
+14545

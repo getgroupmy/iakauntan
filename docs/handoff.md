@@ -13361,3 +13361,58 @@ its own aftermath.
 `create_deposit` (five definitions), `clear_pdc`,
 `run_recurring_journals_for`, `import_open_bills`,
 `dispose_fixed_asset`.
+
+### create_deposit: the three arguments nobody reads back
+
+Five definitions, the most-redefined money mover in the schema, and two
+live overloads since the write-idempotency programme added the keyed
+wrapper.
+
+**26 mutants plus a control. 13 killed on `deposits.sql`,
+`money_names_the_account.sql` kills one more, 24 of 25 across the union
+with one proven equivalent.**
+
+**Seven of the twelve survivors were one fixture problem.** Every
+deposit in a 1,233-line file is a round hundred or thousand taken
+TODAY, with no payment mode and no reference. So:
+
+- `round(p_amount, 2)` had no cents to lose;
+- `coalesce(p_date, app.today())` had nothing to tell from today;
+- `p_mode`, `p_reference` and `p_notes` were never read back;
+- and the journal's `contact_id` on each leg was never looked at.
+
+One deposit — 1234.56, nine days ago, mode `'02'`, reference
+`'CHQ 900241'` — closes seven mutants at once. **The three arguments a
+deposit carries purely so a person can find the money later are exactly
+the three nothing asserted**, and not one of them can unbalance a
+journal.
+
+**The module derivation needed two fixtures** — the lesson `contra.sql`
+paid for first. `app.can_write_module(p_org, v_module)` with
+`v_module` derived from the kind is two claims in one call: that the
+guard exists, and that each direction asks for the right module. A
+stranger proves only the first, being refused whichever module is
+named. The second needs a company holding one side and not the other,
+and only `purchases` can be switched off because `sales` is a core
+module every company has. Purchases off must refuse a SUPPLIER deposit
+and still allow a CUSTOMER one.
+
+**And one needed a company whose base currency is not the suite's.**
+`v_cur := app.base_currency(p_org)` reads the company; every company in
+384 files is MYR, so hardcoding `'MYR'` in its place changed nothing.
+An SGD company is what makes "the base one" assertable — and
+`group_reporting.sql` had already established that an in-place
+`update organizations set base_currency` is the way to build one.
+
+**The equivalent**, proven by shape: the ledger lookup's own
+`and b.org_id = p_org`. By the time that `select` runs, `p_bank` has
+already been refused if null and refused if it belongs to another
+company, so the conjunct cannot exclude a row the id would not have
+missed anyway. Belt-and-braces, and right to keep — the function's own
+comment records that the row written and the balance updated once used
+`p_bank` raw, which is the defect it guards against returning.
+
+**20 of 45 money movers now have a mutants file.** Next with none:
+`clear_pdc`, `run_recurring_journals_for`, `import_open_bills`,
+`dispose_fixed_asset`, `revalue_foreign_balances`,
+`receive_stock_transfer`.

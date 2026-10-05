@@ -1230,4 +1230,197 @@ begin
   raise notice 'deposit_history: the kind is checked, and refuses like a gap';
 end $$;
 
+-- ---------------------------------------------------------------------
+-- create_deposit: the ten things a mutation sweep found nothing on
+--
+-- Five definitions, the most-redefined money mover in the schema, and
+-- 14 of 25 mutants killed across the three files that reach it
+-- (`deposits.sql` 13, `money_names_the_account.sql` one more,
+-- `idempotency.sql` one already counted). These are the other ten, each
+-- with the mutant it exists to kill.
+--
+-- The theme is the same one the whole sweep keeps finding: the three
+-- arguments a deposit carries for a person to read later -- the mode,
+-- the reference, the date -- are the ones nothing read back, and the
+-- journal's own shape is the one nothing counted. None of them can
+-- unbalance anything.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid;
+  v_owner uuid := pg_temp.test_user();
+  v_sgd   uuid;
+  v_cust  uuid; v_supp uuid; v_sgd_cust uuid;
+  v_bank  uuid; v_gl uuid; v_sgd_bank uuid;
+  v_held  uuid;
+  v_dep   uuid; v_entry uuid;
+  v_clerk uuid; v_type uuid;
+  v_msg   text;
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  v_org := pg_temp.test_org('Wang Muka Celah Sdn Bhd');
+  perform pg_temp.allow_many_companies();
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_org, m, true from unnest(array['sales','purchases','accounting']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+  perform pg_temp.sign_in_as(v_owner);
+
+  v_bank := pg_temp.test_bank_account(v_org, 'Maybank current');
+  v_gl   := pg_temp.bank_gl(v_bank);
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'PEL', 'Puan Hasnah', 'customer') returning id into v_cust;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'PEM', 'Pembekal Jaya', 'supplier') returning id into v_supp;
+
+  -- ------------------------------------------------------------------
+  -- 1. THE CENTS, 2. THE MODE, 3. THE REFERENCE, 4. THE DATE,
+  --    5-6. WHO it is held for, on BOTH legs, 7. the link back
+  -- ------------------------------------------------------------------
+  -- Every deposit in this file is a round hundred or thousand taken
+  -- today, so `round(p_amount, 2)` had no cents to lose and
+  -- `coalesce(p_date, app.today())` had nothing to distinguish from
+  -- today. One deposit with an odd sum on a past date, with a mode and
+  -- a reference, closes seven mutants at once.
+  v_dep := public.create_deposit(
+    v_org, 'customer', v_cust, pg_temp.today() - 9, 1234.56, v_bank,
+    '02', 'CHQ 900241', 'Half the fit-out, up front');
+  perform pg_temp.check_eq('a deposit keeps its cents',
+    (select amount from public.deposit_notes where id = v_dep), 1234.56);
+  perform pg_temp.check_eq('and all of them are available to spend',
+    (select balance_amount from public.deposit_notes where id = v_dep),
+    1234.56);
+  perform pg_temp.check_eq('it is dated the day the money came in',
+    (select deposit_date from public.deposit_notes where id = v_dep)::text,
+    (pg_temp.today() - 9)::text);
+  perform pg_temp.check_eq('and records HOW it arrived',
+    (select payment_mode_code from public.deposit_notes where id = v_dep),
+    '02');
+  perform pg_temp.check_eq('and the reference it arrived with',
+    (select reference from public.deposit_notes where id = v_dep),
+    'CHQ 900241');
+  perform pg_temp.check_eq('and what was said about it',
+    (select notes from public.deposit_notes where id = v_dep),
+    'Half the fit-out, up front');
+
+  select gl_entry_id into v_entry from public.deposit_notes where id = v_dep;
+  v_held := app.deposit_account(v_org, 'customer');
+  perform pg_temp.check_eq('the journal takes the cents too',
+    (select debit from public.gl_lines
+      where entry_id = v_entry and account_id = v_gl), 1234.56);
+  -- The contact on BOTH legs, separately. `report_contact_statement`
+  -- reads gl_lines.contact_id, so a leg without one is money held for
+  -- nobody -- and the two legs are built in two different
+  -- jsonb_build_object calls, so either can lose it on its own.
+  perform pg_temp.check_eq('the bank''s leg says who the money came from',
+    (select contact_id from public.gl_lines
+      where entry_id = v_entry and account_id = v_gl), v_cust);
+  perform pg_temp.check_eq('and the held leg says who it is held for',
+    (select contact_id from public.gl_lines
+      where entry_id = v_entry and account_id = v_held), v_cust);
+  -- And the journal points back at the note, which is how a void finds
+  -- what to reverse.
+  perform pg_temp.check_eq('the journal names the note it came from',
+    (select source_id from public.gl_entries where id = v_entry), v_dep);
+  perform pg_temp.check_eq('and which table that note is in',
+    (select source_table from public.gl_entries where id = v_entry),
+    'deposit_notes');
+
+  -- ------------------------------------------------------------------
+  -- 8. THE WRITE GUARD, and 9. WHICH RIGHT each direction needs
+  -- ------------------------------------------------------------------
+  -- `app.can_write_module(p_org, v_module)` with v_module DERIVED from
+  -- the kind -- 'sales' for a customer, 'purchases' for a supplier. Two
+  -- separate claims in one call, and a company holding both rights can
+  -- test neither. Nothing asserted even that the guard exists.
+  --
+  -- A stranger first, for the guard itself.
+  v_clerk := pg_temp.another_user('muka-celah@iakauntan.test');
+  insert into public.org_members (org_id, user_id, role)
+  values (v_org, v_clerk, 'purchaser') on conflict do nothing;
+  select at.id into v_type from public.access_types at
+   where at.org_id = v_org or at.org_id is null
+   order by at.org_id nulls last limit 1;
+  perform pg_temp.sign_in_as(pg_temp.another_user('luar-muka@iakauntan.test'));
+  begin
+    perform public.create_deposit(v_org, 'customer', v_cust,
+                                  pg_temp.today(), 100, v_bank, null, null, null);
+    v_msg := null;
+  exception when others then get stacked diagnostics v_msg = message_text;
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+  -- The WHOLE message: the foreign-bank guard four lines below also
+  -- raises 42501, and so does the contact check's neighbour.
+  perform pg_temp.check_eq('somebody outside the company cannot take a deposit',
+    v_msg, 'not permitted to write for this organization');
+  perform pg_temp.check_eq('and nothing of theirs was recorded',
+    (select count(*) from public.deposit_notes
+      where org_id = v_org and amount = 100), 0);
+
+  -- Then the DERIVATION, which needs a company holding one side and not
+  -- the other. `sales` is a core module every company has; `purchases`
+  -- is not -- so switching purchases off refuses a SUPPLIER deposit and
+  -- must still allow a CUSTOMER one. If the derivation were swapped the
+  -- customer deposit would ask for purchases and be refused, which is
+  -- the half a stranger could never prove.
+  update public.org_modules set is_enabled = false
+   where org_id = v_org and module_code = 'purchases';
+  perform pg_temp.check_refused(
+    'a company that gave up Purchases cannot pay a supplier a deposit',
+    format('select public.create_deposit(%L, %L, %L, %L, 250, %L, null, null, null)',
+           v_org, 'supplier', v_supp, pg_temp.today(), v_bank),
+    'not permitted to write for this organization', '42501');
+  perform pg_temp.check_true(
+    'while a customer deposit still goes through, on core Sales',
+    public.create_deposit(v_org, 'customer', v_cust, pg_temp.today(),
+                          250, v_bank, null, null, null) is not null);
+  update public.org_modules set is_enabled = true
+   where org_id = v_org and module_code = 'purchases';
+
+  -- ------------------------------------------------------------------
+  -- 10. THE COMPANY'S OWN CURRENCY
+  -- ------------------------------------------------------------------
+  -- `v_cur := app.base_currency(p_org)` reads the company; every
+  -- company in this suite is MYR, so hardcoding 'MYR' in its place
+  -- changed nothing. A deposit is refused in any currency but the base
+  -- one (0272's reason), which makes "the base one" the only thing
+  -- worth asserting -- and it is only assertable against a company
+  -- whose base is not the default.
+  v_sgd := pg_temp.test_org('Syarikat Singa Pte Ltd');
+  perform pg_temp.allow_many_companies();
+  perform public.create_fiscal_year(v_sgd, date_trunc('year', pg_temp.today())::date);
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_sgd, m, true from unnest(array['sales','purchases','accounting']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+  perform pg_temp.sign_in_as(v_owner);
+  update public.organizations set base_currency = 'SGD' where id = v_sgd;
+  v_sgd_bank := pg_temp.test_bank_account(
+    v_sgd, 'DBS current', 'current', 'SGD', 0, 0, '8801');
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_sgd, 'SG1', 'Tan & Sons Pte Ltd', 'customer')
+  returning id into v_sgd_cust;
+
+  v_dep := public.create_deposit(v_sgd, 'customer', v_sgd_cust,
+                                 pg_temp.today(), 600, v_sgd_bank,
+                                 null, null, null);
+  perform pg_temp.check_eq(
+    'a deposit is held in the COMPANY''S base currency, not the suite''s',
+    (select currency from public.deposit_notes where id = v_dep), 'SGD');
+  perform pg_temp.check_eq('at a rate of one, because it is the base one',
+    (select exchange_rate from public.deposit_notes where id = v_dep), 1);
+
+  -- What this block does NOT prove, said here so the next sweep does
+  -- not re-chase it: the ledger lookup's own `and b.org_id = p_org`
+  -- (the `select a.id into v_bank ... join accounts` a few lines below
+  -- the foreign-bank guard) is an EQUIVALENT mutation target. By the
+  -- time it runs, p_bank has already been refused if it is null and
+  -- refused if it belongs to another company, so the conjunct cannot
+  -- exclude a row. It is belt-and-braces, and correct to keep -- the
+  -- function's own comment says the row written and the balance
+  -- updated once used p_bank raw, which is the defect it guards
+  -- against returning.
+  raise notice 'ok   the cents, the mode, the reference, the date, the party, the currency';
+end $$;
+
+
 rollback;
