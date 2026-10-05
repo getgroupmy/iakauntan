@@ -114,4 +114,18 @@
 # the stock side. Closed with a company whose 1310 IS a heading.
 # Measured:
 # `all SQL assertions passed (384 files, 14397 assertions executed)`.
-14397
+#
+# 14415, +18: goods_received.sql. app.post_goods_received_internal was
+# mutated 18 ways and TWELVE survived -- the worst score of the session
+# -- and almost all twelve were ONE fixture problem wearing twelve hats.
+# Every note in the file was MYR at rate 1, for an item whose selling
+# unit is its stocking unit, with no inventory account of its own, in a
+# company with one warehouse: so subtotal*rate == subtotal,
+# base_quantity == quantity, round(x,6) == round(x,2), the item's
+# account == the chart's 1310, and the default warehouse == the only
+# warehouse. FIVE rules asserting the same arithmetic. Fixed with one
+# note: 5 cartons of 24 at USD 100, rate 4.2345, unit cost 17.643750
+# where the three wrong routes give 4.166667, 423.450000 and 17.64.
+# 18 of 18 killed afterwards. Measured:
+# `all SQL assertions passed (384 files, 14415 assertions executed)`.
+14415

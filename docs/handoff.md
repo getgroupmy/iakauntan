@@ -12726,3 +12726,82 @@ audit and "fix" them.** If the guard is ever worth spreading, the
 argument has to be about customised charts, and the measurement to make
 first is whether any live org has `is_group` set on a code the posting
 functions look up.
+
+### post_goods_received_internal: 12 of 18 survived, and all twelve were one fixture
+
+The worst score of the session. **18 mutants, six killed, TWELVE
+survived.** `posting_a_bill.sql`, the only other file reaching it,
+killed just the two journal-balance mutations `goods_received.sql`
+already killed, so the union is twelve. 18 of 18 after the work.
+
+**Almost all twelve were one fixture problem wearing twelve hats.**
+Every goods received note in the file was in MYR at rate 1, for an item
+whose selling unit is its stocking unit, with no inventory account of
+its own, in a company with one warehouse. So
+
+```
+subtotal * rate      ==  subtotal
+base_quantity        ==  quantity
+round(x, 6)          ==  round(x, 2)        (the costs all divided clean)
+the item's account   ==  the chart's 1310
+the default warehouse ==  the only warehouse
+```
+
+and **five separate rules in the function were asserting the same
+arithmetic.** This is the twelfth entry in `docs/widget-tests.md` at its
+widest: not one value collapsed into another, but a whole fixture
+flattened until half the function was unobservable. The earlier
+instances of that lesson were single collapses — a bank account on 1120,
+a default that was also the oldest row. This was five at once, and they
+were invisible individually because each looked like a reasonable
+simplification.
+
+The fix is one note:
+
+| | |
+| --- | --- |
+| 5 cartons of 24 at USD 100 | subtotal USD 500, base quantity 120 |
+| rate 4.2345 | inventory debit MYR 2,117.25 |
+| unit cost | `500 * 4.2345 / 120` = **17.643750** |
+| drop the rate | 4.166667 |
+| divide by the 5 cartons | 423.450000 |
+| round to two places | 17.64 |
+
+plus two warehouses where the default is not the first row inserted, an
+item carrying its own `inventory_account_id` distinct from 1310, and a
+second stocked line at quantity zero that must make no movement at all.
+The test asserts all four unit costs differ, so the right figure cannot
+be reached by a wrong route.
+
+The unit cost is the figure worth the trouble: it is what the weighted
+average is built on afterwards, so a wrong one here is invisible until
+something is sold, and then wrong in the cost of sales rather than at
+the point it was made.
+
+#### Two guards that look alike, and one that had to be proved live
+
+`v_total = 0` refuses a note of pure SERVICE lines. `v_n = 0` refuses
+one where the stocked lines have no QUANTITY. They are different
+refusals with different sentences, and the file asserted only the first.
+
+Reaching the second needs a tracked line whose subtotal is non-zero
+while its quantity is zero — which takes a **negative discount**,
+because the line trigger computes `quantity * unit_price - discount`:
+
+```
+quantity 0, unit_price 0, discount_amount -100
+  -> line_subtotal 100, base_quantity 0
+```
+
+Whether the schema permits a negative discount decided whether this was
+a gap or an equivalent mutant, so it was checked rather than assumed: it
+does, the branch is reachable, and the guard is live code. Had it been
+unreachable, the right answer would have been to record the guard as
+dead and leave the mutant alone.
+
+One trap inside that fixture: the company used for it has its 2118
+renamed, for the no-2118 assertion just above. The 2118 lookup happens
+BEFORE the quantity guard, so the note has to have 2118 put back before
+the quantity refusal can be the one under test. A fixture that tripped
+the earlier guard would have passed this assertion while proving nothing
+about the later one.

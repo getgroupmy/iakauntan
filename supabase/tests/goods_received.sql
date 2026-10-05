@@ -360,4 +360,279 @@ begin
     public.post_goods_received(v_grn) is not null);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The twelve a mutation run found this file could not see
+-- ---------------------------------------------------------------------
+--
+-- `app.post_goods_received_internal` was mutated eighteen ways on
+-- 5 October. SIX died against the assertions above and TWELVE survived
+-- -- the worst score of any function measured. `posting_a_bill.sql`,
+-- the only other file that reaches it, killed just the two journal
+-- balance mutations this file already killed, so the union is twelve.
+--
+--     python3 scripts/mutate_sql.py \
+--       supabase/migrations/0609_the_goods_arrived_and_nobody_wrote_it_down.sql \
+--       supabase/tests/goods_received.sql \
+--       supabase/tests/mutants/post_goods_received_internal.py
+--
+-- Almost all twelve were ONE fixture problem wearing twelve hats: every
+-- note above is in MYR at rate 1, for an item whose selling unit is its
+-- stocking unit, with no inventory account of its own, in a company
+-- with one warehouse. So
+--
+--   subtotal x rate  ==  subtotal
+--   base_quantity    ==  quantity
+--   round(x, 6)      ==  round(x, 2)        (the costs all divide clean)
+--   the item's account == the chart's 1310
+--   the default warehouse == the only warehouse
+--
+-- and five separate rules in the function were asserting the same
+-- arithmetic. That is the twelfth entry in docs/widget-tests.md at its
+-- widest: not one value collapsed into another, but a whole fixture
+-- flattened so that half the function was unobservable.
+--
+-- The unit cost is the figure worth the trouble. It is
+-- `round(line_subtotal * rate / base_quantity, 6)`, and it is what the
+-- weighted average is built on afterwards -- so a wrong one here is
+-- invisible until something is sold, and then wrong in the cost of
+-- sales rather than here.
+--
+-- The numbers below are chosen so that every one of those five
+-- collapses comes apart:
+--
+--   5 cartons of 24 at USD 100     -> subtotal USD 500, base qty 120
+--   rate 4.2345                    -> inventory debit MYR 2,117.25
+--   unit cost = 500 * 4.2345 / 120 = 17.643750, to six places
+--
+--   dropping the rate       -> 4.166667    dividing by 5 -> 423.450000
+--   rounding to two places  -> 17.64       using quantity -> 5, not 120
+--
+-- Four assertions are plain gaps rather than collapses: no 2118
+-- account, a note with nothing to receive, the movement-to-journal
+-- link, and the status.
+create or replace function pg_temp.gr_pack(p_org uuid, p_item uuid,
+                                           p_uom text, p_qty numeric)
+returns void language plpgsql as $$
+begin
+  insert into public.item_uom_packs
+    (org_id, item_id, uom_code, qty_in_stock_uom)
+  values (p_org, p_item, p_uom, p_qty);
+end $$;
+
+do $$
+declare
+  v_owner uuid := pg_temp.test_user();
+  v_org   uuid;
+  v_poor  uuid;
+  v_sup   uuid;
+  v_item  uuid;
+  v_other uuid;
+  v_acct  uuid;
+  v_wh1   uuid;
+  v_wh2   uuid;
+  v_grn   uuid;
+  v_entry uuid;
+  v_mv    record;
+  v_n     integer;
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Pengimport Sirap Sdn Bhd',
+                            array['inventory', 'accounting']);
+  perform public.create_fiscal_year(v_org,
+    date_trunc('year', pg_temp.today())::date);
+
+  -- TWO warehouses, and the default is NOT the first one inserted, so
+  -- `is_default` and "whichever row comes back" are different answers.
+  insert into public.warehouses (org_id, code, name, is_default)
+  values (v_org, 'WH-B', 'Gudang biasa', false) returning id into v_wh2;
+  insert into public.warehouses (org_id, code, name, is_default)
+  values (v_org, 'WH-U', 'Gudang utama', true) returning id into v_wh1;
+
+  -- The item's OWN inventory account, distinct from the chart's 1310,
+  -- so `coalesce(inventory_account_id, 1310)` has two answers.
+  insert into public.accounts
+    (org_id, code, name, account_type, account_subtype, is_group)
+  values (v_org, '1312', 'Inventory - sirap', 'asset', 'inventory', false)
+  returning id into v_acct;
+
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'SUP', 'Pembekal Sirap', 'supplier') returning id into v_sup;
+
+  -- Stocked in pieces, bought in cartons of 24.
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, unit_price,
+     inventory_account_id)
+  values (v_org, 'SIRAP', 'Sirap bandung', 'stock', true, 'C62', 12.00,
+          v_acct)
+  returning id into v_item;
+  perform pg_temp.gr_pack(v_org, v_item, 'CT', 24);
+
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, unit_price)
+  values (v_org, 'GULA', 'Gula', 'stock', true, 'C62', 3.00)
+  returning id into v_other;
+
+  -- The note: USD at 4.2345, five cartons, and a zero-quantity line for
+  -- a second stocked item which must make no movement at all.
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, status, subtotal, total_amount, base_total_amount,
+     balance_amount)
+  values (v_org, 'goods_received', 'GRN-FX', app.today(), v_sup, 'USD',
+          4.2345, 'draft', 500, 500, 2117.25, 0)
+  returning id into v_grn;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, uom_code, unit_price)
+  values (v_org, v_grn, 1, 'item', v_item, 'Lima kotak', 5, 'CT', 100.00);
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, uom_code, unit_price)
+  values (v_org, v_grn, 2, 'item', v_other, 'Tiada lagi', 0, 'C62', 3.00);
+
+  -- The trigger did the conversion, which is what makes the rest of
+  -- this block mean anything.
+  perform pg_temp.check_eq('five cartons of 24 is 120 pieces',
+    (select base_quantity from public.purchase_document_lines
+      where document_id = v_grn and line_no = 1), 120.000000);
+  perform pg_temp.check_eq('priced per carton, so the subtotal is 500',
+    (select line_subtotal from public.purchase_document_lines
+      where document_id = v_grn and line_no = 1), 500.00);
+
+  v_entry := public.post_goods_received(v_grn);
+  perform pg_temp.check_true('the note posts', v_entry is not null);
+
+  -- ------------------------------------------------------------------
+  -- The journal: the item's own account, at the day's rate
+  -- ------------------------------------------------------------------
+  perform pg_temp.check_eq(
+    'the inventory debit is in RINGGIT, not the invoice currency',
+    pg_temp.gr_balance(v_org, '1312'), 2117.25);
+  perform pg_temp.check_eq(
+    'and it is on the ITEM''s inventory account, not the chart''s 1310',
+    pg_temp.gr_balance(v_org, '1310'), 0.00);
+  perform pg_temp.check_eq('2118 carries the same figure, credited',
+    pg_temp.gr_balance(v_org, '2118'), -2117.25);
+
+  -- ------------------------------------------------------------------
+  -- The stock: one movement, in pieces, at the converted unit cost
+  -- ------------------------------------------------------------------
+  select count(*)::integer into v_n from public.stock_movements
+   where source_table = 'purchase_documents' and source_id = v_grn;
+  perform pg_temp.check_eq(
+    'one movement, because the zero-quantity line makes none', v_n, 1);
+
+  select * into v_mv from public.stock_movements
+   where source_table = 'purchase_documents' and source_id = v_grn;
+  perform pg_temp.check_eq('the movement is for the item that arrived',
+    v_mv.item_id, v_item);
+  perform pg_temp.check_eq(
+    'in PIECES -- 120, not the 5 cartons that were typed',
+    v_mv.quantity, 120.000000);
+  perform pg_temp.check_eq(
+    'at the unit cost in ringgit per piece, to six places',
+    v_mv.unit_cost, 17.643750);
+  perform pg_temp.check_eq(
+    'in the DEFAULT warehouse, no warehouse having been named',
+    v_mv.warehouse_id, v_wh1);
+  perform pg_temp.check_eq('and the movement names the journal it went with',
+    v_mv.gl_entry_id, v_entry);
+  perform pg_temp.check_eq('the note is posted',
+    (select status::text from public.purchase_documents where id = v_grn),
+    'posted');
+
+  -- Each of the four ways to get that unit cost wrong gives a different
+  -- figure, which is what makes the assertion above worth having.
+  perform pg_temp.check_true('the four wrong unit costs are all different '
+    'from the right one',
+    round(500 * 4.2345 / 120, 6) = 17.643750
+    and round(500 / 120, 6) <> 17.643750
+    and round(500 * 4.2345 / 5, 6) <> 17.643750
+    and round(500 * 4.2345 / 120, 2) <> 17.643750);
+
+  -- ------------------------------------------------------------------
+  -- A company with no 2118 cannot receive goods into limbo
+  -- ------------------------------------------------------------------
+  v_poor := pg_temp.test_org('Tiada 2118 Sdn Bhd',
+                             array['inventory', 'accounting']);
+  perform public.create_fiscal_year(v_poor,
+    date_trunc('year', pg_temp.today())::date);
+  update public.accounts set code = '2119'
+   where org_id = v_poor and code = '2118';
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_poor, 'SUP', 'Pembekal', 'supplier') returning id into v_sup;
+  insert into public.warehouses (org_id, code, name, is_default)
+  values (v_poor, 'W', 'Gudang', true);
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, unit_price)
+  values (v_poor, 'ITM', 'Barang', 'stock', true, 'C62', 10.00)
+  returning id into v_item;
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, status, subtotal, total_amount, base_total_amount,
+     balance_amount)
+  values (v_poor, 'goods_received', 'GRN-NO2118', app.today(), v_sup, 'MYR',
+          1, 'draft', 100, 100, 100, 0)
+  returning id into v_grn;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, uom_code, unit_price)
+  values (v_poor, v_grn, 1, 'item', v_item, 'Barang', 10, 'C62', 10.00);
+  perform pg_temp.check_refused(
+    'a company with no 2118 is told to add it, not posted around',
+    format('select public.post_goods_received(%L)', v_grn),
+    '%account 2118%', 'P0002');
+
+  -- ------------------------------------------------------------------
+  -- A note with money on it and nothing to receive
+  -- ------------------------------------------------------------------
+  -- Two guards in the function look alike and are not: `v_total = 0`
+  -- refuses a note of pure SERVICE lines, and `v_n = 0` refuses one
+  -- where the stocked lines have no QUANTITY. Reaching the second means
+  -- a tracked line whose subtotal is not zero while its quantity is --
+  -- and the only way to make one is a NEGATIVE discount, because the
+  -- line trigger computes `quantity * unit_price - discount`:
+  --
+  --     quantity 0, unit_price 0, discount_amount -100
+  --       -> line_subtotal 100, base_quantity 0
+  --
+  -- A negative discount is a strange thing to type and the schema
+  -- permits it, which was checked before writing this rather than
+  -- assumed: without it the branch would be unreachable and the guard
+  -- dead code, and the mutant that deletes it would be equivalent
+  -- rather than a gap. It is a gap.
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, status, subtotal, total_amount, base_total_amount,
+     balance_amount)
+  values (v_poor, 'goods_received', 'GRN-NOQTY', app.today(), v_sup, 'MYR',
+          1, 'draft', 100, 100, 100, 0)
+  returning id into v_grn;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, uom_code, unit_price, discount_amount)
+  values (v_poor, v_grn, 1, 'item', v_item, 'Sifar', 0, 'C62', 0, -100);
+
+  perform pg_temp.check_eq('the line carries money and no quantity',
+    (select line_subtotal from public.purchase_document_lines
+      where document_id = v_grn and line_no = 1), 100.00);
+  perform pg_temp.check_eq('and nothing to move',
+    (select base_quantity from public.purchase_document_lines
+      where document_id = v_grn and line_no = 1), 0.000000);
+
+  -- 2118 is still renamed in this company, so put it back first -- the
+  -- refusal under test is the quantity one, and the 2118 lookup comes
+  -- before it. A fixture that tripped the earlier guard would pass this
+  -- assertion while proving nothing about the later one.
+  update public.accounts set code = '2118'
+   where org_id = v_poor and code = '2119';
+  perform pg_temp.check_refused(
+    'a note with money on it and nothing to receive is refused',
+    format('select public.post_goods_received(%L)', v_grn),
+    '%has a quantity to receive%', '22023');
+
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;
