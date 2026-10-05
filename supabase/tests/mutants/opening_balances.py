@@ -106,16 +106,25 @@ m("a HEADING can take an opening balance",
   "    elsif false then  -- heading accepted",
   "-- heading accepted")
 
+# The anchor runs to the END of its line. `v_acct_id := null;` shares a
+# line with `v_acct_type := null;`, so a marker placed after the first
+# of them commented out the second -- and the mutant then did TWO
+# things: it read unparseable amounts as zero AND stopped resetting the
+# account type between rows, leaking the previous row's. Its kill could
+# have come from either. Found by the harness's pre-flight on 5 October,
+# after the kill sheet below had already been recorded; re-measured, and
+# the figure held.
 m("something that is not an amount is read as nothing",
   "import_opening_balances",
   "    v_debit  := app.import_number(app.import_text(r, 'debit'), 0);\n"
   "    v_credit := app.import_number(app.import_text(r, 'credit'), 0);\n"
   "\n"
-  "    v_acct_id := null;",
+  "    v_acct_id := null; v_acct_type := null;",
   "    v_debit  := coalesce(app.import_number(app.import_text(r, 'debit'), 0), 0);\n"
   "    v_credit := coalesce(app.import_number(app.import_text(r, 'credit'), 0), 0);\n"
   "\n"
-  "    v_acct_id := null;  -- unparseable amounts read as zero",
+  "    v_acct_id := null; v_acct_type := null;"
+  "  -- unparseable amounts read as zero",
   "-- unparseable amounts read as zero")
 
 m("a NEGATIVE amount is accepted in either column",

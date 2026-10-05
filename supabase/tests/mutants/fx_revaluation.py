@@ -15,6 +15,21 @@
 # `fx_shapes.sql` and 12 survived; 32 of 33 across all four files, with
 # one proven EQUIVALENT. The control lived.
 #
+# SUPERSEDED THE SAME EVENING, and the figures above describe a file
+# that no longer exists. The harness's new pre-flight found that the
+# single mutant "ANOTHER COMPANY's invoices are retranslated" matched
+# its anchor TWICE -- this function's sales and purchase blocks have
+# character-for-character identical `where` clauses -- so it dropped the
+# org scope from BOTH, and a double mutant's kill proves neither half.
+# The sales side was reported covered on evidence the purchase side
+# could have supplied, and the purchase side had no mutant at all.
+#
+# It is now two mutants, 35 in the file, with anchors that carry the
+# table each block reads. THE UNION ABOVE HAS NOT BEEN RE-MEASURED
+# AGAINST THE NEW PAIR: whoever next sweeps this function should do so
+# and replace this header, rather than trust a figure measured with one
+# mutant where there are now two.
+#
 #   fx_shapes.sql         kills 22, then 32
 #   fx_revaluation.sql    kills the empty run and the netting
 #   reversal.sql          kills three about WHICH prior entry is undone
@@ -139,14 +154,40 @@ m("RINGGIT invoices are retranslated too",
   "      union all",
   "-- base currency no longer excluded")
 
-m("ANOTHER COMPANY's invoices are retranslated",
+# TWO MUTANTS, and until 5 October there was one. This function has
+# symmetric SALES and PURCHASE blocks whose `where` clauses are
+# character-for-character identical, so the single anchor matched TWICE
+# and `source.replace` dropped the org scope from BOTH. That is not the
+# mutant the label named: it is a double mutant, and killing a double
+# mutant proves neither half on its own -- the purchase side alone could
+# have done it, leaving the sales scope unasserted and reported as
+# covered. The purchase side meanwhile had no mutant at all.
+#
+# Found by the harness's own pre-flight once it learned to count
+# matches, which is the whole argument for having one: the old run
+# reported a kill and said nothing.
+#
+# The anchors now carry the line that distinguishes them -- the table
+# each block reads.
+m("ANOTHER COMPANY's INVOICES are retranslated",
   "revalue_foreign_balances",
-  "       where d.org_id = p_org_id and d.currency <> v_base\n"
-  "         and d.balance_amount <> 0 and d.doc_date <= p_as_at",
-  "       where d.currency <> v_base\n"
-  "         and d.balance_amount <> 0 and d.doc_date <= p_as_at"
-  "  -- sales org scope dropped",
+  "        from public.sales_documents d\n"
+  "        join public.contacts c on c.id = d.contact_id\n"
+  "       where d.org_id = p_org_id and d.currency <> v_base",
+  "        from public.sales_documents d\n"
+  "        join public.contacts c on c.id = d.contact_id\n"
+  "       where d.currency <> v_base  -- sales org scope dropped",
   "-- sales org scope dropped")
+
+m("ANOTHER COMPANY's BILLS are retranslated",
+  "revalue_foreign_balances",
+  "        from public.purchase_documents d\n"
+  "        join public.contacts c on c.id = d.contact_id\n"
+  "       where d.org_id = p_org_id and d.currency <> v_base",
+  "        from public.purchase_documents d\n"
+  "        join public.contacts c on c.id = d.contact_id\n"
+  "       where d.currency <> v_base  -- purchase org scope dropped",
+  "-- purchase org scope dropped")
 
 m("an invoice dated the valuation day ITSELF is left out",
   "revalue_foreign_balances",

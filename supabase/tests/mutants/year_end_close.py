@@ -11,10 +11,23 @@
 #
 # RESULT, 5 October: 32 mutants plus a control. 15 killed on
 # `year_end_close.sql` and 16 survived; `idempotency.sql` kills one more
-# that this file misses. 30 of 31 across the union, with one proven
-# EQUIVALENT. The control lived throughout.
+# that this file misses.
 #
-#   year_end_close.sql  kills 15, then 29
+# CORRECTED the same evening, and the correction is the interesting
+# part. The figure was recorded as 30 of 31 with one equivalent. The
+# harness's new pre-flight then found that the mutant "a profit and loss
+# account with NO movement gets a line of nothing" had been swallowing
+# `order by p.code` -- so it was a DOUBLE mutant, and its kill was the
+# ordering's. Re-measured with the marker terminated properly, it
+# survives, and it survives because `report_profit_loss` already ends
+# with `having sum(l.debit - l.credit) <> 0` and never returns a nil
+# account at all.
+#
+# So: 29 of 30 killable, with TWO proven equivalent. One fewer killable
+# mutant and one more equivalence than the first measurement said, and
+# the same 29 real kills. The control lived throughout.
+#
+#   year_end_close.sql  kills 15, then 28
 #   idempotency.sql     kills "a year that is not closed can be
 #                       reopened", via refuses_a_repeat
 #
@@ -119,10 +132,36 @@ m("the earlier-year rule is dropped altogether",
 # from report_profit_loss and this filter starts mattering the same day.
 # `year_end_close.sql` now asserts the closing journal's LINE COUNT
 # against the report's own row count, which is what would notice.
+# EQUIVALENT, and this entry is a correction to the kill sheet below.
+#
+# The replacement used to omit its trailing newline, so the marker ran
+# into `order by p.code` and commented it out. The mutant therefore did
+# TWO things -- included nil accounts AND dropped the ordering -- and it
+# was recorded as KILLED. The harness's pre-flight found the swallow on
+# 5 October; with the newline restored the mutant was re-measured and
+# **it SURVIVES**. The kill had been the ordering's all along.
+#
+# And it survives because it cannot be killed. `report_profit_loss`
+# ends with
+#
+#     having sum(l.debit - l.credit) <> 0
+#
+# so it never returns an account with no movement, and `where
+# p.amount <> 0` in the loop above can never be false. No fixture can
+# distinguish the two forms.
+#
+# That is the FOURTH kind of equivalence proof this sweep has found --
+# the guard is in the CALLEE -- and the second instance of it, after
+# `run_depreciation`'s acquisition-date filter standing behind
+# `accumulated_depreciation_at`'s own first line. Both were reached by
+# asking what the called function already refuses.
+#
+# A double mutant masked a real question for a whole day: the one that
+# mattered was not "is this condition asserted" but "can it ever fire".
 m("a profit and loss account with NO movement gets a line of nothing",
   "close_fiscal_year",
   "     where p.amount <> 0\n",
-  "     where p.amount is not null\n  -- nil accounts included",
+  "     where p.amount is not null  -- nil accounts included\n",
   "-- nil accounts included")
 
 m("revenue is swept the WRONG WAY, which still balances",
