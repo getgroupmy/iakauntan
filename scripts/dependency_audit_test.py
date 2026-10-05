@@ -21,6 +21,8 @@ good news. Three of them are worth pinning:
 
 import os
 import sys
+import atexit
+import shutil
 import tempfile
 import unittest
 
@@ -29,9 +31,30 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import dependency_audit as audit  # noqa: E402
 
 
+def _throwaway() -> str:
+    """A temp dir that goes away when the process does.
+
+    These call sites were a bare `mkdtemp` with no cleanup, which never
+    removed anything: the three test files that used it leaked 28
+    directories between them on EVERY run, locally and in CI. That is
+    invisible until the day the disk fills, and a full disk does not
+    present as a full disk -- it presents as a test that has gone quiet.
+    One did, for fifteen minutes, and was first diagnosed as a slow test
+    file.
+
+    `atexit` rather than `addCleanup` because the callers are module-level
+    helpers with no TestCase in scope, and rather than
+    `TemporaryDirectory` because the directory has to outlive the
+    function that builds it.
+    """
+    root = tempfile.mkdtemp()
+    atexit.register(shutil.rmtree, root, True)
+    return root
+
+
 def workspace(files: dict[str, str]) -> str:
     """A throwaway tree with supabase/functions in it."""
-    root = tempfile.mkdtemp()
+    root = _throwaway()
     for path, body in files.items():
         full = os.path.join(root, path)
         os.makedirs(os.path.dirname(full), exist_ok=True)

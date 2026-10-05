@@ -11,14 +11,37 @@ the shapes that are NOT findings.
 import contextlib
 import io
 import pathlib
+import atexit
+import shutil
 import tempfile
 import unittest
 
 import check_capture_is_kept as gate
 
 
+def _throwaway() -> str:
+    """A temp dir that goes away when the process does.
+
+    These call sites were a bare `mkdtemp` with no cleanup, which never
+    removed anything: the three test files that used it leaked 28
+    directories between them on EVERY run, locally and in CI. That is
+    invisible until the day the disk fills, and a full disk does not
+    present as a full disk -- it presents as a test that has gone quiet.
+    One did, for fifteen minutes, and was first diagnosed as a slow test
+    file.
+
+    `atexit` rather than `addCleanup` because the callers are module-level
+    helpers with no TestCase in scope, and rather than
+    `TemporaryDirectory` because the directory has to outlive the
+    function that builds it.
+    """
+    root = tempfile.mkdtemp()
+    atexit.register(shutil.rmtree, root, True)
+    return root
+
+
 def tree(flow: str, sheet: str = 'await repo.deleteAttachmentById(id);'):
-    root = pathlib.Path(tempfile.mkdtemp())
+    root = pathlib.Path(_throwaway())
     for rel, body in ((gate.FLOW, flow), (gate.ASKED, sheet)):
         p = root / rel
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -74,7 +97,7 @@ class TheGate(unittest.TestCase):
     def test_a_missing_flow_file_is_not_a_finding(self):
         # Renamed or moved. That is not this gate's business to guess at,
         # and inventing a failure would block the rename.
-        root = pathlib.Path(tempfile.mkdtemp())
+        root = pathlib.Path(_throwaway())
         self.assertEqual(gate.offenders(root), [])
 
     def test_the_deliberate_remove_going_missing_fails_too(self):
@@ -99,7 +122,7 @@ class TheGate(unittest.TestCase):
         # claim about something it never read. Both halves used to skip
         # quietly -- `offenders()` returns [] and the canary was guarded
         # by `asked.exists() and ...`.
-        root = pathlib.Path(tempfile.mkdtemp())
+        root = pathlib.Path(_throwaway())
         out, code = run(root)
         self.assertEqual(code, 2, out)
         self.assertIn('checked nothing', out)
@@ -109,7 +132,7 @@ class TheGate(unittest.TestCase):
     def test_it_says_that_is_not_a_defect_in_the_app(self):
         # A red build with no explanation gets the gate deleted. This one
         # has to say "the file moved" and not imply the rule was broken.
-        root = pathlib.Path(tempfile.mkdtemp())
+        root = pathlib.Path(_throwaway())
         out, _ = run(root)
         self.assertIn('NOT a defect in the app', out)
         self.assertIn('FLOW and ASKED', out)

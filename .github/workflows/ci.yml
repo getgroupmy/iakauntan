@@ -162,6 +162,24 @@ jobs:
           python3 scripts/check_thin_assertions_test.py
           python3 scripts/check_thin_assertions.py
 
+      # A `mkdtemp` nobody removes fills the disk, and a full disk does
+      # NOT present as a full disk. Five functions across five files
+      # leaked one directory per call -- 28 per gate run -- and 7,052 of
+      # them were eventually sitting in /tmp, 7.2G, with the disk at 100%
+      # and 57M free. At that point `flutter test` on one file produced
+      # zero bytes in fifteen minutes and the first diagnosis was "this
+      # test file is too slow to mutate". It ran in 35 seconds once there
+      # was room. Cheapest possible gate for an hour that cost an hour.
+      #
+      # Two of the five were missed by a file-level grep, because both
+      # files already said `rmtree` somewhere else; the check is per
+      # FUNCTION and reads the AST, so prose about mkdtemp stays prose.
+      - name: Every mkdtemp has somebody to remove it
+        working-directory: .
+        run: |
+          python3 scripts/check_temp_cleanup_test.py
+          python3 scripts/check_temp_cleanup.py
+
       - run: flutter analyze --fatal-infos --fatal-warnings
 
       # `- run: flutter test` was this step for 2251 runs, and a bare

@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import importlib.util
 import pathlib
+import atexit
+import shutil
 import tempfile
 import unittest
 
@@ -21,10 +23,31 @@ assert SPEC.loader is not None
 SPEC.loader.exec_module(coa)
 
 
+def _throwaway() -> str:
+    """A temp dir that goes away when the process does.
+
+    These call sites were a bare `mkdtemp` with no cleanup, which never
+    removed anything: the three test files that used it leaked 28
+    directories between them on EVERY run, locally and in CI. That is
+    invisible until the day the disk fills, and a full disk does not
+    present as a full disk -- it presents as a test that has gone quiet.
+    One did, for fifteen minutes, and was first diagnosed as a slow test
+    file.
+
+    `atexit` rather than `addCleanup` because the callers are module-level
+    helpers with no TestCase in scope, and rather than
+    `TemporaryDirectory` because the directory has to outlive the
+    function that builds it.
+    """
+    root = tempfile.mkdtemp()
+    atexit.register(shutil.rmtree, root, True)
+    return root
+
+
 class FindingByNameAssertions(unittest.TestCase):
 
     def files(self, **files: str) -> pathlib.Path:
-        tmp = pathlib.Path(tempfile.mkdtemp())
+        tmp = pathlib.Path(_throwaway())
         for name, body in files.items():
             (tmp / name).write_text(body)
         return tmp
@@ -54,7 +77,7 @@ class FindingByNameAssertions(unittest.TestCase):
 class TheRatchet(unittest.TestCase):
 
     def files(self, body: str) -> pathlib.Path:
-        tmp = pathlib.Path(tempfile.mkdtemp())
+        tmp = pathlib.Path(_throwaway())
         (tmp / "a.sql").write_text(body)
         return tmp
 

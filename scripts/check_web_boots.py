@@ -40,6 +40,7 @@ expected wherever this runs without credentials and they say nothing
 about bootstrap; what is not ignored is an uncaught exception, which is
 what the outage was.
 """
+import atexit
 import http.server
 import json
 import os
@@ -118,11 +119,16 @@ def boot(url: str, seconds: float = 30) -> tuple[str, list[str]]:
     import websocket
 
     port = 9455
+    # Chrome needs this to outlive the Popen, so TemporaryDirectory is no
+    # good -- but an unremoved one is how THOUSANDS of browser profiles
+    # ended up in /tmp, 24MB each, until the disk hit 100%.
+    profile = tempfile.mkdtemp()
+    atexit.register(shutil.rmtree, profile, True)
     chrome = subprocess.Popen(
         [CHROME, '--headless=new', f'--remote-debugging-port={port}',
          '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage',
          '--remote-allow-origins=*',
-         f'--user-data-dir={tempfile.mkdtemp()}', 'about:blank'],
+         f'--user-data-dir={profile}', 'about:blank'],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         target = None

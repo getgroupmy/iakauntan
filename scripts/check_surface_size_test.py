@@ -115,8 +115,10 @@ class ThroughTheRealFunctions(unittest.TestCase):
     """
 
     def tree(self, **files):
+        import shutil
         import tempfile
         tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
         for name, body in files.items():
             (pathlib.Path(tmp) / (name + ".dart")).write_text(body)
         real = css.TESTS
