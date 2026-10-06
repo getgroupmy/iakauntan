@@ -14391,6 +14391,44 @@ operations timer does not belong in the run that decides what ships.
 **It will be red from its first run until the feed is repaired**, and
 that is correct. Against today's data it says: stale, 11 days.
 
+## 6 October (later): the statutory reports, task #87
+
+After the 45 money movers, the functions that turn the ledger into what
+an authority is told. Each has a mutants file in
+`supabase/tests/mutants/`, and its header holds the kill sheet.
+
+| Function | Mutants | Result | What was missing |
+| --- | --- | --- | --- |
+| `app.sst_output_due` (SST-02) | 18 | 18 killed | nothing: the first function needing no new assertion |
+| `app.sst_period_for` | 13 | 12 + 1 equivalent | nothing |
+| Form C (`tax_business_income`, `tax_computation`) | 21 | 21 killed | unabsorbed capital allowances carried forward |
+| Forms B/P (`individual_tax_on`, `tax_computation_individual`) | 20 | 20 killed | the PCB scale lookup (ONE seeded schedule, so its four rules were unasserted), the RM400 rebate cap, CP500 instalments |
+| `ea_statement` (EA form) | 18 | 16 + 2 equivalent | the fixture: hired long ago, still employed, no zakat, taxable salary only, the period's pay date |
+| `report_withholding` | 15 | 15 killed | dollar certificates, exact days late, a late remittance, void/deleted, the range, **and its tenant boundary** |
+
+| The three core statements (trial balance, P&L, balance sheet) | 21 | 21 killed | **twelve rules**: drafts counted, the from-date boundary, after the as-at, opening balances, group and deleted accounts, and all three membership guards. Only 9 of 21 died across the 19 files that read them |
+
+**The tenant boundary of the definer reports, now asserted as a
+class.** `report_withholding` and the three core statements are
+SECURITY DEFINER, so RLS does not reach them. Their own
+`app.is_org_member(p_org_id)` is the whole boundary, and on all four
+the mutant that drops it survived the suite. An existing check, "a
+stranger cannot read either statement", covered two OTHER statements.
+`supabase/tests/reports_refuse_strangers.sql` now calls every definer
+`report_*` that takes `p_org_id`, after a demo rebuild inside its
+transaction. Each is called as the owner of the first demo company
+where it returns rows, then as a signed-in stranger. A stranger gets no
+rows, or a 42501 and nothing else. **25 reports are asked; the floor is
+25.** 19 had rows in no demo company and are named in the output, not
+counted: group reports in a demo with no group, and per-matter, item or
+asset ledgers whose id is passed as null. Passing a real id is the next
+step. All three core membership mutants die on it.
+
+Observation, not changed: `report_statutory_charges` refuses a MEMBER
+whose company lacks the Property module with "Not your company"
+(42501). That is a module check worded as a membership refusal, so the
+person is told the wrong thing. It is not a leak.
+
 ## 6 October: the gate's first real reading, and the bill sweep
 
 **The rate-feed gate works.** `3ad2e750` went green and its migrate job

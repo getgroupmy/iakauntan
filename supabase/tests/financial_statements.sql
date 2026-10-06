@@ -392,4 +392,134 @@ begin
       'public.report_changes_in_equity(uuid, date, date)', 'execute'));
 end $$;
 
+
+-- ---------------------------------------------------------------------
+-- The three core statements, rule by rule
+--
+-- `report_trial_balance`, `report_profit_loss` and `report_balance_sheet`
+-- are read by every other report, the tax computation and the year-end
+-- close, and the 2026-10-06 sweep (supabase/tests/mutants/
+-- core_statements.py) found twelve of their twenty-one rules unasserted
+-- across nineteen files: drafts counted, an entry ON the from-date
+-- counted twice, journals after the as-at date, an account's own
+-- opening balance (left off, or signed the wrong way on a credit
+-- account), group and deleted accounts listed -- and, on all three,
+-- the membership test that is the whole tenant boundary of a SECURITY
+-- DEFINER report.
+--
+-- The dates are chosen so that each rule moves a number: before the
+-- period, ON its first day, inside it as a DRAFT, and after the as-at.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid;
+  v_y     integer := extract(year from pg_temp.today())::integer;
+  v_stock uuid; v_sales uuid; v_exp uuid; v_ap uuid; v_gone uuid;
+  v_draft uuid;
+  v_from  date; v_to date; v_asat date;
+  r record;
+  v_stranger uuid;
+begin
+  v_org := pg_temp.test_org('Tiga Penyata Sdn Bhd');
+  perform public.create_fiscal_year(v_org, make_date(v_y, 1, 1));
+  select id into v_stock from public.accounts where org_id = v_org and code = '1310';
+  select id into v_sales from public.accounts where org_id = v_org and code = '4100';
+  select id into v_exp   from public.accounts where org_id = v_org and code = '5100';
+  select id into v_ap    from public.accounts where org_id = v_org and code = '2110';
+  v_from := make_date(v_y, 2, 1); v_to := make_date(v_y, 2, 28);
+  v_asat := make_date(v_y, 2, 15);
+
+  -- Before the period: 1,000 of stock sold.
+  perform app.create_gl_entry_internal(v_org, make_date(v_y, 1, 15), 'manual',
+    jsonb_build_array(
+      jsonb_build_object('account_id', v_stock, 'debit', 1000, 'credit', 0),
+      jsonb_build_object('account_id', v_sales, 'debit', 0, 'credit', 1000)),
+    'January');
+  -- ON the first day of the period: 200 of it expensed.
+  perform app.create_gl_entry_internal(v_org, v_from, 'manual',
+    jsonb_build_array(
+      jsonb_build_object('account_id', v_exp,   'debit', 200, 'credit', 0),
+      jsonb_build_object('account_id', v_stock, 'debit', 0, 'credit', 200)),
+    'The first of February');
+  -- After the as-at date, inside the period: 300 more stock.
+  perform app.create_gl_entry_internal(v_org, make_date(v_y, 2, 20), 'manual',
+    jsonb_build_array(
+      jsonb_build_object('account_id', v_stock, 'debit', 300, 'credit', 0),
+      jsonb_build_object('account_id', v_ap,    'debit', 0, 'credit', 300)),
+    'After the fifteenth');
+  -- A DRAFT, in the period: posted it would be 999 more expense. A
+  -- journal waiting for approval is held as a draft, so this is a row
+  -- the product makes, written here directly.
+  v_draft := app.create_gl_entry_internal(v_org, make_date(v_y, 2, 10), 'manual',
+    jsonb_build_array(
+      jsonb_build_object('account_id', v_exp,   'debit', 999, 'credit', 0),
+      jsonb_build_object('account_id', v_stock, 'debit', 0, 'credit', 999)),
+    'Awaiting approval');
+  update public.gl_entries set status = 'draft' where id = v_draft;
+  -- An opening balance carried on the account itself, on a CREDIT
+  -- account, which is where the sign matters.
+  update public.accounts set opening_balance = 500 where id = v_ap;
+  -- An account retired from the chart, with nothing on it.
+  insert into public.accounts (org_id, code, name, account_type, account_subtype)
+  values (v_org, '5999', 'Retired', 'expense', 'operating_expense')
+  returning id into v_gone;
+  update public.accounts set deleted_at = now() where id = v_gone;
+
+  -- The trial balance for February.
+  select * into r from public.report_trial_balance(v_org, v_from, v_to)
+   where account_id = v_stock;
+  perform pg_temp.check_eq('stock opens February at January''s 1,000',
+    r.opening_balance, 1000.00);
+  perform pg_temp.check_eq('and the first of February is in the period, once',
+    r.credit, 200.00);
+  perform pg_temp.check_eq('so it closes at 1,100, the draft left out',
+    r.closing_balance, 1100.00);
+  perform pg_temp.check_eq('the expense in the period is the posted 200, not the draft',
+    (select debit from public.report_trial_balance(v_org, v_from, v_to)
+      where account_id = v_exp), 200.00);
+  perform pg_temp.check_eq('a credit account''s own opening balance is a credit',
+    (select opening_balance from public.report_trial_balance(v_org, v_from, v_to)
+      where account_id = v_ap), -500.00);
+  -- And it carries into the CLOSING balance, which has its own copy of
+  -- the sign rule: 500 owed at the start and 300 more on the 20th.
+  perform pg_temp.check_eq('and closes the period owing 800',
+    (select closing_balance from public.report_trial_balance(v_org, v_from, v_to)
+      where account_id = v_ap), -800.00);
+  perform pg_temp.check_eq('no group account is on the trial balance',
+    (select count(*)::integer from public.report_trial_balance(v_org, v_from, v_to) t
+       join public.accounts a on a.id = t.account_id where a.is_group), 0);
+  perform pg_temp.check_true('-- the chart does have group accounts',
+    exists (select 1 from public.accounts where org_id = v_org and is_group));
+  perform pg_temp.check_eq('nor a deleted one',
+    (select count(*)::integer from public.report_trial_balance(v_org, v_from, v_to)
+      where account_id = v_gone), 0);
+
+  -- The profit and loss for February.
+  perform pg_temp.check_eq('the profit and loss carries the posted expense, not the draft',
+    (select amount from public.report_profit_loss(v_org, v_from, v_to)
+      where account_id = v_exp), 200.00);
+
+  -- The balance sheet at the fifteenth.
+  perform pg_temp.check_eq(
+    'stock at the fifteenth: not the twentieth''s purchase, not the draft',
+    (select balance from public.report_balance_sheet(v_org, v_asat)
+      where account_id = v_stock), 800.00);
+  perform pg_temp.check_eq('and the payable carries its own opening balance',
+    (select balance from public.report_balance_sheet(v_org, v_asat)
+      where account_id = v_ap), 500.00);
+
+  -- And a stranger reads none of the three. All three are SECURITY
+  -- DEFINER, so RLS does not reach them; their membership test is all
+  -- there is.
+  v_stranger := pg_temp.another_user('orang.asing@tigapenyata.test');
+  perform pg_temp.sign_in_as(v_stranger);
+  perform pg_temp.check_eq('a stranger reads no trial balance',
+    (select count(*)::integer from public.report_trial_balance(v_org, v_from, v_to)), 0);
+  perform pg_temp.check_eq('no profit and loss',
+    (select count(*)::integer from public.report_profit_loss(v_org, v_from, v_to)), 0);
+  perform pg_temp.check_eq('and no balance sheet',
+    (select count(*)::integer from public.report_balance_sheet(v_org, v_asat)), 0);
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

@@ -937,4 +937,16 @@
 # SECURITY DEFINER function and were never asserted.
 # Measured:
 # `all SQL assertions passed (385 files, 14942 assertions executed)`.
-14942
+#
+# 14942 -> 14961: the three core statements (0739), 21 of 21 -- only 9
+# of 21 died across the 19 files that read them. financial_statements.sql
+# "the three core statements, rule by rule" adds drafts, the from-date
+# boundary, after the as-at, an account's own opening balance (both
+# columns, credit-signed), group and deleted accounts, and all three
+# membership guards. And a new file, reports_refuse_strangers.sql: every
+# SECURITY DEFINER report_* taking p_org_id, called as an owner who gets
+# rows and then as a stranger -- 25 asked, floored at 25, the rest
+# named. All three core membership mutants die on it.
+# Measured:
+# `all SQL assertions passed (386 files, 14961 assertions executed)`.
+14961

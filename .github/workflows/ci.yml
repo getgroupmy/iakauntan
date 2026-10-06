@@ -1069,6 +1069,7 @@ jobs:
                    supabase/tests/posting_an_invoice_refuses.sql \
                    supabase/tests/posted_link_is_immutable.sql \
                    supabase/tests/no_tenant_sees_another.sql \
+                   supabase/tests/reports_refuse_strangers.sql \
                    supabase/tests/firm_portfolio.sql \
                    supabase/tests/firm_invitations.sql \
                    supabase/tests/multi_company.sql \

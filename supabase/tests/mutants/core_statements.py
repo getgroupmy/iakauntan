@@ -13,6 +13,23 @@
 # company, so another company's lines cannot reach a row. Equivalent by
 # the join; left out rather than measured.
 
+#
+# RESULT, 6 October: 21 mutants, ALL 21 KILLED, control alive. Across the
+# nineteen files that read these statements, only NINE died -- for the
+# three functions every other report, the tax computation and the
+# year-end close stand on. Twelve rules were unasserted: drafts counted
+# (all three statements), an entry ON the from-date counted in both the
+# opening and the period, journals after the as-at date, an account's
+# own opening balance (left off the balance sheet; the wrong sign on a
+# credit account's closing), group and deleted accounts listed, and --
+# on all three -- the membership test that is the whole tenant boundary
+# of a SECURITY DEFINER report. An existing "a stranger cannot read
+# either statement" covered two OTHER statements, which is how it read
+# as coverage. financial_statements.sql's "three core statements, rule
+# by rule" block kills all twelve, with dates chosen so each rule moves
+# a number: before the period, on its first day, a draft inside it, and
+# after the as-at.
+
 m("an entry ON the from-date is counted in the opening AND the period",
   "report_trial_balance",
   "           sum(case when p_from is not null and e.entry_date < p_from",
