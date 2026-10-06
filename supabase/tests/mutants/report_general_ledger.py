@@ -8,7 +8,18 @@
 #       supabase/tests/general_ledger.sql \
 #       supabase/tests/mutants/report_general_ledger.py
 #
-# RESULT: (pending)
+# RESULT, 6 October: 28 mutants, 27 KILLED, 1 equivalent, control
+# alive, on general_ledger.sql alone. 15 died before "The ledger, rule
+# by rule" was added: the fixture had one company, one period start
+# that fell between entries, opening balances only on an asset, no
+# drafts before the period, no contact, and every journal posted in
+# date order -- so a running balance ordered by entry number agreed
+# with one ordered by date.
+#
+# Equivalent: the brought-forward sum reading another company's lines.
+# It already filters to this company's account, and
+# `gl_lines_account_same_org` ties a line's company to its account's.
+# A table constraint.
 
 m("with no end date the ledger stops a year ago",
   "report_general_ledger",
