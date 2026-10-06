@@ -9,6 +9,28 @@
 #       supabase/tests/ea_form.sql \
 #       supabase/tests/mutants/ea_statement.py
 
+#
+# RESULT, 6 October: 18 mutants, 16 KILLED, 2 EQUIVALENT, control
+# alive, all in ea_form.sql. 8 died against the file as it was; a new
+# block "box by box" kills eight more, and one assertion in the
+# unposted-run block a ninth. The FIXTURE was the gap: every employee
+# was hired years ago and still employed, had a tax number, paid no
+# zakat, was paid taxable salary only, and carried the period's pay
+# date on every payslip. Now: an exempt allowance not boxed, zakat on
+# the form, employee and employer EPF told apart, employment clamped to
+# the year at both ends, a TIN standing in, an employee reading their
+# own form, the Payroll switch, and the boxes' own posted-only rule.
+#
+# EQUIVALENT:
+#   - "the year is decided by the pay period": the mutant swaps the
+#     coalesce in the `paid` CTE's SELECT LIST, and nothing reads that
+#     column -- the year filter below it has its own coalesce, payslip
+#     date first, which the mutant does not touch.  (The code.)
+#   - "deductions are put in the boxes as income": dropping the
+#     `kind = 'earning'` test leaves `is_taxable`, and the payroll
+#     engine writes every deduction and employer contribution with
+#     is_taxable = false (measured on a calculated run).  (The writer.)
+
 m("anybody in the company may read anybody's EA form",
   "ea_statement",
   "         or p_employee_id = app.my_employee_id(v_emp.org_id),",

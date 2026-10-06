@@ -244,6 +244,12 @@ begin
   perform pg_temp.check_eq(
     'a calculated run has paid nobody and is not on the form',
     (v_ea ->> 'months_paid')::integer, 1);
+  -- In the BOXES too, which are built by a separate query from the
+  -- totals above and had their own copy of the posted-only rule,
+  -- unasserted until the 2026-10-06 sweep.
+  perform pg_temp.check_eq('nor is its salary in the salary box',
+    (select (b ->> 'amount')::numeric from jsonb_array_elements(v_ea -> 'boxes') b
+      where b ->> 'code' = 'salary'), 6000.00);
 
   -- CONTROL. The payslip exists, so the assertion above is about
   -- posting rather than about the run having produced nothing.
@@ -481,6 +487,109 @@ begin
   perform pg_temp.check_true(
     'while the payroll administrator can',
     jsonb_typeof(public.ea_statement(v.emp, 2025)) = 'object');
+end $$;
+
+
+-- =====================================================================
+-- Box by box, on a fixture where each rule moves a number
+--
+-- The 2026-10-06 sweep of `ea_statement` left ten of eighteen mutants
+-- alive, and the reason was the fixture rather than the form: every
+-- employee was hired years ago and still employed, had a tax number,
+-- paid no zakat, was paid ordinary taxable salary and nothing else, and
+-- had the period's pay date on every payslip. So a form that started
+-- the employment on the hire date, ended it in a later year, dropped the
+-- TIN fallback, left zakat off, boxed an exempt allowance, or dated pay
+-- by the period, read the same as the right one.
+-- =====================================================================
+do $$
+declare
+  v      record;
+  v_run  uuid;
+  v_slip uuid;
+  v_ea   jsonb;
+  v_26   jsonb;
+  v_me   uuid := pg_temp.test_user();
+  v_self uuid;
+begin
+  perform pg_temp.sign_in_as(v_me);
+  perform pg_temp.allow_many_companies();
+  select * into v from pg_temp.ea_company('Kotak Demi Kotak Sdn Bhd');
+  update public.employees set zakat_monthly = 50 where id = v.emp;
+
+  -- January, with an EXEMPT allowance added before posting. It is
+  -- income the employee received, and it is not remuneration on Part
+  -- B; it belongs to the exempt list, which payroll lines do not feed.
+  v_run := pg_temp.ea_month(v.org, 2025, 1, date '2025-01-31', false);
+  select id into v_slip from public.payslips where run_id = v_run;
+  insert into public.payslip_lines
+    (org_id, payslip_id, line_no, kind, code, description, amount, is_taxable)
+  values (v.org, v_slip, 99, 'earning', 'TRANSPORT', 'Exempt travel', 200, false);
+  perform public.post_payroll_run(v_run);
+
+  -- The December PERIOD, whose payslip was paid on 3 January: the
+  -- payslip's own date is the one that decides the year, not the
+  -- period's.
+  v_run := pg_temp.ea_month(v.org, 2025, 12, date '2025-12-31', false);
+  update public.payslips set pay_date = date '2026-01-03' where run_id = v_run;
+  perform public.post_payroll_run(v_run);
+
+  v_ea := public.ea_statement(v.emp, 2025);
+  v_26 := public.ea_statement(v.emp, 2026);
+
+  perform pg_temp.check_eq(
+    'the salary box holds January alone: not the exempt allowance, not December',
+    (select (b ->> 'amount')::numeric from jsonb_array_elements(v_ea -> 'boxes') b
+      where b ->> 'code' = 'salary'), 6000.00);
+  perform pg_temp.check_eq(
+    'and December''s salary, paid in January, is in the 2026 box',
+    (select (b ->> 'amount')::numeric from jsonb_array_elements(v_26 -> 'boxes') b
+      where b ->> 'code' = 'salary'), 6000.00);
+
+  perform pg_temp.check_eq('the zakat deducted is on the form',
+    (v_ea -> 'deductions' ->> 'zakat')::numeric, 50.00);
+  perform pg_temp.check_eq('the employee''s EPF is the employee''s',
+    (v_ea -> 'contributions' ->> 'epf_employee')::numeric,
+    (select epf_employee from public.payslips p join public.payroll_runs r on r.id = p.run_id
+      where p.employee_id = v.emp and p.pay_date = date '2025-01-31'));
+  perform pg_temp.check_true('-- and not the employer''s, which differs',
+    (v_ea -> 'contributions' ->> 'epf_employee')
+      <> (v_ea -> 'contributions' ->> 'epf_employer'));
+
+  -- Hired in 2021: employed for the whole of 2025, from 1 January.
+  perform pg_temp.check_eq('employment starts on 1 January for somebody hired earlier',
+    v_ea -> 'employee' ->> 'employed_from', '2025-01-01');
+  -- Leaving in 2026 does not end the 2025 employment early -- or late.
+  update public.employees set last_working_date = date '2026-03-31' where id = v.emp;
+  perform pg_temp.check_eq('and ends on 31 December for somebody who left the next year',
+    public.ea_statement(v.emp, 2025) -> 'employee' ->> 'employed_to', '2025-12-31');
+
+  -- An employee with only a TIN still has a tax number on the form.
+  update public.employees set income_tax_no = null, tin = 'IG22222222010'
+   where id = v.emp;
+  perform pg_temp.check_eq('a TIN stands in for a missing income tax number',
+    public.ea_statement(v.emp, 2025) -> 'employee' ->> 'income_tax_no',
+    'IG22222222010');
+
+  -- An employee reads their OWN form. The block above refuses a
+  -- colleague; nothing asserted that the employee themself is let in.
+  v_self := pg_temp.another_user('nurul@kotak.test');
+  insert into public.org_members (org_id, user_id, role, status)
+  values (v.org, v_self, 'viewer', 'active')
+  on conflict (org_id, user_id) do update set role = 'viewer';
+  update public.employees set user_id = v_self where id = v.emp;
+  perform pg_temp.sign_in_as(v_self);
+  perform pg_temp.check_true('an employee may read their own EA form',
+    jsonb_typeof(public.ea_statement(v.emp, 2025)) = 'object');
+
+  -- And with Payroll switched off, nobody reads one.
+  perform pg_temp.sign_in_as(v_me);
+  update public.org_modules set is_enabled = false
+   where org_id = v.org and module_code = 'payroll';
+  perform pg_temp.check_refused(
+    'with the Payroll module off there is no EA form to read',
+    format($q$ select public.ea_statement(%L, 2025) $q$, v.emp),
+    '%Payroll module is not switched on%', '42501');
 end $$;
 
 rollback;

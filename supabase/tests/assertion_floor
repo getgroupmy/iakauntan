@@ -915,4 +915,15 @@
 # instalments credited, and nil income needing no scale.
 # Measured:
 # `all SQL assertions passed (385 files, 14917 assertions executed)`.
-14917
+#
+# 14917 -> 14928: the EA form (0608), 16 of 16 killable, 2 equivalent.
+# ea_form.sql had killed 8 of 18: every employee was hired years ago and
+# still employed, had a tax number, paid no zakat, earned taxable salary
+# only, and carried the period's pay date. A "box by box" block now
+# boxes no exempt allowance, carries zakat, tells employee and employer
+# EPF apart, clamps the employment to the year at both ends, falls back
+# to the TIN, lets an employee read their own form, honours the Payroll
+# switch, and dates December's pay by the payslip.
+# Measured:
+# `all SQL assertions passed (385 files, 14928 assertions executed)`.
+14928
