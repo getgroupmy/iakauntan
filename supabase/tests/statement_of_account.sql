@@ -514,6 +514,24 @@ begin
     (select closing_balance from public.report_trial_balance(
        v_org, null, date '2026-03-31') where code = '1210'));
 
+  -- And another customer's cheque is on his statement, not this one.
+  declare v_other uuid; v_their uuid;
+  begin
+    insert into public.contacts (org_id, code, name, contact_type)
+    values (v_org, 'C-002', 'Orang Lain Bhd', 'customer')
+    returning id into v_other;
+    v_their := pg_temp.sales_doc(v_org, v_other, 'invoice', 'INV-O1', 600,
+                                 date '2026-03-02', date '2026-04-01');
+    perform public.record_pdc(v_org, 'incoming', v_other, '400001',
+      date '2026-04-20', 600,
+      jsonb_build_array(jsonb_build_object('document', v_their, 'amount', 600)),
+      v_bank, 'RHB', date '2026-03-20');
+  end;
+  perform pg_temp.check_eq('another customer''s cheque is not on this statement',
+    (select count(*) from public.report_statement_of_account(
+       v_cust, date '2026-03-01', date '2026-03-31') s
+      where s.kind = 'cheque'), 1);
+
   -- Before any of it, none of it.
   perform pg_temp.check_eq('a statement to the 4th has none of the three',
     (select count(*) from public.report_statement_of_account(

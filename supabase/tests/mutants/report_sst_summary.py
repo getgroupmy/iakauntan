@@ -48,8 +48,8 @@ m("a foreign bill's value is in its own currency",
 
 m("a credit note adds to the output tax",
   "report_sst_summary",
-  "           case when d.doc_type in ('credit_note', 'refund_note')\n                then -1 else 1 end as sign,\n           -- 0748.",
-  "           1 as sign,  -- cn adds\n           -- 0748.",
+  "           case when d.doc_type in ('credit_note', 'refund_note')\n                then -1 else 1 end as sign,\n           -- 0748. In ringgit, which is what the return is made in and",
+  "           1 as sign,  -- cn adds\n           -- 0748. In ringgit, which is what the return is made in and",
   "-- cn adds")
 
 m("a purchase credit note adds to the input tax",
@@ -66,8 +66,8 @@ m("a draft invoice is declared",
 
 m("the period has no end",
   "report_sst_summary",
-  "       and d.doc_date between p_from and p_to\n  ),\n  -- The tax a Malaysian",
-  "       and d.doc_date >= p_from  -- no end\n  ),\n  -- The tax a Malaysian",
+  "       and d.doc_date between p_from and p_to\n  ),\n  -- The tax a Malaysian restaurant charges on the ten per cent is",
+  "       and d.doc_date >= p_from  -- no end\n  ),\n  -- The tax a Malaysian restaurant charges on the ten per cent is",
   "-- no end")
 
 m("a stranger reads the output tax",
