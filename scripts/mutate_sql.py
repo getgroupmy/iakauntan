@@ -268,6 +268,49 @@ def live(name: str) -> list[str]:
     return [part for part in out.split(SEP) if part.strip()]
 
 
+def settings(name: str) -> dict[str, str]:
+    """Each overload's `proconfig` -- its `SET` clauses -- by signature.
+
+    The restore re-runs the function's `create or replace` from its
+    defining migration, and `create or replace` REPLACES the SET clauses
+    with whatever that statement carries. A setting a LATER migration
+    added with `alter function ... set` is therefore lost on restore, and
+    nothing the test file checks will notice. That happened on 6 October:
+    `app.set_einvoice_cancel_deadline` is defined in `0007` with no
+    search_path, `0023` pinned it by `alter function`, and a sweep's
+    restore left it unpinned -- found by `search_path.sql`, which no
+    sweep of that function runs. Snapshotted before the first mutant and
+    re-applied after every restore.
+    """
+    out = subprocess.run(
+        ["psql", DB, "-tAc",
+         "select p.oid::regprocedure::text || chr(30) || "
+         "coalesce(array_to_string(p.proconfig, chr(31)), '') "
+         f"from pg_proc p where p.proname = '{name}'"],
+        capture_output=True, text=True).stdout
+    found = {}
+    for line in out.splitlines():
+        if chr(30) in line:
+            sig, conf = line.split(chr(30), 1)
+            found[sig] = conf
+    return found
+
+
+def reapply(snapshot: dict[str, str]) -> None:
+    """Put back the SET clauses a restore dropped. A no-op when none did."""
+    statements = []
+    for sig, conf in snapshot.items():
+        for item in filter(None, conf.split(chr(31))):
+            key, value = item.split("=", 1)
+            # search_path is a list and is written bare; anything else is
+            # one value and is quoted.
+            if key != "search_path":
+                value = "'" + value.replace("'", "''") + "'"
+            statements.append(f"alter function {sig} set {key} = {value};")
+    if statements:
+        psql("\n".join(statements))
+
+
 def latest_defining(name: str) -> pathlib.Path | None:
     """The LAST migration that defines `name`, found case-insensitively.
 
@@ -569,6 +612,9 @@ def main() -> int:
         sys.exit("the test does not pass before anything is broken")
 
     survivors, control_died = [], False
+    snapshots = {}
+    for _, one, *_rest in mutants:
+        snapshots.setdefault(one, settings(one))
     for label, name, old, new, marker in mutants:
         source = block(original, name)
         keep = grants(original, name)
@@ -595,6 +641,7 @@ def main() -> int:
             if _keep:
                 back += "\n" + _keep
             psql(back)
+            reapply(snapshots[_name])
             sys.exit(f"HARNESS ERROR: {why}\n"
                      f"  ({_name} was put back before stopping)")
 
@@ -632,8 +679,15 @@ def main() -> int:
         if keep:
             restore += "\n" + keep
         psql(restore)
+        reapply(snapshots[name])
 
     after = run(test)
+    if after is None:
+        drifted = [one for one, snap in snapshots.items()
+                   if settings(one) != snap]
+        if drifted:
+            after = ("a function's SET clauses differ from before the run: "
+                     + ", ".join(drifted))
     print(f"restored: {'passed' if after is None else 'FAILED ' + after}")
 
     if control_died:
