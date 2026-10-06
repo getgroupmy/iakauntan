@@ -968,4 +968,16 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-15066
+15200
+#
+# 15066 -> 15200, 6 October: the rest of 0739's functions and the
+# statutory dates, rule by rule -- bank transfers, sales by person, the
+# stock card, the fx preview, the dimension P&L, the day sheet, the
+# lodgement, the rate board, the overdue reminders, the recurring
+# runner, the platform billing jobs, the notifications pass, the LHDN
+# due dates and payment terms -- and the answers built in 0750 (debit
+# notes, membership periods, trial companies) and 0751 (Practice
+# Directive 10/2024). Measured against a local cluster at 0751 over the
+# ci.yml list: 386 files, 15200 assertions (15199 with search_path.sql
+# stopped early by a pin a sweep had dropped -- see mutate_sql.py's
+# `settings()`; 15200 once it was put back).
