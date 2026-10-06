@@ -960,4 +960,12 @@
 # each at a different rate (8).
 # Measured:
 # `all SQL assertions passed (386 files, 15011 assertions executed)`.
-15011
+#
+# 15011 -> 15066: the report tier, rule by rule -- Schedule 3 (10), the
+# general ledger (12), the cash flow statement (9), the statutory
+# remittances (7), the fixed asset note over half a year (2), the
+# collections worklist (8) -- and 0749: a debit note chased (2), and a
+# set-off, a deposit and a cheque as payment of service tax (5).
+# Measured:
+# `all SQL assertions passed (386 files, 15066 assertions executed)`.
+15066
