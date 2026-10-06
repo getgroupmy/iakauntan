@@ -174,4 +174,149 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- close_attendance_day, rule by rule
+--
+-- A sweep of `0360`'s definition over this file and `scheduled_work.sql`
+-- left fifteen mutants alive. The fixture above was one company of five
+-- people, all active, all hired months before, with one open clock-in on
+-- the day being closed and one leave request in each state that day. So
+-- nothing said which COMPANY a holiday, a clock-in or an employee had to
+-- belong to; nothing pressed the edges of employment -- somebody who has
+-- left, or retired, or not yet started, or is on their first or last
+-- day; an open clock-in was never on another day nor a finished one on
+-- this; and `dow` against ISO weekdays differ only on a Sunday, which no
+-- roster here worked.
+--
+-- One person per rule, closing a Wednesday, beside a second company that
+-- has a holiday that day, an open clock-in, and staff of its own.
+-- ---------------------------------------------------------------------
+create or replace function pg_temp.rostered(
+  p_org uuid, p_no text, p_shift uuid, p_hired date,
+  p_status text default 'active', p_last date default null)
+returns uuid language plpgsql as $$
+declare v uuid;
+begin
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, employment_status,
+     resignation_date, last_working_date)
+  values (p_org, p_no, p_no, p_hired, p_status::app.employment_status,
+          case when p_status in ('resigned', 'terminated', 'retired')
+               then p_hired + 1 end,
+          p_last)
+  returning id into v;
+  insert into public.employee_shifts (org_id, employee_id, shift_id, effective_from)
+  values (p_org, v, p_shift, least(p_hired, date '2026-01-01'));
+  return v;
+end $$;
+
+create or replace function pg_temp.day_status(p_emp uuid, p_on date)
+returns text language sql stable as $$
+  select coalesce((select status::text from public.attendance_records
+                    where employee_id = p_emp and work_date = p_on), 'no row');
+$$;
+
+do $$
+declare
+  v_wed date := date '2026-06-10';
+  v_sun date := date '2026-06-14';
+  v_a uuid; v_b uuid; v_day uuid; v_wknd uuid; v_b_day uuid; v_type uuid;
+  v_base uuid; v_res uuid; v_ret uuid; v_new uuid; v_day1 uuid;
+  v_gone uuid; v_last uuid; v_sub uuid; v_later uuid; v_openy uuid;
+  v_done uuid; v_weekend uuid; v_b_open uuid; v_b_away uuid;
+begin
+  perform pg_temp.check_eq('2026-06-10 is a Wednesday', to_char(v_wed, 'Dy'), 'Wed');
+  perform pg_temp.check_eq('and 2026-06-14 a Sunday', to_char(v_sun, 'Dy'), 'Sun');
+  perform pg_temp.allow_many_companies();
+
+  v_a := pg_temp.test_org('Kehadiran Peraturan Sdn Bhd');
+  insert into public.work_shifts (org_id, code, name, start_time, end_time, work_days)
+  values (v_a, 'DAY', 'Office hours', '09:00', '18:00', array[1,2,3,4,5])
+  returning id into v_day;
+  -- Saturday and Sunday, written in `dow`: 6 and 0.
+  insert into public.work_shifts (org_id, code, name, start_time, end_time, work_days)
+  values (v_a, 'WKND', 'Weekend', '09:00', '18:00', array[0,6])
+  returning id into v_wknd;
+
+  v_base  := pg_temp.rostered(v_a, 'BASE',  v_day, v_wed - 90);
+  v_res   := pg_temp.rostered(v_a, 'RES',   v_day, v_wed - 90, 'resigned', v_wed + 30);
+  v_ret   := pg_temp.rostered(v_a, 'RET',   v_day, v_wed - 90, 'retired',  v_wed + 30);
+  v_new   := pg_temp.rostered(v_a, 'NEW',   v_day, v_wed + 10);
+  v_day1  := pg_temp.rostered(v_a, 'DAY1',  v_day, v_wed);
+  v_gone  := pg_temp.rostered(v_a, 'GONE',  v_day, v_wed - 90, 'notice', v_wed - 1);
+  v_last  := pg_temp.rostered(v_a, 'LAST',  v_day, v_wed - 90, 'notice', v_wed);
+  v_sub   := pg_temp.rostered(v_a, 'SUB',   v_day, v_wed - 90);
+  v_later := pg_temp.rostered(v_a, 'LATER', v_day, v_wed - 90);
+  v_openy := pg_temp.rostered(v_a, 'OPENY', v_day, v_wed - 90);
+  v_done  := pg_temp.rostered(v_a, 'DONE',  v_day, v_wed - 90);
+  v_weekend := pg_temp.rostered(v_a, 'WKND', v_wknd, v_wed - 90);
+
+  insert into public.leave_types (org_id, code, name, default_days)
+  values (v_a, 'AL', 'Annual', 8) returning id into v_type;
+  insert into public.leave_requests
+    (org_id, request_no, employee_id, leave_type_id, start_date, end_date,
+     total_days, status)
+  values (v_a, 'LV-SUB', v_sub, v_type, v_wed, v_wed, 1, 'submitted'),
+         (v_a, 'LV-LATER', v_later, v_type, v_wed + 5, v_wed + 5, 1, 'approved');
+
+  insert into public.attendance_records
+    (org_id, employee_id, work_date, shift_id, clock_in, clock_out, status)
+  values (v_a, v_openy, v_wed - 1, v_day, (v_wed - 1) + time '09:00', null, 'present'),
+         (v_a, v_done,  v_wed,     v_day, v_wed + time '09:00', v_wed + time '18:00', 'present');
+  -- A holiday that is worked is a working day.
+  insert into public.public_holidays (org_id, holiday_date, name, is_working)
+  values (v_a, v_wed, 'Company anniversary (worked)', true);
+
+  -- The company next door: a holiday that day, an open clock-in, and
+  -- somebody rostered who did not come.
+  v_b := pg_temp.test_org('Kehadiran Jiran Sdn Bhd');
+  insert into public.work_shifts (org_id, code, name, start_time, end_time, work_days)
+  values (v_b, 'DAY', 'Office hours', '09:00', '18:00', array[1,2,3,4,5])
+  returning id into v_b_day;
+  v_b_open := pg_temp.rostered(v_b, 'B-OPEN', v_b_day, v_wed - 90);
+  v_b_away := pg_temp.rostered(v_b, 'B-AWAY', v_b_day, v_wed - 90);
+  insert into public.attendance_records
+    (org_id, employee_id, work_date, shift_id, clock_in, status)
+  values (v_b, v_b_open, v_wed, v_b_day, v_wed + time '09:00', 'present');
+  insert into public.public_holidays (org_id, holiday_date, name)
+  values (v_b, v_wed, 'Their state holiday');
+
+  perform app.close_attendance_day(v_a, v_wed);
+
+  perform pg_temp.check_eq('a worked holiday, and the neighbour''s holiday, close as a working day',
+    pg_temp.day_status(v_base, v_wed), 'absent');
+  perform pg_temp.check_eq('somebody who has resigned is not marked',
+    pg_temp.day_status(v_res, v_wed), 'no row');
+  perform pg_temp.check_eq('nor somebody who has retired',
+    pg_temp.day_status(v_ret, v_wed), 'no row');
+  perform pg_temp.check_eq('nor somebody not yet started',
+    pg_temp.day_status(v_new, v_wed), 'no row');
+  perform pg_temp.check_eq('while their first day is a working day',
+    pg_temp.day_status(v_day1, v_wed), 'absent');
+  perform pg_temp.check_eq('somebody past their last day is not marked',
+    pg_temp.day_status(v_gone, v_wed), 'no row');
+  perform pg_temp.check_eq('while their last day is a working day',
+    pg_temp.day_status(v_last, v_wed), 'absent');
+  perform pg_temp.check_eq('a request still waiting does not excuse the day',
+    pg_temp.day_status(v_sub, v_wed), 'absent');
+  perform pg_temp.check_eq('nor does leave approved for another day',
+    pg_temp.day_status(v_later, v_wed), 'absent');
+  perform pg_temp.check_eq('an open clock-in on another day is left for its own night',
+    pg_temp.day_status(v_openy, v_wed - 1), 'present');
+  perform pg_temp.check_eq('a finished day is not incomplete',
+    pg_temp.day_status(v_done, v_wed), 'present');
+  perform pg_temp.check_eq('a weekend roster is not marked on a Wednesday',
+    pg_temp.day_status(v_weekend, v_wed), 'no row');
+  perform pg_temp.check_eq('the neighbour''s open clock-in is theirs to close',
+    pg_temp.day_status(v_b_open, v_wed), 'present');
+  perform pg_temp.check_eq('and their staff are not marked by this company''s night',
+    pg_temp.day_status(v_b_away, v_wed), 'no row');
+
+  -- SUNDAY, which `dow` writes as 0 and ISO as 7.
+  perform pg_temp.check_eq('a Sunday closes for the weekend roster alone',
+    app.close_attendance_day(v_a, v_sun), 1);
+  perform pg_temp.check_eq('who is absent on it',
+    pg_temp.day_status(v_weekend, v_sun), 'absent');
+end $$;
+
 rollback;

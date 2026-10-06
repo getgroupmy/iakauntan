@@ -480,6 +480,8 @@ function:
 | `app.covering_grant` | `0753` | 13 / 13 | -- | `payslip_access.sql` |
 | `audit_view_payslip` | `0048` | 10 / 10 | -- | `payslip_access.sql` |
 | `audit_list_payslips` | `0281` | 10 / 10 | -- | `payslip_access.sql` |
+| `app.close_attendance_day` | `0360` | 25 / 25 | -- | `attendance_close.sql` |
+| `adjust_attendance`, `app.recompute_attendance` | `0363` | 42 / 42 | -- | `attendance_adjust.sql` |
 
 Every equivalent is written into its mutants file with the reason.
 
