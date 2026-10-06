@@ -8,7 +8,12 @@
 #       supabase/tests/sst_summary.sql \
 #       supabase/tests/mutants/report_sst_summary.py
 #
-# RESULT: (pending)
+# RESULT, 6 October, against 0748: 12 mutants, ALL 12 KILLED, control
+# alive, on sst_summary.sql alone. The six currency mutants are what
+# `0748` fixed and are killed by its "The return is made in ringgit"
+# block -- each amount at a different rate (4.20, 3.40, 4.50) so that
+# the wrong one is a different number. The rest -- credit note signs,
+# drafts, the period, the membership tests -- the file already had.
 
 m("a foreign sale's tax is declared in its own currency",
   "report_sst_summary",
