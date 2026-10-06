@@ -6,7 +6,9 @@
 #       supabase/tests/statutory_remittances.sql \
 #       supabase/tests/mutants/remittance_due.py
 #
-# RESULT: (pending)
+# RESULT: 4 mutants and a control. 4 killed in statutory_remittances.sql,
+# which pins every body's due day, a pay date late in its month, and a
+# body with no due day.
 
 m("it is due in the month the wages were paid",
   "remittance_due",
