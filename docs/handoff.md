@@ -437,6 +437,10 @@ page and renumbering would quietly break the reference.
     exposed: production had 36 payslips, none undated, and no access
     requests at all. The new block in `payslip_access.sql` fails against
     0047's function and passes against 0753's.
+    **Applied, and read back** (6 October, read-only, with 0754): CI
+    for `5c7ba34d` ran "Apply the migrations"; in production both are
+    recorded, `covering_grant` no longer passes a null pay date through
+    a period bound, and it is still SECURITY DEFINER.
 21. ~~A retired employee is given next year's leave.~~ **Raised and
     answered 6 October: exclude retired. Built in `0754`.**
     `app.roll_leave_year` (0058) skipped `resigned` and `terminated`
@@ -447,6 +451,9 @@ page and renumbering would quietly break the reference.
     had four employees, all active; the next roll is 1 January 2027.
     Found reading `close_attendance_day`'s status list next to the
     roll's, not by a mutant -- a sweep only varies what is there.
+    **Applied, and read back** (6 October, read-only): the live
+    `roll_leave_year` skips all three statuses and is still not
+    executable by `authenticated`.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -483,6 +490,7 @@ function:
 | `app.close_attendance_day` | `0360` | 25 / 25 | -- | `attendance_close.sql` |
 | `adjust_attendance`, `app.recompute_attendance` | `0363` | 42 / 42 | -- | `attendance_adjust.sql` |
 | `app.employee_departure_guard`, `reinstate_employee` | `0371` | 16 / 16 | -- | `departures.sql` |
+| `app.record_terminal_punch` | `0612` | 24 / 24 | -- | `terminal_punches.sql` |
 
 Every equivalent is written into its mutants file with the reason.
 

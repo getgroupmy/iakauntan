@@ -369,4 +369,121 @@ begin
     (select count(*) from public.register_time_terminal(v.org, 'Side door')) = 1);
 end $$;
 
+-- =====================================================================
+-- record_terminal_punch, rule by rule
+--
+-- A sweep of `0612`'s definition over this file left fourteen mutants
+-- alive. The fixture's employee was on no roster, so lateness and its
+-- grace were never measured at all; every rejected punch above was an
+-- unknown number, so the terminal, the time and the number were never
+-- missing; the out-of-order test sent the later clock-in FIRST, which
+-- the earliest-wins rule and its opposite answer alike; and nothing
+-- read what a punch does to its terminal, which day a punch near
+-- midnight lands on, or that the punch row points at the day it made.
+--
+-- One roster, fixed dates, one day per rule. A later in-punch after an
+-- earlier one; a clock-in inside and outside the ten minutes' grace; a
+-- punch at half past seven on a Friday morning in Kuala Lumpur, which
+-- is still Thursday in UTC.
+--
+-- Not asserted, and recorded here: a punch's lateness is measured on any
+-- day the roster names -- `clock_in` does the same -- while
+-- `recompute_attendance` re-reading a corrected morning gives a rest day
+-- or a holiday none. No money reads `late_minutes`, so it is a register
+-- that disagrees with itself rather than a wrong payslip.
+-- =====================================================================
+do $$
+declare
+  v record; v_off uuid; v_shift uuid; v_res jsonb; v_rec public.attendance_records;
+  v_tue date := date '2026-06-02';
+  v_wed date := date '2026-06-03';
+  v_thu date := date '2026-06-04';
+  v_fri date := date '2026-06-05';
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  perform pg_temp.allow_many_companies();
+  select * into v from pg_temp.tp_company('Jam Peraturan Sdn Bhd');
+  insert into public.work_shifts
+    (org_id, code, name, start_time, end_time, grace_minutes, work_days)
+  values (v.org, 'DAY', 'Nine to six', '09:00', '18:00', 10, array[0,1,2,3,4,5,6])
+  returning id into v_shift;
+  insert into public.employee_shifts (org_id, employee_id, shift_id, effective_from)
+  values (v.org, v.emp, v_shift, date '2026-01-01');
+
+  -- REFUSED, AND SAYING WHY.
+  perform pg_temp.check_eq('a terminal that is not there says so',
+    app.record_terminal_punch(gen_random_uuid(), '42', now(), null) ->> 'problem',
+    'No such terminal');
+  select r.terminal_id into v_off from public.register_time_terminal(v.org, 'Back door') r;
+  update public.time_terminals set is_active = false where id = v_off;
+  perform pg_temp.check_eq('a terminal switched off says so',
+    app.record_terminal_punch(v_off, '42', now(), null) ->> 'problem',
+    'Terminal is switched off');
+  perform pg_temp.check_eq('a punch with no time says so',
+    app.record_terminal_punch(v.term, '42', null, null) ->> 'problem',
+    'A punch needs a time');
+  perform pg_temp.check_eq('and a punch with no number',
+    app.record_terminal_punch(v.term, '   ', now(), null) ->> 'problem',
+    'A punch needs a user number');
+
+  -- TUESDAY. In at 08:50 with no direction, then a stray 09:30 "in",
+  -- then 18:00 with no direction: the second undirected punch is the
+  -- clock-out, and the later "in" moves neither the arrival nor its
+  -- lateness. The number arrives padded with spaces.
+  v_res := app.record_terminal_punch(v.term, ' 42 ',
+    (v_tue + time '08:50') at time zone 'Asia/Kuala_Lumpur', null);
+  perform pg_temp.check_eq('a number sent with spaces is stored without them',
+    (select enrolment_no from public.terminal_punches
+      where terminal_id = v.term
+        and punched_at = (v_tue + time '08:50') at time zone 'Asia/Kuala_Lumpur'), '42');
+  perform app.record_terminal_punch(v.term, '42',
+    (v_tue + time '09:30') at time zone 'Asia/Kuala_Lumpur', 'in');
+  v_res := app.record_terminal_punch(v.term, '42',
+    (v_tue + time '18:00') at time zone 'Asia/Kuala_Lumpur', null);
+  perform pg_temp.check_eq('an undirected punch after an arrival is the clock-out',
+    v_res ->> 'direction', 'out');
+  select * into v_rec from public.attendance_records
+   where employee_id = v.emp and work_date = v_tue;
+  perform pg_temp.check_eq('a later in-punch does not move the arrival',
+    v_rec.clock_in::text,
+    ((v_tue + time '08:50') at time zone 'Asia/Kuala_Lumpur')::text);
+  perform pg_temp.check_eq('nor make an on-time arrival late', v_rec.late_minutes, 0);
+  perform pg_temp.check_eq('and the punch points at the day it made',
+    (select attendance_id from public.terminal_punches
+      where terminal_id = v.term
+        and punched_at = (v_tue + time '18:00') at time zone 'Asia/Kuala_Lumpur'),
+    v_rec.id);
+
+  -- WEDNESDAY, five minutes late against ten minutes' grace: on time.
+  perform app.record_terminal_punch(v.term, '42',
+    (v_wed + time '09:05') at time zone 'Asia/Kuala_Lumpur', 'in');
+  select * into v_rec from public.attendance_records
+   where employee_id = v.emp and work_date = v_wed;
+  perform pg_temp.check_eq('inside the grace is on time', v_rec.status::text, 'present');
+  -- THURSDAY, half an hour late: twenty minutes past the grace.
+  perform app.record_terminal_punch(v.term, '42',
+    (v_thu + time '09:30') at time zone 'Asia/Kuala_Lumpur', 'in');
+  select * into v_rec from public.attendance_records
+   where employee_id = v.emp and work_date = v_thu;
+  perform pg_temp.check_eq('outside it is late', v_rec.status::text, 'late');
+  perform pg_temp.check_eq('by what is past the grace', v_rec.late_minutes, 20);
+
+  -- FRIDAY at 07:30 in Kuala Lumpur, Thursday 23:30 in UTC.
+  perform app.record_terminal_punch(v.term, '42',
+    (v_fri + time '07:30') at time zone 'Asia/Kuala_Lumpur', 'in');
+  perform pg_temp.check_true('a punch before eight in the morning is that morning''s',
+    exists (select 1 from public.attendance_records
+             where employee_id = v.emp and work_date = v_fri));
+
+  -- THE TERMINAL. Seen just now; and an old punch arriving last does
+  -- not wind its latest punch back.
+  perform app.record_terminal_punch(v.term, '42',
+    (v_tue + time '07:00') at time zone 'Asia/Kuala_Lumpur', 'in');
+  perform pg_temp.check_eq('the terminal was seen just now',
+    (select last_seen_at::text from public.time_terminals where id = v.term), now()::text);
+  perform pg_temp.check_eq('and its latest punch is still Friday''s',
+    (select last_punch_at::text from public.time_terminals where id = v.term),
+    ((v_fri + time '07:30') at time zone 'Asia/Kuala_Lumpur')::text);
+end $$;
+
 rollback;
