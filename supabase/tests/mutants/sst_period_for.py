@@ -10,8 +10,16 @@
 #       supabase/tests/mutants/sst_period_for.py
 
 #
-# RESULT: the sweep was queued on 6 October behind a cluster rebuild;
-# this header is rewritten with the kill sheet when it ends.
+# RESULT, 6 October: 13 mutants, 12 KILLED, 1 EQUIVALENT, control
+# alive. sst_taxable_period.sql kills 11, sst_shapes.sql the twelfth.
+#
+# EQUIVALENT: "an unregistered company is given a taxable period". The
+# mutant drops the is_sst_registered test and leaves the next one,
+# `sst_registered_from is null`. Those two columns change only through
+# set_sst_registration() -- app.guard_sst_registration refuses any
+# other write -- and deregistering there sets the date to null. So no
+# company is unregistered with a date, and the next guard always
+# catches it.  (The writer.)
 
 m("an unregistered company is given a taxable period",
   "sst_period_for",

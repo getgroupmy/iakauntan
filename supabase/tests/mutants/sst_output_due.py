@@ -10,8 +10,14 @@
 #       supabase/tests/mutants/sst_output_due.py
 
 #
-# RESULT: the sweep was queued on 6 October behind a cluster rebuild;
-# this header is rewritten with the kill sheet when it ends.
+# RESULT, 6 October: 18 mutants, ALL 18 KILLED, control alive, across
+# eight files -- with NO new assertion. The first function swept that
+# needed none. service_tax_on_payment.sql kills 10 on its own (the
+# payment basis, the anniversary, the apportionment, the credit-note
+# sign) and sst_shapes.sql the rest (refund notes, drafts, the service
+# charge's own tax, the period edges, the anniversary to the day, a
+# zero period left out, the rounding to the sen). The statutory return
+# was written test-first, and it shows.
 
 m("a credit note adds to the tax instead of reducing it",
   "sst_output_due",
