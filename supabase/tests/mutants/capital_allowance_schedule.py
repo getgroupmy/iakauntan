@@ -90,8 +90,8 @@ m("the cap is shared out ignoring what earlier assets took",
 
 m("an asset that misses the cap gets a negative allowance",
   "capital_allowance_schedule",
-  "             else greatest(\n                    least(",
-  "             else greatest(-1e9,  -- negative\n                    least(",
+  "                           - f.qe)),\n                    0)\n           end as small_allowed",
+  "                           - f.qe)),\n                    -1e9)  -- negative\n           end as small_allowed",
   "-- negative")
 
 m("last year's small assets eat this year's cap",

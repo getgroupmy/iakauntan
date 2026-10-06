@@ -421,6 +421,108 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- The schedule, rule by rule
+--
+-- A mutation sweep of `capital_allowance_schedule` killed 26 of 43 on
+-- this file. What lived was mostly a rule asserted in one year but not
+-- the next, or on one kind of row but not another: a deleted asset; a
+-- sale two years on that leaked into this year's figures; an asset
+-- given away with no proceeds; a balancing allowance on an asset nobody
+-- sold; an asset bought and sold in the same year, where the only
+-- allowance a charge can claw back is the initial one; `claimed`
+-- including the annual allowance; the later years of a small value
+-- asset and of one filed under that class at RM2,000; and last year's
+-- small value assets eating this year's RM20,000.
+--
+-- Not asserted, because no data can tell them apart:
+--   * an initial or annual allowance not capped by what is left: no
+--     class's initial and annual rates together reach 100%, so neither
+--     cap can bite in the first year, and in later years the initial
+--     allowance is nil. Arithmetic.
+--   * the residual going negative: every term before it is capped
+--     already. Arithmetic.
+--   * a small asset written off again later: its prior claim is its
+--     whole cost, so the cap takes the second write-off to nil.
+--     Arithmetic.
+--   * a small value asset given an annual allowance, and small value
+--     judged on cost rather than the restricted amount: the class's
+--     annual rate is 0 and it has no cost cap. The rates as seeded --
+--     and the day either changes, these two stop being equivalent.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_gone uuid; v_later uuid; v_gift uuid; v_flip uuid;
+  v_small uuid; v_mis uuid; v_this uuid; v_i integer;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_org := pg_temp.test_org('Jadual Peraturan Sdn Bhd');
+
+  v_gone := pg_temp.ca_asset(v_org, 'A-DEL', 'plant', 5000, date '2024-03-01');
+  update public.fixed_assets set deleted_at = now() where id = v_gone;
+  perform pg_temp.check_eq('a deleted asset is not on the schedule',
+    (select count(*)::numeric from public.capital_allowance_schedule(v_org, 2024)
+      where asset_id = v_gone), 0);
+
+  -- Sold in 2026. In 2025 it is an ordinary asset: its annual
+  -- allowance, no balancing adjustment, and a residual to carry on.
+  v_later := pg_temp.ca_asset(v_org, 'A-LATER', 'plant', 10000,
+    date '2024-03-01', date '2026-06-01', 3000);
+  perform pg_temp.check_eq('a sale two years on does not reach this year',
+    pg_temp.ca_figure(v_org, 2025, v_later, 'annual'), 1400);
+  perform pg_temp.check_eq('nor give it a balancing allowance',
+    pg_temp.ca_figure(v_org, 2025, v_later, 'balancing_allowance'), 0);
+  perform pg_temp.check_eq('and its residual goes on',
+    pg_temp.ca_figure(v_org, 2025, v_later, 'residual'), 5200);
+  perform pg_temp.check_eq('claimed is the initial and the annual together',
+    pg_temp.ca_figure(v_org, 2024, v_later, 'claimed'), 3400);
+
+  -- Given away: no proceeds, so the whole residual is a balancing
+  -- allowance.
+  v_gift := pg_temp.ca_asset(v_org, 'A-GIFT', 'plant', 10000,
+    date '2024-01-10', date '2025-05-01', null);
+  perform pg_temp.check_eq('an asset given away gives up its whole residual',
+    pg_temp.ca_figure(v_org, 2025, v_gift, 'balancing_allowance'), 6600);
+
+  -- Bought in February, sold in November for more than it cost. The
+  -- year gave 2,000 initial and no annual, so 2,000 is all a charge
+  -- can claw back, whatever the gain.
+  v_flip := pg_temp.ca_asset(v_org, 'A-FLIP', 'plant', 10000,
+    date '2024-02-01', date '2024-11-01', 12000);
+  perform pg_temp.check_eq(
+    'bought and sold in one year: the charge is the initial allowance',
+    pg_temp.ca_figure(v_org, 2024, v_flip, 'balancing_charge'), 2000);
+
+  -- A small value asset, and one filed under that class at RM2,000.
+  v_small := pg_temp.ca_asset(v_org, 'S-1', 'small_value', 1500,
+    date '2024-04-01');
+  perform pg_temp.check_eq('a small asset is still written off a year on',
+    pg_temp.ca_figure(v_org, 2025, v_small, 'residual'), 0);
+  v_mis := pg_temp.ca_asset(v_org, 'S-BIG', 'small_value', 2000,
+    date '2024-04-01');
+  perform pg_temp.check_eq(
+    'and one filed there at RM2,000 still carries its whole cost a year on',
+    pg_temp.ca_figure(v_org, 2025, v_mis, 'residual'), 2000);
+end $$;
+
+do $$
+declare
+  v_org uuid; v_this uuid; v_i integer;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_org := pg_temp.test_org('Kecil Dua Tahun Sdn Bhd');
+  -- RM21,000 of small value assets last year, over that year's cap...
+  for v_i in 1..14 loop
+    perform pg_temp.ca_asset(v_org, 'L-' || lpad(v_i::text, 2, '0'),
+      'small_value', 1500, date '2023-03-01' + v_i);
+  end loop;
+  -- ...and one this year, which has a cap of its own.
+  v_this := pg_temp.ca_asset(v_org, 'T-01', 'small_value', 1500,
+    date '2024-03-01');
+  perform pg_temp.check_eq('last year''s small assets do not use this year''s cap',
+    pg_temp.ca_figure(v_org, 2024, v_this, 'initial'), 1500);
+end $$;
+
+-- ---------------------------------------------------------------------
 -- What is out of the schedule, and who may read it
 -- ---------------------------------------------------------------------
 do $$
