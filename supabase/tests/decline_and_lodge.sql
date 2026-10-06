@@ -236,4 +236,41 @@ begin
       'public.corp_mark_lodged(uuid, date, text, numeric)', 'execute'));
 end $$;
 
+-- ---------------------------------------------------------------------
+-- corp_mark_lodged, rule by rule
+--
+-- A sweep of `0378`'s definition across the three files that lodge left
+-- two rules no file reached: a filing SSM has APPROVED (not merely one
+-- lodged) is not lodged a second time, and a filing lodged on the very
+-- day of the event it notifies is lodged, not refused as early.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_e uuid; v_f uuid;
+  v_today date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
+begin
+  v_org := pg_temp.test_org('Failkan Peraturan Sdn Bhd', array['secretarial']);
+  insert into public.corp_entities
+    (org_id, name, entity_type, incorporated_on, registered_office)
+  values (v_org, 'Failkan Peraturan Sdn Bhd', 'sdn_bhd', date '2020-01-15',
+          'No 2, Jalan Lama, 50000 Kuala Lumpur')
+  returning id into v_e;
+
+  -- Lodged the same day as the event.
+  v_f := public.corp_open_filing(v_e, 'change_registered_office', v_today - 3);
+  perform public.corp_mark_lodged(v_f, v_today - 3, 'SSM-SAME-DAY');
+  perform pg_temp.check_eq('a filing lodged on the day of its event is lodged',
+    (select lodged_on::text from public.corp_filings where id = v_f),
+    (v_today - 3)::text);
+
+  -- Approved by SSM, then somebody presses "lodged" again.
+  update public.corp_filings set status = 'approved' where id = v_f;
+  perform pg_temp.check_refused('an approved filing is not lodged a second time',
+    format('select public.corp_mark_lodged(%L, %L, %L)', v_f, v_today, 'SSM-OVERWRITE'),
+    '%Recording it again would write over%', '23514');
+  perform pg_temp.check_eq('and keeps the reference SSM gave it',
+    (select ssm_reference from public.corp_filings where id = v_f), 'SSM-SAME-DAY');
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;
