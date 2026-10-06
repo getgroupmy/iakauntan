@@ -799,4 +799,29 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- A payslip's own pay date is its own (set_payslip_pay_date, 0045)
+--
+-- A sweep left one mutant: the trigger that fills a missing pay date
+-- from the pay period also overwrote one that was given, and every
+-- payslip here arrived without one. A payslip paid off the period's
+-- day -- a correction run, an early release before a holiday -- keeps
+-- the date it was paid on, which is the date a bounded grant reads.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_runs uuid[]; v_emp uuid; v_slip uuid;
+begin
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Tarikh Bayar Sdn Bhd');
+  v_runs := pg_temp.payroll_of(v_org, array['Hana']);
+  select id into v_emp from public.employees where org_id = v_org;
+  delete from public.payslips where run_id = v_runs[1] and employee_id = v_emp;
+  insert into public.payslips (org_id, run_id, employee_id, pay_date)
+  values (v_org, v_runs[1], v_emp, date '2026-01-20')
+  returning id into v_slip;
+  perform pg_temp.check_eq('a payslip given its own pay date keeps it',
+    (select pay_date::text from public.payslips where id = v_slip), '2026-01-20');
+end $$;
+
 rollback;

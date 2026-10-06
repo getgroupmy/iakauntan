@@ -494,6 +494,7 @@ function:
 | `submit_manager_appraisal`, `finalise_appraisal`, `reopen_appraisal` | `0379` | 40 / 40 | -- | `appraisals.sql` |
 | `open_appraisal_cycle`, `submit_self_appraisal` | `0379` | 23 / 23 | -- | `appraisals.sql` |
 | `renew_employee_document` | `0388` | 15 / 16 | 1 (null comparison) | `employee_documents.sql` |
+| `app.set_payslip_pay_date` | `0045` | 3 / 3 | -- | `payslip_access.sql` |
 
 Every equivalent is written into its mutants file with the reason.
 
