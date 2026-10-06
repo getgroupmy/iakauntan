@@ -14391,6 +14391,42 @@ operations timer does not belong in the run that decides what ships.
 **It will be red from its first run until the feed is repaired**, and
 that is correct. Against today's data it says: stale, 11 days.
 
+## 6 October: the gate's first real reading, and the bill sweep
+
+**The rate-feed gate works.** `3ad2e750` went green and its migrate job
+applied 0744. The first dispatch after it got **HTTP 404** from
+`rpc/rate_feed_newest` with the function already in production's
+`pg_proc` and granted to anon (checked read-only): PostgREST had not
+reloaded its schema cache yet. The re-run a few minutes later read the
+table and failed exactly as it should: *"The newest rate is dated
+2026-09-25, 11 days ago."* The workflow's 404 message now names the
+cache as the other cause. **It stays red until the BNM feed is fixed,
+and it should.**
+
+**`app.post_purchase_document_internal`: 20 mutants, all killed**, in
+`supabase/tests/mutants/post_purchase_document.py`. Three were
+unasserted across 23 files and are now asserted in
+`posting_a_bill.sql`:
+
+* **The stock's unit cost ignoring the exchange rate.** Every bill in
+  the suite was in ringgit at a rate of one, where the right cost and
+  the wrong one are the same number. A USD bill would value the shelf
+  and cost of sales at a fifth of what was paid, while the journal
+  balanced. Section 6 now buys in USD at 4.70.
+* **The input-tax line's `tax_amount`.** Nothing in the database reads
+  it back, but the API serves it.
+* **The line's own warehouse.** The file's only store was the default,
+  so the line's warehouse and the fallback were one row. The only kill
+  was a null-column crash in `bill_credit.sql`. The lines now name a
+  non-default store.
+
+`mutation_targets.py` reads the function name as the second quoted
+string of each `m(...)`, so a mutants file that passes it through a
+variable is invisible to the tally. Write it out literally.
+
+Next: `create_gl_entry_internal` (0688, 23 mutants) and
+`create_gl_entry` (0056, 5); files written and pre-flight clean.
+
 ## 5 October: the harness got a pre-flight, and it found three bad mutants
 
 `scripts/mutate_sql.py` had a HARNESS ERROR guard that worked and came

@@ -36,6 +36,13 @@
 -- With this file in place the sweep reads 1 survivor out of 24, and the
 -- one that survives is recorded rather than worked around.
 --
+-- A second sweep, 6 October 2026 (`supabase/tests/mutants/
+-- post_purchase_document.py`, against 0691's body), found three more
+-- that nothing asserted: the stock's unit cost ignoring the exchange
+-- rate, the input-tax line's `tax_amount`, and the line's own
+-- warehouse -- which this file could not see because its only store
+-- was the default. Sections 2 and 6 now assert all three.
+--
 -- "The same bill posted twice" is asserted below and the assertion
 -- passes, but removing the function's own `gl_entry_id is not null`
 -- guard changes nothing a caller can see. That was checked rather than
@@ -59,7 +66,9 @@ begin;
 do $$
 declare
   v_org    uuid;
-  v_wh     uuid;
+  v_wh     uuid;   -- the store the lines name, which is NOT the default
+  v_main   uuid;   -- the default store, which a line naming none falls to
+  v_fx     uuid;
   v_sup    uuid;
   v_stock  uuid;   -- an item that is held on the shelf
   v_serv   uuid;   -- an item that is not
@@ -79,8 +88,17 @@ begin
   v_org := pg_temp.test_org('Beli Barang Sdn Bhd');
   perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
 
+  -- Two stores, and the lines name the one that is NOT the default.
+  -- This file used to have one, default, store and put every line in
+  -- it -- so "the line's own warehouse" and "the default it falls back
+  -- to" were the same row, and a mutant that ignored the line's
+  -- warehouse could only be caught by a fixture elsewhere that happened
+  -- to have no default at all (`bill_credit.sql`, as a null-column
+  -- crash rather than an assertion). CLAUDE.md's first trap.
   insert into public.warehouses (org_id, code, name, is_default)
-  values (v_org, 'MAIN', 'Store', true) returning id into v_wh;
+  values (v_org, 'MAIN', 'Store', true) returning id into v_main;
+  insert into public.warehouses (org_id, code, name, is_default)
+  values (v_org, 'YARD', 'Laman', false) returning id into v_wh;
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'S-1', 'Pembekal Sdn Bhd', 'supplier') returning id into v_sup;
 
@@ -225,6 +243,16 @@ begin
   perform pg_temp.check_eq('the SST the supplier charged is claimable',
     v_n, 160::numeric);
 
+  -- And the line says how much of it is tax. Nothing in the database
+  -- reads `gl_lines.tax_amount` back today -- the SST return reads the
+  -- documents -- but it is a column the API serves, written on every
+  -- tax line, and a zero there is a stored fact that is wrong. The
+  -- 2026-10-06 sweep found nothing anywhere asserting it.
+  perform pg_temp.check_eq('and the tax line records the tax it carries',
+    (select l.tax_amount from public.gl_lines l
+       join public.accounts a on a.id = l.account_id
+      where l.entry_id = v_entry and a.code = '1410'), 160.00);
+
   select coalesce(sum(l.debit - l.credit), 0) into v_n
     from public.gl_lines l
     join public.accounts a on a.id = l.account_id
@@ -273,6 +301,10 @@ begin
   select round(sl.quantity, 4) into v_n from public.stock_levels sl
    where sl.item_id = v_stock and sl.warehouse_id = v_wh;
   perform pg_temp.check_eq('a hundred bags came in', v_n, 100::numeric);
+  -- Into the store the line named, and none into the default.
+  perform pg_temp.check_eq('and none of them landed in the default store',
+    (select coalesce(sum(sl.quantity), 0) from public.stock_levels sl
+      where sl.item_id = v_stock and sl.warehouse_id = v_main), 0::numeric);
 
   select count(*) into v_n from public.stock_movements m
    where m.source_id = v_bill and m.item_id = v_serv;
@@ -414,6 +446,43 @@ begin
   perform pg_temp.check_true(
     'the journal is filed as a purchase credit note: ' || v_msg,
     v_msg = 'purchase_credit_note');
+
+  -- ------------------------------------------------------------------
+  -- 6. A bill in dollars puts stock on the shelf in ringgit
+  --
+  -- The journal's exchange rate is asserted in `multicurrency.sql`. The
+  -- STOCK's is asserted nowhere, and the 2026-10-06 sweep showed it:
+  -- dropping `* v_rate` from the movement's unit cost survived every
+  -- file. Every bill in every other file is in ringgit at a rate of
+  -- one, where the right cost and the wrong one are the same number --
+  -- the fixture-collapse trap again. A unit cost in dollars values the
+  -- shelf at a fifth of what was paid, and cost of sales with it,
+  -- while the journal balances perfectly.
+  --
+  -- Ten bags at USD 20.00, when a dollar is RM 4.70: RM 94.00 a bag.
+  -- ------------------------------------------------------------------
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'bill', 'BILL-USD', pg_temp.today(), v_sup, 'USD', 4.70,
+          'draft')
+  returning id into v_fx;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, uom_code, unit_price, warehouse_id)
+  values (v_org, v_fx, 1, 'item', v_stock, 'Simen import', 10, 'C62',
+          20.00, v_wh);
+
+  v_entry := public.post_purchase_document(v_fx);
+
+  perform pg_temp.check_eq('the stock is valued in ringgit, not dollars',
+    (select m.unit_cost from public.stock_movements m
+      where m.source_id = v_fx and m.item_id = v_stock), 94.000000);
+  -- The positive control: the journal side of the same bill is in
+  -- ringgit too, so the two agree on what the shelf is worth.
+  perform pg_temp.check_eq('-- as the journal is: 940 into inventory',
+    (select coalesce(sum(l.debit - l.credit), 0) from public.gl_lines l
+      where l.entry_id = v_entry and l.account_id = v_own), 940.00);
 
   raise notice 'posting a bill: the ledger, the shelf and the SST return';
 end $$;

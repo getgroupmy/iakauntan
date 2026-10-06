@@ -87,9 +87,14 @@ jobs:
           # that is not deployed is named as such. The script would also
           # refuse PostgREST's error object -- it is not a rate -- but it
           # would call it an empty table, which sends the reader to the
-          # wrong place. A 404 here means 0744 has not reached production.
+          # wrong place. A 404 here means 0744 has not reached production
+          # -- or has only just: the first dispatch after the deploy, on
+          # 6 October, got a 404 with the function already in pg_proc and
+          # granted to anon, and the re-run a few minutes later read the
+          # date. PostgREST answers from a schema cache that reloads on
+          # DDL asynchronously.
           if [ "$code" != "200" ]; then
-            echo "::error::rpc/rate_feed_newest answered HTTP $code, so the feed's age is unknown. 401: check SUPABASE_ANON_KEY. 404: migration 0744 is not applied on this project."
+            echo "::error::rpc/rate_feed_newest answered HTTP $code, so the feed's age is unknown. 401: check SUPABASE_ANON_KEY. 404: either migration 0744 is not applied on this project, or it was applied in the last minute or two and PostgREST has not reloaded its schema cache yet -- re-run before looking further."
             exit 1
           fi
 

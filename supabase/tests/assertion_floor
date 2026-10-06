@@ -827,4 +827,14 @@
 # no grant at all. Both are "nothing", and the test now says so.
 # Measured:
 # `all SQL assertions passed (385 files, 14843 assertions executed)`.
-14843
+#
+# 14843 -> 14847: posting_a_bill.sql, after the sweep of
+# app.post_purchase_document_internal (20 mutants, all killed). Three
+# were unasserted across 23 files: the stock's unit cost ignoring the
+# exchange rate (every bill anywhere was ringgit at a rate of one, so
+# right and wrong were the same number), the input-tax line's
+# tax_amount, and the line's own warehouse -- this file's only store was
+# the default, so the line's warehouse and the fallback were one row.
+# Measured:
+# `all SQL assertions passed (385 files, 14847 assertions executed)`.
+14847
