@@ -38,12 +38,23 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || 'ewwcgtnniwqndrzukksm' }}
-      # The service role key, for ONE read of ONE column and nothing else.
-      # More authority than this needs -- the same trade
-      # `exchange-rates.yml` makes and names. The alternative is a
-      # SECURITY DEFINER function granted to anon and a migration to make
-      # it, which is new production surface for a monitoring query.
-      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      # The ANON key, the same one `exchange-rates.yml` runs on, read the
+      # same way. Public by design -- it ships in the web bundle.
+      #
+      # This said "the service role key" until its first run, by hand on
+      # 6 October, which failed because the repository has no such secret:
+      # `exchange-rates.yml` mentions it only as a fallback and actually
+      # runs on SCHEDULER_SECRET and the anon key. And the anon key cannot
+      # read `exchange_rates` -- its only SELECT policy is for
+      # `authenticated`, so a stranger gets HTTP 200 and ZERO ROWS, which
+      # this gate would report as an empty table for ever.
+      #
+      # So 0744 added `public.rate_feed_newest()`: no argument, one date
+      # out, SECURITY DEFINER so it can see past row security, granted to
+      # anon and named on both lists of the things a stranger may call,
+      # `function_grants.sql` and `statutory.sql`. That is less authority than the service role
+      # key by the whole width of the database.
+      SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -55,27 +66,30 @@ jobs:
           # No key is NOT "nothing to report". A gate that skips itself
           # when it cannot look is the failure this file exists to catch,
           # so it fails, and says what to set.
-          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
-            echo "::error::SUPABASE_SERVICE_ROLE_KEY is not set, so the rate table could not be read. This gate fails rather than passing blind -- a skipped check reads exactly like a passing one."
+          if [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "::error::SUPABASE_ANON_KEY is not set (as a repository variable or secret), so the rate feed could not be asked. This gate fails rather than passing blind -- a skipped check reads exactly like a passing one."
             exit 1
           fi
 
           out="$(mktemp)"
-          code="$(curl -sS \
-            "https://${PROJECT_REF}.supabase.co/rest/v1/exchange_rates?select=rate_date&order=rate_date.desc&limit=1" \
-            -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
-            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+          code="$(curl -sS -X POST \
+            "https://${PROJECT_REF}.supabase.co/rest/v1/rpc/rate_feed_newest" \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
+            -H 'Content-Type: application/json' \
+            -d '{}' \
             -o "$out" -w '%{http_code}')"
 
           echo "HTTP $code"
           cat "$out"; echo
 
-          # Checked separately and FIRST, so an expired key is named as an
-          # expired key. The script would also refuse PostgREST's error
-          # object -- it is not a rate -- but it would call it an empty
-          # table, which sends the reader to the wrong place.
+          # Checked separately and FIRST, so an expired key or a function
+          # that is not deployed is named as such. The script would also
+          # refuse PostgREST's error object -- it is not a rate -- but it
+          # would call it an empty table, which sends the reader to the
+          # wrong place. A 404 here means 0744 has not reached production.
           if [ "$code" != "200" ]; then
-            echo "::error::Reading exchange_rates answered HTTP $code, so its age is unknown. Check SUPABASE_SERVICE_ROLE_KEY."
+            echo "::error::rpc/rate_feed_newest answered HTTP $code, so the feed's age is unknown. 401: check SUPABASE_ANON_KEY. 404: migration 0744 is not applied on this project."
             exit 1
           fi
 

@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0743` (the highest applied migration).
-842 functions and 367 readable tables, of which
-317 functions only read.
+Schema version `0744` (the highest applied migration).
+843 functions and 367 readable tables, of which
+318 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**701 of 842 functions carry a `comment on
+**702 of 843 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -90,7 +90,7 @@ resolve to the unprotected original and return a plausible id.
 
 ## Reachable without signing in
 
-21 functions are granted to `anon`. Everything else
+22 functions are granted to `anon`. Everything else
 needs a user token.
 
 - `corp_decline_with_link`
@@ -107,6 +107,7 @@ needs a user token.
 - `portal_document_token`
 - `public_pos_menu`
 - `public_pos_menu_modifiers`
+- `rate_feed_newest`
 - `reply_to_shared_ticket`
 - `report_failed_sign_in`
 - `shared_payment_options`
@@ -420,7 +421,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text, p_idempotency_key text)` *(writes)* — Mints one share link per idempotency key and returns THE SAME URL on a replay.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (614)
+### general (615)
 
 Not gated on any module.
 
@@ -824,6 +825,7 @@ Not gated on any module.
 - `quote_opportunity(p_opportunity uuid, p_valid_until date, p_description text)` *(writes)* — Raises a quotation from a deal and links the two.
 - `raise_rent_invoices(p_site_id uuid, p_period_from date, p_period_to date, p_due_date date)` *(writes)* — Invoices every active tenancy at a site for a period, POSTS each invoice, and returns the run.
 - `raise_strata_charges(p_scheme_id uuid, p_period_from date, p_period_to date, p_due_date date)` *(writes)* — Charges every parcel in a scheme for a period — maintenance at the rate per share unit, plus the sinking fund contribution as a second line — POSTS each invoice, and returns the run.
+- `rate_feed_newest()` — The date of the newest exchange rate the feed has stored, or null when it has stored none.
 - `receive_client_money(p_matter uuid, p_amount numeric, p_date date, p_description text, p_reference text, p_payment_mode text)` *(writes)* — Money received from a client to hold on account for a matter.
 - `recognise_revenue(p_org_id uuid, p_upto date)` *(writes)* — Release deferred revenue that has been earned up to a date, one journal per period.
 - `record_departure(p_employee uuid, p_last_working_date date, p_status text, p_reason text, p_resignation_date date)` *(writes)* — Takes somebody off the payroll.

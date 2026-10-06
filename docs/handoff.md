@@ -14344,15 +14344,45 @@ fetch had been attempted.
   does). An empty table, PostgREST's error object, a malformed reply and
   a date in the FUTURE all fail: the worst case must not read as the
   best.
-* `scripts/check_rate_feed_fresh_test.py` — 20 tests, run by `ci.yml`
+* `scripts/check_rate_feed_fresh_test.py` — 25 tests, run by `ci.yml`
   as the 46th self-test. Broken on purpose five ways (the stale
   boundary, an empty table read as fresh, a future date uncaught, a
   warning that fails the run, an error object read as a rate): all five
   killed, control alive.
 * `.github/workflows/rate-feed-fresh.yml` — runs it against production
-  daily at 01:15 UTC, weekends included, with one read of one column.
-  **A missing key FAILS** rather than skipping, because a gate that
-  skips itself when it cannot look is the failure it exists to catch.
+  daily at 01:15 UTC, weekends included, by calling
+  `rpc/rate_feed_newest` on the **anon key**. **A missing key FAILS**
+  rather than skipping, because a gate that skips itself when it cannot
+  look is the failure it exists to catch.
+* `0744_how_old_is_the_newest_rate.sql` — `public.rate_feed_newest()`,
+  no argument, returns `max(rate_date)` over the GLOBAL rows and nothing
+  else. SECURITY DEFINER, granted to anon. Asserted by
+  `supabase/tests/rate_feed_newest.sql` (12 assertions: null on an empty
+  table, a company's own newer row does not move the answer, anon gets
+  the date but still reads ZERO rows of the table), and added to BOTH
+  anon allowlists — `function_grants.sql` and `statutory.sql`, which
+  are independent and each fails on its own. Broken four ways by hand
+  — the global filter dropped, `max` turned to `min`, SECURITY INVOKER,
+  the anon grant removed — all four killed, a no-op control alive.
+
+  The anon read of the table is **refused** on the local stack and
+  answers **200 with zero rows** on Supabase (default privileges grant
+  anon SELECT; the one policy filters it). The test accepts both as
+  "nothing" — the first version asserted only the second and failed
+  locally with `permission denied`.
+
+  **Why not the service role key**, which is how the first version
+  (`5060e5ee`) read the table: its first dispatch failed because
+  `SUPABASE_SERVICE_ROLE_KEY` is not a repository secret, and the
+  schedulers moved OFF that key on purpose (`docs/schedulers.md`).
+  Adding it back to GitHub to read one public date would undo that.
+  **Why not the anon key on the table:** `exchange_rates`' only SELECT
+  policy is for `authenticated`, so anon gets HTTP 200 and `[]` — which
+  the gate reads, correctly, as broken. The user chose the narrow
+  function.
+
+  **The gate cannot pass until 0744 is applied** — a 404 from the RPC
+  says so by name in the run's error.
 
 Its own file, not a step in `ci.yml`: it fails when nothing in the
 repository has changed, and `exchange-rates.yml` already argued why an

@@ -816,4 +816,15 @@
 # the fixture opens next year's fiscal year so `today + 1` is postable
 # on 31 December. Measured:
 # `all SQL assertions passed (384 files, 14831 assertions executed)`.
-14831
+#
+# 14831 -> 14843: rate_feed_newest.sql, the twelve assertions behind
+# 0744 -- the one function the rate-feed gate calls on the anon key.
+# Broken four ways by hand (global filter dropped, max to min, SECURITY
+# INVOKER, the anon grant revoked): all four killed, control alive.
+# Its first version asserted that anon reads ZERO ROWS of the table and
+# failed here with `permission denied` instead: Supabase's default
+# privileges give anon SELECT and RLS filters it, the local stack gives
+# no grant at all. Both are "nothing", and the test now says so.
+# Measured:
+# `all SQL assertions passed (385 files, 14843 assertions executed)`.
+14843

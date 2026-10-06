@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Is the exchange rate table still being fed?
 
-    curl ... /rest/v1/exchange_rates?select=rate_date&order=rate_date.desc&limit=1 \\
+    curl -X POST .../rest/v1/rpc/rate_feed_newest -d '{}' \\
       | python3 scripts/check_rate_feed_fresh.py
     python3 scripts/check_rate_feed_fresh.py --newest 2026-09-25
 
@@ -130,7 +130,14 @@ def verdict(newest: dt.date | None, today: dt.date) -> tuple[str, int | None, st
 
 
 def newest_from_rows(payload: str) -> dt.date | None:
-    """The newest `rate_date` in a PostgREST reply, or None.
+    """The newest rate date in a PostgREST reply, or None.
+
+    Two shapes are read. `rpc/rate_feed_newest` -- which is what the
+    workflow calls, see 0744 -- answers with a bare JSON string, or
+    `null` when nothing is stored. A table read answers with an array
+    of `{"rate_date": ...}` rows. The second is kept because it is how
+    anybody checking by hand will ask, and because a gate whose input
+    format is one tool's quirk breaks the day that tool is swapped.
 
     None for every shape that is not a date, including PostgREST's own
     error object -- `{"message": ...}` is not a rate.
@@ -139,6 +146,11 @@ def newest_from_rows(payload: str) -> dt.date | None:
         rows = json.loads(payload)
     except (ValueError, TypeError):
         return None
+    if isinstance(rows, str):
+        try:
+            return dt.date.fromisoformat(rows[:10])
+        except ValueError:
+            return None
     if not isinstance(rows, list) or not rows:
         return None
     dates = []

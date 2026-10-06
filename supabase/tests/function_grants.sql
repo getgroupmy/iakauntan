@@ -218,9 +218,10 @@ end $$;
 -- =====================================================================
 -- And every function a stranger CAN call is one somebody meant
 --
--- Twenty-one, all of them a deliberate front door: a signing link, a
+-- Twenty-two, all of them a deliberate front door: a signing link, a
 -- portal opened with a token, the landing page, the public menu, the
--- two the sign-in form needs before anybody is signed in. Each carries
+-- two the sign-in form needs before anybody is signed in, and the date
+-- of the newest exchange rate. Each carries
 -- its own `grant execute ... to anon` written after its create,
 -- precisely because `0165` had just taken it away.
 --
@@ -270,7 +271,12 @@ begin
        -- A menu on a table and an order placed from it.
        'place_public_pos_order',
        'public_pos_menu',
-       'public_pos_menu_modifiers');
+       'public_pos_menu_modifiers',
+       -- Read every morning by `rate-feed-fresh.yml`, which has no
+       -- session. One date out, no argument in, and the date is when
+       -- Bank Negara published a rate to the world. Added by 0744 after
+       -- the feed went eleven days dead unnoticed.
+       'rate_feed_newest');
 
   perform pg_temp.check_eq(
     'no function in public is reachable by a stranger unless it is on '

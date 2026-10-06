@@ -617,7 +617,7 @@ begin
       select 1 from pg_policies
        where tablename = 'payslip_access_requests' and cmd <> 'SELECT'));
 
-  -- Nineteen functions are deliberately open to an unauthenticated
+  -- Twenty functions are deliberately open to an unauthenticated
   -- caller, and each earned its place by someone who has no account
   -- needing to
   -- do exactly one thing: a director signing one resolution, a customer
@@ -904,7 +904,21 @@ begin
            -- this number come from" is a row. And a form submitted
            -- empty is refused by a check constraint rather than queued
            -- as an answer.
-           'submit_tax_details')));
+           'submit_tax_details',
+           -- 0744, and the only one here that no person calls. It is
+           -- read by `.github/workflows/rate-feed-fresh.yml`, a timer
+           -- with no session, to ask how old the newest exchange rate
+           -- is -- because the feed died for eleven days in September
+           -- 2026 and nothing that could see it said so.
+           --
+           -- It takes no argument and returns one date: the newest
+           -- `rate_date` among the global rows, which is the date Bank
+           -- Negara published a rate and is public by definition. No
+           -- rate, no currency, no company row, nothing to probe with.
+           -- The table behind it stays shut to anon;
+           -- `supabase/tests/rate_feed_newest.sql` asserts both, and
+           -- that a company's own newer row does not move the answer.
+           'rate_feed_newest')));
 
   -- The other half of that allowlist, and it is not decoration.
   --
@@ -919,7 +933,7 @@ begin
   --
   -- So assert the exposure. A share link that has silently stopped
   -- working is found by a customer, not by us.
-  perform pg_temp.check_eq('and the nineteen that need anon still have it',
+  perform pg_temp.check_eq('and the twenty that need anon still have it',
     (select count(*)
        from pg_proc p
        join pg_namespace n on n.oid = p.pronamespace
@@ -978,8 +992,12 @@ begin
                           -- months later, as an e-Invoice MyInvois will
                           -- not take.
                           'open_tax_detail_request',
-                          'submit_tax_details')),
-    19);
+                          'submit_tax_details',
+                          -- 0744. And a gate that can no longer read
+                          -- the date it guards is found by nobody,
+                          -- which is the failure it was built for.
+                          'rate_feed_newest')),
+    20);
 
   -- And every one of them says what it hands to a stranger.
   --

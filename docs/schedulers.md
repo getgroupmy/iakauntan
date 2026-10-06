@@ -148,6 +148,43 @@ invoice the customer says never arrived.
 - **Any refused rate** — fails red and lists the currency by name. A
   shape change at the publisher means a currency silently stops being
   priced, which is the failure the whole feed exists to prevent.
+- **`502` from `fetch-rates`** — the function booted and could not reach
+  Bank Negara. This is the one that actually happened, and it was not on
+  this list: from the last week of September 2026 BNM's endpoint
+  refused the TLS handshake (`received fatal alert: HandshakeFailure`,
+  logged as `fetch-rates.unreachable`). It fails red, correctly, every
+  weekday — and the feed was dead for eleven days anyway, because a
+  red job nobody reads is not an alarm. Hence the next section.
+
+## The fourth timer, which watches the first
+
+| Workflow | What it does | When |
+| --- | --- | --- |
+| `.github/workflows/rate-feed-fresh.yml` | asks `rpc/rate_feed_newest` for the date of the newest rate and judges it with `scripts/check_rate_feed_fresh.py` | daily, 01:15 UTC (09:15 MYT), weekends included |
+
+The three above report on their **attempt**. This one reports on the
+**outcome**, and it is a different kind of job: it acts for nobody,
+writes nothing, and needs no secret — it runs on the anon key and calls
+one function that `0744` made for it, which takes no argument and
+returns one public date.
+
+It exists because the list above has paths that stay green while the
+feed is dead. "No credential set at all" exits green by design. A `404`
+from `fetch-rates` exits green by design. GitHub disables the schedules
+of a repository with no recent activity, and a disabled schedule shows
+no run at all. And a job that does go red, as `fetch-rates` did for
+eleven days, is only as loud as somebody's habit of reading it.
+
+So it asks the table. It **warns at four days**, which an ordinary long
+weekend with a public holiday reaches, and **fails at seven**, which no
+combination of Malaysian weekends and holidays does. An empty table, a
+`null`, PostgREST's error object and a date in the future all fail: the
+worst case must never read as the best. A missing anon key fails too,
+rather than skipping — a gate that skips itself when it cannot look is
+the failure it exists to catch.
+
+`scripts/check_rate_feed_fresh.py` carries the reasoning; its self-test
+runs in `ci.yml` with the others.
 
 ## What the cron says and what GitHub does
 

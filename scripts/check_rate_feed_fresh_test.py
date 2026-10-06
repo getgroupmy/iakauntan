@@ -105,6 +105,18 @@ class Payload(unittest.TestCase):
         self.assertEqual(g.newest_from_rows('[{"rate_date":"2026-09-25T00:00:00"}]'),
                          dt.date(2026, 9, 25))
 
+    # --- the RPC's reply, which is what the workflow actually reads ----
+    def test_the_rpc_answers_with_a_bare_date(self):
+        """`rpc/rate_feed_newest` returns a JSON string, not rows."""
+        self.assertEqual(g.newest_from_rows('"2026-09-25"'), dt.date(2026, 9, 25))
+
+    def test_the_rpc_answers_null_when_nothing_is_stored(self):
+        """And null must be read as no date -- then judged BROKEN."""
+        self.assertIsNone(g.newest_from_rows("null"))
+
+    def test_a_string_that_is_not_a_date_is_not_a_rate(self):
+        self.assertIsNone(g.newest_from_rows('"not a date"'))
+
     def test_an_empty_table_has_no_newest_date(self):
         self.assertIsNone(g.newest_from_rows("[]"))
 
@@ -143,6 +155,16 @@ class EndToEnd(unittest.TestCase):
         code, out = run(["--today", "2026-10-06"], "[]")
         self.assertEqual(code, 1)
         self.assertIn("::error::", out)
+
+    def test_the_rpc_null_exits_one(self):
+        """The worst case through the real path: nothing stored at all."""
+        code, out = run(["--today", "2026-10-06"], "null")
+        self.assertEqual(code, 1)
+        self.assertIn("::error::", out)
+
+    def test_the_rpc_date_eleven_days_old_exits_one(self):
+        code, _ = run(["--today", "2026-10-06"], '"2026-09-25"')
+        self.assertEqual(code, 1)
 
     def test_an_unreadable_newest_argument_exits_one(self):
         code, _ = run(["--newest", "last tuesday", "--today", "2026-10-06"])
