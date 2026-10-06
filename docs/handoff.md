@@ -304,8 +304,9 @@ page and renumbering would quietly break the reference.
     payment, each at a different rate. Whether any real company had a
     taxed foreign document was NOT checked: the Supabase connector
     answered "Unauthorized" on 6 October.
-11. **Is a contra, an applied deposit or a post-dated cheque "payment
-    received" for service tax?** `app.sst_output_due` brings service
+11. ~~Is a contra, an applied deposit or a post-dated cheque "payment
+    received" for service tax?~~ **Answered 6 October: "All three
+    count" -- built in `0749`, each on the day it reached the ledger.** `app.sst_output_due` brings service
     tax due on an invoice when money arrives, and it counts receipts
     only. Whether a set-off, a deposit applied or a cheque not yet
     cleared is payment for the Service Tax Act is a question for the
@@ -327,7 +328,8 @@ page and renumbering would quietly break the reference.
     is `5e8fa289-a861-4e9d-b7dc-149d346d9ccf` -- which carries the
     thrown error's own text, and that text says which of the three it
     is.
-13. **Should the collections worklist chase debit notes?**
+13. ~~Should the collections worklist chase debit notes?~~ **Answered 6
+    October: "Chase debit notes" -- built in `0749`.**
     `report_collections` reads `report_ar_aging` and keeps only
     `doc_kind = 'invoice'`. A mutation sweep showed that filter matters
     for one kind of row only: a debit note, which is a positive debt
@@ -399,11 +401,18 @@ in a row superseded each other and `0747`/`0748` sat unapplied for most
 of an afternoon. When a migration is waiting to go out, hold the next
 push until its run's `Apply the migrations` job has finished.
 
-**Applied.** Run `37436991795` (`da601a02`) applied `0747` and `0748`
-to the hosted project on 6 October -- its migrate job's notice reads
-"Applying to the hosted project: `0747` `0748`". Not read back from the
-database itself: the Supabase connector answered "Unauthorized" all
-day, so the proof is CI's, not a `prosrc` query.
+**Applied, and read back.** Run `37436991795` (`da601a02`) applied
+`0747` and `0748` on 6 October ("Applying to the hosted project: `0747`
+`0748`"), and once the Supabase connector answered again a read-only
+`prosrc` query confirmed it: both aged listings and the statement read
+`contra_notes`, `payment_allocations.applied_on` exists, and both SST
+functions multiply by `exchange_rate`.
+
+**And nobody was ever hurt by any of the four.** The same read-only
+look at production found no allocation from a contra, a deposit or a
+cheque, no taxed foreign-currency line on either side, and no posted
+debit note -- so `0747`'s backfill updated nothing, and no real
+listing, statement, return or worklist was ever wrong because of them.
 
 **The deploy failures earlier on 6 October were Supabase's, not ours.**
 Three runs failed at `supabase link` (four attempts each) or at an edge
