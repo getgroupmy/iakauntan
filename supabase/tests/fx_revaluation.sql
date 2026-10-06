@@ -436,6 +436,92 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- fx_revaluation_preview, rule by rule
+--
+-- A sweep of 0739's definition left six mutants alive across this file
+-- and `fx_shapes.sql`. The book above has no settled, draft or void
+-- foreign invoice, no ringgit BILL (only a ringgit invoice), no April
+-- bill (only an April invoice), and no rate after the as-at date -- so
+-- "the closing rate" could be read for any day from March onwards and
+-- come out 4.20.
+--
+-- Each document below is one the preview must leave out, and only one
+-- foreign invoice is left in. A single count says which filter failed
+-- by failing, and the booked figure says it was the right one left.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org  uuid := pg_temp.fx_org('Preview Rules Sdn Bhd');
+  v_supp uuid; v_bill uuid; v_doc uuid;
+  r record;
+begin
+  insert into public.exchange_rates
+    (org_id, from_currency, to_currency, rate, rate_date, source)
+  values (v_org,'USD','MYR',4.70, date '2026-03-01','manual'),
+         (v_org,'USD','MYR',4.20, date '2026-03-31','manual'),
+         -- After the as-at date. A preview of March read at April's rate
+         -- would say 4.00.
+         (v_org,'USD','MYR',4.00, date '2026-04-30','manual');
+
+  -- The one that counts.
+  perform pg_temp.posted_usd_invoice(v_org, 1000, 4.70, date '2026-03-01');
+
+  -- Settled. What the writer leaves behind is a nil balance.
+  v_doc := pg_temp.posted_usd_invoice(v_org, 500, 4.70, date '2026-03-02');
+  update public.sales_documents set balance_amount = 0 where id = v_doc;
+
+  -- Raised and never posted: not in the ledger to restate.
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
+     subtotal, total_amount, balance_amount, status)
+  select v_org, 'invoice', 'INV-DRAFT', date '2026-03-03', contact_id,
+         'USD', 4.70, 700, 700, 700, 'draft'
+    from public.sales_documents where id = v_doc;
+
+  -- Posted, then voided.
+  v_doc := pg_temp.posted_usd_invoice(v_org, 300, 4.70, date '2026-03-04');
+  perform public.void_sales_document(v_doc, 'Raised in error');
+
+  -- A ringgit bill, and an April dollar bill.
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org,'S-PRV','Supplier','supplier') returning id into v_supp;
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
+     subtotal, total_amount, balance_amount, status)
+  values (v_org,'bill','BILL-MYR', date '2026-03-05', v_supp,'MYR',1,
+          2000, 2000, 2000, 'draft')
+  returning id into v_bill;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, description, quantity, unit_price)
+  values (v_org, v_bill, 1, 'Local goods', 1, 2000);
+  perform public.post_purchase_document(v_bill);
+
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
+     subtotal, total_amount, balance_amount, status)
+  values (v_org,'bill','BILL-APR', date '2026-04-10', v_supp,'USD',4.00,
+          400, 400, 400, 'draft')
+  returning id into v_bill;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, description, quantity, unit_price)
+  values (v_org, v_bill, 1, 'April goods', 1, 400);
+  perform public.post_purchase_document(v_bill);
+
+  perform pg_temp.check_eq('only the dollar is a line, and not the ringgit bill',
+    (select count(*)::integer
+       from public.fx_revaluation_preview(v_org, date '2026-03-31')), 1);
+
+  select * into r from public.fx_revaluation_preview(v_org, date '2026-03-31');
+  perform pg_temp.check_eq(
+    'one document: not the settled, the draft, the void or April''s bill',
+    r.documents, 1);
+  perform pg_temp.check_eq('and the one is the open March invoice',
+    r.booked, 4700);
+  perform pg_temp.check_eq('restated at the as-at date''s rate, not a later one',
+    r.closing_rate, 4.20);
+end $$;
+
+-- ---------------------------------------------------------------------
 -- Reachability
 -- ---------------------------------------------------------------------
 do $$

@@ -353,4 +353,96 @@ begin
 end;
 $$;
 
+-- ---------------------------------------------------------------------
+-- pos_day_sheet, rule by rule
+--
+-- A sweep of 0739's definition left seven of nine mutants alive. The
+-- sheet above was asked whether every provider appears and how long one
+-- booking runs -- with both providers working, both active, one outlet,
+-- every booking at ten in the morning and one booking each. So the
+-- walk-in name, the Malaysian day, the provider with nothing booked, the
+-- outlet, the retired provider, the stranger and the order of the day
+-- were each a rule no row could tell from its absence.
+--
+-- One string per sheet, so a row out of place, out of order or missing
+-- fails the same assertion, and says which.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org     uuid := pg_temp.test_org('Day Sheet Rules Sdn Bhd');
+  v_owner   uuid := auth.uid();
+  v_wh      uuid;
+  v_outlet  uuid; v_elsewhere uuid;
+  v_az uuid; v_bd uuid; v_old uuid; v_far uuid;
+  v_cust    uuid;
+  v_day     date := date '2026-05-04';
+  v_stranger uuid := pg_temp.another_user('daysheet-stranger@example.test');
+begin
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  values (v_org, 'pos', true)
+  on conflict (org_id, module_code) do update set is_enabled = true;
+  insert into public.warehouses (org_id, code, name)
+  values (v_org, 'DSR', 'Back room') returning id into v_wh;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'NORA', 'Puan Nora', 'customer') returning id into v_cust;
+
+  insert into public.pos_outlets (org_id, code, name, business_type, warehouse_id)
+  values (v_org, 'DS-1', 'The salon', 'service', v_wh) returning id into v_outlet;
+  insert into public.pos_outlets (org_id, code, name, business_type, warehouse_id)
+  values (v_org, 'DS-2', 'The other salon', 'service', v_wh) returning id into v_elsewhere;
+
+  insert into public.pos_service_providers (org_id, outlet_id, code, name)
+  values (v_org, v_outlet, 'AZ', 'Azlina') returning id into v_az;
+  -- Working, with nothing booked.
+  insert into public.pos_service_providers (org_id, outlet_id, code, name)
+  values (v_org, v_outlet, 'BD', 'Badrul') returning id into v_bd;
+  insert into public.pos_service_providers (org_id, outlet_id, code, name, is_active)
+  values (v_org, v_outlet, 'OLD', 'Retired', false) returning id into v_old;
+  insert into public.pos_service_providers (org_id, outlet_id, code, name)
+  values (v_org, v_elsewhere, 'FAR', 'Elsewhere') returning id into v_far;
+
+  -- Azlina's day, entered out of order. 07:00 in Kuala Lumpur is 23:00
+  -- the evening BEFORE in UTC, so a sheet keyed on the UTC day loses it.
+  insert into public.pos_bookings
+    (org_id, outlet_id, provider_id, contact_id, description, price, starts_at, ends_at)
+  values
+    (v_org, v_outlet, v_az, null, 'Walked in', 30,
+     (v_day + time '11:00') at time zone 'Asia/Kuala_Lumpur',
+     (v_day + time '11:50') at time zone 'Asia/Kuala_Lumpur'),
+    (v_org, v_outlet, v_az, v_cust, 'Booked', 45,
+     (v_day + time '09:00') at time zone 'Asia/Kuala_Lumpur',
+     (v_day + time '09:30') at time zone 'Asia/Kuala_Lumpur'),
+    (v_org, v_outlet, v_az, v_cust, 'Early', 45,
+     (v_day + time '07:00') at time zone 'Asia/Kuala_Lumpur',
+     (v_day + time '07:30') at time zone 'Asia/Kuala_Lumpur'),
+    -- The next day, which is not this sheet's.
+    (v_org, v_outlet, v_az, v_cust, 'Tomorrow', 45,
+     (v_day + 1 + time '10:00') at time zone 'Asia/Kuala_Lumpur',
+     (v_day + 1 + time '10:30') at time zone 'Asia/Kuala_Lumpur'),
+    -- On the retired provider and in the other outlet, on the day.
+    (v_org, v_outlet, v_old, v_cust, 'Old', 45,
+     (v_day + time '10:00') at time zone 'Asia/Kuala_Lumpur',
+     (v_day + time '10:30') at time zone 'Asia/Kuala_Lumpur'),
+    (v_org, v_elsewhere, v_far, v_cust, 'Far', 45,
+     (v_day + time '10:00') at time zone 'Asia/Kuala_Lumpur',
+     (v_day + time '10:30') at time zone 'Asia/Kuala_Lumpur');
+
+  perform pg_temp.check_eq('the day sheet is this outlet''s working providers, '
+                        || 'their bookings on the Malaysian day, in time order',
+    (select string_agg(d.provider || ' '
+                       || coalesce(to_char(d.starts_at at time zone 'Asia/Kuala_Lumpur',
+                                           'HH24:MI'), '-'), ',')
+       from public.pos_day_sheet(v_outlet, v_day) d),
+    'Azlina 07:00,Azlina 09:00,Azlina 11:00,Badrul -');
+  perform pg_temp.check_eq('somebody with no customer on file is a walk-in',
+    (select d.customer from public.pos_day_sheet(v_outlet, v_day) d
+      where d.description = 'Walked in'), 'Walk-in');
+
+  perform pg_temp.sign_in_as(v_stranger);
+  perform pg_temp.check_eq('a stranger is shown nobody''s diary',
+    (select count(*)::integer from public.pos_day_sheet(v_outlet, v_day)), 0);
+  perform pg_temp.sign_in_as(v_owner);
+end;
+$$;
+
 rollback;

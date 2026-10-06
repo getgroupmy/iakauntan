@@ -320,6 +320,60 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- exchange_rate_board, rule by rule
+--
+-- A sweep of 0739's definition left five of ten mutants alive. The board
+-- above is read for one company, on the day its rates are dated, with
+-- every rate into ringgit and every currency active -- so another
+-- company's own rate, a rate into some other currency, a rate dated
+-- after the day asked, a retired currency and a stranger were each a
+-- rule no row could tell from its absence. Four currencies nothing else
+-- in this file prices, one per rule, each of which must read as unpriced.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid := pg_temp.rate_org('Board Rules Sdn Bhd');
+  v_owner uuid := auth.uid();
+  v_other uuid;
+  v_stranger uuid := pg_temp.another_user('board-stranger@example.test');
+begin
+  v_other := pg_temp.rate_org('Board Rules Other Sdn Bhd');
+  perform pg_temp.sign_in_as(v_owner);
+
+  insert into public.exchange_rates
+    (org_id, from_currency, to_currency, rate, rate_date, source)
+  values
+    -- Somebody else's own rate.
+    (v_other, 'THB', 'MYR', 0.13, date '2026-03-01', 'manual'),
+    -- This company's, but into dollars, not into its base.
+    (v_org, 'KRW', 'USD', 0.00075, date '2026-03-01', 'manual'),
+    -- This company's, into ringgit, a month after the day asked about.
+    (v_org, 'PHP', 'MYR', 0.08, date '2026-04-30', 'manual'),
+    -- Priced, but the currency is withdrawn below.
+    (v_org, 'VND', 'MYR', 0.00018, date '2026-03-01', 'manual');
+  update public.ref_currencies set is_active = false where code = 'VND';
+
+  perform pg_temp.check_true('another company''s own rate is not this one''s',
+    (select rate is null from public.exchange_rate_board(v_org, date '2026-03-31')
+      where currency = 'THB'));
+  perform pg_temp.check_true('a rate into another currency is not a rate into ours',
+    (select rate is null from public.exchange_rate_board(v_org, date '2026-03-31')
+      where currency = 'KRW'));
+  perform pg_temp.check_true('a rate dated after the day is not that day''s',
+    (select rate is null from public.exchange_rate_board(v_org, date '2026-03-31')
+      where currency = 'PHP'));
+  perform pg_temp.check_true('a withdrawn currency is not on the board',
+    not exists (select 1 from public.exchange_rate_board(v_org, date '2026-03-31')
+                 where currency = 'VND'));
+
+  perform pg_temp.sign_in_as(v_stranger);
+  perform pg_temp.check_refused('a stranger cannot read a company''s board',
+    format('select * from public.exchange_rate_board(%L, %L)', v_org, date '2026-03-31'),
+    '%Not a member of organization%', '42501');
+  perform pg_temp.sign_out();
+end $$;
+
+-- ---------------------------------------------------------------------
 -- Reachability
 --
 -- A rate that prices everybody's ledger is not any one organization's

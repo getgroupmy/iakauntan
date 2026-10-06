@@ -508,4 +508,82 @@ begin
   raise notice 'mbrs: every subtype maps to an element that exists';
 end $$;
 
+-- ---------------------------------------------------------------------
+-- fs_lodge, rule by rule
+--
+-- A sweep of 0739's definition left six of nine mutants alive across
+-- the four files that lodge accounts. Every one of them lodges ONCE, as
+-- the owner of a company with the module, on frozen, circulated
+-- accounts, with a reference that has no spaces round it -- and only
+-- `mbrs.sql` asks what was stored, and only the opinion afterwards. So
+-- each refusal and both stored values were rules no call could tell from
+-- their absence.
+--
+-- The filing is written frozen directly: freezing is `fs_freeze`'s
+-- business and has its own file, and a full set of accounts to get
+-- there would be fixture standing in for the rule under test.
+-- ---------------------------------------------------------------------
+-- One filing per company per year, so each call names its year.
+create or replace function pg_temp.frozen_filing(
+  p_org uuid, p_year integer, p_status text default 'frozen',
+  p_circulated date default date '2026-04-20')
+returns uuid language plpgsql as $$
+declare v_id uuid;
+begin
+  insert into public.fs_filings
+    (org_id, fy_start, fy_end, audit_status, status,
+     directors_approval_date, circulated_on)
+  values (p_org, make_date(p_year, 1, 1), make_date(p_year, 12, 31), 'audited',
+          p_status::app.fs_filing_status,
+          date '2026-04-15', p_circulated)
+  returning id into v_id;
+  return v_id;
+end $$;
+
+do $$
+declare
+  v_org    uuid := pg_temp.mbrs_org('Lodging Rules Sdn Bhd');
+  v_owner  uuid := auth.uid();
+  v_reader uuid := pg_temp.another_user('lodge-viewer@example.test');
+  v_filing uuid;
+begin
+  insert into public.org_members (org_id, user_id, role)
+  values (v_org, v_reader, 'viewer');
+
+  v_filing := pg_temp.frozen_filing(v_org, 2025);
+  perform pg_temp.sign_in_as(v_reader);
+  perform pg_temp.check_refused('somebody who may only read cannot lodge',
+    format('select public.fs_lodge(%L, %L, %L)', v_filing, 'MBRS-1', date '2026-05-02'),
+    '%may not lodge%', '42501');
+  perform pg_temp.sign_in_as(v_owner);
+
+  update public.org_modules set is_enabled = false
+   where org_id = v_org and module_code = 'mbrs';
+  perform pg_temp.check_refused('nor can a company without the module',
+    format('select public.fs_lodge(%L, %L, %L)', v_filing, 'MBRS-1', date '2026-05-02'),
+    '%may not lodge%', '42501');
+  update public.org_modules set is_enabled = true
+   where org_id = v_org and module_code = 'mbrs';
+
+  perform pg_temp.check_refused('accounts still open are not lodged',
+    format('select public.fs_lodge(%L, %L, %L)',
+           pg_temp.frozen_filing(v_org, 2024, 'draft'), 'MBRS-1', date '2026-05-02'),
+    '%Freeze the accounts%', '22023');
+  perform pg_temp.check_refused('nor ones never sent to the members',
+    format('select public.fs_lodge(%L, %L, %L)',
+           pg_temp.frozen_filing(v_org, 2023, 'frozen', null), 'MBRS-1', date '2026-05-02'),
+    '%went to the members first%', '22023');
+  perform pg_temp.check_refused('a reference of spaces is no reference',
+    format('select public.fs_lodge(%L, %L, %L)', v_filing, '   ', date '2026-05-02'),
+    '%MBRS reference%', '22023');
+
+  perform public.fs_lodge(v_filing, '  MBRS-2026-000777  ', date '2026-05-02');
+  perform pg_temp.check_eq('lodged on the day it was lodged, not the day it was typed',
+    (select lodged_on::text from public.fs_filings where id = v_filing), '2026-05-02');
+  perform pg_temp.check_eq('the reference as mPortal gave it, without the spaces',
+    (select mbrs_reference from public.fs_filings where id = v_filing),
+    'MBRS-2026-000777');
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

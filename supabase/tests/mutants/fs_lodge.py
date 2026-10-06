@@ -9,7 +9,13 @@
 # then again against `fs_deadlines.sql`, `fs_statutory_order.sql` and
 # `corp_filing_shapes.sql`.
 #
-# RESULT: (pending)
+# RESULT: 9 mutants and a control. 9 killed.
+#
+#   The first sweep killed 3 across the four files, which all lodge once,
+#   as the owner, frozen, circulated and with a clean reference. "fs_lodge,
+#   rule by rule" in mbrs.sql kills the six refusals and stored values;
+#   "the filing is not marked lodged" and "the write switch is left on"
+#   were already dead in mbrs.sql.
 
 m("a reader lodges the accounts",
   "fs_lodge",

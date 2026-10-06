@@ -6,7 +6,11 @@
 #       supabase/tests/exchange_rate_feed.sql \
 #       supabase/tests/mutants/exchange_rate_board.py
 #
-# RESULT: (pending)
+# RESULT: 10 mutants and a control. 10 killed.
+#
+#   The first sweep killed 5. "exchange_rate_board, rule by rule" uses
+#   four currencies nothing else in the file prices, one per rule, each
+#   of which must read as unpriced, and asks a stranger.
 
 m("a stranger reads the board",
   "exchange_rate_board",

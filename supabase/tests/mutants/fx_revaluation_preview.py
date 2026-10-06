@@ -11,7 +11,14 @@
 # The sales and purchase blocks of the open-items CTE are word for word
 # alike, so each anchor here carries its `from` line to say which.
 #
-# RESULT: (pending)
+# RESULT: 15 mutants and a control. 15 killed.
+#
+#   The first sweep killed 8 across fx_revaluation.sql and fx_shapes.sql.
+#   No fixture had a settled, draft or void foreign invoice, a ringgit
+#   BILL, an April bill, or a rate dated after the as-at day -- so any
+#   day from March on read 4.20. "fx_revaluation_preview, rule by rule"
+#   in fx_revaluation.sql kills the other six; the stranger dies in
+#   fx_shapes.sql.
 
 m("a stranger previews the revaluation",
   "fx_revaluation_preview",

@@ -8,7 +8,13 @@
 #
 # then again against `manual_journal.sql` and `report_layouts.sql`.
 #
-# RESULT: (pending)
+# RESULT: 11 mutants and a control. 11 killed, all in
+# pricing_and_dimensions.sql.
+#
+#   The first sweep killed 4 there. The fixture was revenue only, one
+#   company, all posted, all inside the year, no department and no nil
+#   line. "report_profit_loss_by_dimension, rule by rule" kills the
+#   other seven.
 
 m("revenue is shown as a debit",
   "report_profit_loss_by_dimension",

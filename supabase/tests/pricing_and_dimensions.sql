@@ -115,6 +115,95 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- report_profit_loss_by_dimension, rule by rule
+--
+-- A sweep of 0739's definition left seven mutants alive across the
+-- three files that call it. The block above has revenue and nothing
+-- else, one company, every journal posted and inside the year asked
+-- for, no department, and no account that nets to nil -- so the sign of
+-- an expense, the period's two ends, the posted filter, the department,
+-- the company, the stranger and the nil line were each a rule its rows
+-- could not tell from its absence.
+-- ---------------------------------------------------------------------
+create or replace function pg_temp.dim_journal(
+  p_org uuid, p_on date, p_dr text, p_cr text, p_amount numeric,
+  p_project text, p_department text)
+returns uuid language sql as $$
+  select public.create_gl_entry(p_org, p_on, 'manual'::app.journal_source,
+    jsonb_build_array(
+      jsonb_build_object('account_id',
+        (select id from public.accounts where org_id = p_org and code = p_dr),
+        'debit', p_amount, 'credit', 0,
+        'project_code', p_project, 'department_code', p_department),
+      jsonb_build_object('account_id',
+        (select id from public.accounts where org_id = p_org and code = p_cr),
+        'debit', 0, 'credit', p_amount,
+        'project_code', p_project, 'department_code', p_department)),
+    'dimension rule');
+$$;
+
+do $$
+declare
+  v_org   uuid := pg_temp.pl_org('Dimension Rules Sdn Bhd');
+  v_owner uuid := auth.uid();
+  v_other uuid;
+  v_stranger uuid := pg_temp.another_user('dimension-stranger@example.test');
+begin
+  -- In the period, on JOB-1: 1,000 of sales in department A, 300 of
+  -- expense in department B.
+  perform pg_temp.dim_journal(v_org, date '2026-03-10', '1210', '4100', 1000, 'JOB-1', 'DEPT-A');
+  perform pg_temp.dim_journal(v_org, date '2026-03-10', '6100', '2110', 300, 'JOB-1', 'DEPT-B');
+  -- Either side of the period asked for, 1 February to 31 October.
+  perform pg_temp.dim_journal(v_org, date '2026-01-15', '1210', '4100', 5000, 'JOB-1', 'DEPT-A');
+  perform pg_temp.dim_journal(v_org, date '2026-11-01', '1210', '4100', 7000, 'JOB-1', 'DEPT-A');
+  -- An expense booked and taken back: nil, and not a line.
+  perform pg_temp.dim_journal(v_org, date '2026-03-11', '6200', '2110', 50, 'JOB-1', 'DEPT-B');
+  perform pg_temp.dim_journal(v_org, date '2026-03-12', '2110', '6200', 50, 'JOB-1', 'DEPT-B');
+
+  -- A draft, which is not the ledger.
+  insert into public.gl_entries
+    (org_id, entry_no, entry_date, source, description, status,
+     total_debit, total_credit)
+  values (v_org, 'JV-DIM-DRAFT', date '2026-03-10', 'manual', 'Not posted',
+          'draft', 9000, 9000);
+  insert into public.gl_lines
+    (org_id, entry_id, line_no, account_id, description, debit, credit,
+     project_code, department_code)
+  values (v_org,
+          (select id from public.gl_entries
+            where org_id = v_org and entry_no = 'JV-DIM-DRAFT'),
+          1, (select id from public.accounts where org_id = v_org and code = '4100'),
+          'Not posted', 0, 9000, 'JOB-1', 'DEPT-A');
+
+  -- Another company, the same project code.
+  v_other := pg_temp.pl_org('Dimension Rules Other Sdn Bhd');
+  perform pg_temp.dim_journal(v_other, date '2026-03-10', '1210', '4100', 999, 'JOB-1', 'DEPT-A');
+  perform pg_temp.sign_in_as(v_owner);
+
+  perform pg_temp.check_eq(
+    'department A of JOB-1 is this company''s posted March sale, as a credit',
+    (select amount from public.report_profit_loss_by_dimension(
+       v_org, date '2026-02-01', date '2026-10-31', 'JOB-1', 'DEPT-A')
+      where code = '4100'), 1000);
+  perform pg_temp.check_eq('and nothing else',
+    (select count(*)::integer from public.report_profit_loss_by_dimension(
+       v_org, date '2026-02-01', date '2026-10-31', 'JOB-1', 'DEPT-A')), 1);
+  perform pg_temp.check_eq('department B''s expense is a positive cost',
+    (select amount from public.report_profit_loss_by_dimension(
+       v_org, date '2026-02-01', date '2026-10-31', 'JOB-1', 'DEPT-B')
+      where code = '6100'), 300);
+  perform pg_temp.check_eq('and an expense taken back is not a line',
+    (select count(*)::integer from public.report_profit_loss_by_dimension(
+       v_org, date '2026-02-01', date '2026-10-31', 'JOB-1', 'DEPT-B')), 1);
+
+  perform pg_temp.sign_in_as(v_stranger);
+  perform pg_temp.check_eq('a stranger is shown nothing',
+    (select count(*)::integer from public.report_profit_loss_by_dimension(
+       v_org, date '2026-02-01', date '2026-10-31', 'JOB-1', null)), 0);
+  perform pg_temp.sign_out();
+end $$;
+
+-- ---------------------------------------------------------------------
 -- Recurring journals, run for one organization
 -- ---------------------------------------------------------------------
 do $$

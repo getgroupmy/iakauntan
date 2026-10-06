@@ -6,7 +6,13 @@
 #       supabase/tests/pos_service.sql \
 #       supabase/tests/mutants/pos_day_sheet.py
 #
-# RESULT: (pending)
+# RESULT: 9 mutants and a control. 9 killed.
+#
+#   The first sweep killed 2: every booking was at ten in the morning,
+#   both providers worked and had a booking, and there was one outlet.
+#   "pos_day_sheet, rule by rule" kills the other seven with one string
+#   per sheet, so a row out of place, out of order or missing fails the
+#   same assertion.
 
 m("the length is in seconds",
   "pos_day_sheet",
