@@ -9,7 +9,26 @@
 #       supabase/tests/aged_balances.sql \
 #       supabase/tests/mutants/report_ap_aging.py
 #
-# RESULT: (pending)
+# RESULT, 6 October, against 0747: 46 mutants and a control. 39
+# KILLED, 7 equivalent, control alive -- across aged_balances.sql and
+# aging_shapes.sql. Against 0739 the four files that reach it killed 3
+# on aged_balances.sql and a handful more elsewhere: the payables side
+# had one bill, one payment and the bucket edges. "The payables
+# listing, rule by rule" and "The three ways of being paid…" are what
+# took it the rest of the way.
+#
+# Equivalent, with the reason:
+#   * another company's allocations: composite foreign key (23503). A
+#     table constraint.
+#   * `coalesce(exchange_rate, 0)`: NOT NULL. A table constraint.
+#   * a bill's settlement discount: `allocation_discount_guard` refuses
+#     a discount written onto an allocation, and
+#     `allocate_with_discount`, the one door, settles invoices only.
+#     The writer.
+#   * a void contra, a bounced or cancelled cheque, a cheque with no
+#     journal, a void deposit: the writers delete those allocations,
+#     post whenever they allocate, or refuse to void once applied. The
+#     writer.
 
 # -- allocations: both ends in the ledger by the as-at date ------------
 
