@@ -343,6 +343,55 @@ extension at all. The engine now says which case a real call is in.
 
 **Do not start task #11, the MIA headless scraper.**
 
+## `0747`, `0748`: what a sweep of the reports found, 6 October
+
+The report tier after the money movers: the two aged listings, the
+general ledger, the cash flow statement, Schedule 3, the statutory
+remittances, the SST summary and return, the customer statement, and
+`apply_deposit` (which `0747` redefined, and which the census then
+counted). Every one has a mutants file whose header records the kill
+sheet and the reason for each equivalent.
+
+| function | before the new block | after | equivalents |
+|---|---|---|---|
+| `report_ar_aging` (0747) | 9 files left 23 alive | 41 killed | 6 |
+| `report_ap_aging` (0747) | 3 of 37 on aged_balances.sql | 39 killed | 7 |
+| `report_statement_of_account` (0747) | -- | 8 killed | 1 |
+| `apply_deposit` (0747) | 16 of 19 | 19 of 19 | 0 |
+| `report_sst_summary` (0748) | -- | 12 of 12 | 0 |
+| `app.sst_output_due` (0748) | 18 of 18 against 0456 | 22 of 22, re-run | 0 |
+| `report_general_ledger` | 15 of 28 | 27 killed | 1 |
+| `capital_allowance_schedule` | 26 of 42 | 36 killed | 6 |
+| `report_cash_flow` | 12 of 27 | 27 of 27 | 0 |
+| `report_statutory_remittances` | 15 of 22 | 21 killed | 1 |
+
+**Two defects, both fixed at the user's direction ("fix both"):** the
+aged listings and the customer statement never read contras, applied
+deposits or post-dated cheques (`0747`), and the SST return summed
+foreign-currency tax in the foreign currency (`0748`). Items 9 and 10
+above say what and how.
+
+**Four of my own mutants were wrong, and each looked like a result.**
+One wrapped a clamp in a second `greatest` and changed nothing; one put
+its marker in front of a column alias and died of a syntax error in
+every file, which reads as a kill; one named an enum value that does
+not exist and stopped the sweep half way with every later mutant unrun;
+and the first allocation-date mutant on each aged listing, `coalesce(...,
+p_as_at)`, was a no-op wherever the source document existed. The check
+that catches the second kind is now a habit, not a gate: look for any
+mutant whose marker has code after it on the same line.
+
+**The deploy and the push cadence.** CI's `migrate` applies only from
+the newest run; an older one says "Superseded by …" and stands down.
+Pushing every twenty minutes while a run takes longer meant four runs
+in a row superseded each other and `0747`/`0748` sat unapplied for most
+of an afternoon. When a migration is waiting to go out, hold the next
+push until its run's `Apply the migrations` job has finished.
+
+**The deploy failures earlier on 6 October were Supabase's, not ours.**
+Three runs failed at `supabase link` (four attempts each) or at an edge
+function deploy; a re-run of the same job an hour later was green.
+
 ## Three gates, one file — and the denominator nobody checked
 
 Found by asking whether the gate written the day before could see
