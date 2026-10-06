@@ -394,6 +394,46 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- tax_upcoming_filings, rule by rule
+--
+-- A sweep of `0671` across the five files that read the calendar left
+-- two rules no file reached. Nothing was ever due TODAY -- so "due
+-- today" and "overdue" were never told apart -- and no company had
+-- revised its CP204, so the estimate beside the obligation could have
+-- been the superseded one.
+--
+-- CP204 is used for the first because it falls a fixed thirty days
+-- before the basis period opens: a period opening thirty days from
+-- today puts its due date on today, on any calendar day, where a Form C
+-- is always a month end.
+-- ---------------------------------------------------------------------
+do $$
+declare v_org uuid; v_est uuid; v_new uuid; r record;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  perform pg_temp.allow_many_companies();
+
+  v_org := pg_temp.test_org('Kedai Hari Ini Sdn Bhd');
+  perform public.create_fiscal_year(v_org, app.today() + 30);
+  select * into r from public.tax_upcoming_filings(v_org, 365)
+   where filing_type = 'cp204' and due_date = app.today();
+  perform pg_temp.check_true('an estimate due today is on the list', r.filing_type is not null);
+  perform pg_temp.check_true('and due today is not late', not r.is_overdue);
+  perform pg_temp.check_eq('with no days left, and none lost', r.days_left, 0);
+
+  -- Revised: the estimate beside the obligation is the one in force.
+  v_org := pg_temp.test_org('Kedai Semak Semula Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date '2026-01-01');
+  v_est := public.open_tax_estimate(v_org,
+    (select id from public.fiscal_years where org_id = v_org order by end_date limit 1),
+    50000, 60000);
+  v_new := public.revise_tax_estimate(v_est, 80000);
+  perform pg_temp.check_true('a revised estimate is shown by its revision, not the original',
+    (select estimate_id from public.tax_upcoming_filings(v_org, 3650)
+      where filing_type = 'cp204' and period_to = date '2026-12-31') = v_new);
+end $$;
+
+-- ---------------------------------------------------------------------
 -- tax_filing_due and tax_filing_fixed_date, rule by rule
 --
 -- A sweep of `0668` killed twelve of sixteen mutants through the

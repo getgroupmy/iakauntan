@@ -11,7 +11,18 @@
 # `tax_estimate_first_period.sql`, `tax_dashboard_tile.sql` and
 # `tax_stack_end_to_end.sql`.
 #
-# RESULT: (pending)
+# RESULT: 17 mutants and a control. 17 killed across the five files,
+# none of which kills them all.
+#
+#   Only two survived every file: nothing was ever due TODAY, so "due
+#   today" and "overdue" were never told apart, and the revised estimate
+#   was only asked of in tax_stack_end_to_end.sql. "tax_upcoming_filings,
+#   rule by rule" in tax_filing_calendar.sql asks both -- the first with
+#   a CP204, due a fixed thirty days before its period opens, so the due
+#   date lands on today whatever today is. The first-period CP204 dies in
+#   tax_estimate_first_period.sql; the filed, not-applicable and
+#   in-preparation statuses and Form E's own period in
+#   tax_filings_recorded.sql; the window in tax_dashboard_tile.sql.
 
 m("a stranger reads the company's obligations",
   "tax_upcoming_filings",
