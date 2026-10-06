@@ -14418,8 +14418,9 @@ stranger cannot read either statement", covered two OTHER statements.
 `report_*` that takes `p_org_id`, after a demo rebuild inside its
 transaction. Each is called as the owner of the first demo company
 where it returns rows, then as a signed-in stranger. A stranger gets no
-rows, or a 42501 and nothing else. **29 reports are asked; the floor is
-29.** Required ids are filled with a real matter, item or asset of the
+rows, or a 42501 and nothing else. It now covers every READ-ONLY
+definer function whose first argument is the company, not only those
+named `report_*`. **59 are asked; the floor is 59.** Required ids are filled with a real matter, item or asset of the
 company under test, which brought in the four per-record ledgers. The
 15 left have no data of their kind in any demo company (withholding,
 bank reconciliation, groups, vacancies, leave, lots, layouts) and are

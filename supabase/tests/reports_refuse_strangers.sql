@@ -33,6 +33,13 @@
 -- output. A stranger may get zero rows or an error -- either way they
 -- read nothing -- and never a row.
 --
+-- NOT ONLY `report_*`. The same is true of every definer function that
+-- returns a company's rows -- the lists, boards, directories and
+-- previews that are reports in all but name -- so the file asks every
+-- READ-ONLY one (stable or immutable; a volatile one would be writing to
+-- the books under test) whose first argument is the company. That took
+-- the count from 29 to 59.
+--
 -- Measured on 6 October 2026: 29 reports had rows for an owner in some
 -- demo company and were asked. 25 at first, until required ids were
 -- filled with a REAL matter, item or asset of the company under test
@@ -93,8 +100,13 @@ begin
      where n.nspname = 'public'
        and p.prosecdef
        and p.proretset
-       and p.proname like 'report\_%'
-       and p.proargnames[1] = 'p_org_id'
+       -- Every READ-ONLY definer function that returns rows for a
+       -- company: the reports by name, and the lists, boards and
+       -- lookups that are reports in all but name. Read-only because
+       -- this calls each one as an owner first, and a volatile function
+       -- here would be writing to the books under test.
+       and (p.proname like 'report\_%' or p.provolatile in ('s', 'i'))
+       and p.proargnames[1] in ('p_org_id', 'p_org')
        and p.proargtypes[0] = 'uuid'::regtype
      order by p.proname
   loop
@@ -198,7 +210,7 @@ begin
   perform pg_temp.check_true(
     format('and that was asked of enough reports to mean something (%s)',
            coalesce(array_length(v_counted, 1), 0)),
-    coalesce(array_length(v_counted, 1), 0) >= 29);
+    coalesce(array_length(v_counted, 1), 0) >= 59);
 end $$;
 
 rollback;
