@@ -9,7 +9,15 @@
 #
 # then group_reporting.sql, group_shapes.sql, group_trial_balance_shapes.sql.
 #
-# RESULT: (pending)
+# RESULT, 6 October: 29 mutants, ALL 29 KILLED, control alive, across
+# group_consolidation.sql, group_reporting.sql, group_shapes.sql and
+# group_trial_balance_shapes.sql. Three of the four reports were already
+# held from every side. `report_group_intercompany` was asked one
+# question -- one invoice, dated today -- and lost 10 of its 11 until
+# group_reporting.sql's "The inter-company listing, rule by rule" gave
+# it a period with entries before, inside and after it, a draft, the
+# other side's payable and expense, a company in the group the reader
+# cannot see, a nil line, and a reader from outside.
 
 # -- report_group_trial_balance -------------------------------------------
 
