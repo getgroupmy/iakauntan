@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-15296
+15328
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -989,3 +989,10 @@
 # the may_decide_claim_step block found: a NULL from it was taken as
 # permission. Measured against a local cluster at 0752 over the ci.yml
 # list: 386 files, 15296 assertions; run_locally.sh agrees.
+#
+# 15296 -> 15328, 6 October: payslip access rule by rule (request,
+# decide, revoke, covering_grant and the two audited reads), and the two
+# answers built from what those sweeps found -- 0753 (an undated payslip
+# is outside a bounded grant) and 0754 (a retired employee has no next
+# leave year). run_locally.sh at 0754 counted 15326 before the 0754
+# block's two assertions were added to leave_year_shapes.sql.

@@ -757,4 +757,46 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- An undated payslip is outside a bounded grant (0753)
+--
+-- Until 0753, `p_pay_date is null` passed both of a grant's period
+-- bounds, so a grant limited to January also opened any payslip with
+-- no pay date. A bound that lapses where the date is missing is no
+-- bound. An unbounded grant still covers it.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_owner uuid := pg_temp.test_user();
+  v_y uuid := pg_temp.another_user('y.auditor@tanpa-tarikh.test');
+  v_org uuid; v_runs uuid[]; v_emp uuid; v_slip uuid;
+  v_january uuid; v_open uuid;
+begin
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Tanpa Tarikh Sdn Bhd');
+  v_runs := pg_temp.payroll_of(v_org, array['Farah']);
+  insert into public.org_members (org_id, user_id, role, status)
+  values (v_org, v_y, 'auditor', 'active');
+  select id into v_emp from public.employees where org_id = v_org;
+  select id into v_slip from public.payslips
+   where run_id = v_runs[1] and employee_id = v_emp;
+  update public.payslips set pay_date = null where id = v_slip;
+
+  v_january := pg_temp.grant_for(v_org, v_y, now() + interval '5 days',
+                                 date '2026-01-01', date '2026-01-31');
+  perform pg_temp.sign_in_as(v_y);
+  perform pg_temp.check_eq('a January grant covers a January pay date',
+    app.covering_grant(v_org, v_runs[1], v_emp, date '2026-01-25'), v_january);
+  perform pg_temp.check_true('but not a payslip with no pay date at all',
+    app.covering_grant(v_org, v_runs[1], v_emp, null) is null);
+  perform pg_temp.check_refused('so the undated payslip does not open',
+    format('select public.audit_view_payslip(%L)', v_slip),
+    '%does not cover this payslip%', '42501');
+
+  v_open := pg_temp.grant_for(v_org, v_y, now() + interval '5 days');
+  perform pg_temp.check_eq('while a grant with no period still covers it',
+    app.covering_grant(v_org, v_runs[1], v_emp, null), v_open);
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

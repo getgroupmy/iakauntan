@@ -427,17 +427,26 @@ page and renumbering would quietly break the reference.
     search for the same shape -- boolean guards ending in a CASE that
     can go NULL -- found only `can_attach_to` and
     `can_read_attachment`, and both end `else false` over `exists`.
-20. **A payslip with no pay date is inside every bounded grant.**
-    `app.covering_grant` (0047) tests a grant's period with
-    `p_pay_date is null or p_pay_date >= r.period_from` (and the same
-    for `period_to`), so a grant an administrator limited to January
-    also opens any payslip whose `pay_date` is null. The column is
-    nullable. Nothing is exposed today -- production had 36 payslips,
-    none undated, and no access requests at all on 6 October -- and
-    payroll sets the date. The question is which way it should fail:
-    **outside every bounded grant** (refuse, and let an unbounded grant
-    still cover it), or **as now**. Either is a one-line migration plus
-    an assertion; it is a policy call, so it waits for an answer.
+20. ~~A payslip with no pay date is inside every bounded grant.~~
+    **Raised and answered 6 October: outside bounded grants. Built in
+    `0753`.** `app.covering_grant` (0047) tested a grant's period with
+    `p_pay_date is null or ...`, so a grant an administrator limited to
+    January also opened any payslip whose nullable `pay_date` was null.
+    Now a payslip with no pay date is outside every grant that names a
+    period, and a grant with no period still covers it. Nothing was
+    exposed: production had 36 payslips, none undated, and no access
+    requests at all. The new block in `payslip_access.sql` fails against
+    0047's function and passes against 0753's.
+21. ~~A retired employee is given next year's leave.~~ **Raised and
+    answered 6 October: exclude retired. Built in `0754`.**
+    `app.roll_leave_year` (0058) skipped `resigned` and `terminated`
+    only; `app.employment_status` has a third way to have gone, and
+    every later reader -- 0371's departure guard, 0388, 0419,
+    `close_attendance_day` -- counts `retired` too. A retired employee
+    got a fresh entitlement and their unused days carried. Production
+    had four employees, all active; the next roll is 1 January 2027.
+    Found reading `close_attendance_day`'s status list next to the
+    roll's, not by a mutant -- a sweep only varies what is there.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -461,14 +470,14 @@ function:
 | Function | Migration | Killed | Equivalent | Added to |
 | --- | --- | --- | --- | --- |
 | `decide_leave_request` | `0037` | 19 / 19 | -- | `leave_year_shapes.sql` |
-| `app.roll_leave_year` | `0058` | 19 / 20 | 1 (NOT NULL cap) | `leave_year_shapes.sql` |
+| `app.roll_leave_year` | `0754` | 20 / 21 | 1 (NOT NULL cap) | `leave_year_shapes.sql` |
 | `post_expense_claim` | `0049` | 21 / 21 | -- | `expense_claims.sql` |
 | `decide_claim_step` | `0752` | 21 / 23 | 2 | `claim_approval_chain.sql` |
 | `app.may_decide_claim_step` | `0752` | 12 / 14 | 2 | `claim_approval_chain.sql` |
 | `app.build_claim_chain` | `0121` | 20 / 20 | -- | `claim_approval_chain.sql` |
 | `app.assert_claim_caps` | `0364` | 23 / 23 | -- | `claim_caps.sql` |
 | `request_`, `decide_`, `revoke_payslip_access` | `0046` | 32 / 32 | -- | `payslip_access.sql` |
-| `app.covering_grant` | `0047` | 12 / 12 | -- | `payslip_access.sql` |
+| `app.covering_grant` | `0753` | 13 / 13 | -- | `payslip_access.sql` |
 | `audit_view_payslip` | `0048` | 10 / 10 | -- | `payslip_access.sql` |
 | `audit_list_payslips` | `0281` | 10 / 10 | -- | `payslip_access.sql` |
 

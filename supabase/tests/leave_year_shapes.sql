@@ -437,6 +437,47 @@ begin
         and b.leave_year = v_year), 2);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- A retired employee has no next leave year (0754)
+--
+-- `app.employment_status` has three ways to have gone, and until 0754
+-- the roll knew two of them: a retired employee was given next year's
+-- entitlement and their unused days carried forward -- leave the
+-- company appeared to owe somebody who had left. Every other reader of
+-- the status counts all three (0371's departure guard, 0360's
+-- attendance close).
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.test_org('Bersara Sdn Bhd');
+  v_type uuid; v_retired uuid; v_stay uuid; v_year integer := 2026;
+begin
+  v_type := pg_temp.ly_type(v_org, 'AL', 'Annual', 14, false, 20);
+  v_stay := pg_temp.ly_emp(v_org, 'E1', 'Puan Siti', date '2021-01-01');
+  -- Inserted by hand: the fixture helper gives a last working day only
+  -- to the two statuses the file already had, and a leaver without one
+  -- is refused (0371).
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     date_of_birth, residency_status, employment_status,
+     resignation_date, last_working_date)
+  values (v_org, 'E2', 'Encik Rahim', date '1990-01-01', 3000,
+          date '1964-01-01', 'citizen', 'retired',
+          date '2025-11-30', date '2025-12-31')
+  returning id into v_retired;
+  insert into public.leave_balances
+    (org_id, employee_id, leave_type_id, leave_year, entitled_days, taken_days)
+  values (v_org, v_retired, v_type, v_year - 1, 16, 4);
+
+  perform app.roll_leave_year(v_org, v_year);
+  perform pg_temp.check_eq('somebody who has retired is not given next year''s leave',
+    (select count(*) from public.leave_balances b
+      where b.employee_id = v_retired and b.leave_year = v_year), 0);
+  perform pg_temp.check_eq('while the employee still here is',
+    (select count(*) from public.leave_balances b
+      where b.employee_id = v_stay and b.leave_year = v_year), 1);
+end $$;
+
 -- =====================================================================
 -- 4. What expires, and whose
 -- =====================================================================

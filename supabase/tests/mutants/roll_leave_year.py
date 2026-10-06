@@ -1,15 +1,15 @@
-# Mutants for app.roll_leave_year (0058) -- January's rollover: a
+# Mutants for app.roll_leave_year (0754, restating 0058's) -- January's rollover: a
 # balance for every active leave type and every employee still here,
 # carrying forward what was left, capped by the type's own limit.
 #
 #     python3 scripts/mutate_sql.py \
-#       supabase/migrations/0058_periodic_jobs.sql \
+#       supabase/migrations/0754_a_retired_employee_has_no_next_leave_year.sql \
 #       supabase/tests/leave_year_shapes.sql \
 #       supabase/tests/mutants/roll_leave_year.py
 #
 # then again against `scheduled_work.sql`.
 #
-# RESULT: 20 mutants and a control. 19 killed, all by
+# RESULT: 21 mutants and a control. 20 killed, all by
 # `leave_year_shapes.sql` (`scheduled_work.sql` only names the job and
 # kills none), five of them only after a rule-by-rule block there:
 #
@@ -20,6 +20,11 @@
 #   an overdrawn year carries a debt      no year was overdrawn
 #   the type's cap is ignored             every carry was under its cap
 #   nothing is counted                    nothing read the return value
+#   somebody retired is rolled            0058's own list; found reading
+#   (0058's list)                         `close_attendance_day`, which
+#                                         counts three ways to have gone
+#                                         where the roll counted two.
+#                                         Fixed in 0754.
 #
 # One EQUIVALENT, and it stays so:
 #
@@ -50,15 +55,21 @@ m("another company's staff are rolled",
 
 m("somebody who resigned is rolled",
   "roll_leave_year",
-  "         and e.employment_status not in ('resigned', 'terminated')",
-  "         and e.employment_status not in ('terminated')  -- resigned too",
+  "         and e.employment_status not in ('resigned', 'terminated', 'retired')",
+  "         and e.employment_status not in ('terminated', 'retired')  -- resigned too",
   "-- resigned too")
 
 m("somebody dismissed is rolled",
   "roll_leave_year",
-  "         and e.employment_status not in ('resigned', 'terminated')",
-  "         and e.employment_status not in ('resigned')  -- dismissed too",
+  "         and e.employment_status not in ('resigned', 'terminated', 'retired')",
+  "         and e.employment_status not in ('resigned', 'retired')  -- dismissed too",
   "-- dismissed too")
+
+m("somebody retired is rolled (0058's list)",
+  "roll_leave_year",
+  "         and e.employment_status not in ('resigned', 'terminated', 'retired')",
+  "         and e.employment_status not in ('resigned', 'terminated')  -- retired too",
+  "-- retired too")
 
 m("the carry is read from this year, not last",
   "roll_leave_year",
