@@ -851,4 +851,17 @@
 # had never been asserted.
 # Measured:
 # `all SQL assertions passed (385 files, 14855 assertions executed)`.
-14855
+#
+# 14855 -> 14865: item_bundles.sql, with 0745. Section 4b is the two-
+# line invoice that found the defect: two bundle lines sharing a part
+# read each other's movement cost back (`order by created_at desc limit
+# 1`, and every movement one posting inserts has the same created_at).
+# Against 0277's body it FAILED -- "expected 319, got 580.00"; the
+# scratch repro got 58 with the lines the other way round. Against
+# 0745's, 319. Section 4c and two more checks came from the sweep of
+# the fixed function: the line's own (non-default) store, a carton of
+# two, the journal's date, the movements' link to it, a retired recipe,
+# and a credit note's movement TYPE. 10 of 10 killable, 1 equivalent.
+# Measured:
+# `all SQL assertions passed (385 files, 14865 assertions executed)`.
+14865

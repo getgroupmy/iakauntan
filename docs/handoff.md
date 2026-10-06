@@ -14449,7 +14449,7 @@ only thing the wrapper adds, was unasserted.** Eight files call it,
 always as an owner. `ledger.sql` now calls it as a viewer and as an
 accountant of a different company; both are refused.
 
-### A FOURTH FINDING, awaiting the user's word: bundle cost read back from the wrong line
+### A FOURTH FINDING, FIXED in 0745 at the user's word: bundle cost read back from the wrong line
 
 `app.move_document_bundles` (0277) loops over an invoice's bundle LINES
 with no `order by`. For each part it inserts a movement, then reads that
@@ -14475,11 +14475,17 @@ ran first, and line 1 then read line 2's movement back.
 **Production exposure, read-only: none.** Zero bundle items, zero
 invoices with a bundle line. The defect is latent.
 
-The obvious fix is to sum `-total_cost` over the movements this call
-inserted for this line (key the read-back on `source_line_id`, which
-the insert already writes) or to accumulate the cost from `RETURNING`.
-It is a migration, and a green push deploys it to production, so it is
-the user's decision, like the three findings before it.
+**Fixed (the user chose "fix it now"):**
+`0745_a_bundle_costs_what_its_own_line_moved.sql` replaces the read-back
+with `insert ... returning total_cost`, the cost the BEFORE trigger set
+on the row just written (`0422` reads a manufacturing issue's cost the
+same way). `materialise_movement_lots` fires AFTER insert and writes
+lots, not cost, so the returned value is the stored one. The return
+arm's lookup has the same ordering shape and is left alone: outbound
+movements of one part in one posting are all valued at the weighted
+average, which an outbound movement does not move beyond sixth-decimal
+rounding. `item_bundles.sql` section 4b posts the two-line invoice and
+asserts 319 in movements, 5200 and 1310.
 
 40 of 45 money movers now have a mutants file. Left: the four demo
 builders (`demo_legal_guaman`, `demo_sinar_bank`, `demo_purchases`,

@@ -36,6 +36,9 @@ declare
   v_spoon  uuid;   -- a part
   v_set    uuid;   -- the bundle
   v_inner  uuid;   -- a bundle inside the bundle
+  v_duo    uuid;   -- a two-part bundle, sold by the carton (4c)
+  v_back   uuid;   -- a store that is NOT the default (4c)
+  v_old    uuid;   -- an invoice dated back (4c)
 
   v_bill   uuid;
   v_inv    uuid;
@@ -185,6 +188,14 @@ begin
       join public.gl_entries e on e.id = gl.entry_id
       join public.accounts a on a.id = gl.account_id
      where e.source_id = v_cn and a.code = '5200'), 58::numeric);
+  -- The sign puts them back; the TYPE says why. A return filed as
+  -- `assembly_out` reads as a second sale on the stock card, and every
+  -- assertion above reads quantity, which the type does not move.
+  perform pg_temp.check_eq('and the movements say they came back in',
+    (select string_agg(distinct sm.movement_type::text, ',')
+       from public.stock_movements sm
+      where sm.source_table = 'sales_bundles' and sm.source_id = v_cn),
+    'assembly_in');
 
   -- ------------------------------------------------------------------
   -- 4. A batch-tracked part, picked earliest expiry first
@@ -226,6 +237,145 @@ begin
       join public.stock_lots l on l.id = sml.lot_id
      where sm.source_table = 'sales_bundles' and sm.source_id = v_inv),
     'OLD');
+
+  -- ------------------------------------------------------------------
+  -- 4b. Two lines of the same set on one invoice
+  --
+  -- 0745. Each part's cost was read back with "newest movement for this
+  -- document and this part", and every movement one posting inserts
+  -- has the same `created_at`. With two lines sharing a part, a line
+  -- could read the OTHER line's movement: ten sets and one set booked
+  -- RM 58 of cost for RM 319 of parts, in a journal that balanced.
+  -- Every invoice above has ONE bundle line, which is why nothing saw
+  -- it -- the predicate could only ever match one row.
+  --
+  -- Different quantities on purpose: with equal ones the two
+  -- movements cost the same, and reading the wrong one gives the right
+  -- answer.
+  -- ------------------------------------------------------------------
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'invoice', 'INV-TWO', pg_temp.today(), pg_temp.today(),
+          v_cust, 'MYR', 1, 'draft')
+  returning id into v_inv;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price, warehouse_id)
+  values (v_org, v_inv, 1, 'item', v_set, 'Ten sets',  10, 60, v_wh),
+         (v_org, v_inv, 2, 'item', v_set, 'And one',    1, 60, v_wh);
+  perform public.post_sales_document(v_inv);
+
+  -- The positive control first: eleven sets' worth of parts did move.
+  perform pg_temp.check_eq('-- eleven sets of parts left the shelf',
+    (select round(-sum(sm.total_cost), 2) from public.stock_movements sm
+      where sm.source_table = 'sales_bundles' and sm.source_id = v_inv),
+    319::numeric);
+  perform pg_temp.check_eq(
+    'two bundle lines book the cost of both, not one twice',
+    (select round(sum(gl.debit), 2) from public.gl_lines gl
+      join public.gl_entries e on e.id = gl.entry_id
+      join public.accounts a on a.id = gl.account_id
+     where e.source_id = v_inv and a.code = '5200'), 319::numeric);
+  perform pg_temp.check_eq('and relieve inventory of the same',
+    (select round(sum(gl.credit), 2) from public.gl_lines gl
+      join public.gl_entries e on e.id = gl.entry_id
+      join public.accounts a on a.id = gl.account_id
+     where e.source_id = v_inv and a.code = '1310'), 319::numeric);
+
+  -- ------------------------------------------------------------------
+  -- 4c. The line's store, the line's unit, the invoice's date
+  --
+  -- Every sale above names the DEFAULT store, so "the line's warehouse"
+  -- and "the store it falls back to" were one row and a function that
+  -- ignored the line could not be told apart (CLAUDE.md's first trap,
+  -- found by the 2026-10-06 sweep). Every sale was in single sets, so
+  -- the line's base quantity and its quantity were one number. And every
+  -- invoice was dated today, the day the journal would carry anyway.
+  --
+  -- A bundle of a mug and a spoon (12 a set) -- not the tin, which is
+  -- batch-tracked from section 4 and would need lots in the new store --
+  -- sold by the carton of two, out of a back store that is not the
+  -- default, on an invoice dated three days ago.
+  -- ------------------------------------------------------------------
+  insert into public.warehouses (org_id, code, name, is_default)
+  values (v_org, 'BACK', 'The back store', false) returning id into v_back;
+
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'bill', 'BILL-BACK', pg_temp.today() - 3, v_sup, 'MYR', 1,
+          'draft')
+  returning id into v_bill;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price, warehouse_id)
+  values (v_org, v_bill, 1, 'item', v_mug,   'Mugs',   10, 10, v_back),
+         (v_org, v_bill, 2, 'item', v_spoon, 'Spoons', 10,  2, v_back);
+  perform public.post_purchase_document(v_bill);
+
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, unit_price)
+  values (v_org, 'DUO', 'Mug and spoon', 'non_stock', false, 'C62', 25)
+  returning id into v_duo;
+  perform public.upsert_item_bundle(v_org, v_duo, jsonb_build_array(
+    jsonb_build_object('item', v_mug,   'quantity', 1),
+    jsonb_build_object('item', v_spoon, 'quantity', 1)));
+  perform public.upsert_item_uom_pack(v_duo, 'CT', 2);
+
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'invoice', 'INV-BACK', pg_temp.today() - 3,
+          pg_temp.today() - 3, v_cust, 'MYR', 1, 'draft')
+  returning id into v_old;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, uom_code, unit_price, warehouse_id)
+  values (v_org, v_old, 1, 'item', v_duo, 'One carton', 1, 'CT', 50, v_back);
+  perform public.post_sales_document(v_old);
+
+  perform pg_temp.check_eq(
+    'a carton of two sets takes two mugs out of the store the line named',
+    (select round(sl.quantity, 4) from public.stock_levels sl
+      where sl.item_id = v_mug and sl.warehouse_id = v_back), 8::numeric);
+  perform pg_temp.check_eq(
+    'the cost journal carries the invoice''s date',
+    (select e.entry_date::text from public.gl_entries e
+      where e.source_id = v_old and e.source = 'stock_movement'),
+    (pg_temp.today() - 3)::text);
+  perform pg_temp.check_eq(
+    '-- the carton moved something',
+    (select count(*) from public.stock_movements sm
+      where sm.source_table = 'sales_bundles' and sm.source_id = v_old),
+    2::numeric);
+  perform pg_temp.check_eq(
+    'and every movement knows the journal that booked it',
+    (select count(*) from public.stock_movements sm
+      where sm.source_table = 'sales_bundles' and sm.source_id = v_old
+        and sm.gl_entry_id is distinct from
+            (select e.id from public.gl_entries e
+              where e.source_id = v_old and e.source = 'stock_movement')),
+    0::numeric);
+
+  -- A retired recipe is not a bundle any more: selling the item moves
+  -- none of what it used to be made of.
+  update public.pos_recipes set is_active = false where item_id = v_duo;
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'invoice', 'INV-RETIRED', pg_temp.today(), pg_temp.today(),
+          v_cust, 'MYR', 1, 'draft')
+  returning id into v_old;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price, warehouse_id)
+  values (v_org, v_old, 1, 'item', v_duo, 'Retired set', 1, 25, v_back);
+  perform public.post_sales_document(v_old);
+  perform pg_temp.check_eq('a retired recipe takes nothing off the shelf',
+    (select count(*) from public.stock_movements sm
+      where sm.source_table = 'sales_bundles' and sm.source_id = v_old),
+    0::numeric);
 
   -- ------------------------------------------------------------------
   -- 5. A bundle inside a bundle
@@ -296,8 +446,14 @@ begin
       v_msg like '%some of something%');
   end;
 
+  -- Three: the set, the one inside it, and 4c's mug and spoon -- which
+  -- is retired, and still listed, because the list returns `is_active`
+  -- for the screen to show rather than hiding the row.
   perform pg_temp.check_eq('and the list finds them',
-    (select count(*) from public.item_bundles_list(v_org)), 2::numeric);
+    (select count(*) from public.item_bundles_list(v_org)), 3::numeric);
+  perform pg_temp.check_eq('-- one of them retired',
+    (select count(*) from public.item_bundles_list(v_org) b
+      where not b.is_active), 1::numeric);
 
   raise notice 'ok   item_bundles';
 end $$;
