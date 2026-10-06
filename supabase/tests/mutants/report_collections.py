@@ -1,10 +1,10 @@
-# Mutants for public.report_collections (0739) -- the credit controller's
+# Mutants for public.report_collections (0749; first written against 0739) -- the credit controller's
 # worklist: who owes what on invoices, how old, the last attempt to
 # collect it, the live promise and whether it has been broken, and who
 # has never been chased.
 #
 #     python3 scripts/mutate_sql.py \
-#       supabase/migrations/0739_thirty_nine_defaults_on_the_wrong_clock.sql \
+#       supabase/migrations/0749_what_counts_as_owed_and_as_paid.sql \
 #       supabase/tests/collections.sql \
 #       supabase/tests/mutants/report_collections.py
 #
@@ -41,14 +41,14 @@ m("a member without the ledger reads it",
 
 m("credit notes and receipts are chased as debts -- in fact: debit notes are",
   "report_collections",
-  "     where a.doc_kind = 'invoice'\n       and a.base_outstanding > 0",
+  "     where a.doc_kind in ('invoice', 'debit_note')\n       and a.base_outstanding > 0",
   "     where true  -- any kind\n       and a.base_outstanding > 0",
   "-- any kind")
 
 m("a credit balance is on the worklist",
   "report_collections",
-  "     where a.doc_kind = 'invoice'\n       and a.base_outstanding > 0",
-  "     where a.doc_kind = 'invoice'\n       and a.base_outstanding <> 0  -- credits",
+  "     where a.doc_kind in ('invoice', 'debit_note')\n       and a.base_outstanding > 0",
+  "     where a.doc_kind in ('invoice', 'debit_note')\n       and a.base_outstanding <> 0  -- credits",
   "-- credits")
 
 m("the oldest debt is the youngest",
@@ -134,6 +134,12 @@ m("the oldest debt is last",
   "     o.oldest_days desc;",
   "     o.oldest_days asc;  -- oldest last",
   "-- oldest last")
+
+m("debit notes are not chased (0749)",
+  "report_collections",
+  "     where a.doc_kind in ('invoice', 'debit_note')",
+  "     where a.doc_kind in ('invoice')  -- no dn",
+  "-- no dn")
 
 m("CONTROL: a comment inside the block",
   "report_collections",

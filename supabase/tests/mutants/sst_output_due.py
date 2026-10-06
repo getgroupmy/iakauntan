@@ -1,11 +1,11 @@
-# Mutants for app.sst_output_due (0748; first written against 0456) -- what the SST-02 return says
+# Mutants for app.sst_output_due (0749; first written against 0456) -- what the SST-02 return says
 # is owed for a taxable period: sales tax and non-invoice service tax on
 # the document date, service tax on an invoice when the money arrives
 # (or twelve months after the invoice, whichever is first), with credit
 # notes reducing it. `public.sst_return_lines` is a wrapper over this.
 #
 #     python3 scripts/mutate_sql.py \
-#       supabase/migrations/0748_the_return_is_made_in_ringgit.sql \
+#       supabase/migrations/0749_what_counts_as_owed_and_as_paid.sql \
 #       supabase/tests/service_tax_on_payment.sql \
 #       supabase/tests/mutants/sst_output_due.py
 
@@ -81,8 +81,8 @@ m("tax on the document is read from outside the period",
 
 m("a draft receipt counts as money received",
   "sst_output_due",
-  "       and r.status not in ('draft', 'void')\n  ),",
-  "       and r.status not in ('void')  -- draft receipts count\n  ),",
+  "       and r.status not in ('draft', 'void')\n    union all",
+  "       and r.status not in ('void')  -- draft receipts count\n    union all",
   "-- draft receipts count")
 
 m("the money is dated the day it was keyed, not received",
@@ -177,6 +177,44 @@ m("a foreign service charge is in its own currency",
   "           round(d.service_charge_amount * coalesce(d.exchange_rate, 1), 2),",
   "           round(d.service_charge_amount, 2),  -- no rate sc net",
   "-- no rate sc net")
+
+# -- 0749: a set-off, a deposit and a cheque are payment -------------
+
+m("a contra is not payment",
+  "sst_output_due",
+  "       and (k.id is not null or n.id is not null or q.id is not null)",
+  "       and (n.id is not null or q.id is not null)  -- no contra",
+  "-- no contra")
+
+m("an applied deposit is not payment",
+  "sst_output_due",
+  "       and (k.id is not null or n.id is not null or q.id is not null)",
+  "       and (k.id is not null or q.id is not null)  -- no deposit",
+  "-- no deposit")
+
+m("a post-dated cheque is not payment",
+  "sst_output_due",
+  "       and (k.id is not null or n.id is not null or q.id is not null)",
+  "       and (k.id is not null or n.id is not null)  -- no cheque",
+  "-- no cheque")
+
+m("a deposit is paid the day the button was pressed",
+  "sst_output_due",
+  "                    case when n.id is not null then a.applied_on end,",
+  "                    case when n.id is not null then app.malaysian_day(a.allocated_at) end,  -- pressed",
+  "-- pressed")
+
+m("a cheque is paid the day it can be banked",
+  "sst_output_due",
+  "                    q.received_on),\n           a.amount",
+  "                    q.cheque_date),  -- cheque date\n           a.amount",
+  "-- cheque date")
+
+m("a receipt is counted twice",
+  "sst_output_due",
+  "       and a.receipt_id is null\n",
+  "       and true  -- twice\n",
+  "-- twice")
 
 m("CONTROL -- a comment inside the function block",
   "sst_output_due",

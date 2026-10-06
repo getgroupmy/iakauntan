@@ -317,4 +317,74 @@ begin
     -20);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- A set-off, a deposit and a cheque are payment received (0749)
+--
+-- Until `0749` only a receipt brought service tax due, so an invoice
+-- settled by a contra, by the customer's deposit or by his post-dated
+-- cheque never reached a return -- until its twelve months ran out. The
+-- user's answer on 6 October: all three count, each on the day it
+-- reached the ledger. Three invoices, one settled each way, each in a
+-- different month, so each month's return can say which one it carries.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_cust uuid; v_bank uuid; v_bill uuid; v_dep uuid;
+  v_a uuid; v_b uuid; v_c uuid;
+begin
+  v_org := pg_temp.st_org('Bayaran Lain Sdn Bhd', date '2026-01-01');
+  perform public.create_fiscal_year(v_org, date '2026-01-01');
+  v_bank := pg_temp.a_bank_account(v_org);
+  select id into v_cust from public.contacts where org_id = v_org and code = 'C1';
+  -- Both a customer and a supplier, which is what a contra needs.
+  update public.contacts set contact_type = 'both' where id = v_cust;
+
+  v_a := pg_temp.st_invoice(v_org, 'INV-CONTRA', date '2026-03-05');
+  v_b := pg_temp.st_invoice(v_org, 'INV-DEPOSIT', date '2026-03-06');
+  v_c := pg_temp.st_invoice(v_org, 'INV-CHEQUE', date '2026-03-07');
+
+  -- April: set off against a bill of his.
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'bill', 'BILL-C1', date '2026-03-20', date '2026-04-20',
+          v_cust, 'MYR', 1, 'draft')
+  returning id into v_bill;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, description, quantity, unit_price)
+  values (v_org, v_bill, 1, 'Bekalan', 1, 1080);
+  perform public.post_purchase_document(v_bill);
+  perform public.create_contra(v_org, date '2026-04-10',
+    jsonb_build_array(jsonb_build_object('document', v_a, 'amount', 1080)),
+    jsonb_build_array(jsonb_build_object('document', v_bill, 'amount', 1080)),
+    'Set off');
+
+  -- May: his deposit applied.
+  v_dep := public.create_deposit(v_org, 'customer', v_cust, date '2026-03-01',
+    1080, v_bank, '02', 'CHQ 7', 'Up front');
+  perform public.apply_deposit(v_dep, v_b, 1080, date '2026-05-12');
+
+  -- June: his cheque, dated July, taken in on the 15th.
+  perform public.record_pdc(v_org, 'incoming', v_cust, '500001',
+    date '2026-07-15', 1080,
+    jsonb_build_array(jsonb_build_object('document', v_c, 'amount', 1080)),
+    v_bank, 'Maybank', date '2026-06-15');
+
+  perform pg_temp.check_eq('nothing was paid in March, so nothing is due for it',
+    coalesce((select sum(d.tax_amount) from app.sst_output_due(
+       v_org, date '2026-03-01', date '2026-03-31') d), 0), 0);
+  perform pg_temp.check_eq('a set-off in April brings its tax due in April',
+    (select sum(d.tax_amount) from app.sst_output_due(
+       v_org, date '2026-04-01', date '2026-04-30') d), 80);
+  perform pg_temp.check_eq('a deposit applied in May, in May',
+    (select sum(d.tax_amount) from app.sst_output_due(
+       v_org, date '2026-05-01', date '2026-05-31') d), 80);
+  perform pg_temp.check_eq('a cheque taken in in June, in June -- not July, when it can be banked',
+    (select sum(d.tax_amount) from app.sst_output_due(
+       v_org, date '2026-06-01', date '2026-06-30') d), 80);
+  perform pg_temp.check_eq('and July owes nothing for it',
+    coalesce((select sum(d.tax_amount) from app.sst_output_due(
+       v_org, date '2026-07-01', date '2026-07-31') d), 0), 0);
+end $$;
+
 rollback;

@@ -379,4 +379,53 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- A debit note is chased like an invoice (0749)
+--
+-- Until `0749` the worklist read invoices only, so a customer whose only
+-- debt was a debit note was never on it, and one who owed on both was
+-- shown the invoice part alone. The user's answer on 6 October: chase
+-- debit notes.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_ac uuid; v_only uuid; v_both uuid; v_doc uuid; r record;
+begin
+  v_org := pg_temp.test_org('Nota Debit Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date '2026-01-01');
+  select id into v_ac from public.accounts
+   where org_id = v_org and account_type = 'revenue' and not is_group limit 1;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'N1', 'Hanya Nota Debit', 'customer') returning id into v_only;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'N2', 'Kedua-duanya', 'customer') returning id into v_both;
+
+  -- N1 owes 250 on a debit note and nothing else; N2 owes 1,000 on an
+  -- invoice and 250 on a debit note.
+  for r in select * from (values
+      (v_only, 'debit_note'::app.sales_doc_type, 'DN-1', 250::numeric, date '2026-04-01'),
+      (v_both, 'invoice',    'INV-1', 1000, date '2026-03-01'),
+      (v_both, 'debit_note', 'DN-2',   250, date '2026-04-01')) x(c, t, no, amt, d)
+  loop
+    insert into public.sales_documents
+      (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+       exchange_rate, status)
+    values (v_org, r.t, r.no, r.d, r.d, r.c, 'MYR', 1, 'draft')
+    returning id into v_doc;
+    insert into public.sales_document_lines
+      (org_id, document_id, line_no, line_type, description, quantity,
+       unit_price, account_id, tax_rate)
+    values (v_org, v_doc, 1, 'item', 'Charge', 1, r.amt, v_ac, 0);
+    perform app.post_sales_document_internal(v_doc);
+  end loop;
+
+  perform pg_temp.check_eq('a customer who owes only on a debit note is chased',
+    (select outstanding from public.report_collections(v_org, date '2026-06-10')
+      where contact_id = v_only), 250);
+  select * into r from public.report_collections(v_org, date '2026-06-10')
+   where contact_id = v_both;
+  perform pg_temp.check_eq('and one who owes on both is chased for both',
+    r.outstanding::text || '/' || r.invoices::text, '1250.00/2');
+end $$;
+
 rollback;
