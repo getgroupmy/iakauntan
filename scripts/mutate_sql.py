@@ -322,7 +322,45 @@ def reapply(snapshot: dict[str, str]) -> None:
         psql("\n".join(statements))
 
 
-def latest_defining(name: str) -> pathlib.Path | None:
+def arity(statement: str, at: int = 0) -> int:
+    """How many IN arguments the `create ... function` at `at` declares.
+
+    Counted at the top level of its parentheses and outside quotes, so a
+    `numeric(18, 2)` or a default of `'x, y'` is one argument, and `OUT` arguments
+    are left out because they are not part of the signature.
+    """
+    start = statement.index("(", at)
+    depth, i, parts, cur, quoted = 0, start, [], "", False
+    while True:
+        ch = statement[i]
+        if ch == "'":
+            # A default of 'x, y' is one argument: commas inside a string
+            # are not boundaries ('' inside one toggles twice, harmlessly).
+            quoted = not quoted
+            cur += ch
+        elif quoted:
+            cur += ch
+        elif ch == "(":
+            depth += 1
+            if depth > 1:
+                cur += ch
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                parts.append(cur)
+                break
+            cur += ch
+        elif ch == "," and depth == 1:
+            parts.append(cur)
+            cur = ""
+        elif depth >= 1:
+            cur += ch
+        i += 1
+    return sum(1 for one in parts
+               if one.strip() and not re.match(r"\s*out\s", one, re.I))
+
+
+def latest_defining(name: str, args: int | None = None) -> pathlib.Path | None:
     """The LAST migration that defines `name`, found case-insensitively.
 
     A repository fact, and that is the point: the body comparison below
@@ -351,8 +389,18 @@ def latest_defining(name: str) -> pathlib.Path | None:
     define = re.compile(
         r"\bcreate\s+(?:or\s+replace\s+)?function\s+[a-z_]*\.?"
         + re.escape(name) + r"\s*\(", re.I)
-    found = [p for p in sorted(MIGRATIONS.glob("*.sql"))
-             if define.search(p.read_text())]
+    # `args`: only definitions of the SAME overload count. 0737 gave
+    # `submit_leave_request` an idempotent 11-argument wrapper, and a
+    # name-only guard then refused every sweep of the 10-argument one in
+    # 0507 -- the overload that does the work -- and pointed at the
+    # wrapper. Two overloads with the same number of arguments are still
+    # told apart by nothing, which is the old behaviour and the safe one.
+    found = []
+    for p in sorted(MIGRATIONS.glob("*.sql")):
+        text = p.read_text()
+        if any(args is None or arity(text, hit.start()) == args
+               for hit in define.finditer(text)):
+            found.append(p)
     return found[-1] if found else None
 
 
@@ -582,7 +630,7 @@ def main() -> int:
     # `prosrc` to confirm a mutation landed, so this costs nothing.
     named = pathlib.Path(migration).resolve()
     for _, name, *_ in mutants:
-        last = latest_defining(name)
+        last = latest_defining(name, arity(block(original, name)))
         if last and last.resolve() != named:
             print(f"HARNESS ERROR: {name} is last defined in "
                   f"{last.name}, not {named.name}.", file=sys.stderr)

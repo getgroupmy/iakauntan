@@ -95,6 +95,26 @@ class Settings(unittest.TestCase):
                          "search_path=public\x1fwork_mem=64MB")
 
 
+class Overloads(unittest.TestCase):
+    """The superseded-migration guard, one overload at a time."""
+
+    def test_arity_counts_top_level_in_arguments(self):
+        self.assertEqual(mutate_sql.arity(
+            "create function f(a numeric(18, 2), b text default 'x, y', "
+            "out c int) returns int"), 2)
+
+    def test_no_arguments_is_none(self):
+        self.assertEqual(mutate_sql.arity("create function f() returns void"), 0)
+
+    def test_a_wrapper_with_more_arguments_does_not_supersede(self):
+        # 0507 holds the 10-argument submit_leave_request; 0737 adds an
+        # 11-argument idempotent wrapper and redefines nothing of 0507's.
+        self.assertEqual(
+            mutate_sql.latest_defining("submit_leave_request", 10).name[:4], "0507")
+        self.assertEqual(
+            mutate_sql.latest_defining("submit_leave_request", 11).name[:4], "0737")
+
+
 class Preflight(unittest.TestCase):
 
     def test_a_clean_mutant_is_silent(self):
