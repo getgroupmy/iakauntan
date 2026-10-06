@@ -10,7 +10,15 @@
 #
 # then group_shapes.sql.
 #
-# RESULT: (pending)
+# RESULT, 6 October: 18 mutants, 17 KILLED, 1 equivalent, control
+# alive, across group_consolidation.sql and group_shapes.sql -- with no
+# new assertion. group_shapes.sql alone kills 17.
+#
+# Equivalent: "a bank or tax line is eliminated" (the account filter
+# dropped). Such a line falls through every `case` arm -- there is no
+# `else` -- so its category and its amount are both NULL, and `having
+# round(...) <> 0` is NULL for it and drops the row anyway. The code's
+# own shape.
 
 # -- app.group_intercompany_lines -------------------------------------------
 
