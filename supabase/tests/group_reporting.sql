@@ -227,4 +227,103 @@ begin
     (select linked_org_id is null from public.contacts where id = v_contact));
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The inter-company listing, rule by rule
+--
+-- A mutation sweep of the four group reports across the four files that
+-- reach them killed every mutant of three of them and one of
+-- `report_group_intercompany`'s eleven: the block above asks it one
+-- question, about one invoice, dated today. Each line below exists to
+-- move one rule:
+--
+--   A -> B   10 Mar   receivable and revenue 1,000      in the period
+--   B -> A   12 Mar   expense and payable 1,000         the other side
+--   A -> B    5 Jan   200                               before it
+--   A -> B   20 Dec   300                               after it
+--   A -> B   15 Mar   999, a draft                      never posted
+--   A -> C   10 Mar   50  C is in the group, the boss is not in C
+--   A -> B   10 Mar   a nil line on another contact     nothing to report
+--
+-- and the period is 1 February to 30 November.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_boss uuid := pg_temp.another_user('boss.ic@group.test');
+  v_outsider uuid := pg_temp.another_user('outsider.ic@group.test');
+  v_group uuid; v_a uuid; v_b uuid; v_c uuid;
+  v_ab uuid; v_ab0 uuid; v_ba uuid; v_ac uuid; r record;
+begin
+  insert into public.company_groups (name, created_by)
+  values ('Kumpulan Peraturan', v_boss) returning id into v_group;
+  v_a := pg_temp.grp_org('IC A Sdn Bhd', v_boss, v_group);
+  v_b := pg_temp.grp_org('IC B Sdn Bhd', v_boss, v_group);
+  v_c := pg_temp.grp_org('IC C Sdn Bhd', v_outsider, v_group);
+
+  insert into public.contacts (org_id, code, name, contact_type, linked_org_id)
+  values (v_a, 'IC-B', 'IC B', 'customer', v_b) returning id into v_ab;
+  insert into public.contacts (org_id, code, name, contact_type, linked_org_id)
+  values (v_a, 'IC-B0', 'IC B (nil)', 'customer', v_b) returning id into v_ab0;
+  insert into public.contacts (org_id, code, name, contact_type, linked_org_id)
+  values (v_b, 'IC-A', 'IC A', 'supplier', v_a) returning id into v_ba;
+  insert into public.contacts (org_id, code, name, contact_type, linked_org_id)
+  values (v_a, 'IC-C', 'IC C', 'customer', v_c) returning id into v_ac;
+
+  -- One two-line entry per row of the table above.
+  for r in select * from (values
+      (v_a, v_ab,  date '2026-03-10', 'posted', 'accounts_receivable', 'revenue', 1000::numeric),
+      (v_b, v_ba,  date '2026-03-12', 'posted', 'expense',             'accounts_payable', 1000),
+      (v_a, v_ab,  date '2026-01-05', 'posted', 'accounts_receivable', 'revenue', 200),
+      (v_a, v_ab,  date '2026-12-20', 'posted', 'accounts_receivable', 'revenue', 300),
+      (v_a, v_ab,  date '2026-03-15', 'draft',  'accounts_receivable', 'revenue', 999),
+      (v_a, v_ac,  date '2026-03-10', 'posted', 'accounts_receivable', 'revenue', 50),
+      (v_a, v_ab0, date '2026-03-10', 'posted', 'accounts_receivable', 'revenue', 0))
+      x(org, contact, d, st, dr_kind, cr_kind, amt)
+  loop
+    declare v_entry uuid; v_dr uuid; v_cr uuid;
+    begin
+      select id into v_dr from public.accounts
+       where org_id = r.org and not is_group
+         and (account_subtype::text = r.dr_kind or account_type::text = r.dr_kind)
+       order by code limit 1;
+      select id into v_cr from public.accounts
+       where org_id = r.org and not is_group
+         and (account_subtype::text = r.cr_kind or account_type::text = r.cr_kind)
+       order by code limit 1;
+      insert into public.gl_entries (org_id, entry_no, entry_date, source,
+        description, total_debit, total_credit, status, posted_at)
+      values (r.org, 'IC-' || substr(gen_random_uuid()::text, 1, 8), r.d,
+              'manual', 'intercompany', r.amt, r.amt, r.st,
+              case when r.st = 'posted' then now() end)
+      returning id into v_entry;
+      insert into public.gl_lines
+        (org_id, entry_id, line_no, account_id, debit, credit, contact_id)
+      values (r.org, v_entry, 1, v_dr, r.amt, 0, r.contact),
+             (r.org, v_entry, 2, v_cr, 0, r.amt, r.contact);
+    end;
+  end loop;
+
+  perform pg_temp.sign_in_as(v_boss);
+  select * into r from public.report_group_intercompany(
+    v_a, date '2026-02-01', date '2026-11-30') where contact_id = v_ab;
+  perform pg_temp.check_eq(
+    'A''s receivable from B is the period''s, posted, and nothing else',
+    r.receivable::text || '/' || r.revenue::text, '1000.00/1000.00');
+  select * into r from public.report_group_intercompany(
+    v_a, date '2026-02-01', date '2026-11-30') where contact_id = v_ba;
+  perform pg_temp.check_eq('and B owes it the other way up, as payable and expense',
+    r.payable::text || '/' || r.expense::text, '1000.00/1000.00');
+  perform pg_temp.check_eq(
+    'a company the boss cannot see is not inter-company to him',
+    (select count(*)::integer from public.report_group_intercompany(
+       v_a, date '2026-02-01', date '2026-11-30') where contact_id = v_ac), 0);
+  perform pg_temp.check_eq('nor is a contact with nothing on it',
+    (select count(*)::integer from public.report_group_intercompany(
+       v_a, date '2026-02-01', date '2026-11-30') where contact_id = v_ab0), 0);
+
+  perform pg_temp.sign_in_as(v_outsider);
+  perform pg_temp.check_refused('and somebody outside A reads none of it',
+    format($q$ select count(*) from public.report_group_intercompany(%L) $q$, v_a),
+    '%not a member of this company%', '42501');
+end $$;
+
 rollback;
