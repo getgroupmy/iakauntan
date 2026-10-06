@@ -408,7 +408,10 @@ page and renumbering would quietly break the reference.
     The firm commentary that would settle the first could not be read:
     `hhq.com.my` is refused by the egress proxy (reported, not routed
     around). Sources used: search results summarising SSM's announcement
-    of 16 December 2024.
+    of 16 December 2024. **Applied, and read back** (6 October,
+    read-only): CI run for `700963a9` green; in production a year
+    commencing 1 January 2025 reads PD 10/2024 (RM1m, 10, any two) and
+    one commencing 31 December 2024 reads PD 3/2018.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
