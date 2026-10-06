@@ -64,6 +64,10 @@ begin
   -- Opening it is not filing it.
   v_id := public.record_tax_filing(v_org, 'form_c', date '2026-06-30',
                                    'in_preparation');
+  -- Whose it is. A filing that turns out wrong needs a name beside it,
+  -- and record_tax_filing was swept with nothing asking for one.
+  perform pg_temp.check_true('the record says who made it',
+    (select recorded_by from public.tax_filings where id = v_id) = pg_temp.test_user());
   select count(*) into v_after
     from public.tax_upcoming_filings(v_org, 3650)
    where filing_type = 'form_c' and period_to = date '2026-06-30';
