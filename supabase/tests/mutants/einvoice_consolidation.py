@@ -11,7 +11,14 @@
 # (einvoice_consolidations_due is 0616's, and has its own run below the
 # RESULT.)
 #
-# RESULT: (pending)
+# RESULT: 11 mutants and a control. 11 killed in monthly_jobs.sql.
+#
+#   The first sweep killed 7. The four left were the COUNT query's own
+#   copies of the type, status, already-consolidated and own-e-Invoice
+#   filters: the month above has none of those documents, so a count of
+#   two and a total of 350 were right whether the count query asked or
+#   not. "The month's consolidation, rule by rule" puts one of each
+#   beside the sale that belongs and asks the count, total and items.
 
 m("a month is gathered twice",
   "roll_einvoice_consolidation",
@@ -27,14 +34,14 @@ m("another company's month blocks this one",
 
 m("a credit note is gathered as a sale",
   "roll_einvoice_consolidation",
-  "   where d.org_id = p_org_id\n     and d.doc_type = 'invoice'\n     and d.status in ('posted', 'partial', 'completed')\n     and d.doc_date between p_month_start and v_end\n     and not coalesce(d.is_consolidated, false)\n     and not exists (select 1 from public.einvoice_documents e\n                      where e.source_id = d.id)\n     -- A consumer",
-  "   where d.org_id = p_org_id\n     and true  -- any type\n     and d.status in ('posted', 'partial', 'completed')\n     and d.doc_date between p_month_start and v_end\n     and not coalesce(d.is_consolidated, false)\n     and not exists (select 1 from public.einvoice_documents e\n                      where e.source_id = d.id)\n     -- A consumer",
+  "   where d.org_id = p_org_id\n     and d.doc_type = 'invoice'\n     and d.status in ('posted', 'partial', 'completed')\n     and d.doc_date between p_month_start and v_end\n     and not coalesce(d.is_consolidated, false)\n     and not exists (select 1 from public.einvoice_documents e\n                      where e.source_id = d.id)\n     -- A consumer: no TIN to issue an individual e-Invoice against.",
+  "   where d.org_id = p_org_id\n     and true  -- any type\n     and d.status in ('posted', 'partial', 'completed')\n     and d.doc_date between p_month_start and v_end\n     and not coalesce(d.is_consolidated, false)\n     and not exists (select 1 from public.einvoice_documents e\n                      where e.source_id = d.id)\n     -- A consumer: no TIN to issue an individual e-Invoice against.",
   "-- any type")
 
 m("a draft is counted",
   "roll_einvoice_consolidation",
-  "     and d.status in ('posted', 'partial', 'completed')\n     and d.doc_date between p_month_start and v_end\n     and not coalesce(d.is_consolidated, false)\n     and not exists (select 1 from public.einvoice_documents e\n                      where e.source_id = d.id)\n     -- A consumer",
-  "     and true  -- any status\n     and d.doc_date between p_month_start and v_end\n     and not coalesce(d.is_consolidated, false)\n     and not exists (select 1 from public.einvoice_documents e\n                      where e.source_id = d.id)\n     -- A consumer",
+  "     and d.status in ('posted', 'partial', 'completed')\n     and d.doc_date between p_month_start and v_end\n     and not coalesce(d.is_consolidated, false)\n     and not exists (select 1 from public.einvoice_documents e\n                      where e.source_id = d.id)\n     -- A consumer: no TIN to issue an individual e-Invoice against.",
+  "     and true  -- any status\n     and d.doc_date between p_month_start and v_end\n     and not coalesce(d.is_consolidated, false)\n     and not exists (select 1 from public.einvoice_documents e\n                      where e.source_id = d.id)\n     -- A consumer: no TIN to issue an individual e-Invoice against.",
   "-- any status")
 
 m("the month's last day is left out",
@@ -45,14 +52,14 @@ m("the month's last day is left out",
 
 m("a sale already consolidated is counted again",
   "roll_einvoice_consolidation",
-  "     and not coalesce(d.is_consolidated, false)\n     and not exists (select 1 from public.einvoice_documents e\n                      where e.source_id = d.id)\n     -- A consumer",
-  "     and true  -- again\n     and not exists (select 1 from public.einvoice_documents e\n                      where e.source_id = d.id)\n     -- A consumer",
+  "     and not coalesce(d.is_consolidated, false)\n     and not exists (select 1 from public.einvoice_documents e\n                      where e.source_id = d.id)\n     -- A consumer: no TIN to issue an individual e-Invoice against.",
+  "     and true  -- again\n     and not exists (select 1 from public.einvoice_documents e\n                      where e.source_id = d.id)\n     -- A consumer: no TIN to issue an individual e-Invoice against.",
   "-- again")
 
 m("a sale with its own e-Invoice is counted",
   "roll_einvoice_consolidation",
-  "     and not exists (select 1 from public.einvoice_documents e\n                      where e.source_id = d.id)\n     -- A consumer",
-  "     and true  -- own einvoice\n     -- A consumer",
+  "     and not exists (select 1 from public.einvoice_documents e\n                      where e.source_id = d.id)\n     -- A consumer: no TIN to issue an individual e-Invoice against.",
+  "     and true  -- own einvoice\n     -- A consumer: no TIN to issue an individual e-Invoice against.",
   "-- own einvoice")
 
 m("a buyer with a TIN is consolidated",

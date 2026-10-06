@@ -67,6 +67,34 @@ def one(label, old, new, marker, name="pretend"):
     return mutate_sql.preflight(MIGRATION, [(label, name, old, new, marker)])
 
 
+class Settings(unittest.TestCase):
+    """The SET-clause snapshot that survives a restore.
+
+    The first version parsed with `splitlines()`, which breaks on the
+    \x1e between a signature and its settings, and so snapshotted
+    nothing: a sweep still left `app.set_einvoice_cancel_deadline`
+    unpinned, behind a fix that read as done.
+    """
+
+    def test_a_pinned_function_is_read_with_its_setting(self):
+        got = mutate_sql.parse_settings(
+            "app.f()\x1esearch_path=public, pg_temp\n")
+        self.assertEqual(got, {"app.f()": "search_path=public, pg_temp"})
+
+    def test_overloads_and_an_unpinned_one_are_all_kept(self):
+        got = mutate_sql.parse_settings(
+            "app.f(integer)\x1esearch_path=public\n"
+            "app.f(text)\x1e\n")
+        self.assertEqual(got, {"app.f(integer)": "search_path=public",
+                               "app.f(text)": ""})
+
+    def test_two_settings_stay_one_entry(self):
+        got = mutate_sql.parse_settings(
+            "app.f()\x1esearch_path=public\x1fwork_mem=64MB\n")
+        self.assertEqual(got["app.f()"],
+                         "search_path=public\x1fwork_mem=64MB")
+
+
 class Preflight(unittest.TestCase):
 
     def test_a_clean_mutant_is_silent(self):

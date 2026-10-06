@@ -288,8 +288,19 @@ def settings(name: str) -> dict[str, str]:
          "coalesce(array_to_string(p.proconfig, chr(31)), '') "
          f"from pg_proc p where p.proname = '{name}'"],
         capture_output=True, text=True).stdout
+    return parse_settings(out)
+
+
+def parse_settings(out: str) -> dict[str, str]:
+    """`signature \x1e config` rows, one per line, into a dict.
+
+    `split("\\n")`, not `splitlines()`: splitlines also breaks on \x1e,
+    the record separator between the two halves, and gave an empty
+    snapshot that re-applied nothing -- the fix for dropped SET clauses
+    did nothing at all until mutate_sql_test.py said so.
+    """
     found = {}
-    for line in out.splitlines():
+    for line in out.split("\n"):
         if chr(30) in line:
             sig, conf = line.split(chr(30), 1)
             found[sig] = conf

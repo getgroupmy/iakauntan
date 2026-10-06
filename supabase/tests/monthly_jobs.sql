@@ -289,4 +289,67 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The month's consolidation, rule by rule
+--
+-- A sweep of `0392`'s roll left four mutants alive: the COUNT query's
+-- own copies of the type, status, already-consolidated and own-e-Invoice
+-- filters. The block above has none of those four in its month, so the
+-- count of two and the total of 350 were right whether or not the count
+-- query asked. One consumer sale that belongs, four beside it that do
+-- not -- and the count, the total and the items are each asked.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org  uuid := pg_temp.mj_org('Runcit Peraturan Sdn Bhd');
+  v_walk uuid; v_cn uuid; v_own uuid; v_id uuid; r record;
+begin
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C1', 'Pelanggan Kaunter', 'customer') returning id into v_walk;
+
+  perform pg_temp.mj_invoice(v_org, 'INV-IN', date '2026-08-05', v_walk, 100);
+
+  -- A credit note to the same consumer, posted.
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate, status)
+  values (v_org, 'credit_note', 'CN-1', date '2026-08-06', v_walk, 'MYR', 1, 'draft')
+  returning id into v_cn;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, description, quantity, unit_price)
+  values (v_org, v_cn, 1, 'Returned', 1, 50);
+  perform public.post_sales_document(v_cn);
+
+  -- A draft, never posted.
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate, status)
+  values (v_org, 'invoice', 'INV-DRAFT', date '2026-08-07', v_walk, 'MYR', 1, 'draft');
+
+  -- One already gathered into an earlier consolidation.
+  perform pg_temp.mj_invoice(v_org, 'INV-DONE', date '2026-08-08', v_walk, 30);
+  update public.sales_documents set is_consolidated = true
+   where org_id = v_org and doc_no = 'INV-DONE';
+
+  -- One that has an e-Invoice of its own after all.
+  v_own := pg_temp.mj_invoice(v_org, 'INV-OWN', date '2026-08-09', v_walk, 40);
+  insert into public.einvoice_documents
+    (org_id, source_table, source_id, einvoice_type_code, internal_doc_no,
+     issue_date, currency, supplier_name, supplier_tin, buyer_name,
+     buyer_tin, total_excl_tax, total_incl_tax, payable_amount, status)
+  values (v_org, 'sales_documents', v_own, '01', 'INV-OWN', date '2026-08-09',
+          'MYR', 'Runcit Peraturan Sdn Bhd', 'C12345678900', 'Pelanggan Kaunter',
+          'EI00000000010', 40, 40, 40, 'valid');
+
+  v_id := app.roll_einvoice_consolidation(v_org, date '2026-08-01');
+  select * into r from public.einvoice_consolidations where id = v_id;
+  perform pg_temp.check_eq('one sale counted: not a credit note, a draft, '
+                        || 'one gathered before or one with its own e-Invoice',
+    r.document_count, 1);
+  perform pg_temp.check_eq('and the total is that sale''s', round(r.total_amount, 2), 100);
+  perform pg_temp.check_eq('and it is the only item',
+    (select string_agg(d.doc_no, ',') from public.einvoice_consolidation_items i
+       join public.sales_documents d on d.id = i.sales_document_id
+      where i.consolidation_id = v_id), 'INV-IN');
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

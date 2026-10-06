@@ -7,7 +7,16 @@
 #       supabase/tests/pos_einvoice_consolidation.sql \
 #       supabase/tests/mutants/einvoice_consolidations_due.py
 #
-# RESULT: (pending)
+# RESULT: 9 mutants and a control. 8 killed, 1 equivalent.
+#
+#   The first sweep killed NONE: pos_einvoice_consolidation.sql asserted
+#   only that a user may not call it. "What the scheduler is told is due,
+#   rule by rule" gives one company per rule, each due a known number of
+#   days from today, and kills eight.
+#
+#   EQUIVALENT by the table: "half the credentials is enough".
+#   `einvoice_credentials.client_id` and `client_secret` are both NOT
+#   NULL, so a row with one and not the other cannot exist.
 
 m("a submitted consolidation is still due",
   "einvoice_consolidations_due",

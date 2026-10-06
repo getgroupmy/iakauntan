@@ -690,4 +690,74 @@ begin
   reset role;
 end $$;
 
+-- ---------------------------------------------------------------------
+-- What the scheduler is told is due (0616), rule by rule
+--
+-- `einvoice_consolidations_due` decides which consolidations the
+-- submitting job picks up, across every company, and until now this
+-- file asserted only that a user may not call it. A sweep of it killed
+-- nothing. One company per rule, each due a known number of days from
+-- today, since the function reads `app.today()`; `due_date` is the
+-- table's own `period_end + 7`.
+-- ---------------------------------------------------------------------
+create or replace function pg_temp.due_org(p_name text, p_due_in integer,
+  p_status text default 'draft', p_count integer default 2,
+  p_enabled boolean default true)
+returns uuid language plpgsql as $$
+declare v_org uuid := pg_temp.test_org(p_name);
+begin
+  update public.organizations
+     set einvoice_enabled = p_enabled, einvoice_environment = 'sandbox'
+   where id = v_org;
+  insert into public.einvoice_consolidations
+    (org_id, period_start, period_end, document_count, total_amount, status)
+  values (v_org, (app.today() + p_due_in - 7 - 29), app.today() + p_due_in - 7,
+          p_count, 100 * p_count, p_status);
+  return v_org;
+end $$;
+
+do $$
+declare
+  v_soon uuid; v_late uuid; v_far uuid; v_sent uuid; v_empty uuid; v_off uuid;
+  v_list text; r record;
+begin
+  perform pg_temp.allow_many_companies();
+  v_soon  := pg_temp.due_org('Due Soon Sdn Bhd', 4);
+  v_late  := pg_temp.due_org('Due Late Sdn Bhd', -10);
+  v_far   := pg_temp.due_org('Due Far Sdn Bhd', 20);
+  v_sent  := pg_temp.due_org('Due Sent Sdn Bhd', 1, 'submitted');
+  v_empty := pg_temp.due_org('Due Empty Sdn Bhd', 1, 'draft', 0);
+  v_off   := pg_temp.due_org('Due Off Sdn Bhd', 1, 'draft', 2, false);
+
+  -- Soon: sandbox credentials and a certificate with no key. Late: only
+  -- PRODUCTION credentials, while the company runs in the sandbox.
+  insert into public.einvoice_credentials (org_id, environment, client_id, client_secret, cert_pem)
+  values (v_soon, 'sandbox', 'id', 'secret', '-----BEGIN CERTIFICATE-----');
+  insert into public.einvoice_credentials (org_id, environment, client_id, client_secret,
+                                           cert_pem, cert_private_key_pem)
+  values (v_late, 'production', 'id', 'secret', 'cert', 'key');
+
+  select string_agg(org_name, ',' order by org_name) into v_list
+    from public.einvoice_consolidations_due(7)
+   where org_id in (v_soon, v_late, v_far, v_sent, v_empty, v_off);
+  perform pg_temp.check_eq('due within the week or already late: '
+                        || 'not far off, submitted, empty, or a company off e-Invoice',
+    v_list, 'Due Late Sdn Bhd,Due Soon Sdn Bhd');
+
+  select * into r from public.einvoice_consolidations_due(7) where org_id = v_soon;
+  perform pg_temp.check_eq('days left run to the due date', r.days_left, 4);
+  perform pg_temp.check_true('sandbox credentials count for a sandbox company',
+    r.has_credentials);
+  perform pg_temp.check_true('but a certificate with no private key is not a certificate',
+    not r.has_certificate);
+
+  select * into r from public.einvoice_consolidations_due(7) where org_id = v_late;
+  perform pg_temp.check_eq('a late one says how late', r.days_left, -10);
+  perform pg_temp.check_true('production credentials do not submit a sandbox company''s',
+    not r.has_credentials and not r.has_certificate);
+
+  perform pg_temp.check_true('a wider window reaches the far one',
+    exists (select 1 from public.einvoice_consolidations_due(30) where org_id = v_far));
+end $$;
+
 rollback;
