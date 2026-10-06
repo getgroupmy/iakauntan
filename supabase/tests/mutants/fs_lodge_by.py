@@ -8,7 +8,9 @@
 #
 # then again against `mbrs.sql` and `notifications.sql`.
 #
-# RESULT: (pending)
+# RESULT: 3 mutants and a control. 3 killed in fs_deadlines.sql, whose
+# first block asks the rule directly: uncirculated, circulated early,
+# circulated late, and thirty days that are not a calendar month.
 
 m("the circulation date is ignored",
   "fs_lodge_by",
