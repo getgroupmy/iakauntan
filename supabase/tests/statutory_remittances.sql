@@ -474,4 +474,78 @@ begin
   end;
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The list, rule by rule
+--
+-- A mutation sweep of `report_statutory_remittances` killed 15 of 22 on
+-- this file. Unasserted: a run marked paid, the start of the range
+-- itself, EIS's employee share, the HRD levy and zakat (the fixture's
+-- one employee owes neither), and a contribution on the very day it
+-- falls due -- which no fixed date can reach, because "today" moves.
+-- So the deadline is moved to today instead: `due_day` is the body's,
+-- the file rolls back, and the question "is it overdue ON the day" has
+-- an answer every day of the month.
+--
+-- Not asserted: `sr.org_id = p_org_id`, for the reason in this file's
+-- header -- a table constraint.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_period uuid; v_pay date; v_run uuid; r record;
+begin
+  select * into v_org, v_period
+    from pg_temp.paid_payroll('Senarai Peraturan Sdn Bhd', 2026, 3,
+                              date '2026-03-28');
+  select id into v_run from public.payroll_runs where period_id = v_period;
+
+  -- Paid out, not merely posted: it is still owed to the bodies.
+  update public.payroll_runs set status = 'paid' where id = v_run;
+  perform pg_temp.check_true('a run the staff have been paid is still owed onward',
+    exists (select 1 from public.report_statutory_remittances(v_org)
+             where period_id = v_period and code = 'epf'));
+
+  -- The range includes its first day.
+  perform pg_temp.check_true('a range starting on the pay date includes it',
+    exists (select 1 from public.report_statutory_remittances(
+              v_org, date '2026-03-28', date '2026-03-31')
+             where period_id = v_period));
+
+  select * into r from public.report_statutory_remittances(v_org)
+   where period_id = v_period and code = 'eis';
+  perform pg_temp.check_true('EIS is owed by the employee as well', r.employee_amount > 0);
+
+  -- A levy and a zakat deduction on the run, which this one employee
+  -- did not otherwise carry.
+  update public.payroll_runs set total_hrdf = 50, total_zakat = 30
+   where id = v_run;
+  perform pg_temp.check_eq('the HRD levy is on the list',
+    (select employer_amount from public.report_statutory_remittances(v_org)
+      where period_id = v_period and code = 'hrdf'), 50);
+  perform pg_temp.check_eq('and the zakat',
+    (select total_amount from public.report_statutory_remittances(v_org)
+      where period_id = v_period and code = 'zakat'), 30);
+end $$;
+
+do $$
+declare
+  v_org uuid; v_period uuid; v_pay date;
+begin
+  -- Wages paid last month, so this month carries the deadline; and the
+  -- deadline moved to today.
+  v_pay := (date_trunc('month', pg_temp.today()) - interval '1 day')::date;
+  select * into v_org, v_period
+    from pg_temp.paid_payroll('Hari Ini Sdn Bhd',
+      extract(year from v_pay)::integer, extract(month from v_pay)::integer,
+      v_pay);
+  update public.ref_statutory_remittances
+     set due_day = extract(day from pg_temp.today())::integer
+   where code = 'epf';
+  perform pg_temp.check_eq('the deadline is today',
+    (select due_date from public.report_statutory_remittances(v_org)
+      where period_id = v_period and code = 'epf')::text, pg_temp.today()::text);
+  perform pg_temp.check_true('and on the day it is due it is not yet overdue',
+    not (select is_overdue from public.report_statutory_remittances(v_org)
+          where period_id = v_period and code = 'epf'));
+end $$;
+
 rollback;
