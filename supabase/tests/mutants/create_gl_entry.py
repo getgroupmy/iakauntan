@@ -5,6 +5,17 @@
 #       supabase/migrations/0056_internal_posting_path.sql \
 #       supabase/tests/manual_journal.sql \
 #       supabase/tests/mutants/create_gl_entry.py
+#
+# RESULT, 6 October: 5 mutants, ALL KILLED, control alive.
+#
+#   reversal.sql   the currency, the rate and the reference passed on
+#   ledger.sql     the permission check deleted, and pointed at "some
+#                  company I can post in" instead of the one named
+#
+# THE PERMISSION CHECK -- the whole of what this function adds -- WAS
+# UNASSERTED. Eight files call it and every one called it as an owner.
+# ledger.sql now calls it as a viewer, and as an accountant of a
+# different company, and asserts both are refused and leave nothing.
 
 m("anybody who can call it may post, whatever their role",
   "create_gl_entry",

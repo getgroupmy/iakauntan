@@ -323,4 +323,75 @@ begin
     v_next = date '2026-04-01');
 end $$;
 
+
+-- ---------------------------------------------------------------------
+-- The door: who may write a journal through the API
+--
+-- `public.create_gl_entry` is the API's way into the ledger, and the
+-- whole of it is one permission check in front of the internal writer.
+-- Eight files call it and every one called it as an OWNER, so the
+-- 2026-10-06 sweep deleted the check outright -- and then pointed it at
+-- "any company I can post in" instead of the one named -- and both
+-- survived the suite. Either would let a viewer, or an accountant of a
+-- different company, write journals into somebody's books.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_owner uuid := pg_temp.test_user();
+  v_org   uuid := pg_temp.test_org('Pintu Lejar Sdn Bhd');
+  v_other uuid;
+  v_viewer uuid; v_acct uuid;
+  v_cash  uuid; v_sales uuid; v_lines jsonb; v_n integer;
+begin
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  select id into v_cash  from public.accounts where org_id = v_org and code = '1210';
+  select id into v_sales from public.accounts where org_id = v_org and code = '4100';
+  v_lines := jsonb_build_array(
+    jsonb_build_object('account_id', v_cash,  'debit', 10, 'credit', 0),
+    jsonb_build_object('account_id', v_sales, 'debit', 0,  'credit', 10));
+
+  -- The positive control: the owner may.
+  perform public.create_gl_entry(v_org, pg_temp.today(), 'manual', v_lines, 'owner posts');
+  perform pg_temp.check_eq('the owner may post a journal',
+    (select count(*)::integer from public.gl_entries
+      where org_id = v_org and description = 'owner posts'), 1);
+
+  -- A viewer of this company may not.
+  v_viewer := pg_temp.another_user('lejar-viewer@example.test');
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_org, v_viewer, 'viewer', 'active', now());
+  perform pg_temp.sign_in_as(v_viewer);
+  begin
+    perform public.create_gl_entry(v_org, pg_temp.today(), 'manual', v_lines, 'viewer posts');
+    perform pg_temp.check_true('a viewer may not post a journal', false);
+  exception when insufficient_privilege then
+    perform pg_temp.check_true('a viewer may not post a journal', true);
+  end;
+
+  -- An accountant of ANOTHER company may not post into this one, though
+  -- they may post in their own.
+  perform pg_temp.sign_in_as(v_owner);
+  v_other := pg_temp.test_org('Syarikat Lain Sdn Bhd');
+  v_acct := pg_temp.another_user('lejar-accountant@example.test');
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_other, v_acct, 'accountant', 'active', now());
+  -- A member of their own company ONLY. Were they also a viewer here,
+  -- a check that looked up "some company of mine" could land on this
+  -- one's viewer row first and refuse them by luck.
+  perform pg_temp.sign_in_as(v_acct);
+  begin
+    perform public.create_gl_entry(v_org, pg_temp.today(), 'manual', v_lines, 'stranger posts');
+    perform pg_temp.check_true(
+      'posting rights in one company do not carry into another', false);
+  exception when insufficient_privilege then
+    perform pg_temp.check_true(
+      'posting rights in one company do not carry into another', true);
+  end;
+
+  perform pg_temp.sign_in_as(v_owner);
+  select count(*)::integer into v_n from public.gl_entries
+   where org_id = v_org and description in ('viewer posts', 'stranger posts');
+  perform pg_temp.check_eq('and neither left a journal behind', v_n, 0);
+end $$;
+
 rollback;

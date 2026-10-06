@@ -57,7 +57,7 @@ do $$
 declare
   v_org uuid := pg_temp.test_org('FX Ledger Sdn Bhd');
   v_ar uuid; v_sales uuid; v_entry uuid;
-  v_base numeric; v_fc numeric;
+  v_base numeric; v_fc numeric; v_msg text;
 begin
   perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   select id into v_ar    from public.accounts where org_id=v_org and code='1210';
@@ -104,10 +104,64 @@ begin
       'no rate', null, null, null, 'USD', 0);
     raise exception 'FAIL: a USD entry posted with a zero rate';
   exception when sqlstate '23514' then
-    raise notice 'ok   a foreign entry with no rate is refused';
+    -- By the function, not by the table. `gl_entries` has its own
+    -- `exchange_rate > 0` check with the SAME SQLSTATE, so catching
+    -- 23514 alone passed with the function's guard deleted (the
+    -- 2026-10-06 sweep) -- the row was still refused, but with a
+    -- constraint name instead of a sentence that says which currency
+    -- needed a rate.
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true(
+      'a foreign entry with no rate is refused, and says why: ' || v_msg,
+      v_msg like 'A USD entry needs an exchange rate%');
   end;
 
   perform pg_temp.sign_out();
+end $$;
+
+-- ---------------------------------------------------------------------
+-- "Foreign" means not the COMPANY'S currency, not "not ringgit"
+--
+-- A company may keep its books in Singapore dollars (`setBaseCurrency`
+-- in the app writes `organizations.base_currency`). Every other entry in
+-- this file is for a ringgit company, where "not the base" and "not
+-- MYR" are the same test -- so the 2026-10-06 sweep replaced
+-- `p_currency <> v_base` with `p_currency <> 'MYR'` and nothing in the
+-- suite noticed. For an SGD company that books its OWN currency as
+-- foreign (inventing an SGD "foreign amount" on every line) and ringgit
+-- as home (dropping the foreign amount a ringgit invoice needs).
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.test_org('Lion City Pte Ltd');
+  v_ar uuid; v_sales uuid; v_home uuid; v_away uuid;
+begin
+  update public.organizations set base_currency = 'SGD' where id = v_org;
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  select id into v_ar    from public.accounts where org_id=v_org and code='1210';
+  select id into v_sales from public.accounts where org_id=v_org and code='4100';
+
+  -- Its own currency: no foreign amount.
+  v_home := app.create_gl_entry_internal(
+    v_org, pg_temp.today(), 'manual',
+    jsonb_build_array(
+      jsonb_build_object('account_id', v_ar,    'debit', 100, 'credit', 0),
+      jsonb_build_object('account_id', v_sales, 'debit', 0,   'credit', 100)),
+    'An SGD invoice', null, null, null, 'SGD', 1);
+  perform pg_temp.check_eq('an SGD company''s SGD entry carries no foreign amount',
+    (select sum(fc_debit + fc_credit) from public.gl_lines where entry_id = v_home),
+    0.00);
+
+  -- Ringgit is foreign to it: SGD 300 at 0.30 is MYR 1,000.
+  v_away := app.create_gl_entry_internal(
+    v_org, pg_temp.today(), 'manual',
+    jsonb_build_array(
+      jsonb_build_object('account_id', v_ar,    'debit', 300, 'credit', 0),
+      jsonb_build_object('account_id', v_sales, 'debit', 0,   'credit', 300)),
+    'A ringgit invoice', null, null, null, 'MYR', 0.30);
+  perform pg_temp.check_eq('and its ringgit entry carries the ringgit amount',
+    (select fc_debit from public.gl_lines
+      where entry_id = v_away and account_id = v_ar), 1000.00);
 end $$;
 
 -- ---------------------------------------------------------------------
@@ -170,6 +224,18 @@ begin
     from public.gl_lines g join public.gl_entries e on e.id = g.entry_id
    where g.account_id = v_ar and e.source_id in (v_inv, v_rcp);
   perform pg_temp.check_eq('receivables clear to nothing', v_bal, 0);
+
+  -- And in dollars. The RM 2,000 loss line is a ringgit adjustment with
+  -- no foreign amount behind it, so `post_receipt_internal` states its
+  -- fc columns as ZERO rather than letting them be derived -- its own
+  -- comment: "deriving one would invent dollars that were never
+  -- invoiced". The 2026-10-06 sweep made the posting function ignore a
+  -- supplied fc_credit and derive it anyway, and that survived every
+  -- file: the customer then shows USD 444.44 paid that nobody paid.
+  perform pg_temp.check_eq('and the customer owes nothing in dollars either',
+    (select sum(g.fc_debit - g.fc_credit)
+       from public.gl_lines g join public.gl_entries e on e.id = g.entry_id
+      where g.account_id = v_ar and e.source_id in (v_inv, v_rcp)), 0.00);
 
   select sum(g.debit - g.credit) into v_diff
     from public.gl_lines g join public.gl_entries e on e.id = g.entry_id

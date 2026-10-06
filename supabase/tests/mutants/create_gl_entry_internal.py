@@ -6,6 +6,31 @@
 #       supabase/migrations/0688_the_matter_on_every_posting_path.sql \
 #       supabase/tests/ledger.sql \
 #       supabase/tests/mutants/create_gl_entry_internal.py
+#
+# RESULT, 6 October: 23 mutants, ALL KILLED, control alive. 19 died
+# against the files that already existed (ledger, manual_journal,
+# multicurrency, fx_revaluation, fx_shapes, reversal, matter_on_a_
+# document, pricing_and_dimensions, posting_a_bill). Four needed new
+# assertions:
+#
+#   - THE BASE CURRENCY ASSUMED TO BE RINGGIT (`p_currency <> 'MYR'` for
+#     `<> v_base`). Every entry in the suite was for a ringgit company,
+#     where the two are the same test. The app lets a company keep its
+#     books in another currency; for an SGD company the mutant books its
+#     own currency as foreign and ringgit as home. multicurrency.sql now
+#     has an SGD company posting both ways.
+#   - A SUPPLIED fc_credit IGNORED AND DERIVED. post_receipt_internal
+#     states the realised-loss line's foreign amount as ZERO, and says
+#     why in a comment ("deriving one would invent dollars that were
+#     never invoiced"). Nothing asserted it: under the mutant a customer
+#     who paid in full shows USD 444.44 paid. multicurrency.sql now
+#     asserts the customer's foreign balance clears too.
+#   - THE ZERO-RATE GUARD. Equivalent in OUTCOME -- gl_entries has its
+#     own `exchange_rate > 0` check with the same SQLSTATE, 23514, which
+#     is all multicurrency.sql caught -- but not in what the caller is
+#     told. The test now asserts the function's sentence.
+#   - THE TAX CODE on every line. Read back only by reverse_gl_entry,
+#     and served by the API. posting_a_bill.sql asserts it.
 
 m("a date no fiscal period covers is posted anyway",
   "create_gl_entry_internal",

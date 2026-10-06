@@ -837,4 +837,18 @@
 # the default, so the line's warehouse and the fallback were one row.
 # Measured:
 # `all SQL assertions passed (385 files, 14847 assertions executed)`.
-14847
+#
+# 14847 -> 14855: the ledger's writer and its door.
+# app.create_gl_entry_internal 23 of 23 and public.create_gl_entry 5 of
+# 5, after eight new assertions: an SGD-base company posting both ways
+# (every entry in the suite was a ringgit company's, so "not the base"
+# and "not MYR" were one test), the customer's DOLLAR balance clearing
+# after a realised loss (a supplied fc of zero ignored invented USD
+# 444.44), the zero-rate guard's own message (the table's check refused
+# the row with the same SQLSTATE), the tax code on a journal line, and
+# create_gl_entry called as a viewer and as another company's
+# accountant -- eight callers, all of them owners, so its only check
+# had never been asserted.
+# Measured:
+# `all SQL assertions passed (385 files, 14855 assertions executed)`.
+14855

@@ -209,6 +209,13 @@ begin
   perform pg_temp.check_eq(
     'the stock line lands in the item''s own inventory account',
     v_n, 2000::numeric);
+  -- And carries the tax code it was bought under. `reverse_gl_entry`
+  -- copies it onto the contra, and the API serves it; nothing asserted
+  -- it until the 2026-10-06 sweep dropped it from every journal line in
+  -- the system and no file noticed.
+  perform pg_temp.check_eq('and carries the tax code it was bought under',
+    (select l.tax_code_id from public.gl_lines l
+      where l.entry_id = v_entry and l.account_id = v_own), v_tax);
 
   select coalesce(sum(l.debit - l.credit), 0) into v_n
     from public.gl_lines l

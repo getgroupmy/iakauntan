@@ -14424,8 +14424,66 @@ unasserted across 23 files and are now asserted in
 string of each `m(...)`, so a mutants file that passes it through a
 variable is invisible to the tally. Write it out literally.
 
-Next: `create_gl_entry_internal` (0688, 23 mutants) and
-`create_gl_entry` (0056, 5); files written and pre-flight clean.
+**The ledger's writer and its door: 28 mutants, all killed.**
+
+`app.create_gl_entry_internal` (0688), every journal in the system:
+23 of 23. Four needed new assertions:
+
+* **The base currency assumed to be ringgit.** Every entry in the suite
+  was for a ringgit company. The app lets a company keep SGD books, and
+  for one of those the mutant treats its own currency as foreign and
+  ringgit as home. `multicurrency.sql` now has an SGD company.
+* **A supplied foreign amount ignored and derived.**
+  `post_receipt_internal` sets the realised-loss line's foreign amount
+  to zero on purpose. Its comment says why: *"deriving one would invent
+  dollars that were never invoiced."* Nothing asserted it; a customer
+  who paid in full would show USD 444.44 paid.
+* **The zero-rate guard.** It is equivalent in outcome, because the
+  table's own check refuses the row with the same SQLSTATE. The test
+  now asserts the function's message.
+* **The tax code on every line.** It is read back only by
+  `reverse_gl_entry`.
+
+`public.create_gl_entry` (0056): 5 of 5. **Its permission check, the
+only thing the wrapper adds, was unasserted.** Eight files call it,
+always as an owner. `ledger.sql` now calls it as a viewer and as an
+accountant of a different company; both are refused.
+
+### A FOURTH FINDING, awaiting the user's word: bundle cost read back from the wrong line
+
+`app.move_document_bundles` (0277) loops over an invoice's bundle LINES
+with no `order by`. For each part it inserts a movement, then reads that
+movement's cost back with
+
+    where source_table = 'sales_bundles' and source_id = p_document
+      and item_id = v_row.item_id
+    order by sm.created_at desc limit 1
+
+`created_at` is the transaction's timestamp, so it is identical for every
+movement one posting inserts. When two bundle lines on one invoice share
+a part, the read-back can return the OTHER line's movement. Task #83's
+audit cleared `pos_deplete_recipes` with this exact read-back, because
+its loop is `group by item_id`. This one has no such grouping.
+
+**Reproduced locally** (scratch file, rolled back): the gift set from
+`item_bundles.sql` (parts cost 29), one invoice, two lines of 10 sets
+and 1 set. **The journal booked RM 58.00 cost of sale; the movements
+took RM 319.00 of parts off the shelf.** Inventory in the ledger is
+overstated by RM 261 and the journal balances. The 58 is 29 + 29: line 2
+ran first, and line 1 then read line 2's movement back.
+
+**Production exposure, read-only: none.** Zero bundle items, zero
+invoices with a bundle line. The defect is latent.
+
+The obvious fix is to sum `-total_cost` over the movements this call
+inserted for this line (key the read-back on `source_line_id`, which
+the insert already writes) or to accumulate the cost from `RETURNING`.
+It is a migration, and a green push deploys it to production, so it is
+the user's decision, like the three findings before it.
+
+40 of 45 money movers now have a mutants file. Left: the four demo
+builders (`demo_legal_guaman`, `demo_sinar_bank`, `demo_purchases`,
+`demo_practice_books`) and `move_document_bundles` (trigger-only).
 
 ## 5 October: the harness got a pre-flight, and it found three bad mutants
 
