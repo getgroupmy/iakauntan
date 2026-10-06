@@ -589,4 +589,122 @@ begin
   raise notice 'non-strata: % tenancies billed, rent %', v_count, v_total;
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The arrears list, rule by rule
+--
+-- A mutation sweep of `strata_arrears` killed 2 of 13 on this file: the
+-- one read of it was one parcel's interest on one date. Five parcels
+-- here, each invoice put in a different state, two quarters' runs so the
+-- order means something, a second scheme in the same company, a date
+-- before anything falls due, and the three refusals.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_site uuid; v_site2 uuid; v_scheme uuid; v_scheme2 uuid;
+  v_u uuid[] := array[]::uuid[]; v_c uuid; v_unit uuid; i integer;
+  v_q1 uuid; v_q2 uuid; v_other uuid; v_stranger uuid; v_order text;
+  v_inv uuid[];
+begin
+  v_org := pg_temp.test_org('Tunggakan Peraturan MC', array['property_strata']);
+  insert into public.org_modules (org_id, module_code, is_enabled, enabled_at)
+  values (v_org, 'property_strata', true, now())
+  on conflict (org_id, module_code) do update set is_enabled = true;
+  perform public.create_fiscal_year(v_org, date '2026-01-01');
+
+  insert into public.property_sites (org_id, code, name, tenure)
+  values (v_org, 'TP1', 'Tunggakan Residency', 'strata') returning id into v_site;
+  insert into public.strata_schemes (org_id, site_id, stage, total_share_units)
+  values (v_org, v_site, 'mc', 500) returning id into v_scheme;
+  insert into public.strata_charge_rates
+    (org_id, scheme_id, effective_from, rate_per_share_unit,
+     sinking_fund_percent, late_interest_percent)
+  values (v_org, v_scheme, date '2026-01-01', 0.35, 10, 10);
+
+  for i in 1..5 loop
+    insert into public.contacts (org_id, code, name, contact_type)
+    values (v_org, 'T' || i, 'Pemilik ' || i, 'customer') returning id into v_c;
+    insert into public.property_units
+      (org_id, site_id, unit_no, unit_type, share_units, owner_contact_id)
+    values (v_org, v_site, 'B-' || i, 'parcel', 100, v_c) returning id into v_unit;
+    v_u := v_u || v_unit;
+  end loop;
+
+  v_q1 := public.raise_strata_charges(
+    v_scheme, date '2026-01-01', date '2026-03-31', date '2026-01-15');
+  select array_agg(l.invoice_id order by u.unit_no) into v_inv
+    from public.strata_charge_lines l
+    join public.property_units u on u.id = l.unit_id
+   where l.run_id = v_q1;
+  -- B-2 voided, B-3 paid, B-4 deleted, B-5 back to draft.
+  update public.sales_documents set status = 'void' where id = v_inv[2];
+  update public.sales_documents set balance_amount = 0, status = 'completed'
+   where id = v_inv[3];
+  update public.sales_documents set deleted_at = now() where id = v_inv[4];
+  update public.sales_documents set status = 'draft' where id = v_inv[5];
+
+  perform pg_temp.check_eq(
+    'only the unpaid, posted, live invoice is in arrears',
+    (select string_agg(unit_no, ' ' order by unit_no)
+       from public.strata_arrears(v_scheme, date '2026-03-31')), 'B-1');
+
+  -- Before it falls due: owed, not yet late.
+  perform pg_temp.check_eq('before the due date it is nought days late',
+    (select days_overdue from public.strata_arrears(v_scheme, date '2026-01-10')
+      where unit_no = 'B-1'), 0);
+  perform pg_temp.check_eq('and five days after, five',
+    (select days_overdue from public.strata_arrears(v_scheme, date '2026-01-20')
+      where unit_no = 'B-1'), 5);
+
+  -- A second quarter: B-1 owes twice, and B-2's new invoice is unpaid.
+  v_q2 := public.raise_strata_charges(
+    v_scheme, date '2026-04-01', date '2026-06-30', date '2026-04-15');
+  -- So that parcel order and date order disagree: B-1 pays January, and
+  -- B-5's January invoice is posted after all. By parcel, B-5's January
+  -- debt is near the end; by date it would be first.
+  update public.sales_documents set balance_amount = 0, status = 'completed'
+   where id = v_inv[1];
+  update public.sales_documents set status = 'posted' where id = v_inv[5];
+  select string_agg(unit_no || '@' || to_char(due_date, 'MM'), ' ' order by ord)
+    into v_order
+    from (select unit_no, due_date, row_number() over () as ord
+            from public.strata_arrears(v_scheme, date '2026-06-30')) x;
+  perform pg_temp.check_eq('listed by parcel, then by when each fell due',
+    v_order, 'B-1@04 B-2@04 B-3@04 B-4@04 B-5@01 B-5@04');
+
+  -- Another scheme in the same company is its own list.
+  insert into public.property_sites (org_id, code, name, tenure)
+  values (v_org, 'TP2', 'Another Residency', 'strata') returning id into v_site2;
+  insert into public.strata_schemes (org_id, site_id, stage, total_share_units)
+  values (v_org, v_site2, 'mc', 100) returning id into v_scheme2;
+  insert into public.strata_charge_rates
+    (org_id, scheme_id, effective_from, rate_per_share_unit,
+     sinking_fund_percent, late_interest_percent)
+  values (v_org, v_scheme2, date '2026-01-01', 0.35, 10, 10);
+  insert into public.property_units
+    (org_id, site_id, unit_no, unit_type, share_units, owner_contact_id)
+  values (v_org, v_site2, 'Z-1', 'parcel', 100, v_c);
+  perform public.raise_strata_charges(
+    v_scheme2, date '2026-01-01', date '2026-03-31', date '2026-01-15');
+  perform pg_temp.check_eq('another scheme''s parcels are not on this list',
+    (select count(*)::integer from public.strata_arrears(v_scheme, date '2026-06-30')
+      where unit_no = 'Z-1'), 0);
+
+  -- The refusals.
+  perform pg_temp.check_refused('a scheme that does not exist is said so',
+    format('select * from public.strata_arrears(%L)', gen_random_uuid()),
+    '%No such strata scheme%', 'P0002');
+  v_stranger := pg_temp.another_user('orang.luar@strata.test');
+  perform pg_temp.sign_in_as(v_stranger);
+  perform pg_temp.check_refused('a stranger is refused',
+    format('select * from public.strata_arrears(%L)', v_scheme),
+    '%Not your scheme%', '42501');
+  perform pg_temp.sign_in_as(
+    (select created_by from public.organizations where id = v_org));
+  update public.org_modules set is_enabled = false
+   where org_id = v_org and module_code = 'property_strata';
+  perform pg_temp.check_refused('and so is a company that has given up the module',
+    format('select * from public.strata_arrears(%L)', v_scheme),
+    '%Not your scheme%', '42501');
+end $$;
+
 rollback;

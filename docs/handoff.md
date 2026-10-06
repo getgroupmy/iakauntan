@@ -340,6 +340,15 @@ page and renumbering would quietly break the reference.
     note is how an extra charge is billed -- but the report's own words
     are "who owes what on invoices", so it is asked rather than changed.
     Nothing asserts either answer yet.
+14. **Is the strata arrears list "as at" a date or "as of now"?**
+    `strata_arrears(scheme, p_as_at)` runs the late interest to the
+    as-at date but reads each invoice's CURRENT `balance_amount`, and
+    does not leave out invoices dated after it -- so asked about 31
+    March, it shows a debt paid in April as settled and a charge raised
+    in May as owing. `report_ar_aging` had the same shape until `0096`
+    made it a true as-at listing. Probably harmless while the screen
+    only ever asks about today, and a defect the day somebody prints a
+    quarter-end list for an AGM. Asked rather than changed.
 
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
