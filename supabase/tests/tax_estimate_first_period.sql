@@ -388,4 +388,50 @@ begin
     v_due::text, '2027-07-31');
 end $$;
 
+-- ---------------------------------------------------------------------
+-- tax_estimate_first_period, rule by rule
+--
+-- A sweep of `0671`'s definition left three mutants alive in both files
+-- that read it: nobody outside the company asked, no company sat
+-- exactly on the RM2.5m capital limit, and no PERSON had a first
+-- period -- and a CP500's rules give no years of exemption at all, so
+-- "the rules grant none" and "the rules do not matter" read the same.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_est uuid; fp record;
+  v_stranger uuid := pg_temp.another_user('first-period-stranger@example.test');
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+
+  -- Capital of exactly RM2,500,000: "not exceeding" is within.
+  v_org := pg_temp.new_co('Syarikat Had Modal Sdn Bhd');
+  v_est := public.open_tax_estimate(v_org, pg_temp.year_of(v_org), 24000);
+  update public.tax_estimates
+     set first_period = true, commenced_on = date '2026-01-01',
+         paid_up_capital = 2500000, gross_business_income = 1200000
+   where id = v_est;
+  select * into fp from public.tax_estimate_first_period(v_est);
+  perform pg_temp.check_true('paid-up capital of exactly RM2.5m is within the SME limit',
+    fp.exempt_instalments);
+
+  -- A person in their first year of business, small on both counts:
+  -- a CP500 has no first-period exemption, so instalments are owed.
+  v_org := pg_temp.new_co('Kedai Baharu Pak Din');
+  update public.organizations set entity_type = 'sole_proprietor' where id = v_org;
+  v_est := public.open_tax_estimate(v_org, pg_temp.year_of(v_org), 6000);
+  update public.tax_estimates
+     set first_period = true, commenced_on = date '2026-01-01',
+         paid_up_capital = 0, gross_business_income = 100000
+   where id = v_est;
+  select * into fp from public.tax_estimate_first_period(v_est);
+  perform pg_temp.check_true('a person''s first year is not exempt from CP500 instalments',
+    fp.form = 'CP500' and fp.exemption_known and not fp.exempt_instalments);
+
+  perform pg_temp.sign_in_as(v_stranger);
+  perform pg_temp.check_refused('a stranger cannot read a company''s first period',
+    format('select * from public.tax_estimate_first_period(%L)', v_est),
+    '%Insufficient privileges%', '42501');
+end $$;
+
 rollback;
