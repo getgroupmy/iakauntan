@@ -427,6 +427,16 @@ page and renumbering would quietly break the reference.
     search for the same shape -- boolean guards ending in a CASE that
     can go NULL -- found only `can_attach_to` and
     `can_read_attachment`, and both end `else false` over `exists`.
+    A second pass the same day looked for the other two ways a guard
+    goes NULL and found none: the four `if ... <> auth.uid()` guards
+    (`decide_approval`, `chat_edit_message`, `chat_delete_message`,
+    `chat_end_call`) each meet a value that is checked or NOT NULL
+    first; every SQL-language boolean helper in `app` is `exists`,
+    `coalesce`, or built on ones that are; `app.in_maintenance()`
+    coalesces to false; and `app.module_access` returns 'none' on every
+    path. (`app.has_permission` reading `access_type_modules` by a
+    permission code looks like a slip and is not -- 0244 stores
+    permissions there under their own codes, deliberately.)
 20. ~~A payslip with no pay date is inside every bounded grant.~~
     **Raised and answered 6 October: outside bounded grants. Built in
     `0753`.** `app.covering_grant` (0047) tested a grant's period with
