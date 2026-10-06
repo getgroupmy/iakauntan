@@ -522,4 +522,154 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The cash flow statement, rule by rule
+--
+-- A mutation sweep of `report_cash_flow` killed 12 of 27 on this file.
+-- The fixture was one year with every journal inside it, opening
+-- balances nowhere, no drafts, one company, and a bank account as the
+-- only kind of cash -- so the period's two edges, the brought-forward
+-- and carried-forward arithmetic, cash in hand, drawings, and the lines
+-- the statement leaves off were all unasserted.
+--
+--   bank opening balance                     2,000
+--   15 Jan  shares issued for cash          +1,000   before the period
+--   20 Jan  a draft, 888                             never posted
+--    1 Feb  a term loan drawn               +  500   the first day
+--    1 Mar  bank to cash in hand                300   both cash
+--   10 Apr  invoiced 100, collected 100      +  100   the debtor nets to nil
+--    1 Jun  a draft, 999                             never posted
+--   30 Nov  drawings                        -  200   the last day
+--   15 Dec  sales 700                                after the period
+--
+-- plus a deleted petty cash account that still carries an opening
+-- balance, and another company's bank. The period is 1 February to 30
+-- November: brought forward 3,000, carried forward 3,400.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_other uuid; v_org uuid; v_owner uuid; v_stranger uuid;
+  v_bank uuid; v_entry uuid;
+begin
+  -- Another company's bank moves first, so a statement that forgot
+  -- whose bank it was reading would count it.
+  v_other := pg_temp.fs_org('Aliran Lain Sdn Bhd');
+  perform public.post_manual_journal(v_other, date '2026-01-10',
+    jsonb_build_array(
+      jsonb_build_object('account_id', pg_temp.acct(v_other, '1120'),
+                         'debit', 5000, 'credit', 0, 'description', 'Theirs'),
+      jsonb_build_object('account_id', pg_temp.acct(v_other, '3100'),
+                         'debit', 0, 'credit', 5000, 'description', 'Theirs')),
+    'Their capital');
+
+  v_org := pg_temp.fs_org('Aliran Peraturan Sdn Bhd');
+  v_owner := (select created_by from public.organizations where id = v_org);
+  v_bank := pg_temp.acct(v_org, '1120');
+  update public.accounts set opening_balance = 2000 where id = v_bank;
+  update public.accounts set opening_balance = 50, deleted_at = now()
+   where org_id = v_org and code = '1130';
+
+  perform public.post_manual_journal(v_org, date '2026-01-15',
+    jsonb_build_array(
+      jsonb_build_object('account_id', v_bank, 'debit', 1000, 'credit', 0,
+                         'description', 'Shares'),
+      jsonb_build_object('account_id', pg_temp.acct(v_org, '3100'),
+                         'debit', 0, 'credit', 1000, 'description', 'Shares')),
+    'Shares issued');
+  perform public.post_manual_journal(v_org, date '2026-02-01',
+    jsonb_build_array(
+      jsonb_build_object('account_id', v_bank, 'debit', 500, 'credit', 0,
+                         'description', 'Loan'),
+      jsonb_build_object('account_id', pg_temp.acct(v_org, '2210'),
+                         'debit', 0, 'credit', 500, 'description', 'Loan')),
+    'Term loan drawn');
+  perform public.post_manual_journal(v_org, date '2026-03-01',
+    jsonb_build_array(
+      jsonb_build_object('account_id', pg_temp.acct(v_org, '1110'),
+                         'debit', 300, 'credit', 0, 'description', 'Float'),
+      jsonb_build_object('account_id', v_bank, 'debit', 0, 'credit', 300,
+                         'description', 'Float')),
+    'Cash for the till');
+  perform public.post_manual_journal(v_org, date '2026-04-10',
+    jsonb_build_array(
+      jsonb_build_object('account_id', pg_temp.acct(v_org, '1210'),
+                         'debit', 100, 'credit', 0, 'description', 'Sale'),
+      jsonb_build_object('account_id', pg_temp.acct(v_org, '4100'),
+                         'debit', 0, 'credit', 100, 'description', 'Sale')),
+    'Invoiced');
+  perform public.post_manual_journal(v_org, date '2026-04-20',
+    jsonb_build_array(
+      jsonb_build_object('account_id', v_bank, 'debit', 100, 'credit', 0,
+                         'description', 'Paid'),
+      jsonb_build_object('account_id', pg_temp.acct(v_org, '1210'),
+                         'debit', 0, 'credit', 100, 'description', 'Paid')),
+    'Collected');
+  perform public.post_manual_journal(v_org, date '2026-11-30',
+    jsonb_build_array(
+      jsonb_build_object('account_id', pg_temp.acct(v_org, '3400'),
+                         'debit', 200, 'credit', 0, 'description', 'Drawings'),
+      jsonb_build_object('account_id', v_bank, 'debit', 0, 'credit', 200,
+                         'description', 'Drawings')),
+    'Drawings');
+  perform public.post_manual_journal(v_org, date '2026-12-15',
+    jsonb_build_array(
+      jsonb_build_object('account_id', v_bank, 'debit', 700, 'credit', 0,
+                         'description', 'December'),
+      jsonb_build_object('account_id', pg_temp.acct(v_org, '4100'),
+                         'debit', 0, 'credit', 700, 'description', 'December')),
+    'After the period');
+
+  -- Two drafts, one before the period and one inside it.
+  insert into public.gl_entries
+    (org_id, entry_no, entry_date, source, description, status,
+     total_debit, total_credit)
+  values (v_org, 'JV-D1', date '2026-01-20', 'manual', 'Draft', 'draft', 888, 888),
+         (v_org, 'JV-D2', date '2026-06-01', 'manual', 'Draft', 'draft', 999, 999);
+  insert into public.gl_lines
+    (org_id, entry_id, line_no, account_id, description, debit, credit)
+  select v_org, e.id, x.n, x.acc, 'Draft',
+         case when x.n = 1 then e.total_debit else 0 end,
+         case when x.n = 2 then e.total_debit else 0 end
+    from public.gl_entries e
+   cross join lateral (values (1, v_bank), (2, pg_temp.acct(v_org, '4100'))) x(n, acc)
+   where e.org_id = v_org and e.entry_no in ('JV-D1', 'JV-D2');
+
+  perform pg_temp.check_eq(
+    'brought forward: the opening balance and what came before, no draft',
+    pg_temp.cf(v_org, 'Cash and cash equivalents brought forward',
+               date '2026-02-01', date '2026-11-30'), 3000);
+  perform pg_temp.check_eq(
+    'carried forward: through the last day, and not past it',
+    pg_temp.cf(v_org, 'Cash and cash equivalents carried forward',
+               date '2026-02-01', date '2026-11-30'), 3400);
+  perform pg_temp.check_eq('and the movement between them is the period''s',
+    pg_temp.cf(v_org, 'Net movement in cash',
+               date '2026-02-01', date '2026-11-30'), 400);
+  perform pg_temp.check_eq('a loan on the first day and drawings on the last are financing',
+    pg_temp.cf_section(v_org, 'financing',
+                       date '2026-02-01', date '2026-11-30'), 300);
+  perform pg_temp.check_eq('profit is the period''s, without the drafts or December',
+    pg_temp.cf(v_org, 'Profit for the period',
+               date '2026-02-01', date '2026-11-30'), 100);
+  perform pg_temp.check_eq('cash in hand is cash, not working capital',
+    (select count(*)::numeric from public.report_cash_flow(
+       v_org, date '2026-02-01', date '2026-11-30')
+      where label = 'Cash in Hand'), 0);
+  perform pg_temp.check_eq('no depreciation, no depreciation line',
+    (select count(*)::numeric from public.report_cash_flow(
+       v_org, date '2026-02-01', date '2026-11-30')
+      where label = 'Depreciation and amortisation'), 0);
+  perform pg_temp.check_eq('a debtor that netted to nil is not a line',
+    (select count(*)::numeric from public.report_cash_flow(
+       v_org, date '2026-02-01', date '2026-11-30')
+      where section = 'operating' and sort_order = 30), 0);
+
+  v_stranger := pg_temp.another_user('orang.luar@aliran.test');
+  perform pg_temp.sign_in_as(v_stranger);
+  perform pg_temp.check_eq('a stranger reads none of it',
+    (select count(*)::numeric from public.report_cash_flow(
+       v_org, date '2026-02-01', date '2026-11-30')), 0);
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;
