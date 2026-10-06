@@ -467,6 +467,12 @@ Equivalents worth knowing, because they look like gaps and are not:
   `= any('{}')` is false, so "no reminder days" needs no guard of its
   own.
 
+**Applied, and read back** (6 October, read-only): `0750` deployed in
+CI run for `3bf23036`; production has `app.org_status_is_live`, five
+daily jobs calling it, `report_sales_by_person` reading debit notes,
+`membership_period` counting from the start, and `bill_the_month`
+still reading `active` only.
+
 Noted and not asserted: a landed cost on an empty shelf leaves
 `report_stock_card` at the charge while `app.apply_stock_movement`
 stores nil (it zeroes value whenever quantity is zero). Which the
