@@ -14254,6 +14254,92 @@ A sweep and a hand-run of the same suite cannot share a cluster. Wait
 for `restored:`, or give the second one its own `IAK_PGPORT`. Written
 into `scripts/mutate_sql.py`.
 
+## 6 October: THE RATE FEED HAS BEEN DEAD FOR ELEVEN DAYS — diagnosed, not touched
+
+Found while checking CI, nothing to do with the sweep, and the most
+urgent thing in this file.
+
+**`exchange_rates` has no row newer than 2026-09-25.** 588 rows, 21
+currencies, and nothing for eleven days.
+
+The `Exchange rates` workflow (`.github/workflows/exchange-rates.yml`,
+weekdays at 09:30 UTC) has failed **every run since 28 September** —
+runs 42 through 47 — after succeeding through run 41 on the 25th.
+
+### The cause, from the production edge logs
+
+```json
+{"event":"fetch-rates.unreachable","session":"1700","kind":"TypeError",
+ "message":"error sending request for url
+  (https://api.bnm.gov.my/public/exchange-rate?session=1700&quote=rm):
+  client error (Connect): received fatal alert: HandshakeFailure"}
+```
+
+The function **boots cleanly in 29ms** and then fails the **TLS
+handshake to Bank Negara**. A `HandshakeFailure` fatal alert comes from
+the server, so BNM's endpoint is refusing what Supabase's edge runtime
+offers — a TLS version, a cipher suite or an SNI expectation that
+changed at their end in the last week of September.
+
+What it is NOT, each checked rather than assumed:
+
+* **Not the supabase-js pin.** `d107dbd8` (23 September) pinned
+  `jsr:@supabase/supabase-js@2` to `@2.117.0` in this function, and the
+  dates line up invitingly. `2.117.0` exists on jsr and is not yanked,
+  and the function boots, so the import resolves.
+* **Not credentials.** The workflow names 401 and 403 separately and
+  got neither; it got 502. `myinvois`, `send-email` and `ocr` all
+  returned 200 on the same project the same day.
+* **Not the function's logic.** It catches the failure, logs a
+  structured `fetch-rates.unreachable`, and returns 502 so the workflow
+  fails loudly. That is the design working: the file's own header says
+  the fear was "a scheduler that is not running looks exactly like a
+  scheduler with nothing to report".
+
+**It could not be tested from this container.** The agent proxy denies
+`api.bnm.gov.my` with a 403 — an egress-policy refusal, reported rather
+than worked around. Somewhere with open egress, `curl -v` against that
+URL would say in one line whether BNM handshakes with a normal client,
+which separates "BNM changed their TLS" from "Deno's TLS stack no
+longer suits them".
+
+### Why it matters more than a red badge
+
+`revalue_foreign_balances` **refuses a currency it cannot price rather
+than assuming par** — the workflow's header says so in its first
+sentence. So month end does not fail; it quietly does not happen. Every
+foreign balance has been carried at its booked rate since 25 September,
+and the longer it runs the larger the catch-up revaluation when the
+feed returns.
+
+This is also the function this session swept to 28 of 33 on
+`fx_shapes.sql` alone. The arithmetic is well asserted. **Nothing
+asserts that the feed it reads is current**, and no amount of mutation
+testing would have found this: the failure is outside the database.
+
+### Not fixed here, and what the options are
+
+Deliberately untouched — it is a deployed edge function and a
+third-party outage, and every repair changes production:
+
+1. **Wait**, if BNM's change was accidental. Eleven days says
+   otherwise.
+2. **Ask BNM what changed.** Their API is documented and versioned
+   (`Accept: application/vnd.BNM.API.v1+json`); a TLS tightening would
+   normally be announced.
+3. **Give the function a fallback source**, which means a second field
+   mapping — the exact duplication the workflow's header rejected for
+   `pg_net`, and worth rejecting again.
+4. **Backfill by hand** for the missing days once rates are available,
+   since `exchange_rates` is keyed by date and re-running rewrites the
+   same row.
+
+**A fifth thing is worth doing whichever of those happens: nothing in
+the suite notices a stale rate table.** A check that the newest
+`exchange_rates` row is within a few business days would have caught
+this on 29 September instead of 6 October, and it belongs with the
+other gates rather than in a workflow that only fails when it runs.
+
 ## 5 October: the harness got a pre-flight, and it found three bad mutants
 
 `scripts/mutate_sql.py` had a HARNESS ERROR guard that worked and came
