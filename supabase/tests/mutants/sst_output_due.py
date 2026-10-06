@@ -10,6 +10,16 @@
 #       supabase/tests/mutants/sst_output_due.py
 
 #
+# RESULT, 6 October, against 0749: 28 mutants, 27 KILLED, 1
+# equivalent, control alive, across service_tax_on_payment.sql,
+# sst_shapes.sql and sst_summary.sql. The six 0749 added -- a contra, a
+# deposit and a cheque as payment, the deposit's day and the cheque's --
+# are killed by service_tax_on_payment.sql's "A set-off, a deposit and a
+# cheque are payment received". Equivalent: "a receipt is counted
+# twice" (`a.receipt_id is null` dropped) -- the branch already demands
+# a contra, deposit or cheque behind the allocation, and an allocation
+# has one source. The code's own shape.
+#
 # RESULT AGAIN, 6 October, against 0748: 22 mutants, ALL 22 KILLED,
 # control alive. The 18 below re-run rather than assumed to carry over:
 # service_tax_on_payment.sql 9, sst_shapes.sql the rest. The four

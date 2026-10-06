@@ -8,7 +8,16 @@
 #       supabase/tests/collections.sql \
 #       supabase/tests/mutants/report_collections.py
 #
-# RESULT, 6 October: 18 mutants, 15 KILLED, 2 equivalent, 1 left as a
+# RESULT AGAIN, against 0749: 19 mutants, 16 KILLED, 3 equivalent,
+# control alive. The question below was answered -- "Chase debit notes"
+# -- and 0749 reads invoices and debit notes; collections.sql's "A debit
+# note is chased like an invoice" kills the new mutant that takes them
+# off again. "Credit notes and receipts are chased as debts" is now
+# EQUIVALENT by the code's own shape: every positive kind of row is on
+# the list, and `> 0` keeps the negative ones off without the kind
+# filter's help.
+#
+# RESULT, 6 October (against 0739): 18 mutants, 15 KILLED, 2 equivalent, 1 left as a
 # question, control alive, on collections.sql. 7 died before "The
 # worklist, rule by rule" was added.
 #
