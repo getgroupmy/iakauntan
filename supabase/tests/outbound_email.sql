@@ -555,5 +555,118 @@ begin
   delete from public.platform_settings where key = 'site_url';
 end $$;
 
+-- ---------------------------------------------------------------------
+-- queue_overdue_reminders, rule by rule
+--
+-- A sweep of 0739's definition left eleven of fourteen mutants alive
+-- here. The blocks above chase one posted invoice in one company with
+-- mail switched on, due on the day it was issued -- so "days overdue"
+-- and "days since issue" were the same number, nothing was part-paid,
+-- deleted, a draft or a credit note, nothing sat exactly on the
+-- minimum, and no company was switched off, suspended or on trial.
+--
+-- Every document below is due on 10 March and issued on 1 March, so
+-- the 15th is five days over and fourteen since issue.
+--
+-- Counted per document or per company, never from the return value
+-- alone: the function walks every company in the database, and this
+-- file has left overdue invoices behind in several.
+-- ---------------------------------------------------------------------
+create or replace function pg_temp.dun_org(
+  p_name text, p_enabled boolean default true, p_status text default 'active',
+  p_days integer[] default '{5,6}', p_min numeric default 100)
+returns uuid language plpgsql as $$
+declare v_org uuid := pg_temp.mail_org(p_name);
+begin
+  insert into public.email_settings (org_id, is_enabled, reminder_days, reminder_min_amount)
+  values (v_org, p_enabled, p_days, p_min);
+  insert into public.contacts (org_id, code, name, contact_type, email)
+  values (v_org, 'C-DUN', 'Slow Payer Bhd', 'customer', 'ap@slow.example');
+  update public.organizations set status = p_status where id = v_org;
+  return v_org;
+end;
+$$;
+
+create or replace function pg_temp.dun_doc(
+  p_org uuid, p_no text, p_amount numeric,
+  p_type text default 'invoice', p_post boolean default true)
+returns uuid language plpgsql as $$
+declare v_doc uuid;
+begin
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, subtotal, total_amount, balance_amount, status)
+  values (p_org, p_type::app.sales_doc_type, p_no, date '2026-03-01', date '2026-03-10',
+          (select id from public.contacts where org_id = p_org and code = 'C-DUN'),
+          'MYR', 1, p_amount, p_amount, p_amount, 'draft')
+  returning id into v_doc;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, description, quantity, unit_price, line_total)
+  values (p_org, v_doc, 1, 'Consulting', 1, p_amount, p_amount);
+  if p_post then perform public.post_sales_document(v_doc); end if;
+  return v_doc;
+end;
+$$;
+
+do $$
+declare
+  v_org uuid; v_off uuid; v_susp uuid; v_trial uuid; v_free uuid;
+  v_ok uuid; v_part uuid; v_min uuid; v_n integer;
+  v_list text;
+begin
+  v_org := pg_temp.dun_org('Dunning Rules Sdn Bhd');
+  v_ok   := pg_temp.dun_doc(v_org, 'INV-OK', 500);
+  v_part := pg_temp.dun_doc(v_org, 'INV-PART', 500);
+  update public.sales_documents set balance_amount = 200, status = 'partial'
+   where id = v_part;
+  -- Exactly the minimum, which is worth chasing.
+  v_min  := pg_temp.dun_doc(v_org, 'INV-MIN', 100);
+  perform pg_temp.dun_doc(v_org, 'INV-DEL', 500);
+  update public.sales_documents set deleted_at = now()
+   where org_id = v_org and doc_no = 'INV-DEL';
+  perform pg_temp.dun_doc(v_org, 'CN-1', 500, 'credit_note');
+  perform pg_temp.dun_doc(v_org, 'INV-DRAFT', 500, 'invoice', false);
+
+  -- A company that set no floor, with an invoice paid in full but still
+  -- marked posted: the balance is what says it is paid.
+  v_free := pg_temp.dun_org('Dunning No Floor Sdn Bhd', p_min => 0);
+  perform pg_temp.dun_doc(v_free, 'INV-PAID', 500);
+  update public.sales_documents set balance_amount = 0
+   where org_id = v_free and doc_no = 'INV-PAID';
+
+  v_off   := pg_temp.dun_org('Dunning Off Sdn Bhd', false);
+  perform pg_temp.dun_doc(v_off, 'INV-OFF', 500);
+  v_susp  := pg_temp.dun_org('Dunning Suspended Sdn Bhd', true, 'suspended');
+  perform pg_temp.dun_doc(v_susp, 'INV-SUSP', 500);
+  -- 0750. A company on trial is a company, and its customers are chased.
+  v_trial := pg_temp.dun_org('Dunning Trial Sdn Bhd', true, 'trial');
+  perform pg_temp.dun_doc(v_trial, 'INV-TRIAL', 500);
+
+  v_n := app.queue_overdue_reminders(date '2026-03-15');
+
+  select string_agg(d.doc_no, ',' order by d.doc_no) into v_list
+    from public.email_outbox x join public.sales_documents d on d.id = x.document_id
+   where x.org_id in (v_org, v_free, v_off, v_susp, v_trial);
+  perform pg_temp.check_eq(
+    'five days over: the open, the part-paid, the one on the floor, and trial''s',
+    v_list, 'INV-MIN,INV-OK,INV-PART,INV-TRIAL');
+  perform pg_temp.check_true('and the run says it queued them', v_n >= 4);
+  -- The key is what makes the 5th and the 6th two mails and a second
+  -- run on the 5th none, and it names the days OVERDUE -- five here, not
+  -- the fourteen since the invoice was issued.
+  perform pg_temp.check_eq('the reminder is keyed on the days overdue',
+    (select dedupe_key from public.email_outbox where document_id = v_ok),
+    'reminder:' || v_ok::text || ':5');
+
+  -- Six days is the second reminder day: another of each, not a repeat
+  -- of the first swallowed by its key.
+  perform app.queue_overdue_reminders(date '2026-03-16');
+  perform pg_temp.check_eq('the second reminder day is a second mail',
+    (select count(*)::integer from public.email_outbox where org_id = v_org), 6);
+  -- Seven days is nobody's reminder day.
+  perform app.queue_overdue_reminders(date '2026-03-17');
+  perform pg_temp.check_eq('and a day nobody chose is not one',
+    (select count(*)::integer from public.email_outbox where org_id = v_org), 6);
+end $$;
 
 rollback;

@@ -445,4 +445,96 @@ begin
 end;
 $$;
 
+-- ---------------------------------------------------------------------
+-- A membership renews on the day it was bought (0750)
+--
+-- `membership_period` walked one step from the previous period, so the
+-- 28th that February clamps a 31 January start to was carried on for
+-- good. Each case here is a start date whose walk and whose count part
+-- company, and each asks the period that holds a date well past the
+-- clamp -- the place a walk has already gone wrong and a count has not.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org  uuid := pg_temp.test_org('Renewal Day Sdn Bhd');
+  v_item uuid; v_cust uuid;
+  r record;
+begin
+  insert into public.items (org_id, code, name, item_type, track_inventory, uom_code, unit_price)
+  values (v_org, 'MEMB', 'Membership', 'service', false, 'C62', 100) returning id into v_item;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'MEM-1', 'A member', 'customer') returning id into v_cust;
+  insert into public.pos_memberships (org_id, code, name, item_id, period)
+  values (v_org, 'M', 'Monthly', v_item, 'monthly'),
+         (v_org, 'Q', 'Quarterly', v_item, 'quarterly'),
+         (v_org, 'Y', 'Yearly', v_item, 'yearly'),
+         (v_org, 'W', 'Weekly', v_item, 'weekly');
+  insert into public.pos_membership_subscriptions (org_id, membership_id, contact_id, started_on)
+  select v_org, m.id, v_cust, x.started
+    from (values ('M', date '2026-01-31'), ('Q', date '2025-11-30'),
+                 ('Y', date '2024-02-29'), ('W', date '2026-01-01')) x(code, started)
+    join public.pos_memberships m on m.org_id = v_org and m.code = x.code;
+
+  -- Monthly from 31 January. A walk says 28 May to 27 June.
+  select p.* into r
+    from public.pos_membership_subscriptions s
+    join public.pos_memberships m on m.id = s.membership_id and m.code = 'M'
+    cross join lateral app.membership_period(s.id, date '2026-06-15') p
+   where s.org_id = v_org;
+  perform pg_temp.check_eq('a monthly membership bought on the 31st renews on the 31st',
+    r.period_start::text || ' to ' || r.period_end::text,
+    '2026-05-31 to 2026-06-29');
+
+  -- And February itself, where the clamp is the right answer.
+  select p.* into r
+    from public.pos_membership_subscriptions s
+    join public.pos_memberships m on m.id = s.membership_id and m.code = 'M'
+    cross join lateral app.membership_period(s.id, date '2026-03-01') p
+   where s.org_id = v_org;
+  perform pg_temp.check_eq('and on the last day February has',
+    r.period_start::text || ' to ' || r.period_end::text,
+    '2026-02-28 to 2026-03-30');
+
+  -- Quarterly from 30 November: 28 February, then 30 May, not 28 May.
+  select p.* into r
+    from public.pos_membership_subscriptions s
+    join public.pos_memberships m on m.id = s.membership_id and m.code = 'Q'
+    cross join lateral app.membership_period(s.id, date '2026-06-15') p
+   where s.org_id = v_org;
+  perform pg_temp.check_eq('a quarter counts from the start too',
+    r.period_start::text || ' to ' || r.period_end::text,
+    '2026-05-30 to 2026-08-29');
+
+  -- Yearly from 29 February 2024: a walk is on the 28th from 2025 on;
+  -- a count is back on the 29th in 2028.
+  select p.* into r
+    from public.pos_membership_subscriptions s
+    join public.pos_memberships m on m.id = s.membership_id and m.code = 'Y'
+    cross join lateral app.membership_period(s.id, date '2028-03-01') p
+   where s.org_id = v_org;
+  perform pg_temp.check_eq('a leap-day membership is a leap-day membership again in 2028',
+    r.period_start::text || ' to ' || r.period_end::text,
+    '2028-02-29 to 2029-02-27');
+
+  -- Weekly has no month to clamp: the control that the count is a count.
+  select p.* into r
+    from public.pos_membership_subscriptions s
+    join public.pos_memberships m on m.id = s.membership_id and m.code = 'W'
+    cross join lateral app.membership_period(s.id, date '2026-01-20') p
+   where s.org_id = v_org;
+  perform pg_temp.check_eq('a week is seven days from the start',
+    r.period_start::text || ' to ' || r.period_end::text,
+    '2026-01-15 to 2026-01-21');
+
+  -- The day a period ends and the day the next one starts.
+  select p.* into r
+    from public.pos_membership_subscriptions s
+    join public.pos_memberships m on m.id = s.membership_id and m.code = 'M'
+    cross join lateral app.membership_period(s.id, date '2026-04-30') p
+   where s.org_id = v_org;
+  perform pg_temp.check_eq('the renewal day starts the new period, not the old',
+    r.period_start::text, '2026-04-30');
+end;
+$$;
+
 rollback;

@@ -299,4 +299,154 @@ begin
   perform pg_temp.sign_in_as(f.boss);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- raise_notifications, rule by rule
+--
+-- The pass above has one of each source, each of which should ring, and
+-- one refused e-Invoice next door that should not. So a filter that
+-- turns things AWAY -- an accepted e-Invoice, a ticket still inside its
+-- SLA or already resolved, a draft claim or one with no approver, a
+-- lodged filing or one months off -- was a rule no row could tell from
+-- its absence; the ticket had nobody assigned, so "to its assignee" and
+-- "to everybody" agreed; and the filing was neither past its date nor
+-- on it, nor on the thirtieth day.
+--
+-- Run as of 10 July 2026. `fs_lodge_by` is the circulation date (or the
+-- year end plus six months) plus thirty days, so each filing below sits
+-- at a chosen distance from that morning.
+-- ---------------------------------------------------------------------
+create or replace function pg_temp.einv(p_org uuid, p_no text, p_status text,
+  p_reason text, p_error text)
+returns uuid language sql as $$
+  insert into public.einvoice_documents
+    (org_id, source_table, source_id, einvoice_type_code, internal_doc_no,
+     issue_date, currency, supplier_name, supplier_tin, buyer_name,
+     buyer_tin, total_excl_tax, total_incl_tax, payable_amount, status,
+     rejection_reason, error_message)
+  values (p_org, 'sales_documents', gen_random_uuid(), '01', p_no,
+          date '2026-01-15', 'MYR', 'Bell Rules Sdn Bhd', 'C12345678900',
+          'Buyer Bhd', 'C98765432100', 100, 100, 100, p_status::app.einvoice_status,
+          p_reason, p_error)
+  returning id;
+$$;
+
+create or replace function pg_temp.filing(p_org uuid, p_ent uuid, p_fy_end date,
+  p_circulated date, p_lodged date default null)
+returns uuid language sql as $$
+  insert into public.fs_filings
+    (org_id, corp_entity_id, fy_start, fy_end, framework,
+     directors_approval_date, circulated_on, lodged_on, mbrs_reference)
+  values (p_org, p_ent, (p_fy_end - interval '1 year' + interval '1 day')::date,
+          p_fy_end, 'mpers', p_circulated, p_circulated, p_lodged,
+          case when p_lodged is not null then 'MBRS-LODGED' end)
+  returning id;
+$$;
+
+do $$
+declare
+  v_org   uuid := pg_temp.test_org('Bell Rules Sdn Bhd');
+  v_boss  uuid := pg_temp.test_user();
+  v_clerk uuid := pg_temp.another_user('bell-rules-clerk@example.test');
+  v_other uuid;
+  v_them  uuid; v_emp uuid; v_ent uuid; v_oemp uuid; v_oent uuid; v_othem uuid;
+  e_failed uuid; e_both uuid; t_late uuid; c_due uuid;
+  f_soon uuid; f_past uuid; f_thirty uuid; f_today uuid;
+  v_n integer;
+begin
+  perform pg_temp.allow_many_companies();
+  v_other := pg_temp.test_org('Bell Rules Other Sdn Bhd');
+  perform pg_temp.sign_in_as(v_boss);
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_org, v_clerk, 'accountant', 'active', now());
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-001', 'Buyer Bhd', 'customer') returning id into v_them;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_other, 'C-001', 'Buyer Bhd', 'customer') returning id into v_othem;
+  insert into public.employees (org_id, employee_no, full_name, hire_date, employment_status)
+  values (v_org, 'E-1', 'Siti', date '2025-01-01', 'active') returning id into v_emp;
+  insert into public.employees (org_id, employee_no, full_name, hire_date, employment_status)
+  values (v_other, 'E-1', 'Ali', date '2025-01-01', 'active') returning id into v_oemp;
+  insert into public.corp_entities (org_id, name, entity_type)
+  values (v_org, 'Bell Rules Sdn Bhd', 'sdn_bhd') returning id into v_ent;
+  insert into public.corp_entities (org_id, name, entity_type)
+  values (v_other, 'Bell Rules Other Sdn Bhd', 'sdn_bhd') returning id into v_oent;
+
+  -- E-Invoices. A failed submission says why in `error_message`; a
+  -- refusal that carries both says LHDN's reason, not ours.
+  e_failed := pg_temp.einv(v_org, 'INV-F', 'failed', null, 'Timeout from MyInvois');
+  e_both   := pg_temp.einv(v_org, 'INV-R', 'rejected', 'Buyer TIN not found', 'HTTP 400');
+  perform pg_temp.einv(v_org, 'INV-V', 'valid', null, null);
+
+  -- Tickets: late and assigned; not yet due; late but resolved; and one
+  -- late next door.
+  insert into public.tickets (org_id, ticket_no, subject, requester_contact_id,
+                              status, priority, resolution_due_at, assignee_id)
+  values (v_org, 'T-LATE', 'Late', v_them, 'open', 'p1', now() - interval '1 hour', v_clerk)
+  returning id into t_late;
+  insert into public.tickets (org_id, ticket_no, subject, requester_contact_id,
+                              status, priority, resolution_due_at)
+  values (v_org, 'T-SOON', 'Not yet', v_them, 'open', 'p1', now() + interval '1 day'),
+         (v_org, 'T-DONE', 'Done', v_them, 'resolved', 'p1', now() - interval '1 hour'),
+         (v_other, 'T-THEIRS', 'Theirs', v_othem, 'open', 'p1', now() - interval '1 hour');
+
+  -- Claims: submitted to the clerk; a draft; submitted to nobody; and
+  -- one next door.
+  insert into public.expense_claims (org_id, claim_no, employee_id, claim_date, title,
+                                     status, total_amount, currency, submitted_at, approver_id)
+  values (v_org, 'CLM-DUE', v_emp, date '2026-02-01', 'Due', 'submitted', 250, 'MYR', now(), v_clerk)
+  returning id into c_due;
+  insert into public.expense_claims (org_id, claim_no, employee_id, claim_date, title,
+                                     status, total_amount, currency, submitted_at, approver_id)
+  values (v_org, 'CLM-DRAFT', v_emp, date '2026-02-01', 'Draft', 'draft', 250, 'MYR', null, v_clerk),
+         (v_org, 'CLM-NOBODY', v_emp, date '2026-02-01', 'Nobody', 'submitted', 250, 'MYR', now(), null),
+         (v_other, 'CLM-THEIRS', v_oemp, date '2026-02-01', 'Theirs', 'submitted', 250, 'MYR', now(), v_boss);
+
+  -- Filings, by distance from 10 July 2026.
+  f_soon   := pg_temp.filing(v_org, v_ent, date '2025-12-31', date '2026-06-20');  -- 20 Jul: 10 days
+  f_past   := pg_temp.filing(v_org, v_ent, date '2024-12-31', date '2026-05-01');  -- 31 May: past
+  f_thirty := pg_temp.filing(v_org, v_ent, date '2023-12-31', date '2026-07-10');  -- 9 Aug: day 30
+  f_today  := pg_temp.filing(v_org, v_ent, date '2022-12-31', date '2026-06-10');  -- 10 Jul: today
+  -- 31 Mar 2026 year end, not circulated: 30 Oct, far off.
+  perform pg_temp.filing(v_org, v_ent, date '2026-03-31', null);
+  -- Past its date, but lodged.
+  perform pg_temp.filing(v_org, v_ent, date '2021-12-31', date '2026-04-01', date '2026-04-20');
+  -- Past its date, next door.
+  perform pg_temp.filing(v_other, v_oent, date '2025-12-31', date '2026-05-01');
+
+  v_n := app.raise_notifications(v_org, date '2026-07-10');
+
+  perform pg_temp.check_eq('exactly what is waiting, and nothing that is not',
+    (select string_agg(x, ',' order by x) from (
+     select coalesce(e.internal_doc_no, t.ticket_no, c.claim_no,
+                     to_char(f.fy_end, 'YYYY-MM-DD')) as x
+       from public.notifications n
+       left join public.einvoice_documents e on e.id = n.source_id
+       left join public.tickets t on t.id = n.source_id
+       left join public.expense_claims c on c.id = n.source_id
+       left join public.fs_filings f on f.id = n.source_id
+      where n.org_id = v_org) w),
+    '2022-12-31,2023-12-31,2024-12-31,2025-12-31,CLM-DUE,INV-F,INV-R,T-LATE');
+  perform pg_temp.check_eq('and the run counts what it raised', v_n, 8);
+
+  perform pg_temp.check_eq('a failed submission says what failed',
+    (select body from public.notifications where source_id = e_failed),
+    'Timeout from MyInvois');
+  perform pg_temp.check_eq('a refusal says what LHDN said',
+    (select body from public.notifications where source_id = e_both),
+    'Buyer TIN not found');
+  perform pg_temp.check_eq('and it is urgent',
+    (select severity from public.notifications where source_id = e_both), 'urgent');
+
+  perform pg_temp.check_true('a late ticket goes to the one it is assigned to',
+    (select user_id from public.notifications where source_id = t_late) = v_clerk);
+  perform pg_temp.check_true('and a claim to the one who approves it',
+    (select user_id from public.notifications where source_id = c_due) = v_clerk);
+
+  perform pg_temp.check_eq('a filing past its date is urgent, one due today is not yet',
+    (select string_agg(severity, ',' order by f.fy_end)
+       from public.notifications n join public.fs_filings f on f.id = n.source_id
+      where f.id in (f_past, f_today, f_soon)),
+    'warning,urgent,warning');
+end $$;
+
 rollback;

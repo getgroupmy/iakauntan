@@ -253,4 +253,40 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- A company on trial is a company (0750)
+--
+-- `set_org_status` accepts `trial` and the custom-domain code treats it
+-- as live; the daily pass read `status = 'active'` and passed a trial
+-- company by. Asserted on the consolidation because it is the
+-- per-company branch this file already proves runs, and against a
+-- suspended company in the same pass, so the assertion cannot be met
+-- by a loop that has simply stopped filtering.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_trial uuid := pg_temp.mj_org('Percubaan Sdn Bhd');
+  v_susp  uuid := pg_temp.mj_org('Digantung Sdn Bhd');
+  v_w1 uuid; v_w2 uuid;
+begin
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_trial, 'C1', 'Kaunter', 'customer') returning id into v_w1;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_susp, 'C1', 'Kaunter', 'customer') returning id into v_w2;
+  perform pg_temp.mj_invoice(v_trial, 'INV-1', date '2026-06-05', v_w1, 300);
+  perform pg_temp.mj_invoice(v_susp, 'INV-1', date '2026-06-05', v_w2, 400);
+  update public.organizations set status = 'trial' where id = v_trial;
+  update public.organizations set status = 'suspended' where id = v_susp;
+
+  perform app.run_daily_jobs(date '2026-07-01');
+
+  perform pg_temp.check_eq('a company on trial gets its month gathered',
+    (select count(*)::integer from public.einvoice_consolidations
+      where org_id = v_trial), 1);
+  perform pg_temp.check_eq('a suspended one does not',
+    (select count(*)::integer from public.einvoice_consolidations
+      where org_id = v_susp), 0);
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

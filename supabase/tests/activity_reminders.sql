@@ -146,4 +146,42 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The fifteen-minute sweep walks every company that is trading (0750)
+--
+-- `queue_all_activity_reminders` read `status = 'active'` and passed a
+-- company on `trial` by -- a trial being exactly when somebody sets
+-- their first reminder to see whether it works. A suspended company
+-- beside it, so the assertion is about the status and not a loop that
+-- has stopped filtering.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_me    uuid := pg_temp.test_user();
+  v_trial uuid; v_susp uuid; a_trial uuid; a_susp uuid;
+begin
+  perform pg_temp.allow_many_companies();
+  v_trial := pg_temp.test_org('Jualan Percubaan Sdn Bhd', array['crm']);
+  v_susp  := pg_temp.test_org('Jualan Digantung Sdn Bhd', array['crm']);
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_trial, 'C1', 'Puan Trial', 'customer'), (v_susp, 'C1', 'Encik Susp', 'customer');
+  insert into public.activities (org_id, activity_type, subject, contact_id, assigned_to, reminder_at)
+  select v_trial, 'call', 'Trial call', id, v_me, now() - interval '1 hour'
+    from public.contacts where org_id = v_trial
+  returning id into a_trial;
+  insert into public.activities (org_id, activity_type, subject, contact_id, assigned_to, reminder_at)
+  select v_susp, 'call', 'Suspended call', id, v_me, now() - interval '1 hour'
+    from public.contacts where org_id = v_susp
+  returning id into a_susp;
+  update public.organizations set status = 'trial' where id = v_trial;
+  update public.organizations set status = 'suspended' where id = v_susp;
+
+  perform app.queue_all_activity_reminders();
+
+  perform pg_temp.check_true('a company on trial is reminded',
+    (select reminder_sent from public.activities where id = a_trial));
+  perform pg_temp.check_true('a suspended one is not',
+    not (select reminder_sent from public.activities where id = a_susp));
+end $$;
+
 rollback;

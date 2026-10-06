@@ -1,33 +1,34 @@
-# Mutants for public.report_sales_by_person (0739) -- what each
+# Mutants for public.report_sales_by_person (0750, after 0739) -- what each
 # salesperson sold, what was credited back, and the commission on the
 # difference, plus the line of sales nobody was credited with.
 #
 #     python3 scripts/mutate_sql.py \
-#       supabase/migrations/0739_thirty_nine_defaults_on_the_wrong_clock.sql \
+#       supabase/migrations/0750_what_earns_when_it_renews_and_who_is_trading.sql \
 #       supabase/tests/salespeople.sql \
 #       supabase/tests/mutants/report_sales_by_person.py
 #
-# RESULT: 17 mutants and a control. 16 killed; 1 is a QUESTION, not an
+# RESULT, against 0750: 19 mutants and a control. 18 killed, 1
 # equivalent.
 #
-#   The first sweep killed 7. Every fixture in the file was in ringgit at
-#   rate one, with no refund note, nothing before the period, one
-#   company, and salespeople whose alphabetical order was also their
-#   sales order -- so currency, refunds, the period's start, deletion,
-#   the company boundary, the ordering and the stranger were rules no row
-#   could tell from their absence. "report_sales_by_person, rule by
-#   rule" in salespeople.sql kills nine more.
+#   Against 0739 the first sweep killed 7 of 17: every fixture was in
+#   ringgit at rate one, with no refund note, nothing before the period,
+#   one company, and salespeople whose alphabetical order was also their
+#   sales order. "report_sales_by_person, rule by rule" killed nine more.
 #
-#   SURVIVES, AND IS FOR THE USER: "a quotation is counted as a
-#   document". Only four document types can be posted at all
-#   (`post_sales_document_internal`: invoice, credit note, debit note,
-#   refund note), so the only posted document this filter turns away is
-#   a DEBIT NOTE -- and a debit note posts revenue. The file's own
-#   assertion says the lines "foot to everything sold ... checkable
-#   against the profit and loss"; with a debit note in the period they
-#   do not, and nobody is credited with it. Whether a debit note earns
-#   commission is a business decision, so it is asked rather than
-#   asserted either way. See docs/handoff.md.
+#   The seventeenth, "a quotation is counted as a document", survived
+#   because the only posted document the type filter turned away was a
+#   DEBIT NOTE -- which posts revenue. Asked (docs/handoff.md item 15),
+#   answered "count them", built in 0750, and "A debit note is a sale"
+#   asserts it, including that the report foots to the ledger's revenue.
+#   Both 0750 mutants -- the debit note left out of `invoiced`, and
+#   0739's type list put back -- are killed by it.
+#
+#   EQUIVALENT by the writer, now: "a quotation is counted as a
+#   document". `post_sales_document_internal` posts four types --
+#   invoice, debit note, credit note, refund note -- and refuses the
+#   rest ("does not post to the ledger"), and all four are in the list,
+#   so `status = 'posted'` has already turned away everything the type
+#   filter could.
 
 m("a stranger reads the commission",
   "report_sales_by_person",
@@ -79,7 +80,7 @@ m("a deleted invoice is commissioned",
 
 m("a quotation is counted as a document",
   "report_sales_by_person",
-  "       and d.doc_type in ('invoice', 'credit_note', 'refund_note')\n     group by",
+  "       and d.doc_type in ('invoice', 'debit_note', 'credit_note', 'refund_note')\n     group by",
   "       and true  -- every type\n     group by",
   "-- every type")
 
@@ -130,6 +131,19 @@ m("the biggest seller is not first",
   "   order by 7 desc nulls last, 3;",
   "   order by 3;  -- by name",
   "-- by name")
+
+# 0750 -- a debit note is invoiced.
+m("a debit note is not invoiced",
+  "report_sales_by_person",
+  "           sum(case when d.doc_type in ('invoice', 'debit_note')",
+  "           sum(case when d.doc_type in ('invoice')  -- no debit note",
+  "-- no debit note")
+
+m("a debit note is not read at all",
+  "report_sales_by_person",
+  "       and d.doc_type in ('invoice', 'debit_note', 'credit_note', 'refund_note')",
+  "       and d.doc_type in ('invoice', 'credit_note', 'refund_note')  -- 0739's list",
+  "-- 0739's list")
 
 m("CONTROL: a comment inside the block",
   "report_sales_by_person",

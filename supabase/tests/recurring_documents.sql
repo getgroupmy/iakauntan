@@ -861,4 +861,76 @@ begin
   raise notice 'the nightly sweep: due, not due, switched off, and counted';
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The night run and the button, rule by rule
+--
+-- A sweep of 0739's definitions found the blocks above drive every
+-- schedule through `run_recurring_documents_for` as the owner of one
+-- company -- so the nightly runner's own filters (paused, suspended,
+-- not yet due), the button's company boundary and the stranger were
+-- rules no row could tell from their absence. One company per rule, so
+-- each count is about one thing.
+--
+-- 0750: a company on trial is a company, and its schedules run.
+-- ---------------------------------------------------------------------
+create or replace function pg_temp.scheduled_org(
+  p_name text, p_start date, p_status text default 'active',
+  p_paused boolean default false)
+returns uuid language plpgsql as $$
+declare
+  v_org uuid := pg_temp.rec_org(p_name);
+  v_cust uuid; v_seed uuid; v_sched uuid;
+begin
+  v_cust := pg_temp.customer(v_org, 'C-001', 'Steady Bhd');
+  v_seed := pg_temp.invoice(v_org, v_cust, 'INV-SEED',
+                            date '2026-01-01', date '2026-01-31');
+  v_sched := public.create_recurring_document(
+    p_document_id => v_seed, p_name => 'Monthly', p_frequency => 'monthly',
+    p_start_date => p_start, p_auto_post => true);
+  update public.recurring_documents set is_active = not p_paused where id = v_sched;
+  update public.organizations set status = p_status where id = v_org;
+  return v_org;
+end;
+$$;
+
+do $$
+declare
+  v_owner uuid := pg_temp.test_user();
+  v_a uuid; v_t uuid; v_s uuid; v_p uuid; v_e uuid;
+  v_n integer;
+  v_stranger uuid := pg_temp.another_user('recurring-stranger@example.test');
+begin
+  v_a := pg_temp.scheduled_org('Night Run Active Sdn Bhd', date '2026-02-01');
+  v_t := pg_temp.scheduled_org('Night Run Trial Sdn Bhd', date '2026-02-01', 'trial');
+  v_s := pg_temp.scheduled_org('Night Run Suspended Sdn Bhd', date '2026-02-01', 'suspended');
+  v_p := pg_temp.scheduled_org('Night Run Paused Sdn Bhd', date '2026-02-01', 'active', true);
+  v_e := pg_temp.scheduled_org('Night Run Early Sdn Bhd', date '2026-05-01');
+
+  v_n := app.run_recurring_documents(date '2026-02-01');
+  perform pg_temp.check_eq('the night run raises a schedule due that very day',
+    (select count(*)::integer from pg_temp.raised(v_a, date '2026-02-01')), 1);
+  perform pg_temp.check_eq('and a trial company''s',
+    (select count(*)::integer from pg_temp.raised(v_t, date '2026-02-01')), 1);
+  perform pg_temp.check_eq('but not a suspended company''s, a paused one or one not yet due',
+    (select count(*)::integer from public.sales_documents
+      where org_id in (v_s, v_p, v_e) and doc_no <> 'INV-SEED'), 0);
+  perform pg_temp.check_true('and it says how many it raised', v_n >= 2);
+
+  perform pg_temp.sign_in_as(v_stranger);
+  perform pg_temp.check_refused('a stranger cannot run a company''s schedules',
+    format('select public.run_recurring_documents_for(%L, %L)', v_a, date '2026-03-01'),
+    '%Insufficient privileges to post%', '42501');
+  perform pg_temp.sign_in_as(v_owner);
+
+  perform pg_temp.check_eq('the button leaves a paused schedule alone',
+    public.run_recurring_documents_for(v_p, date '2026-03-01'), 0);
+  perform pg_temp.check_eq('and one not yet due',
+    public.run_recurring_documents_for(v_e, date '2026-03-01'), 0);
+  perform pg_temp.check_eq('and runs this company''s March',
+    public.run_recurring_documents_for(v_a, date '2026-03-01'), 1);
+  perform pg_temp.check_eq('and nobody else''s',
+    (select count(*)::integer from pg_temp.raised(v_t, date '2026-02-01')), 1);
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

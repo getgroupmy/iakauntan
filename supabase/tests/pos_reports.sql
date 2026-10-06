@@ -277,4 +277,73 @@ begin
     (select count(*) from public.pos_reports where id = v_mine), 0);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The evening digest goes to every company that is trading (0750)
+--
+-- `queue_sales_digest` read `status = 'active'` and passed a shop on
+-- `trial` by -- which is when somebody most wants to see the day's
+-- takings arrive. One bill each in a trial shop and a suspended one, so
+-- the assertion is about the status and not a loop that stopped
+-- filtering.
+-- ---------------------------------------------------------------------
+create or replace function pg_temp.digest_shop(p_name text, p_status text)
+returns uuid language plpgsql as $$
+declare
+  v_org uuid; v_wh uuid; v_walkin uuid; v_item uuid; v_outlet uuid;
+  v_reg uuid; v_cash uuid; v_sale uuid;
+begin
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org(p_name);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  values (v_org, 'pos', true)
+  on conflict (org_id, module_code) do update set is_enabled = true;
+  insert into public.warehouses (org_id, code, name)
+  values (v_org, 'MAIN', 'Store') returning id into v_wh;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'WALK-IN', 'Counter sales', 'customer') returning id into v_walkin;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, unit_price, cost_price)
+  values (v_org, 'TEH', 'Teh tarik', 'service', false, 'C62', 3.00, 1.00)
+  returning id into v_item;
+  insert into public.pos_outlets
+    (org_id, code, name, business_type, warehouse_id, walk_in_contact_id, prices_include_tax)
+  values (v_org, 'KEDAI', 'Kedai', 'food_beverage', v_wh, v_walkin, false)
+  returning id into v_outlet;
+  insert into public.pos_registers (org_id, outlet_id, code, name)
+  values (v_org, v_outlet, 'C1', 'Counter') returning id into v_reg;
+  insert into public.pos_settings (org_id, round_cash_to_5sen) values (v_org, false);
+  perform pg_temp.a_till(v_org);
+  insert into public.pos_tender_types
+    (org_id, code, name, kind, payment_mode_code, counts_in_drawer, gives_change, opens_drawer)
+  values (v_org, 'TUNAI', 'Tunai', 'cash', '01', true, true, true)
+  returning id into v_cash;
+  perform public.open_pos_shift(v_reg, 100.00);
+  v_sale := public.open_pos_sale(v_reg);
+  perform public.add_pos_sale_line(v_sale, v_item, 2, 3.00);
+  perform public.complete_pos_sale(v_sale, jsonb_build_array(
+    jsonb_build_object('type', v_cash, 'amount', 6.00)));
+
+  insert into public.email_settings (org_id, is_enabled, sales_digest_to)
+  values (v_org, true, 'boss@' || md5(p_name) || '.test');
+  update public.organizations set status = p_status where id = v_org;
+  return v_org;
+end;
+$$;
+
+do $$
+declare
+  v_kl    date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
+  v_trial uuid := pg_temp.digest_shop('Kedai Percubaan Sdn Bhd', 'trial');
+  v_susp  uuid := pg_temp.digest_shop('Kedai Digantung Sdn Bhd', 'suspended');
+begin
+  perform app.queue_sales_digest(v_kl);
+  perform pg_temp.check_eq('a shop on trial is sent its takings',
+    (select count(*)::integer from public.email_outbox
+      where org_id = v_trial and template_code = 'sales_digest'), 1);
+  perform pg_temp.check_eq('a suspended one is not',
+    (select count(*)::integer from public.email_outbox
+      where org_id = v_susp and template_code = 'sales_digest'), 0);
+end $$;
+
 rollback;

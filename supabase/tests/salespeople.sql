@@ -330,6 +330,40 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- A debit note is a sale (0750)
+--
+-- It is the extra charge on a sale and posts revenue like one, so it is
+-- invoiced, the person who made the sale is credited with it, and the
+-- report foots to the profit and loss with one in the period -- which
+-- is the property the "lines foot to everything sold" assertion above
+-- is about, and which a debit note quietly broke.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.sales_org('Debit Note Sales Sdn Bhd');
+  v_p uuid;
+  r record;
+begin
+  v_p := pg_temp.person(v_org, 'dina', 10);
+  perform pg_temp.sale_in(v_org, 'invoice',     1000, v_p, 'MYR', 1, date '2026-03-10');
+  perform pg_temp.sale_in(v_org, 'debit_note',   200, v_p, 'MYR', 1, date '2026-03-12');
+  perform pg_temp.sale_in(v_org, 'credit_note',  100, v_p, 'MYR', 1, date '2026-03-14');
+
+  select * into r from public.report_sales_by_person(
+    v_org, date '2026-01-01', date '2026-12-31') where code = 'dina';
+  perform pg_temp.check_eq('a debit note is invoiced', r.invoiced, 1200);
+  perform pg_temp.check_eq('and counted as a document', r.documents, 3);
+  perform pg_temp.check_eq('so commission is on the charge too', r.commission, 110);
+
+  perform pg_temp.check_eq('and the report foots to the revenue in the ledger',
+    (select sum(net_sales) from public.report_sales_by_person(
+       v_org, date '2026-01-01', date '2026-12-31')),
+    (select sum(amount) from public.report_profit_loss(
+       v_org, date '2026-01-01', date '2026-12-31')
+      where account_type = 'revenue'));
+end $$;
+
+-- ---------------------------------------------------------------------
 -- Reachability
 -- ---------------------------------------------------------------------
 do $$

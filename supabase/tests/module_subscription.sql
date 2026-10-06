@@ -826,4 +826,81 @@ begin
       'app.bill_the_month(date)', 'execute'));
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Who the platform bills and chases, rule by rule
+--
+-- A sweep of 0739's `bill_the_month` and `chase_platform_invoices` left
+-- six mutants alive. Every company billed or chased above is active
+-- and real, and the chase's configured days -- 7, 14 and 30 -- are
+-- exactly its defaults, so "read the configuration" and "ignore it"
+-- gave the same mail on the same day.
+--
+-- 0750 made `trial` a live company for every daily job EXCEPT these two:
+-- a trial is the period nobody is billed for. So a trial company sits
+-- here with the suspended and the demo ones, on the side that is not
+-- billed and not chased, beside one active company that is.
+-- ---------------------------------------------------------------------
+create or replace function pg_temp.billable(p_name text, p_status text)
+returns uuid language plpgsql as $$
+declare v_org uuid;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org(p_name, array['crm']);
+  update public.organizations set email = 'akaun@' || md5(p_name) || '.test' where id = v_org;
+  perform pg_temp.held(v_org, 'multi_company', timestamptz '2025-11-04 09:00+08');
+  update public.organizations set status = p_status where id = v_org;
+  return v_org;
+end $$;
+
+do $$
+declare
+  v_live uuid; v_trial uuid; v_susp uuid; v_demo uuid; v_set uuid;
+  v_inv uuid;
+begin
+  v_live  := pg_temp.billable('Bil Aktif Sdn Bhd', 'active');
+  v_trial := pg_temp.billable('Bil Percubaan Sdn Bhd', 'trial');
+  v_susp  := pg_temp.billable('Bil Digantung Sdn Bhd', 'suspended');
+  -- Billed while it was a real company, and made a demo afterwards:
+  -- the one way a demo company comes to hold a platform invoice, since
+  -- `bill_org_modules` refuses to write one for a demo.
+  v_demo  := pg_temp.billable('Bil Demo Sdn Bhd', 'active');
+  perform app.bill_org_modules(v_demo, pg_temp.jan());
+  update public.organizations set is_demo = true where id = v_demo;
+
+  perform app.bill_the_month(date '2026-02-01');
+  perform pg_temp.check_eq('an active company is billed for January',
+    (select count(*)::integer from public.platform_invoices
+      where org_id = v_live and notes = 'modules:2026-01'), 1);
+  perform pg_temp.check_eq('a trial and a suspended company are not',
+    (select count(*)::integer from public.platform_invoices
+      where org_id in (v_trial, v_susp)), 0);
+
+  -- Give the other two an invoice anyway -- raised by hand, as a
+  -- platform admin might -- and see that the chase leaves all three
+  -- alone. No days configured, so the defaults apply: the 7th is one.
+  update public.platform_settings
+     set value = value - 'reminder_days' where key = 'platform_issuer';
+  perform app.bill_org_modules(v_trial, pg_temp.jan());
+  perform app.bill_org_modules(v_susp, pg_temp.jan());
+  perform app.chase_platform_invoices(date '2026-02-08');
+  perform pg_temp.check_eq('with nothing configured the 7th day is still a reminder day',
+    pg_temp.reminders(v_live), 1);
+  perform pg_temp.check_eq('but not for a trial, a suspended or a demo company',
+    pg_temp.reminders(v_trial) + pg_temp.reminders(v_susp) + pg_temp.reminders(v_demo), 0);
+
+  -- Configured days that are NOT the defaults: the 3rd, and only it.
+  update public.platform_settings
+     set value = jsonb_set(value, '{reminder_days}', '[3]'::jsonb)
+   where key = 'platform_issuer';
+  v_set := pg_temp.billable('Bil Tetapan Sdn Bhd', 'active');
+  v_inv := app.bill_org_modules(v_set, pg_temp.jan());
+  perform app.chase_platform_invoices(date '2026-02-04');
+  perform pg_temp.check_eq('the days the platform chose are the days it chases',
+    pg_temp.reminders(v_set), 1);
+  perform app.chase_platform_invoices(date '2026-02-08');
+  perform pg_temp.check_eq('and the default 7th is not one of them',
+    pg_temp.reminders(v_set), 1);
+end $$;
+
 rollback;

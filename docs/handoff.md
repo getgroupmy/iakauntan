@@ -349,6 +349,48 @@ page and renumbering would quietly break the reference.
     made it a true as-at listing. Probably harmless while the screen
     only ever asks about today, and a defect the day somebody prints a
     quarter-end list for an AGM. Asked rather than changed.
+15. ~~Does a debit note earn commission?~~ **Answered 6 October: yes.
+    Built in `0750`** -- invoiced, credited to the salesperson, and the
+    report foots to the P&L with one in the period (asserted). As asked: `report_sales_by_person`
+    counts invoices less credit and refund notes. A debit note posts
+    revenue (`post_sales_document_internal`, sign +1) and is left out,
+    so with one in the period the report stops footing to the profit
+    and loss -- which its own test says is the point of it -- and
+    nobody is credited with the charge. It is the only posted document
+    type the filter turns away, which is why the mutant "a quotation is
+    counted as a document" survives the sweep. Item 13 was answered
+    "chase debit notes"; this is the same question asked of commission,
+    and is a business decision rather than arithmetic.
+16. ~~A membership started on the 29th to the 31st drifts.~~ **Answered
+    6 October: fix it. Built in `0750`** -- each period is the start plus
+    n steps; asserted for 31 January monthly, 30 November quarterly,
+    29 February yearly and a weekly control. As found:
+    `app.membership_period` says, in its own comment since `0218`, that
+    "add n months to the start is the only arithmetic that keeps the
+    31st landing on the 30th" -- and then walks one month at a time from
+    the PREVIOUS period instead, so a monthly membership started 31
+    January runs 28 February, 28 March, 28 April ... for good, where
+    adding to the start gives 31 March, 30 April, 31 May. Quarterly
+    drifts the same way from a 30 November start. Production has **no
+    membership subscriptions at all** (read 6 October), so nothing live
+    moves; the fix is one line, but it shifts every existing period
+    boundary, so it is asked rather than shipped.
+17. ~~A company on `trial` gets no daily jobs.~~ **Answered 6 October:
+    run them, don't bill. Built in `0750`** -- one definition,
+    `app.org_status_is_live`, used by every daily job except
+    `bill_the_month` and `chase_platform_invoices`; both sides asserted
+    (a trial company is chased for its customers and gets its month
+    gathered, and is neither billed nor chased by the platform). As found: `set_org_status` (0020)
+    accepts `trial`, and the custom-domain code treats it as live
+    (`in ('active', 'trial')`, 0327, 0342, 0344, 0349). Every daily job
+    reads `coalesce(status, 'active') = 'active'` instead --
+    `run_daily_jobs`' HR, till, notification and month-start loop,
+    `run_recurring_documents`, `queue_overdue_reminders`,
+    `bill_the_month`, `chase_platform_invoices` -- so a trial company's
+    recurring invoices, dunning mail, notifications and leave year would
+    all stop without a word. Possibly deliberate for billing, hardly for
+    the rest. Production has no trial company today (all 18 are
+    `active`, 6 October).
 
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
@@ -364,6 +406,55 @@ its own section: whether a given platform advertises the rotation
 extension at all. The engine now says which case a real call is in.
 
 **Do not start task #11, the MIA headless scraper.**
+
+## `0750`, and the rest of `0739`'s functions, 6 October
+
+`0739` redefined thirty-nine functions to change one default each, and
+the mutation census then counted every one of them as unswept. They are
+now all swept except `run_daily_jobs`' per-company work, which is a list
+of calls into functions swept on their own. Every function has a
+mutants file in `supabase/tests/mutants/` whose header records the
+first sweep, what was added, the final kill sheet and the reason for
+each equivalent.
+
+The pattern was the same in almost every one, and it is the fixture
+collapse `CLAUDE.md` warns about: **each fixture was the one case the
+function was written for**, so every filter that turns something AWAY
+-- another company, a draft, a void, a retired type, a date on the
+wrong side, a stranger -- was a rule no row could tell from its
+absence. First sweeps killed roughly half; "rule by rule" blocks, one
+row per rule, took each to its equivalents.
+
+Three of the survivors were not missing assertions but questions, asked
+and answered the same day (items 15 to 17 above) and built in `0750`:
+
+* `report_sales_by_person` left the debit note out, so the report
+  stopped footing to the P&L. Now invoiced, and the footing asserted.
+* `app.membership_period` walked from the previous period and carried
+  February's 28th on for good. Now the start plus n steps.
+* every daily job read `status = 'active'` and passed a `trial` company
+  by. Now `app.org_status_is_live` -- active or trial -- everywhere but
+  the platform's own billing, which still bills `active` only; both
+  sides asserted.
+
+Equivalents worth knowing, because they look like gaps and are not:
+
+* **by the callee** -- `queue_document_email` refuses a company with
+  mail switched off, `advance_recurring_document` exits on a paused or
+  not-yet-due schedule, `bill_org_modules` refuses a demo company, and
+  `app.exchange_rate_for` raises before `create_bank_transfer`'s own
+  missing-rate guard can be reached. The caller's filter saves a call,
+  not a row.
+* **by the code's shape** -- `expire_carried_leave`'s `least(taken,
+  carried)` can only differ on a row its WHERE has already turned away;
+  `= any('{}')` is false, so "no reminder days" needs no guard of its
+  own.
+
+Noted and not asserted: a landed cost on an empty shelf leaves
+`report_stock_card` at the charge while `app.apply_stock_movement`
+stores nil (it zeroes value whenever quantity is zero). Which the
+ledger agrees with depends on what `post_landed_cost_run` posts for a
+shelf with nothing on it. See `mutants/report_stock_card.py`.
 
 ## `0747`, `0748`: what a sweep of the reports found, 6 October
 
