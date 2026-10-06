@@ -218,6 +218,118 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- report_sales_by_person, rule by rule
+--
+-- A sweep of 0739's definition left ten of seventeen mutants alive.
+-- Every fixture above is in ringgit at rate one, has no refund note,
+-- nothing before the period, one salesperson per company and nobody's
+-- name in the wrong alphabetical place -- so the currency, the refund,
+-- the start of the period, the company boundary, the ordering and the
+-- stranger were each a rule no row could tell from its absence.
+-- ---------------------------------------------------------------------
+create or replace function pg_temp.sale_in(
+  p_org uuid, p_type text, p_amount numeric, p_person uuid,
+  p_currency char(3), p_rate numeric, p_on date)
+returns uuid language plpgsql as $$
+declare v_cust uuid; v_doc uuid;
+begin
+  select id into v_cust from public.contacts
+   where org_id = p_org and contact_type = 'customer' limit 1;
+  if v_cust is null then
+    insert into public.contacts (org_id, code, name, contact_type)
+    values (p_org, 'C-001', 'Buyer', 'customer') returning id into v_cust;
+  end if;
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
+     subtotal, total_amount, balance_amount, status, salesperson_id)
+  values (p_org, p_type::app.sales_doc_type,
+          upper(left(p_type, 3)) || '-' || substr(gen_random_uuid()::text, 1, 8),
+          p_on, v_cust, p_currency, p_rate,
+          p_amount, p_amount, p_amount, 'draft', p_person)
+  returning id into v_doc;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, description, quantity, unit_price)
+  values (p_org, v_doc, 1, 'Goods', 1, p_amount);
+  perform public.post_sales_document(v_doc);
+  return v_doc;
+end;
+$$;
+
+do $$
+declare
+  v_org uuid := pg_temp.sales_org('Rule By Rule Sales Sdn Bhd');
+  v_owner uuid := auth.uid();
+  v_other uuid;
+  -- Named so the alphabet and the figures disagree: Aminah sells least.
+  v_aminah uuid; v_zul uuid; v_gone uuid;
+  r record;
+  v_first text;
+  v_stranger uuid := pg_temp.another_user('sales-stranger@example.test');
+begin
+  v_aminah := pg_temp.person(v_org, 'aminah', 10);
+  v_zul    := pg_temp.person(v_org, 'zul', 10);
+
+  -- Zul: 1,000 dollars at 4.00, and a 100-dollar credit at 4.00, so in
+  -- ringgit 4,000 and 400 -- figures no reading in dollars produces.
+  perform pg_temp.sale_in(v_org, 'invoice', 1000, v_zul, 'USD', 4, date '2026-03-10');
+  perform pg_temp.sale_in(v_org, 'credit_note', 100, v_zul, 'USD', 4, date '2026-03-11');
+  -- A refund note is money handed back: it comes off like a credit.
+  perform pg_temp.sale_in(v_org, 'refund_note', 300, v_zul, 'MYR', 1, date '2026-03-12');
+  -- Before the period asked for (which starts 1 February).
+  perform pg_temp.sale_in(v_org, 'invoice', 50000, v_zul, 'MYR', 1, date '2026-01-15');
+
+  perform pg_temp.sale_in(v_org, 'invoice', 2000, v_aminah, 'MYR', 1, date '2026-03-10');
+  -- Posted, then soft-deleted: not a sale this report pays on.
+  perform pg_temp.sale_in(v_org, 'invoice', 7000, v_aminah, 'MYR', 1, date '2026-03-10');
+  update public.sales_documents set deleted_at = now()
+   where org_id = v_org and salesperson_id = v_aminah and total_amount = 7000;
+
+  -- Unattributed: an invoice and a credit against it.
+  perform pg_temp.sale_in(v_org, 'invoice', 900, null, 'MYR', 1, date '2026-03-10');
+  perform pg_temp.sale_in(v_org, 'credit_note', 200, null, 'MYR', 1, date '2026-03-10');
+
+  select * into r from public.report_sales_by_person(
+    v_org, date '2026-02-01', date '2026-12-31') where code = 'zul';
+  perform pg_temp.check_eq('a foreign invoice is counted in ringgit', r.invoiced, 4000);
+  perform pg_temp.check_eq('a foreign credit and a refund come off in ringgit',
+    r.credited, 400 + 300);
+  perform pg_temp.check_eq('so the net is in ringgit too', r.net_sales, 3300);
+  perform pg_temp.check_eq('and three documents in the period, not four',
+    r.documents, 3);
+
+  select * into r from public.report_sales_by_person(
+    v_org, date '2026-02-01', date '2026-12-31') where code = 'aminah';
+  perform pg_temp.check_eq('a deleted invoice earns nobody anything',
+    r.net_sales, 2000);
+  perform pg_temp.check_eq('nor counts as a document', r.documents, 1);
+
+  select * into r from public.report_sales_by_person(
+    v_org, date '2026-02-01', date '2026-12-31') where name = 'Not attributed';
+  perform pg_temp.check_eq('the unattributed line is net of its credits too',
+    r.net_sales, 700);
+
+  select code into v_first from public.report_sales_by_person(
+    v_org, date '2026-02-01', date '2026-12-31') limit 1;
+  perform pg_temp.check_eq('the biggest seller is first, whatever the alphabet says',
+    v_first, 'zul');
+
+  -- Another company, with a salesperson of its own.
+  v_other := pg_temp.sales_org('Rule By Rule Other Sdn Bhd');
+  v_gone := pg_temp.person(v_other, 'outsider', 5);
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_eq('another company''s salespeople are not listed',
+    (select count(*)::integer from public.report_sales_by_person(
+       v_org, date '2026-02-01', date '2026-12-31') where code = 'outsider'), 0);
+
+  perform pg_temp.sign_in_as(v_stranger);
+  perform pg_temp.check_refused('a stranger cannot read the commission',
+    format('select * from public.report_sales_by_person(%L, %L, %L)',
+           v_org, date '2026-02-01', date '2026-12-31'),
+    '%Not allowed to read the ledger%', '42501');
+  perform pg_temp.sign_out();
+end $$;
+
+-- ---------------------------------------------------------------------
 -- Reachability
 -- ---------------------------------------------------------------------
 do $$

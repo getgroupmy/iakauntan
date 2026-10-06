@@ -476,4 +476,163 @@ begin
 end;
 $$;
 
+-- ---------------------------------------------------------------------
+-- report_stock_card, rule by rule
+--
+-- A sweep of 0739's definition left ten of twenty-one mutants alive
+-- here, and twenty-one in `utc_is_not_today.sql`, which only asks the
+-- card about its clock. The fixture above is in date order AND in
+-- number order, so no assertion could say which the running balance
+-- followed; no movement falls on the first day of a range, so `<` and
+-- `<=` for the brought-forward agreed; it has one item, so nothing
+-- tested that the opening is that item's; the warehouse filter was only
+-- ever used without a range; and the reference column had a document to
+-- find for an adjustment and for nothing else.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org  uuid := pg_temp.card_org();
+  v_item uuid := current_setting('app.test_card_item')::uuid;
+  v_a    uuid := current_setting('app.test_card_wh_a')::uuid;
+  v_b    uuid := current_setting('app.test_card_wh_b')::uuid;
+  v_other uuid;
+begin
+  -- A second item on the same shelf, in the same month.
+  insert into public.items (org_id, code, name, item_type, track_inventory,
+                            uom_code, unit_price, cost_price)
+  values (v_org, 'CARD-2', 'Gadget', 'stock', true, 'C62', 9, 5)
+  returning id into v_other;
+  insert into public.stock_movements
+    (org_id, movement_no, movement_date, movement_type, item_id,
+     warehouse_id, quantity, unit_cost)
+  values (v_org, 'SM-0101', date '2026-03-03', 'purchase_receipt', v_other,
+          v_a, 7, 5);
+
+  -- From 2 April, the day SM-0004 happened. The opening is the three
+  -- March movements of THIS item -- 120 at 1,280.00 -- and SM-0004 is in
+  -- the range, not in the opening.
+  perform pg_temp.check_eq('the opening stops the day before the range',
+    (select c.balance_quantity
+       from public.report_stock_card(v_org, v_item, date '2026-04-02') c
+      where c.reference = 'Brought forward'), 120);
+  perform pg_temp.check_eq('and is in value what it is in quantity',
+    (select c.balance_value
+       from public.report_stock_card(v_org, v_item, date '2026-04-02') c
+      where c.reference = 'Brought forward'), 1280.00);
+  perform pg_temp.check_text('it heads the card even beside a movement of the same day',
+    (select string_agg(coalesce(c.movement_no, 'b/f'), ',')
+       from public.report_stock_card(v_org, v_item, date '2026-04-02') c),
+    'b/f,SM-0004,SM-0005');
+  -- 20 out at the average of 10.666667 is 213.33.
+  perform pg_temp.check_eq('and the running value carries on from it',
+    (select c.balance_value
+       from public.report_stock_card(v_org, v_item, date '2026-04-02') c
+      where c.movement_no = 'SM-0004'), 1066.67);
+  perform pg_temp.check_true('the other item is on its own card, not this one',
+    not exists (select 1 from public.report_stock_card(v_org, v_item) c
+                 where c.movement_no = 'SM-0101'));
+
+  -- The second shed from 15 April: its opening is its own 40 at 600,
+  -- not the company's 140.
+  perform pg_temp.check_eq('a shed''s opening is the shed''s',
+    (select c.balance_quantity
+       from public.report_stock_card(v_org, v_item, date '2026-04-15',
+                                     date '2026-12-31', v_b) c
+      where c.reference = 'Brought forward'), 40);
+  perform pg_temp.check_eq('in value too',
+    (select c.balance_value
+       from public.report_stock_card(v_org, v_item, date '2026-04-15',
+                                     date '2026-12-31', v_b) c
+      where c.reference = 'Brought forward'), 600.00);
+end;
+$$;
+
+-- Back-dated: entered last, dated second. The card reads by date, and
+-- the running balance follows the card.
+do $$
+declare
+  v_org  uuid := pg_temp.card_org();
+  v_item uuid := current_setting('app.test_card_item')::uuid;
+  v_a    uuid := current_setting('app.test_card_wh_a')::uuid;
+begin
+  insert into public.stock_movements
+    (org_id, movement_no, movement_date, movement_type, item_id,
+     warehouse_id, quantity, unit_cost, notes)
+  values (v_org, 'SM-0006', date '2026-03-02', 'purchase_receipt', v_item,
+          v_a, 10, 10, 'Found in a drawer');
+
+  perform pg_temp.check_text('a back-dated movement reads in its date''s place',
+    (select string_agg(c.movement_no, ',')
+       from public.report_stock_card(v_org, v_item) c),
+    'SM-0001,SM-0006,SM-0002,SM-0003,SM-0004,SM-0005');
+  perform pg_temp.check_eq('and the running balance at it is as of its date',
+    (select c.balance_quantity from public.report_stock_card(v_org, v_item) c
+      where c.movement_no = 'SM-0006'), 110);
+end;
+$$;
+
+-- What a sale and a purchase are called on the card.
+do $$
+declare
+  v_org  uuid := pg_temp.card_org();
+  v_item uuid := current_setting('app.test_card_item')::uuid;
+  v_a    uuid := current_setting('app.test_card_wh_a')::uuid;
+  v_cust uuid; v_supp uuid; v_inv uuid; v_bill uuid;
+begin
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-CARD', 'Card Buyer', 'customer') returning id into v_cust;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'S-CARD', 'Card Seller', 'supplier') returning id into v_supp;
+  insert into public.sales_documents (org_id, doc_type, doc_no, doc_date, contact_id)
+  values (v_org, 'invoice', 'INV-CARD-1', date '2026-04-20', v_cust)
+  returning id into v_inv;
+  insert into public.purchase_documents (org_id, doc_type, doc_no, doc_date, contact_id)
+  values (v_org, 'bill', 'BILL-CARD-1', date '2026-04-21', v_supp)
+  returning id into v_bill;
+
+  insert into public.stock_movements
+    (org_id, movement_no, movement_date, movement_type, item_id,
+     warehouse_id, quantity, unit_cost, notes, source_table, source_id)
+  values
+    (v_org, 'SM-0007', date '2026-04-20', 'sales_delivery', v_item, v_a,
+     -1, 0, 'a note the document outranks', 'sales_documents', v_inv),
+    (v_org, 'SM-0008', date '2026-04-21', 'purchase_receipt', v_item, v_a,
+     1, 10, 'a note the document outranks', 'purchase_documents', v_bill);
+
+  perform pg_temp.check_text('a delivery is named by its invoice',
+    (select c.reference from public.report_stock_card(v_org, v_item) c
+      where c.movement_no = 'SM-0007'), 'INV-CARD-1');
+  perform pg_temp.check_text('a receipt is named by its bill',
+    (select c.reference from public.report_stock_card(v_org, v_item) c
+      where c.movement_no = 'SM-0008'), 'BILL-CARD-1');
+end;
+$$;
+
+-- An opening worth something with nothing on the shelf. Landed cost is
+-- the one movement whose money is not quantity times cost, so a charge
+-- that lands on an empty shelf leaves a value with no quantity -- and a
+-- brought-forward that hid it would start the card 50.00 short.
+do $$
+declare
+  v_org  uuid := pg_temp.card_org();
+  v_a    uuid := current_setting('app.test_card_wh_a')::uuid;
+  v_item uuid;
+begin
+  insert into public.items (org_id, code, name, item_type, track_inventory,
+                            uom_code, unit_price, cost_price)
+  values (v_org, 'CARD-3', 'Freighted', 'stock', true, 'C62', 9, 5)
+  returning id into v_item;
+  insert into public.stock_movements
+    (org_id, movement_no, movement_date, movement_type, item_id,
+     warehouse_id, quantity, unit_cost, total_cost)
+  values (v_org, 'SM-0201', date '2026-03-01', 'landed_cost', v_item, v_a,
+          0, 0, 50);
+
+  perform pg_temp.check_eq('a value with no quantity is still brought forward',
+    (select c.balance_value
+       from public.report_stock_card(v_org, v_item, date '2026-04-01') c
+      where c.reference = 'Brought forward'), 50.00);
+end;
+$$;
+
 rollback;
