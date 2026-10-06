@@ -926,4 +926,15 @@
 # switch, and dates December's pay by the payslip.
 # Measured:
 # `all SQL assertions passed (385 files, 14928 assertions executed)`.
-14928
+#
+# 14928 -> 14942: the withholding register (0419), 15 of 15. It killed 4:
+# withholding.sql read it with two ringgit certificates in one company,
+# by its owner, with no range and days late as "more than none". A
+# "register, rule by rule" block adds a dollar certificate, exact days
+# late, a late remittance with nothing at risk, the due day itself,
+# deleted and void, the range at both ends -- and the company filter
+# and the membership test, which are the whole tenant boundary of this
+# SECURITY DEFINER function and were never asserted.
+# Measured:
+# `all SQL assertions passed (385 files, 14942 assertions executed)`.
+14942

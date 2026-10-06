@@ -369,6 +369,123 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- The register, rule by rule
+--
+-- The 2026-10-06 sweep of `report_withholding` left eleven of fifteen
+-- mutants alive. The block above has two ringgit certificates in one
+-- company, read by its owner, with no date range, none remitted, none
+-- void or deleted, and the days late asserted only as "more than none".
+-- Among what that could not see were the two lines that keep one
+-- company's register from another's: the function is SECURITY DEFINER,
+-- so they are the whole of the tenant boundary.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid := pg_temp.wht_org('Daftar Sdn Bhd');
+  v_supp  uuid; v_bill uuid; v_usd uuid; v_paid uuid; v_due uuid;
+  v_gone  uuid; v_void uuid; v_old uuid;
+  v_other uuid; v_theirs uuid; v_stranger uuid;
+  r record;
+begin
+  v_supp := pg_temp.supplier(v_org, 'S-001', 'Overseas Ltd');
+  v_bill := pg_temp.bill(v_org, v_supp, 'BILL-1', 900000, date '2026-02-10');
+
+  -- A dollar bill: the register is in ringgit.
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id,
+     currency, exchange_rate, status)
+  values (v_org, 'bill', 'BILL-USD', date '2026-02-10', date '2026-03-12',
+          v_supp, 'USD', 4.50, 'draft')
+  returning id into v_usd;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, description, quantity, unit_price)
+  values (v_org, v_usd, 1, 'Technical services', 1, 10000);
+  perform public.post_purchase_document(v_usd);
+  v_usd := public.create_withholding(v_usd, 'S109B_SPECIAL',
+    p_gross_amount => 10000, p_cert_date => pg_temp.today() - 120);
+  select * into r from public.report_withholding(v_org) where certificate_id = v_usd;
+  perform pg_temp.check_eq('a dollar certificate''s tax is reported in ringgit',
+    r.base_tax_amount, round(r.tax_amount * 4.50, 2));
+  perform pg_temp.check_eq('and so is the penalty on it',
+    r.penalty_if_unpaid, round(r.tax_amount * 4.50 * 0.10, 2));
+  -- Days late from the DUE date, exactly, not from the certificate.
+  perform pg_temp.check_eq('days late are counted from the due date',
+    r.days_late, (pg_temp.today() - r.due_date)::integer);
+
+  -- Remitted, but late: late it is, and no penalty is AT RISK, because
+  -- it has been paid. The 10% is a figure for what has not.
+  v_paid := public.create_withholding(v_bill, 'S109B_SPECIAL',
+    p_gross_amount => 100000, p_cert_date => pg_temp.today() - 120);
+  perform public.post_withholding(v_paid);
+  perform public.remit_withholding(v_paid, pg_temp.today() - 10,
+    pg_temp.a_bank_account(v_org));
+  select * into r from public.report_withholding(v_org) where certificate_id = v_paid;
+  perform pg_temp.check_true('-- remitted after its due date',
+    r.remitted_on > r.due_date);
+  perform pg_temp.check_eq('so it shows as late', r.days_late,
+    (r.remitted_on - r.due_date)::integer);
+  perform pg_temp.check_eq('but nothing is at risk once it is paid',
+    r.penalty_if_unpaid, 0);
+
+  -- On the due date itself it is not yet late.
+  v_due := public.create_withholding(v_bill, 'S109B_SPECIAL',
+    p_gross_amount => 100000, p_cert_date => pg_temp.today() - 40);
+  update public.withholding_certificates set due_date = pg_temp.today()
+   where id = v_due;
+  perform pg_temp.check_eq('no penalty on the due date itself',
+    (select penalty_if_unpaid from public.report_withholding(v_org)
+      where certificate_id = v_due), 0);
+
+  -- Deleted and void certificates are not on the register.
+  v_gone := public.create_withholding(v_bill, 'S109B_SPECIAL',
+    p_gross_amount => 1000, p_cert_date => pg_temp.today() - 5);
+  update public.withholding_certificates set deleted_at = now() where id = v_gone;
+  v_void := public.create_withholding(v_bill, 'S109B_SPECIAL',
+    p_gross_amount => 1000, p_cert_date => pg_temp.today() - 5);
+  update public.withholding_certificates set status = 'void' where id = v_void;
+  perform pg_temp.check_eq('a deleted certificate is not on the register',
+    (select count(*)::integer from public.report_withholding(v_org)
+      where certificate_id = v_gone), 0);
+  perform pg_temp.check_eq('nor a void one',
+    (select count(*)::integer from public.report_withholding(v_org)
+      where certificate_id = v_void), 0);
+
+  -- The range, at both ends.
+  v_old := public.create_withholding(v_bill, 'S109B_SPECIAL',
+    p_gross_amount => 1000, p_cert_date => date '2026-01-15');
+  perform pg_temp.check_eq('a certificate before the range is not in it',
+    (select count(*)::integer
+       from public.report_withholding(v_org, date '2026-02-01', pg_temp.today())
+      where certificate_id = v_old), 0);
+  perform pg_temp.check_eq('nor one after it',
+    (select count(*)::integer
+       from public.report_withholding(v_org, null, date '2026-01-31')
+      where certificate_id = v_usd), 0);
+  perform pg_temp.check_eq('-- while a certificate inside it is',
+    (select count(*)::integer
+       from public.report_withholding(v_org, null, date '2026-01-31')
+      where certificate_id = v_old), 1);
+
+  -- Another company's certificates are not on this register...
+  v_other := pg_temp.wht_org('Syarikat Lain Sdn Bhd');
+  v_theirs := public.create_withholding(
+    pg_temp.bill(v_other, pg_temp.supplier(v_other, 'S-001', 'Theirs'),
+                 'BILL-T', 100000, date '2026-02-10'),
+    'S109B_SPECIAL', p_gross_amount => 1000, p_cert_date => pg_temp.today() - 5);
+  perform pg_temp.check_eq('another company''s certificate is not on this register',
+    (select count(*)::integer from public.report_withholding(v_org)
+      where certificate_id = v_theirs), 0);
+
+  -- ...and somebody who is not a member reads none of it.
+  v_stranger := pg_temp.another_user('orang.luar@daftar.test');
+  perform pg_temp.sign_in_as(v_stranger);
+  perform pg_temp.check_eq('a stranger reads nothing of the register',
+    (select count(*)::integer from public.report_withholding(v_org)), 0);
+
+  perform pg_temp.sign_out();
+end $$;
+
+-- ---------------------------------------------------------------------
 -- Who can reach any of it
 -- ---------------------------------------------------------------------
 do $$

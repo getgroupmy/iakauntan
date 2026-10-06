@@ -8,6 +8,17 @@
 #       supabase/tests/withholding.sql \
 #       supabase/tests/mutants/report_withholding.py
 
+#
+# RESULT, 6 October: 15 mutants, ALL 15 KILLED, control alive, on
+# withholding.sql. It killed 4 before a "register, rule by rule" block
+# was added: a dollar certificate in ringgit (tax and penalty), days
+# late counted exactly from the due date, a late REMITTANCE carrying no
+# penalty at risk, no penalty on the due day itself, deleted and void
+# certificates left out, the date range at both ends, and the two lines
+# that are the whole tenant boundary of this SECURITY DEFINER function
+# -- the company filter and the membership test. Neither was asserted:
+# the only read of the register was by its own company's owner.
+
 m("the tax is reported in the foreign currency, not ringgit",
   "report_withholding",
   "         round(c.tax_amount * coalesce(c.exchange_rate, 1), 2),\n         c.due_date,",
