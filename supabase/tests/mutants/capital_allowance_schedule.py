@@ -67,7 +67,7 @@ m("a sale in another year is treated as this year's",
 m("an asset AT the small value threshold is small",
   "capital_allowance_schedule",
   "                  < s.small_value_threshold)                  as is_small",
-  "                  <= s.small_value_threshold)  -- le             as is_small",
+  "                  <= s.small_value_threshold)                  as is_small  -- le",
   "-- le")
 
 m("small value is judged on cost, not the restricted amount",
