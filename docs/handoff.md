@@ -491,6 +491,7 @@ function:
 | `adjust_attendance`, `app.recompute_attendance` | `0363` | 42 / 42 | -- | `attendance_adjust.sql` |
 | `app.employee_departure_guard`, `reinstate_employee` | `0371` | 16 / 16 | -- | `departures.sql` |
 | `app.record_terminal_punch` | `0612` | 24 / 24 | -- | `terminal_punches.sql` |
+| `submit_manager_appraisal`, `finalise_appraisal`, `reopen_appraisal` | `0379` | 40 / 40 | -- | `appraisals.sql` |
 
 Every equivalent is written into its mutants file with the reason.
 

@@ -944,4 +944,131 @@ begin
       'public.submit_self_appraisal(uuid, numeric, text)', 'execute'));
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The manager's half, the final rating and the way back, rule by rule
+--
+-- A sweep of `0379`'s three functions over this file left twenty
+-- mutants alive. Several guards were met only where the table's own
+-- trigger refuses the same thing in the same words, so the function's
+-- check could go: a non-reviewer is told "named reviewer" by both, and
+-- only arriving before the self review is due tells them apart, since
+-- the function's check comes first. Others were refused but asserted by
+-- SQLSTATE, or never tried -- a self review due TODAY, a cycle with no
+-- due date, a final rating left blank. And the reopen tests reopened
+-- the self review only, never the manager's half or the final rating.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.test_org('Penilaian Peraturan Sdn Bhd');
+  v_today date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
+  v_mei uuid; v_ali uuid; v_zul uuid;
+  v_c1 uuid; v_c2 uuid; v_c3 uuid;
+  v_ali1 uuid; v_zul1 uuid; v_ali2 uuid; v_ali3 uuid;
+  r public.appraisals;
+begin
+  v_mei := pg_temp.ap_person(v_org, 'E1', 'Mei', 'mei9@ap.test');
+  v_ali := pg_temp.ap_person(v_org, 'E2', 'Ali', 'ali9@ap.test', v_mei);
+  v_zul := pg_temp.ap_person(v_org, 'E3', 'Zul', 'zul9@ap.test', v_mei);
+
+  -- Three cycles: self reviews due yesterday, due today, and never set.
+  insert into public.appraisal_cycles
+    (org_id, name, period_start, period_end, self_review_due, rating_scale_max)
+  values (v_org, 'Overdue', date '2026-01-01', date '2026-12-31', v_today - 1, 5)
+  returning id into v_c1;
+  insert into public.appraisal_cycles
+    (org_id, name, period_start, period_end, self_review_due, rating_scale_max)
+  values (v_org, 'Due today', date '2026-01-01', date '2026-12-31', v_today, 5)
+  returning id into v_c2;
+  insert into public.appraisal_cycles
+    (org_id, name, period_start, period_end, self_review_due, rating_scale_max)
+  values (v_org, 'Undated', date '2026-01-01', date '2026-12-31', null, 5)
+  returning id into v_c3;
+  perform public.open_appraisal_cycle(v_c1);
+  perform public.open_appraisal_cycle(v_c2);
+  perform public.open_appraisal_cycle(v_c3);
+  select id into v_ali1 from public.appraisals where cycle_id = v_c1 and employee_id = v_ali;
+  select id into v_zul1 from public.appraisals where cycle_id = v_c1 and employee_id = v_zul;
+  select id into v_ali2 from public.appraisals where cycle_id = v_c2 and employee_id = v_ali;
+  select id into v_ali3 from public.appraisals where cycle_id = v_c3 and employee_id = v_ali;
+
+  -- WHO, before WHEN. Ali is not his own reviewer, and is told so --
+  -- not that his self review is not yet due.
+  perform pg_temp.sign_in_as(pg_temp.ap_user(v_ali));
+  perform pg_temp.check_refused('the subject is told the manager''s half is not theirs',
+    format('select public.submit_manager_appraisal(%L, 3, %L)', v_ali2, 'Me, rating me'),
+    '%named reviewer%', '42501');
+
+  perform pg_temp.sign_in_as(pg_temp.ap_user(v_mei));
+  perform pg_temp.check_refused('an appraisal that is not there says so',
+    format('select public.submit_manager_appraisal(%L, 3, %L)', gen_random_uuid(), 'Fine'),
+    '%No such appraisal%', 'P0002');
+  -- WHEN. Due today is not yet late, and no due date is never late.
+  perform pg_temp.check_refused('a self review due today is still waited for',
+    format('select public.submit_manager_appraisal(%L, 3, %L)', v_ali2, 'Fine'),
+    '%not written their self review yet%', '23514');
+  perform pg_temp.check_refused('and one with no due date is waited for always',
+    format('select public.submit_manager_appraisal(%L, 3, %L)', v_ali3, 'Fine'),
+    '%not written their self review yet%', '23514');
+
+  -- WHAT IS KEPT. Goals: Ali's weigh a hundred, Zul's fifty.
+  insert into public.appraisal_goals (org_id, appraisal_id, title, weight_percent)
+  values (v_org, v_ali1, 'Ship the migration', 100),
+         (v_org, v_zul1, 'Half a job', 50);
+  perform public.submit_manager_appraisal(v_ali1, 3, '  Solid year  ', null, null,
+    true, '   ');
+  select * into r from public.appraisals where id = v_ali1;
+  perform pg_temp.check_eq('the comments are kept trimmed', r.manager_comments, 'Solid year');
+  perform pg_temp.check_true('a promotion recommended is kept', r.promotion_recommended);
+  perform pg_temp.check_true('and a blank plan is no plan', r.development_plan is null);
+  perform pg_temp.check_refused('a submitted half says when it was submitted',
+    format('select public.submit_manager_appraisal(%L, 4, %L)', v_ali1, 'Again'),
+    '%You submitted this on%', '23514');
+  -- A cancelled appraisal stays cancelled, whatever the manager writes.
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  update public.appraisals set status = 'cancelled' where id = v_zul1;
+  perform pg_temp.sign_in_as(pg_temp.ap_user(v_mei));
+  perform public.submit_manager_appraisal(v_zul1, 3, 'For the file');
+  perform pg_temp.check_eq('a cancelled appraisal is not moved on to calibration',
+    (select status::text from public.appraisals where id = v_zul1), 'cancelled');
+
+  -- THE FINAL RATING.
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  perform pg_temp.check_refused('a missing appraisal cannot be finalised',
+    format('select public.finalise_appraisal(%L, 3)', gen_random_uuid()),
+    '%No such appraisal%', 'P0002');
+  perform pg_temp.check_refused('nor one with no final rating',
+    format('select public.finalise_appraisal(%L, null)', v_ali1),
+    '%has a final rating%', '23514');
+  perform pg_temp.check_refused('a blank reason is no reason',
+    format('select public.finalise_appraisal(%L, 4, %L)', v_ali1, '   '),
+    '%Say why%', '23514');
+  -- Zul's goals weigh fifty; that is Zul's appraisal, not this one.
+  perform public.finalise_appraisal(v_ali1, 4, '  Moderated for the reassigned goal  ');
+  select * into r from public.appraisals where id = v_ali1;
+  perform pg_temp.check_eq('only this appraisal''s goals are weighed, and it completes',
+    r.status::text, 'completed');
+  perform pg_temp.check_eq('with the note kept trimmed', r.calibration_note,
+    'Moderated for the reassigned goal');
+  perform pg_temp.check_refused('a completed appraisal says when',
+    format('select public.finalise_appraisal(%L, 4, %L)', v_ali1, 'Again'),
+    '%was completed on%', '23514');
+
+  -- THE WAY BACK, on the two sides the file never reopened.
+  perform pg_temp.check_refused('a missing appraisal cannot be reopened',
+    format('select public.reopen_appraisal(%L, %L)', gen_random_uuid(), 'final'),
+    '%No such appraisal%', 'P0002');
+  perform public.reopen_appraisal(v_ali1, 'final');
+  select * into r from public.appraisals where id = v_ali1;
+  perform pg_temp.check_true('reopening the final rating un-completes it', r.completed_at is null);
+  perform pg_temp.check_eq('back to calibration, not to the manager', r.status::text, 'calibration');
+  perform public.finalise_appraisal(v_ali1, 4, 'Moderated again');
+  perform public.reopen_appraisal(v_ali1, 'manager');
+  select * into r from public.appraisals where id = v_ali1;
+  perform pg_temp.check_true('reopening the manager''s half clears its stamp',
+    r.manager_submitted_at is null);
+  perform pg_temp.check_true('and un-completes the appraisal', r.completed_at is null);
+  perform pg_temp.check_eq('and hands it back to the manager', r.status::text, 'manager_review');
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;
