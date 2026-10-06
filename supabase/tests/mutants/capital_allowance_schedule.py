@@ -8,7 +8,30 @@
 #       supabase/tests/capital_allowances.sql \
 #       supabase/tests/mutants/capital_allowance_schedule.py
 #
-# RESULT: (pending)
+# RESULT, 6 October: 42 mutants, 36 KILLED, 6 equivalent, control alive,
+# on capital_allowances.sql alone. 26 died before "The schedule, rule by
+# rule" was added; it took the deleted asset, a sale in a later year, a
+# gift, a balancing allowance on an unsold asset, a same-year sale's
+# charge limit, `claimed`, the later years of a small asset and of a
+# mis-classed one, and last year's small assets against this year's cap.
+#
+# Two mutants were wrong, not the tests: "negative allowance" wrapped
+# the clamp in another `greatest` and changed nothing, and "AT the
+# threshold" put its marker in front of the column alias and died of
+# `column f.is_small does not exist` -- in every file, which reads as a
+# kill. Both rewritten; both now die on an assertion.
+#
+# Equivalent, with the reason (also in the test, next to the block):
+#   * the initial or annual allowance not capped by what is left: no
+#     class's two rates together reach 100%. Arithmetic.
+#   * the residual going negative: every term before it is capped.
+#     Arithmetic.
+#   * a small asset written off again later: its prior claim is its
+#     whole cost and the cap takes the rest to nil. Arithmetic.
+#   * a small value asset given an annual allowance, and small value
+#     judged on cost: the class's annual rate is 0 and it has no cost
+#     cap. The rates as seeded -- not a constraint, so these two would
+#     stop being equivalent the day a class gained both.
 
 m("a stranger reads the schedule",
   "capital_allowance_schedule",
