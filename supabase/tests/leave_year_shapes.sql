@@ -371,6 +371,72 @@ begin
       where t.id = v_scaling), 0);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- roll_leave_year, rule by rule
+--
+-- A sweep of `0058`'s definition across this file and
+-- `scheduled_work.sql` left two rules unreached. Somebody who has left
+-- was always somebody who RESIGNED, so a roll that opened a new year
+-- for a dismissed employee read the same. And last year had one
+-- balance, on one leave type, so the carry could be read from any type
+-- the employee held and still come out right.
+--
+-- And three more the carry and the count never met: no year in the
+-- file was OVERDRAWN, so nothing said an overdraft carries nothing
+-- rather than a debt; every carry was under its type's cap, so the cap
+-- was never what decided; and nothing read the number the roll returns.
+--
+-- One survivor is equivalent and stays so: swapping the `0` in
+-- `coalesce(max_carry_forward, 0)` changes nothing, because the column
+-- is NOT NULL (asserted above, in the roll's own section).
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.test_org('Guling Peraturan Sdn Bhd');
+  v_annual uuid; v_study uuid; v_capped uuid; v_stay uuid; v_dismissed uuid;
+  v_n integer; v_year integer := 2026;
+begin
+  v_annual := pg_temp.ly_type(v_org, 'AL', 'Annual', 14, false, 20);
+  v_study  := pg_temp.ly_type(v_org, 'ST', 'Study', 14, false, 20);
+  v_capped := pg_temp.ly_type(v_org, 'RP', 'Replacement', 14, false, 2);
+  v_stay := pg_temp.ly_emp(v_org, 'E1', 'Puan Siti', date '2021-01-01');
+  v_dismissed := pg_temp.ly_emp(v_org, 'E2', 'Encik Zul', date '2021-01-01',
+                                'terminated');
+
+  -- Last year: six left of annual leave; study leave OVERDRAWN by three
+  -- (a balance corrected by hand after the leave was taken); and ten
+  -- left of a type that carries at most two.
+  insert into public.leave_balances
+    (org_id, employee_id, leave_type_id, leave_year,
+     entitled_days, taken_days)
+  values (v_org, v_stay, v_annual, v_year - 1, 10, 4),
+         (v_org, v_stay, v_study,  v_year - 1, 10, 13),
+         (v_org, v_stay, v_capped, v_year - 1, 10, 0);
+
+  v_n := app.roll_leave_year(v_org, v_year);
+
+  -- Three types, one employee still here: three rows opened, and the
+  -- roll says so.
+  perform pg_temp.check_eq('the roll counts the balances it opened', v_n, 3);
+
+  perform pg_temp.check_eq('somebody dismissed is not given next year''s leave',
+    (select count(*) from public.leave_balances b
+      where b.employee_id = v_dismissed and b.leave_year = v_year), 0);
+  perform pg_temp.check_eq('annual leave carries what was left of annual leave',
+    (select b.carried_forward from public.leave_balances b
+      where b.employee_id = v_stay and b.leave_type_id = v_annual
+        and b.leave_year = v_year), 6);
+  perform pg_temp.check_eq('an overdrawn year carries nothing, not a debt',
+    (select b.carried_forward from public.leave_balances b
+      where b.employee_id = v_stay and b.leave_type_id = v_study
+        and b.leave_year = v_year), 0);
+  perform pg_temp.check_eq('and the type''s cap is what carries when less '
+    'than was left',
+    (select b.carried_forward from public.leave_balances b
+      where b.employee_id = v_stay and b.leave_type_id = v_capped
+        and b.leave_year = v_year), 2);
+end $$;
+
 -- =====================================================================
 -- 4. What expires, and whose
 -- =====================================================================
@@ -575,6 +641,54 @@ begin
     (select b.taken_days from public.leave_balances b
       where b.employee_id = v_emp and b.leave_type_id = v_type
         and b.leave_year = v_year), 4);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- decide_leave_request, rule by rule
+--
+-- A sweep of `0037`'s definition across `leave_requests.sql` and this
+-- file left two rules no file reached. Nobody looked at WHEN a
+-- decision was recorded, only who made it. And every balance the
+-- decision moved belonged to the only employee holding that leave type
+-- in that year, so a decision that moved every employee's balance read
+-- the same as one that moved the right one.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.test_org('Keputusan Cuti Sdn Bhd');
+  v_owner uuid := pg_temp.test_user();
+  v_type uuid; v_me uuid; v_colleague uuid; v_req uuid;
+  v_year integer := extract(year from pg_temp.today())::integer;
+begin
+  v_type := pg_temp.ly_type(v_org, 'AL', 'Annual', 14, false, 20);
+  v_me := pg_temp.ly_emp(v_org, 'E1', 'Puan Siti', date '2020-01-01',
+                         'active', v_owner);
+  v_colleague := pg_temp.ly_emp(v_org, 'E2', 'Encik Zul', date '2020-01-01');
+
+  insert into public.leave_balances
+    (org_id, employee_id, leave_type_id, leave_year,
+     entitled_days, pending_days, taken_days)
+  values (v_org, v_me, v_type, v_year, 14, 0, 0),
+         -- The colleague has a request of their own on hold, and some
+         -- days already spent, on the same type in the same year.
+         (v_org, v_colleague, v_type, v_year, 14, 5, 1);
+
+  v_req := public.submit_leave_request(
+    v_org, v_type, make_date(v_year, 6, 1), make_date(v_year, 6, 3), 3);
+  perform public.decide_leave_request(v_req, true);
+
+  perform pg_temp.check_eq('the decision is dated when it was made',
+    (select decided_at::text from public.leave_requests where id = v_req),
+    now()::text);
+  perform pg_temp.check_eq('the approval spends the requester''s days',
+    (select b.taken_days from public.leave_balances b
+      where b.employee_id = v_me and b.leave_year = v_year), 3);
+  perform pg_temp.check_eq('and leaves a colleague''s hold where it was',
+    (select b.pending_days from public.leave_balances b
+      where b.employee_id = v_colleague and b.leave_year = v_year), 5);
+  perform pg_temp.check_eq('and a colleague''s days taken where they were',
+    (select b.taken_days from public.leave_balances b
+      where b.employee_id = v_colleague and b.leave_year = v_year), 1);
 end $$;
 
 -- ---------------------------------------------------------------------

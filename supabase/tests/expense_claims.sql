@@ -318,6 +318,105 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- post_expense_claim, rule by rule
+--
+-- A sweep of `0049`'s definition over this file left eight mutants
+-- alive. Six were the journal's own particulars, which nothing above
+-- read: its date, the claim it points back at, the reference, and the
+-- line's description. Two were refusals asserted only by their
+-- SQLSTATE -- and the undecided claim's 22023 arrives anyway without
+-- the status check, because an undecided claim has no approved amount
+-- and the journal it would make cannot balance. A refusal is asserted
+-- by what it says.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.claim_org('Claim Particulars Sdn Bhd');
+  v_other uuid; v_their_bank uuid;
+  v_type uuid; v_claim uuid; v_rejected uuid; v_empty uuid; v_entry uuid;
+  r record;
+begin
+  v_type := pg_temp.claim_type_for(v_org, 'TRAVEL');
+  v_claim := pg_temp.claim_fixture(v_org, 'EC-101',
+    array[120.00]::numeric[], array[v_type]);
+  perform pg_temp.approve_fully(v_claim, true);
+
+  -- The fixture's claim is dated 15 March, which no run of this file
+  -- falls on, so a journal dated the day it was posted is told apart.
+  v_entry := public.post_expense_claim(v_claim);
+  select * into r from public.gl_entries where id = v_entry;
+  perform pg_temp.check_eq('the journal is dated the day of the claim',
+    r.entry_date::text, '2026-03-15');
+  perform pg_temp.check_eq('it points back at the claim', r.source_id, v_claim);
+  perform pg_temp.check_eq('and carries its number', r.reference, 'EC-101');
+  perform pg_temp.check_eq('the expense line says what it was for',
+    (select l.description from public.gl_lines l
+      where l.entry_id = v_entry and l.debit > 0), 'Client visit');
+
+  perform pg_temp.check_refused('a claim that is not there says so',
+    format('select public.post_expense_claim(%L)', gen_random_uuid()),
+    '%Claim not found%', 'P0002');
+
+  -- Rejected, not merely undecided: the status is the only thing that
+  -- stops it.
+  v_rejected := pg_temp.claim_fixture(v_org, 'EC-102',
+    array[40.00]::numeric[], array[v_type]);
+  perform pg_temp.approve_fully(v_rejected, false, 'Not a business trip');
+  perform pg_temp.check_refused('a rejected claim is not posted',
+    format('select public.post_expense_claim(%L)', v_rejected),
+    '%Only an approved claim can be posted%', '22023');
+
+  -- Approved with no lines at all: there is no expense to debit.
+  insert into public.expense_claims
+    (org_id, claim_no, employee_id, claim_date, title, total_amount,
+     approved_amount, status, submitted_at, pay_with_payroll)
+  values (v_org, 'EC-103',
+          (select id from public.employees where org_id = v_org limit 1),
+          date '2026-03-15', 'Nothing in it', 0, 30.00, 'approved', now(),
+          false)
+  returning id into v_empty;
+  perform pg_temp.check_refused('a claim with nothing in it is not posted',
+    format('select public.post_expense_claim(%L)', v_empty),
+    '%nothing to post%', '22023');
+
+  -- Paid from the company next door's bank: refused, by the ledger's
+  -- own same-company key rather than by anything in the function.
+  perform pg_temp.allow_many_companies();
+  v_other := pg_temp.claim_org('Claim Neighbour Sdn Bhd');
+  insert into public.bank_accounts (org_id, account_id, name)
+  values (v_other,
+          (select id from public.accounts
+            where org_id = v_other and code = '1110' and not is_group limit 1),
+          'Their Current')
+  returning id into v_their_bank;
+  perform pg_temp.sign_in_as((select user_id from public.employees
+                               where org_id = v_org limit 1));
+  v_claim := pg_temp.claim_fixture(v_org, 'EC-104',
+    array[60.00]::numeric[], array[v_type]);
+  perform pg_temp.approve_fully(v_claim, true);
+  perform pg_temp.check_refused('a claim is not paid from another company''s bank',
+    format('select public.post_expense_claim(%L, %L)', v_claim, v_their_bank),
+    '%gl_lines_account_same_org%', '23503');
+
+  -- A company whose 2120 is a heading has no accrual account to credit.
+  -- The function looks for a posting account with that code and finds
+  -- none, and the claim is not posted against the heading instead.
+  v_other := pg_temp.claim_org('Claim Heading Sdn Bhd');
+  update public.accounts set is_group = true
+   where org_id = v_other and code = '2120';
+  v_type := pg_temp.claim_type_for(v_other, 'TRAVEL');
+  v_claim := pg_temp.claim_fixture(v_other, 'EC-105',
+    array[25.00]::numeric[], array[v_type]);
+  perform pg_temp.approve_fully(v_claim, true);
+  perform pg_temp.check_refused('a claim is not credited to a heading',
+    format('select public.post_expense_claim(%L)', v_claim), '%');
+  perform pg_temp.check_eq('and nothing reaches the heading',
+    (select count(*) from public.gl_lines l
+       join public.accounts a on a.id = l.account_id
+      where a.org_id = v_other and a.code = '2120'), 0);
+end $$;
+
+-- ---------------------------------------------------------------------
 -- `post_expense_claim` still works after 0089 withdrew `create_gl_entry`
 --
 -- It calls `create_gl_entry`, which `authenticated` no longer holds.
