@@ -412,6 +412,21 @@ page and renumbering would quietly break the reference.
     read-only): CI run for `700963a9` green; in production a year
     commencing 1 January 2025 reads PD 10/2024 (RM1m, 10, any two) and
     one commencing 31 December 2024 reads PD 3/2018.
+19. ~~Anybody signed in could decide a step on any company's expense
+    claim.~~ **Raised and answered 6 October: fix it. Built in `0752`.**
+    `app.may_decide_claim_step` answered the manager's and the unit
+    head's step with `approver_employee_id = v_me`, and for a caller
+    with no employee record in the claim's company -- HR or an
+    accountant off the payroll, or a user of ANOTHER company -- `v_me`
+    is null and the answer was NULL, not false. `decide_claim_step`
+    asked `if not ...`, which NULL slips through: such a caller could
+    approve or REJECT that step, given the claim's id. Reproduced
+    locally before the fix. Production had **no `claim_approvals` rows
+    at all**, so nothing was decided this way. Both ends closed:
+    `coalesce(..., false)` in the helper, `is not true` at the door. A
+    search for the same shape -- boolean guards ending in a CASE that
+    can go NULL -- found only `can_attach_to` and
+    `can_read_attachment`, and both end `else false` over `exists`.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -426,6 +441,47 @@ its own section: whether a given platform advertises the rotation
 extension at all. The engine now says which case a real call is in.
 
 **Do not start task #11, the MIA headless scraper.**
+
+## `0752`, and the claim chain swept, 6 October
+
+The leave cycle's other half and the expense claim path, function by
+function:
+
+| Function | Migration | Killed | Equivalent | Added to |
+| --- | --- | --- | --- | --- |
+| `decide_leave_request` | `0037` | 19 / 19 | -- | `leave_year_shapes.sql` |
+| `app.roll_leave_year` | `0058` | 19 / 20 | 1 (NOT NULL cap) | `leave_year_shapes.sql` |
+| `post_expense_claim` | `0049` | 21 / 21 | -- | `expense_claims.sql` |
+| `decide_claim_step` | `0752` | 21 / 23 | 2 | `claim_approval_chain.sql` |
+| `app.may_decide_claim_step` | `0752` | 12 / 14 | 2 | `claim_approval_chain.sql` |
+| `app.build_claim_chain` | `0121` | 20 / 20 | -- | `claim_approval_chain.sql` |
+| `app.assert_claim_caps` | `0364` | 23 / 23 | -- | `claim_caps.sql` |
+
+Every equivalent is written into its mutants file with the reason.
+
+**What the sweep of `may_decide_claim_step` found is item 19 above.**
+Ten of its twelve mutants survived both files at first, and for one
+reason: every role step in them was cleared by the OWNER, who is an
+administrator and may act at any stage, so nothing could tell HR's step
+from finance's. The rule-by-rule block gave each stage somebody holding
+exactly one role -- and the first of its assertions, "HR may not decide
+the manager's step", failed, because the answer was NULL. With both of
+`0119`'s definitions put back the file fails there; with `0752` it
+passes.
+
+Two things worth knowing that are NOT defects:
+
+* `post_expense_claim`'s `not is_group` is the only thing between a
+  claim and a 2120 heading. The ledger takes a line on a heading (manual
+  journals post to 1120 as a ledger account, by design -- "The twelve
+  accounts" below). With the guard gone the claim posted there.
+* `post_expense_claim` reads the paying bank account by id alone. A
+  neighbour's account is refused, but by `gl_lines_account_same_org`,
+  not by the function. Asserted, so a change to that key is caught.
+
+And one trap paid for: **editing a test file while a sweep reads it.**
+The harness re-reads the file for every mutant, so a half-written
+assertion killed the control and voided the run. Sweep, then edit.
 
 ## `0750`, and the rest of `0739`'s functions, 6 October
 

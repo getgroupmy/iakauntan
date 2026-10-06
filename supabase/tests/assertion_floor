@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-15200
+15296
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -981,3 +981,11 @@
 # ci.yml list: 386 files, 15200 assertions (15199 with search_path.sql
 # stopped early by a pin a sweep had dropped -- see mutate_sql.py's
 # `settings()`; 15200 once it was put back).
+#
+# 15200 -> 15296, 6 October: the leave cycle's other half
+# (decide_leave_request, roll_leave_year), post_expense_claim, and the
+# claim chain (decide_claim_step, may_decide_claim_step,
+# build_claim_chain, assert_claim_caps), rule by rule -- and 0752, which
+# the may_decide_claim_step block found: a NULL from it was taken as
+# permission. Measured against a local cluster at 0752 over the ci.yml
+# list: 386 files, 15296 assertions; run_locally.sh agrees.

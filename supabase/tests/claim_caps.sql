@@ -276,4 +276,79 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- assert_claim_caps, rule by rule
+--
+-- A sweep of `0364`'s definition left five mutants alive, from two
+-- things the fixture never had: a SECOND employee, so "the claims
+-- already in this month" could mean everybody's; and a claim that was
+-- anything but submitted, so whether a rejected one still spends the
+-- allowance, or an approved one stops spending it, was never asked.
+--
+-- And `claim_refused` above returns true on ANY error, so it cannot say
+-- a refusal was the cap's. These read the words.
+-- ---------------------------------------------------------------------
+create or replace function pg_temp.cap_refusal(
+  p_org uuid, p_emp uuid, p_type uuid, p_no text, p_on date, p_amount numeric)
+returns text language plpgsql as $$
+begin
+  insert into public.expense_claims
+    (org_id, claim_no, employee_id, claim_date, title, status, total_amount)
+  values (p_org, p_no, p_emp, p_on, 'Claim', 'submitted', p_amount);
+  insert into public.expense_claim_lines
+    (org_id, claim_id, line_no, claim_type_id, expense_date, description, amount)
+  select p_org, c.id, 1, p_type, p_on, 'Claim', p_amount
+    from public.expense_claims c where c.org_id = p_org and c.claim_no = p_no;
+  return null;
+exception when check_violation then
+  return sqlerrm;
+end $$;
+
+do $$
+declare
+  v_org uuid; v_me uuid; v_colleague uuid; v_fuel uuid; v_glasses uuid;
+begin
+  v_org := pg_temp.test_org('Had Tuntutan Peraturan Sdn Bhd');
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, employment_status)
+  values (v_org, 'E-1', 'Siti', date '2020-01-01', 'active')
+  returning id into v_me;
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, employment_status)
+  values (v_org, 'E-2', 'Zul', date '2020-01-01', 'active')
+  returning id into v_colleague;
+  insert into public.claim_types (org_id, code, name, monthly_cap)
+  values (v_org, 'FUEL', 'Petrol', 300) returning id into v_fuel;
+  insert into public.claim_types (org_id, code, name, annual_cap)
+  values (v_org, 'GLAS', 'Spectacles', 500) returning id into v_glasses;
+
+  -- A colleague's allowance is theirs. Zul spends 250 of petrol in
+  -- March and 400 on spectacles in 2026; Siti still has all of hers.
+  perform pg_temp.check_true('a colleague''s petrol goes in',
+    pg_temp.cap_refusal(v_org, v_colleague, v_fuel, 'R-1', date '2026-03-02', 250) is null);
+  perform pg_temp.check_true('and their spectacles',
+    pg_temp.cap_refusal(v_org, v_colleague, v_glasses, 'R-2', date '2026-02-02', 400) is null);
+  perform pg_temp.check_true('while my month is my own',
+    pg_temp.cap_refusal(v_org, v_me, v_fuel, 'R-3', date '2026-03-03', 200) is null);
+  perform pg_temp.check_true('and my year',
+    pg_temp.cap_refusal(v_org, v_me, v_glasses, 'R-4', date '2026-03-03', 300) is null);
+
+  -- A REJECTED claim spent nothing. Siti's 200 of March petrol is
+  -- refused by her manager; the next 250 fits under 300.
+  update public.expense_claims set status = 'rejected'
+   where org_id = v_org and claim_no in ('R-3', 'R-4');
+  perform pg_temp.check_true('a rejected claim gives the month back',
+    pg_temp.cap_refusal(v_org, v_me, v_fuel, 'R-5', date '2026-03-10', 250) is null);
+  perform pg_temp.check_true('and the year',
+    pg_temp.cap_refusal(v_org, v_me, v_glasses, 'R-6', date '2026-05-10', 450) is null);
+
+  -- An APPROVED claim has spent it. R-5's 250 is approved; another 100
+  -- would make 350 of a 300 allowance.
+  update public.expense_claims set status = 'approved'
+   where org_id = v_org and claim_no = 'R-5';
+  perform pg_temp.check_true('an approved claim still counts against the month',
+    pg_temp.cap_refusal(v_org, v_me, v_fuel, 'R-7', date '2026-03-20', 100)
+      like '%capped at 300.00 a month%');
+end $$;
+
 rollback;
