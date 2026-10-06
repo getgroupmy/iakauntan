@@ -12,8 +12,9 @@ import '../secretarial/person_editor.dart' show StatutoryDateField;
 ///
 /// `fs_filings` holds the auditor's name and firm number, who signed
 /// the report and when, the opinion, whether going concern was
-/// emphasised, the headcount the PD 3/2018 threshold test needs, and
-/// the dates the directors approved and circulated them. `createFsFiling`
+/// emphasised, the headcount the threshold test needs (PD 3/2018, and
+/// PD 10/2024 from 2025), and the dates the directors approved and
+/// circulated them. `createFsFiling`
 /// sets three of those, once, and `updateFsFiling` had no caller — so
 /// every one of the rest could never be entered at all, and the
 /// exemption card answered "cannot tell" forever because the headcount
@@ -22,8 +23,8 @@ import '../secretarial/person_editor.dart' show StatutoryDateField;
 const List<String> kFrameworks = ['mpers', 'mfrs'];
 
 /// `unaudited` is not the same as `audit_exempt`. A company that
-/// qualifies under PD 3/2018 and claims it files unaudited accounts on
-/// that ground; one that simply has not had them audited is something
+/// qualifies under the Registrar's practice directive and claims it
+/// files unaudited accounts on that ground; one that simply has not had them audited is something
 /// else, and MBRS asks which.
 const List<String> kAuditStatuses = ['audited', 'audit_exempt', 'unaudited'];
 

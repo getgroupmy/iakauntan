@@ -487,8 +487,11 @@ class _ExemptionCard extends ConsumerWidget {
             ),
             const SizedBox(height: Space.xs),
             Text(
-              'Practice Directive 3/2018, tested over this financial year '
-              'and the two before it.',
+              // 0751. Which directive is decided by when the financial
+              // year commenced; each ground's own line names it.
+              'The Registrar\'s practice directive for this financial year '
+              '(3/2018 before 2025, 10/2024 from 2025), tested over this '
+              'year and the two before it.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: Space.md),

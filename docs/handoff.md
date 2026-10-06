@@ -392,6 +392,23 @@ page and renumbering would quietly break the reference.
     the rest. Production has no trial company today (all 18 are
     `active`, 6 October).
 
+18. ~~The audit exemption is tested under a superseded directive.~~
+    **Raised and answered 6 October: implement Practice Directive
+    10/2024. Built in `0751`.** `fs_audit_exemption` tested the threshold
+    ground under PD 3/2018 (revenue <= RM100k, assets <= RM300k, <= 5
+    staff, ALL THREE). SSM's PD 10/2024 replaced it for financial years
+    commencing on or after 1 January 2025: ANY TWO of the three, phased
+    RM1m/RM1m/10 (2025), RM2m/RM2m/20 (2026), RM3m/RM3m/30 (2027 on).
+    All seven filings in production commenced in 2025 or later, and the
+    old test is strictly harder, so qualifying companies were being told
+    an audit was required. **Two readings are interpretation, and want
+    checking against the directive's own text** -- the phase is chosen
+    by when the year being filed COMMENCED and applied to its two prior
+    years too; and the dormant and zero-revenue grounds are unchanged.
+    The firm commentary that would settle the first could not be read:
+    `hhq.com.my` is refused by the egress proxy (reported, not routed
+    around). Sources used: search results summarising SSM's announcement
+    of 16 December 2024.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
