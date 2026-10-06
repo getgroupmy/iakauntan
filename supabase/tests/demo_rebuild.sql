@@ -475,6 +475,103 @@ begin
       where org_id = v_sinar and is_active));
 
   -- --------------------------------------------------------------
+  -- What the cash builders promise -- the 2026-10-06 sweep
+  --
+  -- `app.demo_sinar_bank` and `app.demo_purchases` each move money in
+  -- several ways that nothing here looked at: eight of thirteen
+  -- deliberate breakages survived the whole demo suite. A prospect
+  -- reads these numbers before anything else.
+  -- --------------------------------------------------------------
+  perform pg_temp.check_eq('Sinar''s paid-up capital is RM 700,000',
+    (select coalesce(sum(l.credit - l.debit), 0) from public.gl_lines l
+       join public.gl_entries e on e.id = l.entry_id
+       join public.accounts a on a.id = l.account_id
+      where e.org_id = v_sinar and e.status = 'posted' and a.code = '3100'),
+    700000.00);
+
+  perform pg_temp.check_eq(
+    'every receipt Sinar shows is posted, not a draft that looks collected',
+    (select count(*) from public.receipts
+      where org_id = v_sinar and gl_entry_id is null), 0::bigint);
+
+  -- What `demo_sinar_bank` settles is the OLDER paper: invoices at
+  -- least 45 days old, bills at least 60. "Something is still
+  -- outstanding" cannot see that rule broken, because builders that run
+  -- after it raise newer invoices and bills of their own -- the 2026-10-06
+  -- sweep made it settle everything and both "outstanding" checks still
+  -- held. So ask what each settlement settled.
+  perform pg_temp.check_eq(
+    'Sinar''s receipts settle invoices at least 45 days old, and no newer',
+    (select count(*) from public.receipts r
+       join public.payment_allocations pa on pa.receipt_id = r.id
+       join public.sales_documents d on d.id = pa.invoice_id
+      where r.org_id = v_sinar and r.reference like 'Settlement of %'
+        and d.doc_date > app.today() - 45), 0::bigint);
+  perform pg_temp.check_eq(
+    'and its supplier payments bills at least 60 days old, and no newer',
+    (select count(*) from public.purchase_payments p
+       join public.payment_allocations pa on pa.payment_id = p.id
+       join public.purchase_documents d on d.id = pa.bill_id
+      where p.org_id = v_sinar and p.reference like 'Settlement of %'
+        and d.doc_date > app.today() - 60), 0::bigint);
+  -- The positive control: it did settle some, so the zeros above are
+  -- about which, not about whether.
+  perform pg_temp.check_true('-- and it did settle some of each',
+    exists (select 1 from public.receipts
+             where org_id = v_sinar and reference like 'Settlement of %')
+    and exists (select 1 from public.purchase_payments
+                 where org_id = v_sinar and reference like 'Settlement of %'));
+
+  -- Money dated in the future is the one thing a demo ledger cannot
+  -- show: the bank feed, the aging and the cash forecast all read it as
+  -- already happened.
+  perform pg_temp.check_eq(
+    'no demo invoice, receipt or payment is dated after today',
+    (select count(*) from public.receipts r
+       join public.organizations o on o.id = r.org_id
+      where o.is_demo and r.receipt_date > app.today())
+    + (select count(*) from public.purchase_payments p
+         join public.organizations o on o.id = p.org_id
+        where o.is_demo and p.payment_date > app.today())
+    + (select count(*) from public.sales_documents d
+         join public.organizations o on o.id = d.org_id
+        where o.is_demo and d.doc_type = 'invoice' and d.status <> 'draft'
+          and d.doc_date > app.today()), 0::bigint);
+
+  -- The cache check above is Sinar's alone; `demo_purchases` keeps
+  -- every OTHER company's, and nothing asked whether it did.
+  select string_agg(x.name, ', ' order by x.name) into v_missing
+    from (select o.name,
+                 (select coalesce(sum(b.current_balance), 0)
+                    from public.bank_accounts b where b.org_id = o.id) as cached,
+                 (select coalesce(sum(l.debit - l.credit), 0)
+                    from public.gl_lines l
+                    join public.gl_entries e on e.id = l.entry_id
+                    join public.bank_accounts b on b.account_id = l.account_id
+                   where e.org_id = o.id and e.status = 'posted'
+                     and b.org_id = o.id) as ledger
+            from public.organizations o where o.is_demo) x
+   where x.cached <> x.ledger;
+  perform pg_temp.check_true(
+    'every demo company''s cached bank balance equals its ledger'
+    || coalesce(': not ' || v_missing, ''), v_missing is null);
+
+  -- A cash box pays in cash. Positive control first: there are such
+  -- payments, so the zero below is about their mode and not their
+  -- absence.
+  perform pg_temp.check_true('-- some demo supplier is paid out of a cash box',
+    exists (select 1 from public.purchase_payments p
+              join public.bank_accounts b on b.id = p.bank_account_id
+              join public.organizations o on o.id = p.org_id
+             where o.is_demo and b.account_type = 'cash'));
+  perform pg_temp.check_eq('and every such payment says it was cash',
+    (select count(*) from public.purchase_payments p
+       join public.bank_accounts b on b.id = p.bank_account_id
+       join public.organizations o on o.id = p.org_id
+      where o.is_demo and b.account_type = 'cash'
+        and p.payment_mode_code <> '01'), 0::bigint);
+
+  -- --------------------------------------------------------------
   -- And no demo account on the heading -- 0730
   --
   -- Four seeders used to insert one there, and the trigger refuses it
@@ -967,6 +1064,42 @@ begin
               select matter_id from public.client_account_transactions
                where org_id = v_guaman and transaction_type = 'payment'
                limit 1)));
+
+    -- The figures the builder says it made, asserted as figures. Every
+    -- check above is a relation between two numbers -- the register
+    -- against the ledger, a matter against itself -- and six of
+    -- fourteen deliberate breakages of `app.demo_legal_guaman` moved
+    -- both sides together and survived (the 2026-10-06 sweep).
+    --
+    -- RM 50,000 in, RM 42,300 out to the vendor's solicitors, RM 4,500
+    -- of fee transferred to office: RM 3,200 left. The builder's own
+    -- return message says so.
+    perform pg_temp.check_eq('the client account holds RM 3,200',
+      (select current_balance from public.bank_accounts
+        where id = v_client_bank), 3200.00);
+
+    -- The tenancy matter's hours: 90 + 120 + 30 chargeable minutes at
+    -- RM 450 an hour is RM 1,800. The 20-minute file note is not
+    -- chargeable and must not be on the bill.
+    perform pg_temp.check_eq(
+      'the tenancy matter is billed for its chargeable hours and no more',
+      -- Found through the time it billed: `bill_time_internal` puts
+      -- the matter on the time entries it marks billed, not on the
+      -- invoice header.
+      (select d.subtotal from public.sales_documents d
+        where d.id = (select distinct t.invoice_id
+                        from public.time_entries t
+                        join public.matters m on m.id = t.matter_id
+                       where t.org_id = v_guaman
+                         and m.matter_no = 'M-2026-002'
+                         and t.invoice_id is not null)), 1800.00);
+
+    -- And the corporate matter is on an agreed fee it has run over:
+    -- 15 hours at RM 450 is RM 6,750 of time against RM 6,000 agreed,
+    -- which is the over-budget warning the matter screen exists to show.
+    perform pg_temp.check_eq('the corporate matter has an agreed fee',
+      (select agreed_fee from public.matters
+        where org_id = v_guaman and matter_no = 'M-2026-003'), 6000.00);
   end;
 
   -- --------------------------------------------------------------

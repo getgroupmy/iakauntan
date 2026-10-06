@@ -14487,9 +14487,36 @@ average, which an outbound movement does not move beyond sixth-decimal
 rounding. `item_bundles.sql` section 4b posts the two-line invoice and
 asserts 319 in movements, 5200 and 1310.
 
-40 of 45 money movers now have a mutants file. Left: the four demo
-builders (`demo_legal_guaman`, `demo_sinar_bank`, `demo_purchases`,
-`demo_practice_books`) and `move_document_bundles` (trigger-only).
+**All 45 money movers now have a mutants file.** The last five:
+
+* `move_document_bundles` (0745): 11 mutants, 10 killed, 1 equivalent
+  (the guard is in its callee, `pos_recipe_components`). It also found
+  the defect above. `item_bundles.sql` 4b/4c.
+* `demo_sinar_bank` + `demo_purchases` (`mutants/demo_cash.py`): 13
+  mutants, 10 killed, 3 equivalent. The settlement windows survived
+  "something is still outstanding" because builders that run later
+  raise newer paper; `demo_rebuild.sql` now asserts what each
+  settlement settled.
+* `demo_practice_books` + `demo_legal_guaman`
+  (`mutants/demo_practice.py`): 14 mutants, 13 killed, 1 equivalent.
+  Every Guaman check was a relation between two numbers, and six
+  breakages moved both sides; the figures are now asserted as figures.
+
+**A correction that nearly shipped:** I first "fixed" demo_rebuild's
+"some invoices are still outstanding" check to read `balance_amount`,
+with a comment saying it counted settled invoices. It did not. A
+settled invoice's status is `completed`, so `status = 'posted'` already
+means outstanding. A rolled-back probe of the rebuilt data showed it,
+and the change was reverted before commit. **Probe the data before
+saying an assertion is weak.**
+
+**And a process slip:** I ran `demo_rebuild.sql` by hand while a sweep
+owned the cluster. It rolled back and passed, so no result is wrong,
+but a sweep swaps function bodies in and out of the shared database.
+Don't do it.
+
+What is left in task #86 is the earlier gaps: 7 open `pos_return`
+mutants and 18 `pos_deplete` ones, listed in their mutants files.
 
 ## 5 October: the harness got a pre-flight, and it found three bad mutants
 

@@ -10,8 +10,37 @@
 #       supabase/tests/demo_rebuild.sql \
 #       supabase/tests/mutants/demo_cash.py
 #
-# RESULT: the sweep was started on 6 October and this header is
-# rewritten with the kill sheet when it ends. Pre-flight clean.
+# RESULT, 6 October: 13 mutants, 10 killed, 3 EQUIVALENT, control alive.
+# Against the demo files as they were: 5 killed (demo_rebuild,
+# demo_modules, money_names_the_account). demo_rebuild.sql gained the
+# assertions that kill the next five:
+#
+#   - Sinar's capital as a figure (RM 700,000)
+#   - every Sinar receipt POSTED (the old check counted receipts)
+#   - a cash box pays in cash, across every demo company
+#   - the settlement windows: receipts settle invoices at least 45 days
+#     old and payments bills at least 60. "Something is outstanding"
+#     could not see either broken, because builders that run AFTER this
+#     one raise newer paper of their own.
+#
+# EQUIVALENT, each for a reason in the code:
+#   - "a receipt can be dated in the future": the loop only takes
+#     invoices at least 45 days old, so doc_date + 21 is always past.
+#     The `least(..., today)` is belt and braces. (The code's own shape.)
+#   - "the builder leaves the owner signed in": set_config(..., true) is
+#     transaction-local, and app.demo_rebuild clears it before it
+#     returns. (The caller.)
+#   - "the bank's shown balance is never synced" in demo_purchases: it
+#     only posts a bill and a supplier payment, and posting a payment
+#     maintains bank_accounts.current_balance itself -- the every-demo-
+#     company cache check passes with the sync deleted. (The callee.)
+#
+# A CORRECTION made on the way, recorded because it nearly shipped: the
+# first version of these assertions "fixed" the existing "some invoices
+# are still outstanding" check to read balance_amount, with a comment
+# saying the old one counted settled invoices. It did not: a settled
+# invoice's status is `completed`, so `status = 'posted'` already means
+# outstanding. Reverted before commit.
 
 m("Sinar's capital is paid into the bank heading, not its own account",
   "demo_sinar_bank",

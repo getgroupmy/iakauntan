@@ -177,6 +177,16 @@ begin
     (select count(*) from public.receipts r
        join public.organizations o on o.id = r.org_id
       where o.firm_id = v_firm and r.status = 'posted') > 0);
+  -- Against them, not merely near them. A receipt nobody applied is
+  -- money on account: the invoice stays open, the customer looks as if
+  -- they owe it, and the aging and the statement disagree with the
+  -- bank. The 2026-10-06 sweep dropped the allocation and this file
+  -- did not notice.
+  perform pg_temp.check_eq('and every one of them applied in full',
+    (select count(*)::integer from public.receipts r
+       join public.organizations o on o.id = r.org_id
+      where o.firm_id = v_firm and r.status = 'posted'
+        and coalesce(r.unapplied_amount, 0) <> 0), 0);
 
   -- The ledger balances in every one of them. A demo tenant that cannot
   -- produce a trial balance is the half-built tenant this project has

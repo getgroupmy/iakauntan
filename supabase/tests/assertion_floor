@@ -864,4 +864,16 @@
 # and a credit note's movement TYPE. 10 of 10 killable, 1 equivalent.
 # Measured:
 # `all SQL assertions passed (385 files, 14865 assertions executed)`.
-14865
+#
+# 14865 -> 14878: the last four of the 45, the demo builders. 27
+# mutants across demo_cash.py and demo_practice.py: 23 killed, 4
+# equivalent. demo_rebuild.sql gained Sinar's capital, posted receipts,
+# a cash box paying in cash, the 45- and 60-day settlement windows
+# (later builders' newer paper kept "something is outstanding" true
+# with everything settled), nothing dated after today, every demo
+# company's bank cache, and Guaman Aziz's figures as figures -- every
+# check there had been a relation, and six breakages moved both sides.
+# demo_practice.sql gained "every receipt applied in full".
+# Measured:
+# `all SQL assertions passed (385 files, 14878 assertions executed)`.
+14878

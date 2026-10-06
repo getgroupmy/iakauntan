@@ -10,8 +10,27 @@
 #       supabase/tests/demo_practice.sql \
 #       supabase/tests/mutants/demo_practice.py
 #
-# RESULT: the sweep was queued on 6 October behind demo_cash.py's, and
-# this header is rewritten with the kill sheet when it ends.
+# RESULT, 6 October: 14 mutants, 13 killed, 1 EQUIVALENT, control alive.
+# Against the demo files as they were: 5 killed. New assertions:
+#
+#   demo_rebuild.sql  Guaman Aziz's figures as figures -- RM 3,200 left
+#                     in the client account (kills the unposted payment
+#                     out and the tenth-sized fee transfer), the tenancy
+#                     bill at RM 1,800 (kills the billed file note, the
+#                     tenth rate and the narrowed window), the agreed
+#                     fee of RM 6,000; and no demo INVOICE dated after
+#                     today (the check covered receipts and payments)
+#   demo_practice.sql every practice receipt applied in full
+#
+# Every Guaman check before this was a RELATION -- register against
+# ledger, a matter against itself -- and six breakages moved both sides
+# together.
+#
+# EQUIVALENT: "the retainer is invoiced to whichever revenue account
+# comes first" (account_id null). The builder passes 4100 explicitly
+# and a line with no account falls back to 4100, so the ledger is the
+# same either way. The fixture cannot tell them apart and, for a demo,
+# nothing needs to.
 
 m("the retainer is invoiced to whichever revenue account comes first",
   "demo_practice_books",
