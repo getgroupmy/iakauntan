@@ -272,6 +272,35 @@ page and renumbering would quietly break the reference.
    Say which and it is a short change. The one real ledger line on the
    heading is a separate thing: `EXP-2026-00001` at GESWANT & CO, item
    2 above.
+9. **The aged listings ignore three of the six ways an invoice or a
+   bill is settled** (found 6 October, by the mutation sweep of
+   `report_ar_aging` / `report_ap_aging`, and measured, not read).
+   Both reports count an allocation only when it comes from a receipt
+   or payment, a credit note, or (payables only) a withholding
+   certificate. A **contra** (`0272`), a **deposit applied** (`0273`)
+   and a **post-dated cheque** (`0275`) each credit the control account
+   in the ledger and write a `payment_allocations` row, and the
+   listing reads none of them. All three post-date `0096`, where the
+   listing was written, and `0739` re-created it without them. One
+   invoice settled each way: **the listing said 7,000.00 and 1210 said
+   2,200.00**; on the payables side 700.00 against 2110's 400.00. Every
+   test of those three features asserts `balance_amount` — "the aged
+   listing stops chasing him" in `post_dated_cheques.sql` is a comment
+   over an assertion on the document, not on the report. The fix is a
+   migration (production), so it waits for a yes. The probe is in this
+   session's scratchpad as `probe_aging.sql`; it is twenty lines to
+   rebuild.
+10. **The SST return declares a foreign-currency invoice in its own
+    currency.** `report_sst_summary` and `app.sst_output_due` — which
+    `sst_taxable_periods` and `sst_return_lines`, i.e. the SST-02
+    screen, read — sum `line_subtotal` and `tax_amount` with no
+    `exchange_rate`. A USD 1,000.00 invoice at 4.20 with 10% sales tax
+    puts **RM420.00** in 2130 and **100.00** on the return. The Flutter
+    side passes the figure through (`repository.dart`, `report_sst_summary`
+    and `sst_return_lines`). Also a production migration, so it also
+    waits. Whether any real company has a taxed foreign-currency
+    document was NOT checked: the Supabase connector answered
+    "Unauthorized" on 6 October.
 
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the

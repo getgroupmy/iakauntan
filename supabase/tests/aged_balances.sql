@@ -439,6 +439,86 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- The receivables listing, rule by rule
+--
+-- A mutation sweep of `report_ar_aging` found these unasserted, with
+-- nine test files reaching the function: a debit note, and what was
+-- paid against one; a deleted invoice; and money that has not reached
+-- the ledger -- a receipt keyed but never posted, one posted and then
+-- deleted, and a credit note never posted -- each of which can carry an
+-- allocation, because `app.apply_allocation` checks whose money it is
+-- and how much, and not whether it was ever posted.
+--
+-- Not asserted, because no data can tell them apart: an allocation
+-- filed under another company (`payment_allocations` has a composite
+-- foreign key to the document's company and refuses it, 23503), and
+-- `coalesce(exchange_rate, 1)` (the column is NOT NULL on all three
+-- tables it is read from).
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.aged_org('Rules AR Sdn Bhd');
+  v_cust uuid; v_inv uuid; v_gone uuid; v_dn uuid; v_cn uuid;
+  v_draft uuid; v_rcp uuid;
+begin
+  v_cust := pg_temp.party(v_org, 'C-001', 'Rules Bhd', 'customer');
+  v_inv := pg_temp.sales_doc(v_org, v_cust, 'invoice', 'INV-1', 1000,
+                             date '2026-02-01', date '2026-03-03');
+
+  -- A debit note adds to what is owed and is paid like an invoice.
+  v_dn := pg_temp.sales_doc(v_org, v_cust, 'debit_note', 'DN-1', 300,
+                            date '2026-02-10', date '2026-03-12');
+  perform pg_temp.receipt(v_org, v_cust, 'RCP-DN', 100, date '2026-02-20',
+                          v_dn);
+  perform pg_temp.check_eq('a debit note is on the listing, less what paid it',
+    (select outstanding from public.report_ar_aging(v_org, date '2026-03-31')
+      where doc_no = 'DN-1'), 200);
+
+  -- A posted invoice deleted afterwards is not chased.
+  v_gone := pg_temp.sales_doc(v_org, v_cust, 'invoice', 'INV-GONE', 700,
+                              date '2026-02-01', date '2026-03-03');
+  update public.sales_documents set deleted_at = now() where id = v_gone;
+  perform pg_temp.check_eq('a deleted invoice is not on the listing',
+    (select count(*) from public.report_ar_aging(v_org, date '2026-03-31')
+      where doc_no = 'INV-GONE'), 0);
+
+  -- A receipt keyed and matched but never posted: no money moved, so
+  -- the invoice is still owed in full and the receipt is no line.
+  insert into public.receipts
+    (org_id, receipt_no, receipt_date, contact_id, amount, unapplied_amount,
+     currency, exchange_rate, bank_account_id)
+  values (v_org, 'RCP-DRAFT', date '2026-02-15', v_cust, 250, 250, 'MYR', 1,
+          pg_temp.a_bank_account(v_org))
+  returning id into v_draft;
+  insert into public.payment_allocations (org_id, receipt_id, invoice_id, amount)
+  values (v_org, v_draft, v_inv, 250);
+
+  -- A credit note raised and matched but never posted: the same.
+  v_cn := pg_temp.sales_doc(v_org, v_cust, 'credit_note', 'CN-DRAFT', 50,
+                            date '2026-02-16', null, false);
+  insert into public.payment_allocations (org_id, credit_note_id, invoice_id, amount)
+  values (v_org, v_cn, v_inv, 50);
+
+  -- And one posted and then deleted.
+  v_rcp := pg_temp.receipt(v_org, v_cust, 'RCP-GONE', 150, date '2026-02-17',
+                           v_inv);
+  update public.receipts set deleted_at = now() where id = v_rcp;
+
+  perform pg_temp.check_eq(
+    'only money that reached the ledger settles an invoice',
+    (select outstanding from public.report_ar_aging(v_org, date '2026-03-31')
+      where doc_no = 'INV-1'), 1000);
+  perform pg_temp.check_eq('a receipt never posted is not a line',
+    (select count(*) from public.report_ar_aging(v_org, date '2026-03-31')
+      where doc_no = 'RCP-DRAFT'), 0);
+  perform pg_temp.check_eq('nor is one posted and deleted',
+    (select count(*) from public.report_ar_aging(v_org, date '2026-03-31')
+      where doc_no = 'RCP-GONE'), 0);
+
+  perform pg_temp.sign_out();
+end $$;
+
+-- ---------------------------------------------------------------------
 -- Who can read a customer ledger
 -- ---------------------------------------------------------------------
 do $$
