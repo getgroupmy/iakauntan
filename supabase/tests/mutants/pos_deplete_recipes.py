@@ -26,7 +26,7 @@
 # sell items with no recipe, so they reach the function and return at the
 # first `having sum(n.quantity) > 0`.
 #
-# NOT A MUTANT -- A DEFECT, reported in `docs/handoff.md` and NOT fixed:
+# NOT A MUTANT -- A DEFECT, reported in `docs/handoff.md`, FIXED in 0746:
 # the depletion half has a whole `union all` branch over
 # `pos_sale_line_modifiers`, and the return half HAS NO REFERENCE TO ANY
 # MODIFIER TABLE. Measured on `pos_recipes.sql`'s own section-7 fixture:

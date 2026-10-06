@@ -892,4 +892,16 @@
 # reaches), and no movement of zero.
 # Measured:
 # `all SQL assertions passed (385 files, 14900 assertions executed)`.
-14900
+#
+# 14900 -> 14906: 0746, a credited plate gives back its modifiers'
+# ingredients too. pos_recipes.sql: 9b now expects two eggs back where
+# it expected one, and a duplicate credit finding nothing owing; its two
+# date checks moved to section 10, onto a credit that still has food to
+# return. Section 10 gained eight: four eggs back on a full credit, two
+# for one plate of two, the two dates, and both double-return guards
+# re-earned on a partial credit -- the fix had un-killed them, because
+# they were asserted on a duplicate that only had something to claim
+# because of the defect.
+# Measured:
+# `all SQL assertions passed (385 files, 14906 assertions executed)`.
+14906

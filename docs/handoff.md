@@ -14532,11 +14532,30 @@ over-take runs at COMMIT, and a rolled-back test file never reaches it.
 
 **Task #86 is complete.** All 45 money movers are swept. Every survivor
 is either killed by a new assertion or marked equivalent with its
-reason. The three findings awaiting the user (retired accounts still
-posted to, reverse_gl_entry's six columns, the credited plate's
-modifier ingredients) are unchanged. Section 10 deliberately does not
-assert eggs on a credit, because the return half not giving back
-modifier ingredients is that third finding.
+reason.
+
+### The credited plate's modifiers: FIXED in 0746 (the user's choice)
+
+Of the three findings, the user chose this one.
+`0746_a_credited_plate_gives_back_its_extras.sql` gives
+`pos_return_recipes` the modifier branch the depletion has had since
+0250. A credit line does not say which sale line it reverses
+(`credit_sales_invoice` renumbers its lines), so modifiers come back
+**per dish**: at the rate the sale took them per plate of that dish,
+times the plates credited. That is exact when the dish was on one line,
+an average across its lines otherwise, and capped either way by "never
+more than went out". `pos_recipes.sql` 9b now asserts two eggs back,
+not one, and a duplicate credit note finds nothing owing. Section 10
+asserts all four eggs back on a full credit, and two for one plate of
+two (with a discount line naming the dish not counted as a plate).
+
+**The fix un-killed two mutants.** Both double-return guards had been
+asserted on a duplicate credit that still had the defect's missing egg
+to claim. Section 10's partial credit re-earns them. A test that leans
+on a defect stops testing when the defect goes.
+
+**Still awaiting the user:** retired accounts still posted to, and
+reverse_gl_entry dropping six columns.
 
 ## 5 October: the harness got a pre-flight, and it found three bad mutants
 

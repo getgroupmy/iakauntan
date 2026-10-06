@@ -631,9 +631,14 @@ begin
     select round(quantity_on_hand, 4) into v_before
       from public.items where id = v_egg;
     v_rtn := public.credit_sales_invoice(v_inv2, null, 'Sent it back');
-    perform pg_temp.check_eq('crediting the plate puts its own egg back',
+    -- TWO eggs: the plate's own, and the extra one its modifier took.
+    -- Until 0746 this said one, because the return half had no
+    -- reference to any modifier table -- an extra egg sold was an egg
+    -- never given back.
+    perform pg_temp.check_eq(
+      'crediting the plate puts back its own egg AND its modifier''s',
       (select round(i.quantity_on_hand, 4) from public.items i where i.id = v_egg),
-      v_before + 1);
+      v_before + 2);
     select id into v_note from public.sales_documents
      where original_invoice_id = v_inv2 and doc_type = 'credit_note'
      order by created_at limit 1;
@@ -745,38 +750,21 @@ begin
        uom_code, unit_price, item_id)
     values (v_org, v_note2, 1, 'item', 'Nasi again', 1, 'C62', 12.00, v_nasi);
 
-    -- What a second credit may claim, and where it stops. The first
-    -- draft asserted that it returns NOTHING, on the assumption that a
-    -- full credit had already brought everything back. It had not --
-    -- and the reason is the defect reported in `docs/handoff.md`: the
-    -- first credit returned the dish's own egg and not the MODIFIER's,
-    -- so one egg of the two was still owing and a duplicate credit note
-    -- could legitimately claim it. The clamp was right; the premise was
-    -- wrong.
-    --
-    -- That is the defect's second-order consequence, and it is worse
-    -- than the shortfall alone: the missing stock comes back only if
-    -- somebody makes a SECOND mistake.
-    perform pg_temp.check_true('a duplicate credit note claims what is still owing',
-      app.pos_return_recipes(v_modsale, v_note2) is not null);
-    perform pg_temp.check_eq('and that is the one egg the modifier left out',
+    -- What a second credit may claim: NOTHING, because the full credit
+    -- above brought everything back. Until 0746 it could claim an egg --
+    -- the first credit returned the plate's own egg and not the
+    -- modifier's, so one of the two stayed "owing", and the stock came
+    -- right only if somebody made a SECOND mistake. This file asserted
+    -- that consequence as the defect's signature; it now asserts the
+    -- opposite.
+    perform pg_temp.check_true('a duplicate credit note finds nothing still owing',
+      app.pos_return_recipes(v_modsale, v_note2) is null);
+    perform pg_temp.check_eq('and moves no egg',
       (select round(quantity_on_hand, 4) from public.items where id = v_egg),
-      v_eggs + 1);
-
-    -- MUTANT: `v_doc.doc_date` replaced by the day of the SALE, in the
-    -- movement and again in the journal. Now that the credit is dated a
-    -- day later than the sale, the two are separable.
-    perform pg_temp.check_eq('the returning movement is dated the credit note',
-      (select movement_date::text from public.stock_movements
-        where source_table = 'pos_sales' and source_id = v_modsale
-          and source_line_id = v_note2 and item_id = v_egg),
-      (pg_temp.today() + 1)::text);
-    perform pg_temp.check_eq('and so is the journal it posts',
-      (select e.entry_date::text from public.gl_entries e
-        join public.stock_movements sm on sm.gl_entry_id = e.id
-       where sm.source_table = 'pos_sales' and sm.source_id = v_modsale
-         and sm.source_line_id = v_note2 and sm.item_id = v_egg),
-      (pg_temp.today() + 1)::text);
+      v_eggs);
+    -- The dates this credit note was made to separate (it is dated the
+    -- day after the sale) are asserted in section 10 now, on a credit
+    -- that has something to return.
 
     -- MUTANT: the link `and sm.source_line_id = p_credit` dropped from
     -- the final update, which restamps the DEPLETING movements with the
@@ -787,8 +775,10 @@ begin
       (select count(distinct gl_entry_id) = 1 from public.stock_movements
         where source_table = 'pos_sales' and source_id = v_modsale
           and movement_type = 'assembly_out'));
+    -- Two journals: the depletion's and the one credit's. (Three until
+    -- 0746, when the duplicate credit still had an egg to claim.)
     perform pg_temp.check_true('which is not the return''s',
-      (select count(distinct gl_entry_id)::integer = 3
+      (select count(distinct gl_entry_id)::integer = 2
          from public.stock_movements
         where source_table = 'pos_sales' and source_id = v_modsale));
 
@@ -832,7 +822,7 @@ begin
           and source_line_id = v_note3), 0);
     perform pg_temp.check_eq('because never more comes back than went out',
       (select round(quantity_on_hand, 4) from public.items where id = v_egg),
-      v_eggs + 1);
+      v_eggs);
     -- The invariant behind that sentence, stated directly.
     perform pg_temp.check_true(
       'and what came back never exceeds what was consumed, per ingredient',
@@ -910,6 +900,9 @@ declare
 begin
   v_org := pg_temp.test_org('Warung Dua Sdn Bhd');
   perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  -- Next year's too, so a credit dated tomorrow posts on 31 December.
+  perform public.create_fiscal_year(
+    v_org, (date_trunc('year', pg_temp.today()) + interval '1 year')::date);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['pos','inventory']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
@@ -1073,9 +1066,8 @@ begin
   -- `app.pos_return_recipes` chooses the store the same way the
   -- depletion does, and its four rules were unasserted for the same
   -- reason: 9b credits a sale from the block above, whose only store is
-  -- both. Eggs are not asserted here -- the return half gives back the
-  -- plate's own egg and not the modifier's, which is a reported finding
-  -- awaiting a decision, and this block does not paper over it.
+  -- both. And since 0746 the modifiers come back too: outlet A's sale
+  -- took four eggs, two plates' own and an extra on each.
   -- ------------------------------------------------------------------
   select invoice_id into v_inv from public.pos_sales where id = v_sale_a;
   perform public.credit_sales_invoice(v_inv, null, 'Sent back');
@@ -1085,6 +1077,9 @@ begin
   perform pg_temp.check_eq('-- and not into the default',
     (select round(sl.quantity, 4) from public.stock_levels sl
       where sl.item_id = v_rice and sl.warehouse_id = v_main), 9.8::numeric);
+  perform pg_temp.check_eq('and all four eggs come back, the extras with the plates',
+    (select round(sl.quantity, 4) from public.stock_levels sl
+      where sl.item_id = v_egg and sl.warehouse_id = v_bar), 10::numeric);
 
   select invoice_id into v_inv from public.pos_sales where id = v_sale_b;
   perform public.credit_sales_invoice(v_inv, null, 'Sent back');
@@ -1113,18 +1108,25 @@ begin
     v_two  uuid;
     v_cn   uuid;
     v_before numeric;
+    v_eggs   numeric;
   begin
     v_two := public.open_pos_sale(v_reg_a);
-    perform public.add_pos_sale_line(v_two, v_nasi, 2, 10.00);
+    v_line := public.add_pos_sale_line(v_two, v_nasi, 2, 10.00);
+    perform public.add_line_modifier(v_line, v_extra);
     perform public.complete_pos_sale(
-      v_two, jsonb_build_array(jsonb_build_object('type', v_cash, 'amount', 20.00)));
+      v_two, jsonb_build_array(jsonb_build_object('type', v_cash, 'amount', 22.00)));
     select round(sl.quantity, 4) into v_before from public.stock_levels sl
      where sl.item_id = v_rice and sl.warehouse_id = v_bar;
+    select round(sl.quantity, 4) into v_eggs from public.stock_levels sl
+     where sl.item_id = v_egg and sl.warehouse_id = v_bar;
 
     insert into public.sales_documents
       (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
        exchange_rate, status, original_invoice_id)
-    values (v_org, 'credit_note', 'CN-DISC', pg_temp.today(), pg_temp.today(),
+    -- Dated the DAY AFTER the sale, so "dated the credit" and "dated
+    -- the sale" are two answers and not one (moved here from 9b, whose
+    -- dated credit has nothing left to return since 0746).
+    values (v_org, 'credit_note', 'CN-DISC', pg_temp.today() + 1, pg_temp.today() + 1,
             v_walkin, 'MYR', 1, 'draft',
             (select invoice_id from public.pos_sales where id = v_two))
     returning id into v_cn;
@@ -1140,6 +1142,62 @@ begin
       (select round(sl.quantity, 4) from public.stock_levels sl
         where sl.item_id = v_rice and sl.warehouse_id = v_bar),
       v_before + 0.2);
+    -- And one plate's eggs: its own, and the extra the sale gave EACH
+    -- plate -- two of the four, not one (the modifier forgotten) and not
+    -- four (the whole line's modifier, or the discount line counted as
+    -- a second plate).
+    perform pg_temp.check_eq('and one plate''s eggs: its own and its extra',
+      (select round(sl.quantity, 4) from public.stock_levels sl
+        where sl.item_id = v_egg and sl.warehouse_id = v_bar),
+      v_eggs + 2);
+
+    perform pg_temp.check_eq('the returning movement is dated the credit note',
+      (select string_agg(distinct movement_date::text, ',')
+         from public.stock_movements
+        where source_table = 'pos_sales' and source_id = v_two
+          and source_line_id = v_cn),
+      (pg_temp.today() + 1)::text);
+    perform pg_temp.check_eq('and so is the journal it posts',
+      (select string_agg(distinct e.entry_date::text, ',') from public.gl_entries e
+        join public.stock_movements sm on sm.gl_entry_id = e.id
+       where sm.source_table = 'pos_sales' and sm.source_id = v_two
+         and sm.source_line_id = v_cn),
+      (pg_temp.today() + 1)::text);
+
+    -- 0269's first guarantee, re-earned. "A credit note posted twice
+    -- must not return the food twice" was asserted in 9b on a duplicate
+    -- that still had an egg to claim -- and since 0746 a full credit
+    -- leaves nothing owing, so the clamp alone stops a double return
+    -- there and the guard went unasserted. Here a plate IS still owing:
+    -- the same credit note presented again must move nothing, and a
+    -- second credit note for the other plate must still return it.
+    perform pg_temp.check_true('presented again, the same credit note returns nothing',
+      app.pos_return_recipes(v_two, v_cn) is null);
+    perform pg_temp.check_eq('-- although a plate is still owing',
+      (select round(sl.quantity, 4) from public.stock_levels sl
+        where sl.item_id = v_rice and sl.warehouse_id = v_bar),
+      v_before + 0.2);
+
+    insert into public.sales_documents
+      (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+       exchange_rate, status, original_invoice_id)
+    values (v_org, 'credit_note', 'CN-OTHER', pg_temp.today() + 1,
+            pg_temp.today() + 1, v_walkin, 'MYR', 1, 'draft',
+            (select invoice_id from public.pos_sales where id = v_two))
+    returning id into v_cn;
+    insert into public.sales_document_lines
+      (org_id, document_id, line_no, line_type, item_id, description,
+       quantity, unit_price)
+    values (v_org, v_cn, 1, 'item', v_nasi, 'The other plate', 1, 10.00);
+    perform public.post_sales_document(v_cn);
+    perform pg_temp.check_eq('while a second credit note returns the other plate',
+      (select round(sl.quantity, 4) from public.stock_levels sl
+        where sl.item_id = v_rice and sl.warehouse_id = v_bar),
+      v_before + 0.4);
+    perform pg_temp.check_eq('and its eggs, so all four are back',
+      (select round(sl.quantity, 4) from public.stock_levels sl
+        where sl.item_id = v_egg and sl.warehouse_id = v_bar),
+      v_eggs + 4);
   end;
 
   -- ------------------------------------------------------------------

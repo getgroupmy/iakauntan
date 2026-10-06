@@ -1,4 +1,4 @@
-# Mutants for app.pos_return_recipes (migration 0269) -- the dish's
+# Mutants for app.pos_return_recipes (0269, last defined in 0746) -- the dish's
 # ingredients going back on the shelf when the sale is credited.
 #
 # ONE HALF OF A PAIR. `pos_deplete_recipes.py` is the other, and the two
@@ -9,7 +9,7 @@
 # pair aborts the run for whichever half it is not pointed at.
 #
 #     python3 scripts/mutate_sql.py \
-#       supabase/migrations/0269_crediting_a_counter_sale_puts_it_back.sql \
+#       supabase/migrations/0746_a_credited_plate_gives_back_its_extras.sql \
 #       supabase/tests/pos_recipes.sql \
 #       supabase/tests/mutants/pos_return_recipes.py
 #
@@ -33,6 +33,27 @@
 # two eggs out, one back. A mutation sweep cannot find that -- it breaks
 # what is there and cannot see what is missing -- which is why it was
 # found by reading the two halves against each other instead.
+#
+# RESULT, 6 October, AFTER 0746 -- supersedes both results below: 33
+# mutants (five new for 0746's modifier branch), 25 KILLED, 8
+# EQUIVALENT, control alive, all on pos_recipes.sql.
+#
+# 0746 FIXED THE DEFECT this file's header describes: a credited plate
+# now gives back what its modifiers took, at the rate the sale took them
+# per plate of the dish. Four of its five new mutants die on section 10
+# (the branch switched off, the per-plate rate dropped, a discount line
+# counted as a plate, the sale scope dropped). The fifth -- the
+# zero-quantity modifier guard -- is equivalent by arithmetic, exactly
+# as its twin in the depletion is.
+#
+# THE FIX UN-KILLED TWO MUTANTS, and that is worth knowing: both
+# double-return guards had been asserted in 9b on a duplicate credit
+# note that still had an egg to claim -- the egg the defect left
+# owing. Once a full credit returns everything, the clamp alone stops a
+# double return and the guards go unasserted. Section 10's partial
+# credit (one plate of two) re-earns both: the same note presented
+# again moves nothing, and a second note for the other plate returns
+# it. A test that leans on a defect stops testing when the defect goes.
 #
 # RESULT, 6 October -- SUPERSEDES the 5 October one below: 21 of 28
 # KILLED, 7 EQUIVALENT, control alive. Of the seven left "STILL OPEN"
@@ -171,27 +192,58 @@ m("a SECOND credit note against the same sale returns nothing",
 
 m("the lines of ANOTHER credit note are returned",
   "pos_return_recipes",
-  "     where l.document_id = p_credit\n       and l.line_type = 'item'",
-  "     where l.line_type = 'item'  -- credit note scope dropped",
+  "       where l.document_id = p_credit\n         and l.line_type = 'item'",
+  "       where l.line_type = 'item'  -- credit note scope dropped",
   "-- credit note scope dropped")
 
 m("a delivery charge on the credit note is treated as food",
   "pos_return_recipes",
-  "       and l.line_type = 'item'\n       and l.item_id is not null",
-  "       and l.item_id is not null  -- line_type no longer checked",
+  "         and l.line_type = 'item'\n         and l.item_id is not null",
+  "         and l.item_id is not null  -- line_type no longer checked",
   "-- line_type no longer checked")
 
 m("a credit line of zero quantity puts food back",
   "pos_return_recipes",
-  "       and l.quantity > 0\n       and i.track_inventory",
-  "       and i.track_inventory  -- zero-quantity credit lines included",
+  "         and l.item_id is not null\n         and l.quantity > 0\n       group by c.item_id",
+  "         and l.item_id is not null\n       group by c.item_id  -- zero-quantity credit lines included",
   "-- zero-quantity credit lines included")
 
 m("an ingredient nobody counts is put back on the shelf",
   "pos_return_recipes",
-  "       and l.quantity > 0\n       and i.track_inventory",
-  "       and l.quantity > 0  -- track_inventory dropped on the way back",
+  "     where i.track_inventory\n     group by n.item_id, i.name",
+  "     group by n.item_id, i.name  -- track_inventory dropped on the way back",
   "-- track_inventory dropped on the way back")
+
+# 0746's modifier branch.
+m("A CREDITED PLATE'S MODIFIERS ARE NOT GIVEN BACK",
+  "pos_return_recipes",
+  "        join public.pos_sale_line_modifiers m on m.line_id = pl.id",
+  "        join public.pos_sale_line_modifiers m on m.line_id = pl.id and false  -- modifiers off",
+  "-- modifiers off")
+
+m("crediting one plate gives back the whole line's modifiers",
+  "pos_return_recipes",
+  "            * m.quantity * pl.quantity * cr.credited / so.sold) c",
+  "            * m.quantity * pl.quantity) c  -- per-plate rate dropped",
+  "-- per-plate rate dropped")
+
+m("a discount line naming the dish counts as a plate credited",
+  "pos_return_recipes",
+  "               where cl.document_id = p_credit\n                 and cl.line_type = 'item'",
+  "               where cl.document_id = p_credit  -- discount lines counted",
+  "-- discount lines counted")
+
+m("the modifiers are read off every sale of the dish, not this one",
+  "pos_return_recipes",
+  "          on pl.sale_id = p_sale and pl.item_id = cr.item_id",
+  "          on pl.item_id = cr.item_id  -- sale scope dropped from modifiers",
+  "-- sale scope dropped from modifiers")
+
+m("a modifier with no recipe quantity gives an ingredient back anyway",
+  "pos_return_recipes",
+  "       where pm.recipe_item_id is not null\n         and coalesce(pm.recipe_quantity, 0) > 0",
+  "       where pm.recipe_item_id is not null  -- zero-quantity modifier guard dropped",
+  "-- zero-quantity modifier guard dropped")
 
 m("MORE COMES BACK THAN EVER WENT OUT",
   "pos_return_recipes",
