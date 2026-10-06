@@ -8,7 +8,13 @@
 #       supabase/tests/financial_statements.sql \
 #       supabase/tests/mutants/report_cash_flow.py
 #
-# RESULT: (pending)
+# RESULT, 6 October: 27 mutants, ALL 27 KILLED, control alive, on
+# financial_statements.sql. 12 died before "The cash flow statement,
+# rule by rule" was added -- one year with every journal inside it, no
+# opening balances, no drafts, one company, a bank as the only cash.
+# The first run stopped at a mutant that named `'none'` as an account
+# subtype, which is not in the enum: a harness error, not a kill, and
+# every mutant after it unrun. Rewritten to name `'reserves'`.
 
 m("another company's lines move this company's cash",
   "report_cash_flow",
