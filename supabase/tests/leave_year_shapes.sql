@@ -577,4 +577,31 @@ begin
         and b.leave_year = v_year), 4);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- A band with a gap after it (leave_entitlement)
+--
+-- A sweep of `0058`'s `app.leave_entitlement` killed every mutant but
+-- one: the band's END was never consulted, because the Act's bands are
+-- contiguous -- the highest band starting at or before the service
+-- always runs past it. HR can type bands of their own, and a gap
+-- between them is where the end decides: three years' service, bands
+-- for 0-1 and 5+, is in neither and gets the type's default.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.test_org('Cuti Jurang Sdn Bhd');
+  v_type uuid;
+begin
+  v_type := pg_temp.ly_type(v_org, 'AL-GAP', 'Annual (gapped)', 10, true);
+  insert into public.leave_entitlement_bands (leave_type_id, service_years_from, service_years_to, days)
+  values (v_type, 0, 1, 8), (v_type, 5, null, 16);
+
+  perform pg_temp.check_eq('in the first band, its days',
+    pg_temp.ly_entitlement(v_type, date '2026-03-01', 2026), 8);
+  perform pg_temp.check_eq('in a gap between bands, the type''s default, not the band that ended',
+    pg_temp.ly_entitlement(v_type, date '2023-03-01', 2026), 10);
+  perform pg_temp.check_eq('and past the gap, the band that applies',
+    pg_temp.ly_entitlement(v_type, date '2020-03-01', 2026), 16);
+end $$;
+
 rollback;
