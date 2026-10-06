@@ -410,4 +410,90 @@ begin
     '%Insufficient privileges%', '42501');
 end $$;
 
+-- ---------------------------------------------------------------------
+-- tax_estimate_exposure, rule by rule
+--
+-- A sweep of `0670`'s definition across the three files that read it
+-- left five mutants alive in all of them. One is equivalent and four
+-- were rules no fixture reached:
+--
+--   * the zakat rebate -- no computation here recorded any zakat, so
+--     "tax charged" and "tax charged less the rebate" were one number;
+--   * a CP500's floor -- a person's estimate has none, and every CP500
+--     here had no prior figure either, so "no floor" and "a floor of
+--     nothing, met" read the same;
+--   * the revision month, twice -- whether today is a month a revision
+--     may be made in was only ever asked of years whose month the
+--     fixture never pinned.
+--
+-- EQUIVALENT by the callee: "a refund due is a negative tax owed".
+-- `tax_computation` caps the rebate at the tax (`least(zakat_paid,
+-- tax)`), so charged less rebate is never below nothing and the
+-- `greatest(..., 0)` here cannot bite.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_fy uuid; v_comp uuid; v_est uuid;
+  v_bank uuid; v_sales uuid; v_expense uuid; v_start date;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  perform pg_temp.allow_many_companies();
+
+  -- The same 37,500 year as above, with 7,500 of zakat paid: what was
+  -- owed is 30,000, and it is 30,000 an estimate is measured against.
+  v_org := pg_temp.est_org('Kedai Zakat Sdn Bhd');
+  v_fy := pg_temp.est_year(v_org);
+  select id into v_bank from public.accounts
+   where org_id = v_org and account_subtype = 'bank' and not is_group order by code limit 1;
+  select id into v_sales from public.accounts
+   where org_id = v_org and account_type = 'revenue' and not is_group order by code limit 1;
+  select id into v_expense from public.accounts where org_id = v_org and code = '6100';
+  perform public.post_manual_journal(v_org, date '2026-06-30', jsonb_build_array(
+      jsonb_build_object('account_id', v_bank, 'debit', 500000, 'credit', 0),
+      jsonb_build_object('account_id', v_sales, 'debit', 0, 'credit', 500000)), 'Sales', 'S-1');
+  perform public.post_manual_journal(v_org, date '2026-06-30', jsonb_build_array(
+      jsonb_build_object('account_id', v_expense, 'debit', 300000, 'credit', 0),
+      jsonb_build_object('account_id', v_bank, 'debit', 0, 'credit', 300000)), 'Costs', 'E-1');
+  v_comp := public.open_tax_computation(v_org, v_fy);
+  update public.tax_computations
+     set paid_up_capital = 100000, gross_business_income = 500000, zakat_paid = 7500
+   where id = v_comp;
+  v_est := public.open_tax_estimate(v_org, v_fy, 10000, 5000);
+  perform pg_temp.check_eq('what was owed is the tax less the zakat rebate',
+    (select actual_tax from public.tax_estimate_exposure(v_est, v_comp)), 30000);
+
+  -- A person's CP500, with last year's figure on record: there is still
+  -- no floor to meet, and it is not said to have met one.
+  v_org := pg_temp.test_org('Kedai Pak Hamid');
+  update public.organizations set entity_type = 'sole_proprietor' where id = v_org;
+  perform public.create_fiscal_year(v_org, date '2026-01-01');
+  v_est := public.open_tax_estimate(v_org,
+    (select id from public.fiscal_years where org_id = v_org order by end_date limit 1),
+    1000, 50000);
+  perform pg_temp.check_true('a CP500 has no floor, and so meets none, whatever last year was',
+    (select form = 'CP500' and not floor_applies and not meets_floor
+       from public.tax_estimate_exposure(v_est)));
+
+  -- Today in the SIXTH month of a basis period, where a CP204 may be
+  -- revised; and, on the same day, a company whose period began a
+  -- month later, in its FIFTH, where it may not. A month counted from
+  -- anything but the period's own start gives the two the same answer.
+  v_start := (date_trunc('month', app.today()) - interval '5 months')::date;
+  v_org := pg_temp.test_org('Kedai Bulan Enam Sdn Bhd');
+  perform public.create_fiscal_year(v_org, v_start);
+  v_est := public.open_tax_estimate(v_org,
+    (select id from public.fiscal_years where org_id = v_org order by end_date limit 1),
+    20000, 10000);
+  perform pg_temp.check_true('in the sixth month of the period a revision is open',
+    (select revision_open from public.tax_estimate_exposure(v_est)));
+
+  v_org := pg_temp.test_org('Kedai Bulan Lima Sdn Bhd');
+  perform public.create_fiscal_year(v_org, (v_start + interval '1 month')::date);
+  v_est := public.open_tax_estimate(v_org,
+    (select id from public.fiscal_years where org_id = v_org order by end_date limit 1),
+    20000, 10000);
+  perform pg_temp.check_true('and in the fifth it is not',
+    not (select revision_open from public.tax_estimate_exposure(v_est)));
+end $$;
+
 rollback;
