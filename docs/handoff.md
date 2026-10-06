@@ -327,6 +327,17 @@ page and renumbering would quietly break the reference.
     is `5e8fa289-a861-4e9d-b7dc-149d346d9ccf` -- which carries the
     thrown error's own text, and that text says which of the three it
     is.
+13. **Should the collections worklist chase debit notes?**
+    `report_collections` reads `report_ar_aging` and keeps only
+    `doc_kind = 'invoice'`. A mutation sweep showed that filter matters
+    for one kind of row only: a debit note, which is a positive debt
+    (credit notes, refund notes and receipts are negative and the
+    `> 0` filter already drops them). So a customer who owes on a debit
+    note and nothing else is never on the worklist, and one who owes on
+    both is shown the invoice part only. Probably an oversight -- a debit
+    note is how an extra charge is billed -- but the report's own words
+    are "who owes what on invoices", so it is asked rather than changed.
+    Nothing asserts either answer yet.
 
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the

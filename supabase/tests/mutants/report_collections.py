@@ -8,7 +8,24 @@
 #       supabase/tests/collections.sql \
 #       supabase/tests/mutants/report_collections.py
 #
-# RESULT: (pending)
+# RESULT, 6 October: 18 mutants, 15 KILLED, 2 equivalent, 1 left as a
+# question, control alive, on collections.sql. 7 died before "The
+# worklist, rule by rule" was added.
+#
+# Equivalent, with the reason:
+#   * another company's attempt: `collection_attempts` has a composite key
+#     to its contact's company. A table constraint.
+#   * a credit balance on the worklist (`<> 0` for `> 0`): the rows are
+#     invoices and `app.apply_allocation` refuses to over-allocate one, so
+#     none is negative. The writer.
+#
+# NOT asserted, deliberately: "credit notes and receipts are chased as
+# debts" -- `where a.doc_kind = 'invoice'` dropped. Credit notes, refund
+# notes and receipts are negative and the `> 0` filter drops them anyway;
+# the only row the kind filter keeps off is a DEBIT NOTE, which is a debt.
+# So the worklist never chases a customer whose only debt is a debit
+# note. Asserting it either way would decide a question that is the
+# user's (docs/handoff.md, item 13).
 
 m("a stranger reads the worklist",
   "report_collections",
@@ -22,7 +39,7 @@ m("a member without the ledger reads it",
   "  if false then  -- any member",
   "-- any member")
 
-m("credit notes and receipts are chased as debts",
+m("credit notes and receipts are chased as debts -- in fact: debit notes are",
   "report_collections",
   "     where a.doc_kind = 'invoice'\n       and a.base_outstanding > 0",
   "     where true  -- any kind\n       and a.base_outstanding > 0",
