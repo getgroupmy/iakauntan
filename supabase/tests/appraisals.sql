@@ -1071,4 +1071,90 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Opening a cycle and the self review, rule by rule
+--
+-- A sweep of `open_appraisal_cycle` and `submit_self_appraisal` (0379)
+-- left eleven mutants alive. Everybody the fixtures opened a cycle for
+-- had joined years before it and was staying, so nothing pressed who a
+-- cycle is for at its edges; no cycle was opened twice once past self
+-- review, nor opened closed, nor backwards; and the self review's
+-- refusals were asserted by SQLSTATE where the trigger behind them
+-- refuses with the same one.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.test_org('Kitaran Peraturan Sdn Bhd');
+  v_mei uuid; v_ali uuid; v_late uuid; v_lastday uuid; v_leaving uuid;
+  v_cycle uuid; v_done uuid; v_back uuid; v_ap uuid;
+begin
+  v_mei := pg_temp.ap_person(v_org, 'E1', 'Mei', 'mei10@ap.test');
+  v_ali := pg_temp.ap_person(v_org, 'E2', 'Ali', 'ali10@ap.test', v_mei);
+  -- Joined the day after the period, on its last day, and leaving on it.
+  v_late := pg_temp.ap_person(v_org, 'E3', 'Joined after', 'late10@ap.test', v_mei);
+  update public.employees set hire_date = date '2027-01-01' where id = v_late;
+  v_lastday := pg_temp.ap_person(v_org, 'E4', 'Joined on the last day', 'lastday10@ap.test', v_mei);
+  update public.employees set hire_date = date '2026-12-31' where id = v_lastday;
+  v_leaving := pg_temp.ap_person(v_org, 'E5', 'Leaving on the last day', 'leaving10@ap.test', v_mei);
+  update public.employees set employment_status = 'resigned',
+         resignation_date = date '2026-11-30', last_working_date = date '2026-12-31'
+   where id = v_leaving;
+
+  insert into public.appraisal_cycles (org_id, name, period_start, period_end, rating_scale_max)
+  values (v_org, 'FY2026 edges', date '2026-01-01', date '2026-12-31', 5)
+  returning id into v_cycle;
+  perform public.open_appraisal_cycle(v_cycle);
+  perform pg_temp.check_true('somebody who joins after the period is not appraised in it',
+    not exists (select 1 from public.appraisals where cycle_id = v_cycle and employee_id = v_late));
+  perform pg_temp.check_true('somebody who joined on its last day is',
+    exists (select 1 from public.appraisals where cycle_id = v_cycle and employee_id = v_lastday));
+  perform pg_temp.check_true('and so is somebody whose last day is its last day',
+    exists (select 1 from public.appraisals where cycle_id = v_cycle and employee_id = v_leaving));
+
+  -- Opened again past self review: it stays where it is.
+  update public.appraisal_cycles set status = 'manager_review' where id = v_cycle;
+  perform public.open_appraisal_cycle(v_cycle);
+  perform pg_temp.check_eq('opening a cycle again does not put it back to self review',
+    (select status::text from public.appraisal_cycles where id = v_cycle), 'manager_review');
+
+  insert into public.appraisal_cycles (org_id, name, period_start, period_end, rating_scale_max, status)
+  values (v_org, 'FY2025 closed', date '2025-01-01', date '2025-12-31', 5, 'completed')
+  returning id into v_done;
+  perform pg_temp.check_refused('a closed cycle is not opened again',
+    format('select public.open_appraisal_cycle(%L)', v_done), '%is closed%', '23514');
+  insert into public.appraisal_cycles (org_id, name, period_start, period_end, rating_scale_max)
+  values (v_org, 'Backwards', date '2026-12-31', date '2026-01-01', 5)
+  returning id into v_back;
+  perform pg_temp.check_refused('nor one that ends before it starts',
+    format('select public.open_appraisal_cycle(%L)', v_back), '%ends after it starts%', '23514');
+
+  -- THE SELF REVIEW.
+  select id into v_ap from public.appraisals where cycle_id = v_cycle and employee_id = v_ali;
+  perform pg_temp.sign_in_as(pg_temp.ap_user(v_mei));
+  -- Who before what: the manager writing nothing in Ali's half is told
+  -- it is not hers, not that she wrote nothing.
+  perform pg_temp.check_refused('the manager is told the self review is not hers',
+    format('select public.submit_self_appraisal(%L, 3, %L)', v_ap, ''),
+    '%Only the person being appraised%', '42501');
+  perform pg_temp.sign_in_as(pg_temp.ap_user(v_ali));
+  perform pg_temp.check_refused('a missing appraisal says so',
+    format('select public.submit_self_appraisal(%L, 3, %L)', gen_random_uuid(), 'Fine'),
+    '%No such appraisal%', 'P0002');
+  perform public.submit_self_appraisal(v_ap, 4, '  Shipped the migration  ');
+  perform pg_temp.check_eq('the self review is kept trimmed',
+    (select self_comments from public.appraisals where id = v_ap), 'Shipped the migration');
+  perform pg_temp.check_refused('and says when it was submitted if sent again',
+    format('select public.submit_self_appraisal(%L, 5, %L)', v_ap, 'Again'),
+    '%You submitted this on%', '23514');
+  -- A cancelled appraisal stays cancelled.
+  select id into v_ap from public.appraisals where cycle_id = v_cycle and employee_id = v_lastday;
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  update public.appraisals set status = 'cancelled' where id = v_ap;
+  perform pg_temp.sign_in_as(pg_temp.ap_user(v_lastday));
+  perform public.submit_self_appraisal(v_ap, 3, 'For the file');
+  perform pg_temp.check_eq('a cancelled appraisal is not moved on to the manager',
+    (select status::text from public.appraisals where id = v_ap), 'cancelled');
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

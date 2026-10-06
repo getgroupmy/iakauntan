@@ -568,4 +568,56 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- renew_employee_document, rule by rule
+--
+-- A sweep of `0388`'s definition left six mutants alive. Every renewal
+-- above restated nothing but the expiry, of a document that had one, in
+-- a file with no other renewal in it: so nothing said that a new title
+-- or issue date is kept, that a blank title is no title, that a
+-- document with no expiry can still be replaced, that another
+-- document's renewal is not this one's, or that the same expiry again
+-- is not a renewal.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.test_org('Pembaharuan Peraturan Sdn Bhd');
+  v_emp uuid; v_permit uuid; v_passport uuid; v_cert uuid; v_new uuid;
+  r public.employee_documents;
+begin
+  insert into public.employees (org_id, employee_no, full_name, hire_date)
+  values (v_org, 'E1', 'Rina', date '2020-01-01') returning id into v_emp;
+  insert into public.employee_documents
+    (org_id, employee_id, doc_type, title, issued_date, expires_date, notes)
+  values (v_org, v_emp, 'permit', 'Work pass 2025', date '2025-01-01', date '2026-01-01', 'Sponsor: us')
+  returning id into v_permit;
+  insert into public.employee_documents
+    (org_id, employee_id, doc_type, title, issued_date, expires_date)
+  values (v_org, v_emp, 'identity', 'Passport', date '2020-01-01', date '2030-01-01')
+  returning id into v_passport;
+  insert into public.employee_documents (org_id, employee_id, doc_type, title)
+  values (v_org, v_emp, 'certificate', 'First aid') returning id into v_cert;
+
+  -- The passport is renewed first; that is the passport's renewal.
+  perform public.renew_employee_document(v_passport, date '2040-01-01');
+
+  perform pg_temp.check_refused('the same expiry again is not a renewal',
+    format('select public.renew_employee_document(%L, %L)', v_permit, '2026-01-01'),
+    '%runs past the document it replaces%', '23514');
+  v_new := public.renew_employee_document(v_permit, date '2027-01-01',
+    date '2026-01-15', 'Work pass 2026');
+  select * into r from public.employee_documents where id = v_new;
+  perform pg_temp.check_true('another document''s renewal does not block this one',
+    v_new is not null);
+  perform pg_temp.check_eq('a new title is kept', r.title, 'Work pass 2026');
+  perform pg_temp.check_eq('and the issue date given', r.issued_date::text, '2026-01-15');
+  perform pg_temp.check_eq('while the notes not restated carry over', r.notes, 'Sponsor: us');
+
+  -- A blank title is no title; and a document that never expired can
+  -- still be replaced.
+  v_new := public.renew_employee_document(v_cert, date '2028-01-01', null, '   ');
+  perform pg_temp.check_eq('a document with no expiry can be renewed, keeping its title',
+    (select title from public.employee_documents where id = v_new), 'First aid');
+end $$;
+
 rollback;
