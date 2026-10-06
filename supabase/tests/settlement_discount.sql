@@ -652,4 +652,37 @@ begin
       'execute'));
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Payment terms, rule by rule
+--
+-- A sweep of `0385`'s three term functions killed twelve of fourteen
+-- here. The two it left: the file's cash-on-delivery term carries thirty
+-- days and is asserted due on the day, but PREPAID never appears, so
+-- its own branch could have meant thirty days' credit unnoticed; and
+-- every term with no discount offered none on both halves, so a
+-- percentage of nought with days named -- "nought per cent if you pay
+-- within ten days" -- was never asked whether it is a discount.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org  uuid := pg_temp.test_org('Terma Bayaran Sdn Bhd');
+  v_cust uuid; v_pre uuid; v_zero uuid; v_inv uuid; r record;
+begin
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C1', 'Pelanggan', 'customer') returning id into v_cust;
+
+  -- Thirty days on the row, as a company that edited it might leave it.
+  v_pre := pg_temp.sd_terms(v_org, 'PREPAID', 30, 'prepaid');
+  v_inv := pg_temp.sd_invoice(v_org, 'INV-PRE', v_cust, v_pre, 500);
+  perform pg_temp.check_eq('prepaid is due the day it is raised, whatever the days say',
+    (select (due_date - doc_date)::integer from public.sales_documents where id = v_inv), 0);
+
+  v_zero := pg_temp.sd_terms(v_org, 'NET30-0', 30, 'net', 0, 10);
+  v_inv := pg_temp.sd_invoice(v_org, 'INV-ZERO', v_cust, v_zero, 500);
+  select * into r from public.settlement_discount_available(v_inv);
+  perform pg_temp.check_true('nought per cent is no discount, days or not',
+    r.deadline is null and not r.still_open);
+end $$;
+
 rollback;

@@ -7,7 +7,14 @@
 #       supabase/tests/settlement_discount.sql \
 #       supabase/tests/mutants/payment_terms.py
 #
-# RESULT: (pending)
+# RESULT: 13 mutants and a control. 13 killed in settlement_discount.sql.
+#
+#   The first sweep killed 11. PREPAID never appeared in the file, so its
+#   own branch could have meant the term's days of credit; and every term
+#   offering no discount offered none on both halves, so a nought per
+#   cent with days named was never asked. "Payment terms, rule by rule"
+#   kills both. aged_balances.sql and aging_shapes.sql type every due
+#   date, and kill none -- as they should not.
 
 m("cash on delivery is credit for the term's days",
   "due_date_from_terms",
