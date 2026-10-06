@@ -33,11 +33,13 @@
 -- output. A stranger may get zero rows or an error -- either way they
 -- read nothing -- and never a row.
 --
--- Measured on 6 October 2026: 25 reports had rows for an owner in some
--- demo company and were asked; 19 had none anywhere (a group report in
--- a demo with no group; a ledger for one matter, item or asset, whose id
--- is passed as null) and are named in the output rather than counted.
--- Passing a real id for those is the obvious next step.
+-- Measured on 6 October 2026: 29 reports had rows for an owner in some
+-- demo company and were asked. 25 at first, until required ids were
+-- filled with a REAL matter, item or asset of the company under test
+-- instead of null; that brought in the per-matter, per-item and
+-- per-asset ledgers. The 15 left have no data of their kind in any demo
+-- company (no withholding certificate, bank reconciliation, group,
+-- vacancy, leave, lot or layout) and are named in the output.
 --
 -- Nothing is written; the file rolls back.
 -- =====================================================================
@@ -121,6 +123,17 @@ begin
           when v_type = 'date' then format('%L::date', app.today())
           when v_type = 'integer' then format('%s', extract(year from app.today())::integer)
           when v_type = 'boolean' then 'false'
+          -- A required id is a REAL one from the company under test, so a
+          -- per-matter, per-item or per-asset report has something to
+          -- show its owner -- and the stranger is handed another
+          -- company's real id, which is the leak worth looking for.
+          when v_type = 'uuid' and v_name = 'p_matter_id' then format(
+            '(select id from public.matters where org_id = %L limit 1)', o.id)
+          when v_type = 'uuid' and v_name = 'p_item_id' then format(
+            '(select item_id from public.stock_movements where org_id = %L '
+            'group by item_id order by count(*) desc limit 1)', o.id)
+          when v_type = 'uuid' and v_name = 'p_asset_id' then format(
+            '(select id from public.fixed_assets where org_id = %L limit 1)', o.id)
           when v_type in ('text', 'uuid') then format('null::%s', v_type)
           else format('(select enum_first(null::%s))', v_type)
         end;
@@ -185,7 +198,7 @@ begin
   perform pg_temp.check_true(
     format('and that was asked of enough reports to mean something (%s)',
            coalesce(array_length(v_counted, 1), 0)),
-    coalesce(array_length(v_counted, 1), 0) >= 25);
+    coalesce(array_length(v_counted, 1), 0) >= 29);
 end $$;
 
 rollback;

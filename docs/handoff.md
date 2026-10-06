@@ -14418,11 +14418,13 @@ stranger cannot read either statement", covered two OTHER statements.
 `report_*` that takes `p_org_id`, after a demo rebuild inside its
 transaction. Each is called as the owner of the first demo company
 where it returns rows, then as a signed-in stranger. A stranger gets no
-rows, or a 42501 and nothing else. **25 reports are asked; the floor is
-25.** 19 had rows in no demo company and are named in the output, not
-counted: group reports in a demo with no group, and per-matter, item or
-asset ledgers whose id is passed as null. Passing a real id is the next
-step. All three core membership mutants die on it.
+rows, or a 42501 and nothing else. **29 reports are asked; the floor is
+29.** Required ids are filled with a real matter, item or asset of the
+company under test, which brought in the four per-record ledgers. The
+15 left have no data of their kind in any demo company (withholding,
+bank reconciliation, groups, vacancies, leave, lots, layouts) and are
+named in the output. Seeding those is the next step. All three core
+membership mutants die on it.
 
 Observation, not changed: `report_statutory_charges` refuses a MEMBER
 whose company lacks the Property module with "Not your company"
