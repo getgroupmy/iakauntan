@@ -8,7 +8,8 @@
 #
 # then again against `einvoice_payload_shapes.sql`.
 #
-# RESULT: (pending)
+# RESULT: 3 mutants and a control. 3 killed in einvoice_statutory.sql --
+# 72 hours from validation, and no deadline before validation.
 
 m("seventy-two hours is three days of twenty-four, counted as 48",
   "set_einvoice_cancel_deadline",
