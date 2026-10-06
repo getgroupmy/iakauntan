@@ -292,4 +292,98 @@ begin
       'public.record_departure(uuid, date, text, text, date)', 'execute'));
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The departure guard and reinstate_employee, rule by rule
+--
+-- A sweep of `0371`'s two functions over this file and the four others
+-- that touch a leaver left eleven mutants alive. The guard was only
+-- ever reached through `record_departure`, whose own check refuses a
+-- date before the hire date first, so the trigger's copy was never
+-- what stopped it; nobody retired; no saved leaver's date was moved,
+-- and no row already in a leaving state was ever edited while it broke
+-- the rule. And "clears all three fields" was asserted of a row where
+-- two of the three had never been set.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.test_org('Keluar Masuk Sdn Bhd');
+  v_staff uuid := pg_temp.another_user('staff@keluar-masuk.test');
+  v_a uuid; v_b uuid; v_legacy uuid; v_new uuid;
+  r record;
+begin
+  insert into public.org_members (org_id, user_id, role)
+  values (v_org, v_staff, 'employee');
+
+  -- THE GUARD, met directly.
+  perform pg_temp.check_refused('a retired employee needs a last working day too',
+    format($q$insert into public.employees
+      (org_id, employee_no, full_name, hire_date, employment_status)
+      values (%L, 'RET', 'Retired, undated', date '1990-01-01', 'retired')$q$, v_org),
+    '%needs a last working day%', '23514');
+  perform pg_temp.check_refused('and a last day cannot come before the first',
+    format($q$insert into public.employees
+      (org_id, employee_no, full_name, hire_date, employment_status, last_working_date)
+      values (%L, 'EARLY', 'Gone before joining', date '2026-03-01', 'resigned',
+              date '2026-02-28')$q$, v_org),
+    '%cannot come before the day they joined%', '23514');
+  -- A one-day job is a job.
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, employment_status, last_working_date)
+  values (v_org, 'ONEDAY', 'One day', date '2026-03-01', 'resigned', date '2026-03-01')
+  returning id into v_new;
+  perform pg_temp.check_true('while leaving on the day one joined is allowed',
+    v_new is not null);
+  -- And moving a saved leaver's last day is judged again.
+  perform pg_temp.check_refused('moving a leaver''s last day before they joined is refused',
+    format('update public.employees set last_working_date = date %L where id = %L',
+           '2026-02-01', v_new),
+    '%cannot come before the day they joined%', '23514');
+
+  -- A row ALREADY in a leaving state with no last day -- what existed
+  -- before 0371 -- is left editable. Made by setting the guard aside
+  -- for the one insert, since it can no longer be made any other way.
+  alter table public.employees disable trigger employees_departure_ck;
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, employment_status)
+  values (v_org, 'LEGACY', 'Left in 2024', date '2020-01-01', 'resigned')
+  returning id into v_legacy;
+  alter table public.employees enable trigger employees_departure_ck;
+  update public.employees set phone = '019-0000000' where id = v_legacy;
+  perform pg_temp.check_eq('a leaver from before the rule can still be edited',
+    (select phone from public.employees where id = v_legacy), '019-0000000');
+
+  -- REINSTATING. Two leavers, one unconfirmed; every field set.
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, employment_status,
+     resignation_date, last_working_date, termination_reason)
+  values (v_org, 'A', 'Still on probation', date '2025-01-01', 'terminated',
+          date '2026-01-15', date '2026-01-31', 'Restructuring')
+  returning id into v_a;
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, employment_status,
+     resignation_date, last_working_date)
+  values (v_org, 'B', 'Also gone', date '2025-01-01', 'resigned',
+          date '2026-01-15', date '2026-01-31')
+  returning id into v_b;
+
+  perform pg_temp.check_refused('an employee who is not there says so',
+    format('select public.reinstate_employee(%L)', gen_random_uuid()),
+    '%No such employee%', 'P0002');
+  perform pg_temp.sign_in_as(v_staff);
+  perform pg_temp.check_refused('a member who is not HR may not reinstate anybody',
+    format('select public.reinstate_employee(%L)', v_a),
+    '%not permitted to reinstate%', '42501');
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+
+  perform public.reinstate_employee(v_a);
+  select * into r from public.employees where id = v_a;
+  perform pg_temp.check_eq('somebody never confirmed comes back on probation',
+    r.employment_status::text, 'probation');
+  perform pg_temp.check_true('with the resignation cleared', r.resignation_date is null);
+  perform pg_temp.check_true('and the reason they were let go', r.termination_reason is null);
+  perform pg_temp.check_eq('and nobody else is brought back with them',
+    (select employment_status::text from public.employees where id = v_b), 'resigned');
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

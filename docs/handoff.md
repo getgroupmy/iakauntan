@@ -482,6 +482,7 @@ function:
 | `audit_list_payslips` | `0281` | 10 / 10 | -- | `payslip_access.sql` |
 | `app.close_attendance_day` | `0360` | 25 / 25 | -- | `attendance_close.sql` |
 | `adjust_attendance`, `app.recompute_attendance` | `0363` | 42 / 42 | -- | `attendance_adjust.sql` |
+| `app.employee_departure_guard`, `reinstate_employee` | `0371` | 16 / 16 | -- | `departures.sql` |
 
 Every equivalent is written into its mutants file with the reason.
 
