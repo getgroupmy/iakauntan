@@ -7,7 +7,16 @@
 #       supabase/tests/statutory_remittances.sql \
 #       supabase/tests/mutants/report_statutory_remittances.py
 #
-# RESULT: (pending)
+# RESULT, 6 October: 22 mutants, 21 KILLED, 1 equivalent, control
+# alive, on statutory_remittances.sql. 15 died before "The list, rule
+# by rule" was added: a paid run, the range's first day, EIS's employee
+# share, the HRD levy, zakat, and -- the one no fixed date could reach
+# -- a contribution on the day it is due. That one is asserted by moving
+# the body's `due_day` to today inside the rolled-back transaction.
+#
+# Equivalent: `sr.org_id = p_org_id`. The file's own header says why:
+# since 0502 a remittance's company is its period's (composite key), and
+# a period id belongs to one company. A table constraint.
 
 m("another company's payroll is on the list",
   "report_statutory_remittances",
