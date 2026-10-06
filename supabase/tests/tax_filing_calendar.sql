@@ -393,4 +393,41 @@ begin
     'Not a member of organization%', '42501');
 end $$;
 
+-- ---------------------------------------------------------------------
+-- tax_filing_due and tax_filing_fixed_date, rule by rule
+--
+-- A sweep of `0668` killed twelve of sixteen mutants through the
+-- calendar above, and the four it left are rules its obligations never
+-- reach: every basis period opens on the first of a month, every
+-- fixed-date obligation's period sits inside one calendar year, every
+-- fixed day is the last of its month -- where the clamp hides a day
+-- counted one too far -- and every obligation names its month. Asked of
+-- the two functions directly, because each is a rule about dates and
+-- not about any one form.
+-- ---------------------------------------------------------------------
+do $$
+begin
+  -- A first basis period that opens on 15 July. Its sixth month is
+  -- December, and closes on the 31st -- not six months from the 15th.
+  perform pg_temp.check_eq('month n of a period counts from the month it opens in',
+    app.tax_filing_due('month_of_period', null, null, 6, null, null,
+                       date '2025-07-15', date '2026-06-30')::text,
+    '2025-12-31');
+
+  -- A period from July to June: the year of assessment is the year it
+  -- ENDS in, so a fixed date falls in the year after that.
+  perform pg_temp.check_eq('a fixed date is in the year after the period ends, not starts',
+    app.tax_filing_due('month_day_after_ya', null, null, null, 6, 30,
+                       date '2025-07-01', date '2026-06-30')::text,
+    '2027-06-30');
+
+  -- A day short of the month's end, where the clamp cannot hide a day
+  -- counted one too far.
+  perform pg_temp.check_eq('a fixed day is that day',
+    app.tax_filing_fixed_date(2027, 6, 15)::text, '2027-06-15');
+
+  perform pg_temp.check_true('no month is no date, not January',
+    app.tax_filing_fixed_date(2027, null, 30) is null);
+end $$;
+
 rollback;
