@@ -9,7 +9,27 @@
 #       supabase/tests/bank_transfers.sql \
 #       supabase/tests/mutants/create_bank_transfer.py
 #
-# RESULT: (pending)
+# RESULT: 20 mutants and a control. 19 killed, 1 equivalent.
+#
+#   create_bank_transfer (15): 14 killed in bank_transfers.sql, and
+#   six of those only after "create_bank_transfer, rule by rule" was
+#   written. The first sweep caught every refusal by SQLSTATE, and with a
+#   guard deleted the next thing along refused the same call anyway: the
+#   zero-amount guard fell through to "nothing arrived" (both 22023), the
+#   nothing-arrived guard to the table's CHECK, and the stranger and the
+#   same-currency fee were never asked at all.
+#
+#   EQUIVALENT by the code's shape: "a missing rate is not refused".
+#   `app.exchange_rate_for` (0104) raises P0002 itself when it has no
+#   rate and never returns null, so `v_from_rate is null or v_to_rate is
+#   null` cannot be true. The test asserts the refusal a person actually
+#   sees instead. The guard is dead code, harmless, and left alone: it is
+#   the right check if the helper is ever changed to return null.
+#
+#   exchange_rate_for wrapper (1): killed by the stranger in the same block.
+#
+#   depreciation_preview (4): all killed in depreciation_shapes.sql or
+#   fixed_assets.sql; bank_transfers.sql was never meant to reach them.
 
 m("a stranger moves a company's money",
   "create_bank_transfer",

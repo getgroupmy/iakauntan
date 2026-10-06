@@ -570,4 +570,76 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- create_bank_transfer, rule by rule
+--
+-- A sweep of 0739's `create_bank_transfer` left six mutants alive, and
+-- every one of them for the same reason: the refusals above catch a
+-- SQLSTATE, and when a guard is deleted the NEXT thing along -- another
+-- guard, or a table constraint -- refuses the same call with something
+-- else. Deleting the zero-amount guard still ended in 22023, because
+-- nothing sent less no charges is nothing received; deleting the
+-- nothing-arrived guard ended in the table's CHECK. Each is told apart
+-- here by what it says. The stranger and the default
+-- arithmetic were simply never asked.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.tr_org('Rule By Rule Transfer Sdn Bhd');
+  v_owner uuid := auth.uid();
+  v_a uuid; v_b uuid; v_usd uuid; v_id uuid;
+  v_stranger uuid := pg_temp.another_user('transfer-stranger@example.test');
+begin
+  v_a := pg_temp.bank(v_org, 'Current account', '1121');
+  v_b := pg_temp.bank(v_org, 'Savings account', '1122');
+  v_usd := pg_temp.bank(v_org, 'USD account', '1123', 'USD');
+  insert into public.exchange_rates
+    (org_id, from_currency, to_currency, rate, rate_date)
+  values (v_org, 'USD', 'MYR', 4.50, date '2026-03-01');
+
+  -- Same currency and nobody said what arrived: what left, less the fee.
+  -- The fee is ten, so the guess and the gross are different numbers.
+  v_id := public.create_bank_transfer(v_a, v_b, 1000, date '2026-03-01',
+    p_bank_charges => 10);
+  perform pg_temp.check_eq('in one currency what arrived is what left less the fee',
+    (select amount_received from public.bank_transfers where id = v_id), 990);
+
+  perform pg_temp.check_refused('a transfer of nothing is refused as nothing',
+    format('select public.create_bank_transfer(%L, %L, 0, %L)',
+           v_a, v_b, date '2026-03-01'),
+    '%needs an amount%', '22023');
+
+  -- Across currencies, so the fee arithmetic cannot produce the zero:
+  -- only the guard can.
+  perform pg_temp.check_refused('nothing arriving is refused as nothing arriving',
+    format('select public.create_bank_transfer(%L, %L, 100, %L, p_amount_received => 0)',
+           v_usd, v_a, date '2026-03-01'),
+    '%Nothing arrived%', '22023');
+
+  -- The table's rate is from 1 March; 1 February has none. The refusal
+  -- is `app.exchange_rate_for`'s own (P0002), which never returns null,
+  -- so the transfer's `v_from_rate is null` guard is never reached --
+  -- equivalent by the code's shape, and what is asserted is the refusal
+  -- a person actually sees.
+  perform pg_temp.check_refused('a missing rate is refused by name',
+    format('select public.create_bank_transfer(%L, %L, 100, %L, p_amount_received => 450)',
+           v_usd, v_a, date '2026-02-01'),
+    '%No exchange rate for USD to MYR on or before 2026-02-01%', 'P0002');
+
+  perform pg_temp.sign_in_as(v_stranger);
+  perform pg_temp.check_refused('a stranger cannot move a company''s money',
+    format('select public.create_bank_transfer(%L, %L, 100, %L)',
+           v_a, v_b, date '2026-03-01'),
+    '%Insufficient privileges to post%', '42501');
+  perform pg_temp.check_refused('nor read the rate it would be moved at',
+    format('select public.exchange_rate_for(%L, %L, %L)',
+           v_org, 'USD', date '2026-03-01'),
+    '%Not a member of organization%', '42501');
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_eq('while a member reads it',
+    public.exchange_rate_for(v_org, 'USD', date '2026-03-01'), 4.50);
+
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;
