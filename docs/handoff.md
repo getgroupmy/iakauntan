@@ -311,6 +311,22 @@ page and renumbering would quietly break the reference.
     cleared is payment for the Service Tax Act is a question for the
     person who files, not a rounding error -- so `0748` deliberately
     left it alone. Say which and it is a short change.
+12. **The exchange-rate feed has been dead since 28 September.** Every
+    `Exchange rates` run from 28 September on has failed, and every one
+    the same way: `fetch-rates` answers 502 with **"Could not reach Bank
+    Negara."** -- the branch where `fetch()` itself throws, not the one
+    where BNM answers with an error status. So the edge runtime cannot
+    open a connection to `api.bnm.gov.my` at all (DNS, TLS, or BNM
+    refusing Supabase's egress addresses); the last good run was 25
+    September. `rate-feed-fresh.yml` is doing its job by being red. It
+    cannot be diagnosed from a session: the agent proxy refuses
+    `api.bnm.gov.my` (403, an egress-policy denial) and the Supabase
+    connector answered "Unauthorized" on 6 October. What a person can
+    do: read the `fetch-rates` function logs in the Supabase dashboard
+    for the `fetch-rates.unreachable` event -- the 5 October run's ref
+    is `5e8fa289-a861-4e9d-b7dc-149d346d9ccf` -- which carries the
+    thrown error's own text, and that text says which of the three it
+    is.
 
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
