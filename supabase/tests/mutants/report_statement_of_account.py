@@ -8,7 +8,16 @@
 #       supabase/tests/statement_of_account.sql \
 #       supabase/tests/mutants/report_statement_of_account.py
 #
-# RESULT: (pending)
+# RESULT, 6 October, against 0747: 9 mutants, 8 KILLED, 1 equivalent,
+# control alive, on statement_of_account.sql. "Another customer's
+# settlements" lived until the block gained a second customer whose
+# cheque must stay off this one's statement.
+#
+# Equivalent: "every allocation is read as one of the three". A receipt's
+# allocation then joins none of contra_notes, deposit_notes and
+# post_dated_cheques, so its date is coalesce(null, null, null) -- and a
+# null date is neither before the period (opening) nor inside it, so the
+# row is never shown and never summed. The code's own shape.
 
 m("a contra is not on the statement",
   "report_statement_of_account",
