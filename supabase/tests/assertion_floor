@@ -949,4 +949,15 @@
 # named. All three core membership mutants die on it.
 # Measured:
 # `all SQL assertions passed (386 files, 14961 assertions executed)`.
-14961
+#
+# 14961 -> 15011: 0747 and 0748, and the sweeps that found them. The
+# aged listings, rule by rule, on both sides (14), the three ways of
+# being paid the listings never saw -- contra, deposit, post-dated
+# cheque, each the day before and the day of, footed to 1210 and 2110
+# (20); the statement a customer is sent, with the same three and
+# another customer's cheque kept off it (8); and the SST return in
+# ringgit -- sales, input, a service charge and service tax half paid,
+# each at a different rate (8).
+# Measured:
+# `all SQL assertions passed (386 files, 15011 assertions executed)`.
+15011
