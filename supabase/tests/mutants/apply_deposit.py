@@ -15,7 +15,13 @@
 # took it the rest of the way); the mutants were not kept then. These
 # are.
 #
-# RESULT: (pending)
+# RESULT, 6 October, against 0747: 19 mutants, ALL 19 KILLED, control
+# alive. deposits.sql kills 16 -- every refusal, both control accounts,
+# the direction of the journal, the typed date, the deposit's balance
+# -- and aged_balances.sql the three it cannot see: an allocation with
+# no `applied_on`, or with today's, on either side. Those three are
+# what `0747` added, and the only reader of the column is the listing,
+# so the listing is where they are asserted.
 
 m("a stranger applies a deposit",
   "apply_deposit",
