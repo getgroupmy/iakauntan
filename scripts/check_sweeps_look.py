@@ -147,10 +147,16 @@ def drive(gate: str, tree: pathlib.Path) -> tuple[object, str]:
     env = dict(os.environ)
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     try:
+        # stdin closed: a gate that reads its input from stdin -- as
+        # `check_rate_feed_fresh` does without `--newest` -- would
+        # otherwise inherit whatever this process was given and wait on
+        # it until TIMEOUT. In CI that is nothing and it reports at once;
+        # in a shell left open it is a hang, and a hang reads "timeout"
+        # rather than "reported".
         done = subprocess.run(
             [sys.executable, "-B", "scripts/%s.py" % gate],
             capture_output=True, text=True, cwd=tree, env=env,
-            timeout=TIMEOUT)
+            stdin=subprocess.DEVNULL, timeout=TIMEOUT)
         return done.returncode, done.stdout + done.stderr
     except subprocess.TimeoutExpired:
         return "timeout", ""
