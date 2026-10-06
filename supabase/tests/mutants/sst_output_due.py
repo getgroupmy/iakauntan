@@ -10,6 +10,14 @@
 #       supabase/tests/mutants/sst_output_due.py
 
 #
+# RESULT AGAIN, 6 October, against 0748: 22 mutants, ALL 22 KILLED,
+# control alive. The 18 below re-run rather than assumed to carry over:
+# service_tax_on_payment.sql 9, sst_shapes.sql the rest. The four
+# 0748 added -- each amount converted at the document's rate -- were
+# all alive against the old body's shape until sst_summary.sql's "The
+# return is made in ringgit" block, which kills all four: sales tax at
+# 4.20, a service charge at 4.50, and service tax half paid at 5.00.
+#
 # RESULT, 6 October: 18 mutants, ALL 18 KILLED, control alive, across
 # eight files -- with NO new assertion. The first function swept that
 # needed none. service_tax_on_payment.sql kills 10 on its own (the
