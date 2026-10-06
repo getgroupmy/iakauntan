@@ -7,7 +7,20 @@
 #       supabase/tests/depreciation_schedule.sql \
 #       supabase/tests/mutants/report_asset_movements.py
 #
-# RESULT: (pending)
+# RESULT, 6 October: 26 mutants, 25 KILLED, 1 equivalent, control
+# alive, across depreciation_schedule.sql and asset_disposal_shapes.sql
+# -- which between them kill every edge of the period from both sides.
+# One clause lived in both: the period's charge reading runs after its
+# end. Every note asked for ran to 31 December, after the last run.
+# depreciation_schedule.sql's "A period that ends between two runs" now
+# asks for half a year.
+#
+# Equivalent: accumulated depreciation brought forward on an asset bought
+# inside the period. Nothing charged it before it was bought, so the
+# filter changes a sum of nils. The writer.
+#
+# One anchor ended part way through a comment line; the pre-flight
+# refused the whole file before anything ran, which is what it is for.
 
 m("anybody reads the note",
   "report_asset_movements",
