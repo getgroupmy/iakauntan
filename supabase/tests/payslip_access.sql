@@ -524,4 +524,237 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- request, decide and revoke, rule by rule
+--
+-- A sweep of `0046`'s three functions over this file and
+-- `statutory.sql` left seventeen mutants alive. Most were refusals
+-- asserted by SQLSTATE alone, where the next guard down raises the same
+-- one: a stranger asking is refused by the membership check AND by the
+-- auditor check, both 42501, so either could go. One was the guard the
+-- scheme exists for: an auditor approving their own request was only
+-- ever tried while they were an auditor, whom the admin check refuses
+-- first. It matters to somebody who has since been MADE an administrator
+-- -- which is the case here. The rest were what a decision and a
+-- revocation write, which nothing read.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_owner uuid := pg_temp.test_user();
+  v_org uuid := pg_temp.test_org('Akses Slip Peraturan Sdn Bhd');
+  v_a uuid := pg_temp.another_user('a.auditor@akses.test');
+  v_b uuid := pg_temp.another_user('b.auditor@akses.test');
+  v_staff uuid := pg_temp.another_user('staff@akses.test');
+  v_req_a uuid; v_req_b uuid; v_req_b2 uuid;
+  r record;
+begin
+  insert into public.org_members (org_id, user_id, role, status)
+  values (v_org, v_a, 'auditor', 'active'), (v_org, v_b, 'auditor', 'active'),
+         (v_org, v_staff, 'employee', 'active');
+
+  -- WHO MAY ASK, by what they are told.
+  perform pg_temp.sign_in_as(pg_temp.another_user('nobody@elsewhere-akses.test'));
+  perform pg_temp.check_refused('a stranger is told they are not a member',
+    format('select public.request_payslip_access(%L, %L)', v_org, 'Let me in'),
+    '%Not a member of this company%', '42501');
+  perform pg_temp.sign_in_as(v_staff);
+  perform pg_temp.check_refused('a member who is not an auditor is told only an auditor may',
+    format('select public.request_payslip_access(%L, %L)', v_org, 'Curious'),
+    '%Only an auditor may request%', '42501');
+
+  -- WHAT A REQUEST KEEPS. A period of one day is a period; the reason
+  -- is kept as said, without the spaces round it.
+  perform pg_temp.sign_in_as(v_a);
+  v_req_a := public.request_payslip_access(v_org, '  Year-end cut-off  ',
+    date '2026-01-31', date '2026-01-31');
+  select * into r from public.payslip_access_requests where id = v_req_a;
+  perform pg_temp.check_eq('the reason is kept trimmed', r.reason, 'Year-end cut-off');
+  perform pg_temp.check_eq('and a one-day period is kept',
+    r.period_from::text || '..' || r.period_to::text, '2026-01-31..2026-01-31');
+
+  -- One pending request each -- not one for the company.
+  perform pg_temp.sign_in_as(v_b);
+  v_req_b := public.request_payslip_access(v_org, 'Payroll walkthrough');
+  perform pg_temp.check_true('a second auditor may ask while the first waits',
+    v_req_b is not null);
+
+  -- DECIDING.
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_refused('a request that is not there says so',
+    format('select public.decide_payslip_access(%L, true)', gen_random_uuid()),
+    '%Request not found%', 'P0002');
+
+  -- The auditor, since made an administrator, and their own request.
+  update public.org_members set role = 'admin'
+   where org_id = v_org and user_id = v_a;
+  perform pg_temp.sign_in_as(v_a);
+  perform pg_temp.check_refused(
+    'an auditor made administrator still cannot approve their own request',
+    format('select public.decide_payslip_access(%L, true)', v_req_a),
+    '%cannot approve your own request%', '42501');
+
+  -- A refusal needs no number of days, and is given no expiry.
+  perform pg_temp.sign_in_as(v_owner);
+  perform public.decide_payslip_access(v_req_b, false, 'Not this quarter', 0);
+  select * into r from public.payslip_access_requests where id = v_req_b;
+  perform pg_temp.check_eq('a refusal is a refusal', r.status::text, 'rejected');
+  perform pg_temp.check_true('with no expiry', r.expires_at is null);
+  perform pg_temp.check_eq('and dated when it was made', r.decided_at::text, now()::text);
+
+  -- An approval for seven days expires in exactly seven.
+  perform public.decide_payslip_access(v_req_a, true, 'For the cut-off', 7);
+  perform pg_temp.check_eq('seven days means seven',
+    (select expires_at::text from public.payslip_access_requests where id = v_req_a),
+    (now() + interval '7 days')::text);
+
+  -- REVOKING.
+  perform pg_temp.check_refused('a request that is not there cannot be revoked',
+    format('select public.revoke_payslip_access(%L)', gen_random_uuid()),
+    '%Request not found%', 'P0002');
+  perform public.revoke_payslip_access(v_req_a);
+  select * into r from public.payslip_access_requests where id = v_req_a;
+  perform pg_temp.check_eq('a revocation is dated', r.revoked_at::text, now()::text);
+  perform pg_temp.check_eq('and with nothing to say leaves the decision''s note',
+    r.decision_note, 'For the cut-off');
+
+  perform pg_temp.sign_in_as(v_b);
+  v_req_b2 := public.request_payslip_access(v_org, 'Payroll walkthrough, again');
+  perform pg_temp.sign_in_as(v_owner);
+  perform public.decide_payslip_access(v_req_b2, true, null, 3);
+  perform public.revoke_payslip_access(v_req_b2, 'Walkthrough done early');
+  perform pg_temp.check_eq('while a revocation that says something is kept',
+    (select decision_note from public.payslip_access_requests where id = v_req_b2),
+    'Walkthrough done early');
+  perform pg_temp.sign_out();
+end $$;
+
+-- ---------------------------------------------------------------------
+-- The grant and the two audited reads, rule by rule
+--
+-- Sweeps of `app.covering_grant` (0047), `audit_view_payslip` (0048) and
+-- `audit_list_payslips` (0281) over this file left twelve mutants
+-- alive:
+--
+--   * the grant's edges. Nothing sat ON a boundary: a grant expiring at
+--     this instant, or a period whose first or last day is the pay date.
+--   * which grant is named when two cover, and whether a grant in one
+--     company answers for another. Every auditor here belonged to one
+--     company, so there was no other company's grant to find.
+--   * the list's run filter, the tenant column it strips, and the count
+--     it logs -- the fixture's list was only ever one payslip long.
+--   * three refusals of the single read asserted by SQLSTATE alone,
+--     each with a later guard that raises the same code.
+--
+-- The grants are written straight into the table, approved, so each
+-- edge is set exactly rather than by the days `decide_payslip_access`
+-- counts from now.
+-- ---------------------------------------------------------------------
+create or replace function pg_temp.grant_for(
+  p_org uuid, p_user uuid, p_expires timestamptz,
+  p_from date default null, p_to date default null)
+returns uuid language plpgsql as $$
+declare v uuid;
+begin
+  insert into public.payslip_access_requests
+    (org_id, requested_by, reason, status, decided_by, decided_at,
+     expires_at, period_from, period_to)
+  values (p_org, p_user, 'Fixture grant', 'approved', pg_temp.test_user(),
+          now(), p_expires, p_from, p_to)
+  returning id into v;
+  return v;
+end $$;
+
+create or replace function pg_temp.payroll_of(p_org uuid, p_names text[])
+returns uuid[] language plpgsql as $$
+declare v_runs uuid[] := '{}'; i integer; m integer;
+begin
+  insert into public.payroll_settings (org_id, pay_day)
+  values (p_org, 25) on conflict (org_id) do nothing;
+  for i in 1 .. array_length(p_names, 1) loop
+    insert into public.employees
+      (org_id, employee_no, full_name, hire_date, basic_salary,
+       date_of_birth, residency_status)
+    values (p_org, 'E' || i, p_names[i], date '2020-01-01', 4000 + i * 1000,
+            date '1990-01-01', 'citizen');
+  end loop;
+  for m in 1 .. 2 loop
+    v_runs := v_runs || public.create_payroll_run(
+      p_org, public.ensure_pay_period(p_org, 2026, m), 'Month ' || m);
+    perform public.calculate_payroll_run(v_runs[m]);
+  end loop;
+  return v_runs;
+end $$;
+
+do $$
+declare
+  v_owner uuid := pg_temp.test_user();
+  v_x uuid := pg_temp.another_user('x.auditor@gaji-peraturan.test');
+  v_a uuid; v_b uuid; v_runs uuid[]; v_b_runs uuid[];
+  v_emp uuid; v_slip uuid;
+  v_day uuid; v_short uuid; v_long uuid; v_theirs uuid;
+  j jsonb;
+begin
+  perform pg_temp.allow_many_companies();
+  v_a := pg_temp.test_org('Gaji Peraturan Sdn Bhd');
+  v_runs := pg_temp.payroll_of(v_a, array['Chong', 'Devi']);
+  v_b := pg_temp.test_org('Gaji Jiran Sdn Bhd');
+  v_b_runs := pg_temp.payroll_of(v_b, array['Elias']);
+  insert into public.org_members (org_id, user_id, role, status)
+  values (v_a, v_x, 'auditor', 'active'), (v_b, v_x, 'auditor', 'active');
+  select id into v_emp from public.employees where org_id = v_a and employee_no = 'E1';
+  select id into v_slip from public.payslips where run_id = v_runs[1] and employee_id = v_emp;
+
+  -- THE SINGLE READ'S REFUSALS, by what they say.
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_refused('a payslip that is not there says so',
+    format('select public.audit_view_payslip(%L)', gen_random_uuid()),
+    '%Payslip not found%', 'P0002');
+  perform pg_temp.check_refused('payroll is sent to its own screens for one payslip too',
+    format('select public.audit_view_payslip(%L)', v_slip),
+    '%Use the payroll screens%', '22023');
+  perform pg_temp.sign_in_as(pg_temp.another_user('nobody@gaji-peraturan.test'));
+  perform pg_temp.check_refused('a stranger is told they are not a member',
+    format('select public.audit_view_payslip(%L)', v_slip),
+    '%Not a member of this company%', '42501');
+
+  -- THE EDGES. A grant for the one day 25 January covers a payslip paid
+  -- that day -- both bounds are inclusive.
+  v_day := pg_temp.grant_for(v_a, v_x, now() + interval '5 days',
+                             date '2026-01-25', date '2026-01-25');
+  perform pg_temp.sign_in_as(v_x);
+  perform pg_temp.check_eq('a grant for one day covers a payslip paid that day',
+    app.covering_grant(v_a, v_runs[1], v_emp, date '2026-01-25'), v_day);
+  -- And expiring NOW is expired.
+  update public.payslip_access_requests set expires_at = now() where id = v_day;
+  perform pg_temp.check_true('a grant expiring this instant covers nothing',
+    app.covering_grant(v_a, v_runs[1], v_emp, date '2026-01-25') is null);
+
+  -- WHICH GRANT, OF TWO. The one that lasts longer -- and only this
+  -- company's, though the neighbour's grant to the same auditor lasts
+  -- longer still.
+  v_short  := pg_temp.grant_for(v_a, v_x, now() + interval '1 day');
+  v_long   := pg_temp.grant_for(v_a, v_x, now() + interval '10 days');
+  v_theirs := pg_temp.grant_for(v_b, v_x, now() + interval '20 days');
+  perform pg_temp.check_eq('of two grants, the one that lasts longer is named',
+    app.covering_grant(v_a, v_runs[2], v_emp, date '2026-02-25'), v_long);
+
+  -- THE LIST. Four payslips here, one next door that this auditor may
+  -- also read -- and a list of this company's has four.
+  j := public.audit_list_payslips(v_a);
+  perform pg_temp.check_eq('the list holds this company''s payslips only',
+    jsonb_array_length(j), 4);
+  perform pg_temp.check_true('without the tenant column on any of them',
+    not exists (select 1 from jsonb_array_elements(j) e where e ? 'org_id'));
+  perform pg_temp.check_eq('and the log counts all four',
+    (select payslip_count from public.payslip_access_log
+      where org_id = v_a and action = 'list' and actor_id = v_x), 4);
+  j := public.audit_list_payslips(v_a, v_runs[2]);
+  perform pg_temp.check_eq('a list of one run holds that run''s',
+    jsonb_array_length(j), 2);
+  perform pg_temp.check_true('and nothing from the other',
+    not exists (select 1 from jsonb_array_elements(j) e
+                 where (e ->> 'run_id')::uuid <> v_runs[2]));
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

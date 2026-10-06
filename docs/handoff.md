@@ -427,6 +427,17 @@ page and renumbering would quietly break the reference.
     search for the same shape -- boolean guards ending in a CASE that
     can go NULL -- found only `can_attach_to` and
     `can_read_attachment`, and both end `else false` over `exists`.
+20. **A payslip with no pay date is inside every bounded grant.**
+    `app.covering_grant` (0047) tests a grant's period with
+    `p_pay_date is null or p_pay_date >= r.period_from` (and the same
+    for `period_to`), so a grant an administrator limited to January
+    also opens any payslip whose `pay_date` is null. The column is
+    nullable. Nothing is exposed today -- production had 36 payslips,
+    none undated, and no access requests at all on 6 October -- and
+    payroll sets the date. The question is which way it should fail:
+    **outside every bounded grant** (refuse, and let an unbounded grant
+    still cover it), or **as now**. Either is a one-line migration plus
+    an assertion; it is a policy call, so it waits for an answer.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -456,6 +467,10 @@ function:
 | `app.may_decide_claim_step` | `0752` | 12 / 14 | 2 | `claim_approval_chain.sql` |
 | `app.build_claim_chain` | `0121` | 20 / 20 | -- | `claim_approval_chain.sql` |
 | `app.assert_claim_caps` | `0364` | 23 / 23 | -- | `claim_caps.sql` |
+| `request_`, `decide_`, `revoke_payslip_access` | `0046` | 32 / 32 | -- | `payslip_access.sql` |
+| `app.covering_grant` | `0047` | 12 / 12 | -- | `payslip_access.sql` |
+| `audit_view_payslip` | `0048` | 10 / 10 | -- | `payslip_access.sql` |
+| `audit_list_payslips` | `0281` | 10 / 10 | -- | `payslip_access.sql` |
 
 Every equivalent is written into its mutants file with the reason.
 
