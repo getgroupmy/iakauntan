@@ -409,6 +409,21 @@ begin
     pg_temp.tax_figure(v_comp, 'chargeable_income'), 0);
   perform pg_temp.check_eq('and the rest carries forward',
     pg_temp.tax_figure(v_comp, 'loss_carried_forward'), 250000);
+
+  -- And the ALLOWANCES carried forward include what was brought forward
+  -- and not used. Nothing asserted this until the 2026-10-06 sweep made
+  -- the figure "this year's allowances less what was used" -- which,
+  -- in a year with none of its own, is negative, and in any year drops
+  -- the unabsorbed balance a company is entitled to carry for ever.
+  perform pg_temp.check_eq('brought-forward allowances all used leave none to carry',
+    pg_temp.tax_figure(v_comp, 'ca_carried_forward'), 0);
+  update public.tax_computations
+     set capital_allowance_bf = 250000, loss_bf = 0
+   where id = v_comp;
+  perform pg_temp.check_eq('allowances larger than the income are used up to it',
+    pg_temp.tax_figure(v_comp, 'ca_used'), 200000);
+  perform pg_temp.check_eq('and the unabsorbed 50,000 carries forward',
+    pg_temp.tax_figure(v_comp, 'ca_carried_forward'), 50000);
 end $$;
 
 -- ---------------------------------------------------------------------

@@ -904,4 +904,15 @@
 # because of the defect.
 # Measured:
 # `all SQL assertions passed (385 files, 14906 assertions executed)`.
-14906
+#
+# 14906 -> 14917: the income tax computations. Form C (0666) 21 of 21:
+# tax_computation.sql now reads unabsorbed capital allowances carried
+# forward with b/f in play. Forms B and P 20 of 20: tax_forms_b_and_p.sql
+# gained competing PCB schedules (older and in force, newer and ended,
+# future, another body's) at 90% inside the file's transaction -- the
+# seeded data had ONE schedule, so the four rules choosing it were
+# unasserted -- plus the RM400 rebate stopping at a tax of 20, CP500
+# instalments credited, and nil income needing no scale.
+# Measured:
+# `all SQL assertions passed (385 files, 14917 assertions executed)`.
+14917

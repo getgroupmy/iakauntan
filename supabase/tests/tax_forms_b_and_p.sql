@@ -291,6 +291,31 @@ begin
    where computation_id = v_b and label = 'Individual';
   perform pg_temp.check_eq('exactly at the threshold still does',
     pg_temp.b_figure(v_b, 'rebate'), 400);
+
+  -- The rebate is UP TO 400: on a tax smaller than that it takes the
+  -- tax to nothing and no further. Every case above had a tax larger
+  -- than the rebate, so a rebate that paid out its full 400 regardless
+  -- was invisible (the 2026-10-06 sweep). 7,000 chargeable is 20 of tax.
+  update public.tax_relief_claims set amount = 33000
+   where computation_id = v_b and label = 'Individual';
+  perform pg_temp.check_eq('-- a small chargeable income',
+    pg_temp.b_figure(v_b, 'chargeable_income'), 7000);
+  perform pg_temp.check_true('-- whose tax is under the rebate',
+    pg_temp.b_figure(v_b, 'tax_charged') between 0.01 and 399.99);
+  perform pg_temp.check_eq('the rebate stops at the tax',
+    pg_temp.b_figure(v_b, 'rebate'), pg_temp.b_figure(v_b, 'tax_charged'));
+  perform pg_temp.check_eq('so nothing is payable, rather than a refund of tax never charged',
+    pg_temp.b_figure(v_b, 'tax_payable'), 0);
+
+  -- And instalments already paid come off what is payable. For a
+  -- person they are CP500 instalments, held in the same column as a
+  -- company's CP204.
+  update public.tax_relief_claims set amount = 9000
+   where computation_id = v_b and label = 'Individual';
+  update public.tax_computations set cp204_paid = 150 where id = v_b;
+  perform pg_temp.check_eq('instalments already paid come off the tax payable',
+    pg_temp.b_figure(v_b, 'tax_payable'),
+    pg_temp.b_figure(v_b, 'tax_charged') - 400 - 150);
 end $$;
 
 do $$
@@ -494,6 +519,71 @@ begin
   perform pg_temp.check_eq(
     'and nothing seeded claims to have been checked against the Act',
     v_count, 0);
+end $$;
+
+
+-- ---------------------------------------------------------------------
+-- Which scale: the PCB schedule in force on the day, and only that
+--
+-- `app.individual_tax_on` picks a schedule by four rules -- the PCB
+-- body, started by the day, not yet ended, the newest of those -- and
+-- the seeded data has ONE PCB schedule with brackets, so all four
+-- picked the same rows and none of them could be broken visibly (the
+-- 2026-10-06 sweep). Competing schedules are added here, inside this
+-- file's transaction, each with an absurd 90% rate so that reading the
+-- wrong one cannot go unnoticed: one still in force but older, one
+-- newer that has already ended, one not yet started, and another
+-- body's. The tax on a fixed income must not move.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_before numeric;
+  v_sched  uuid;
+begin
+  v_before := app.individual_tax_on(104500, pg_temp.today());
+  perform pg_temp.check_true('-- the scale in force taxes 104,500 at all',
+    v_before > 0);
+
+  -- Older, and never ended.
+  insert into public.statutory_schedules (body, name, method, effective_from)
+  select 'pcb', 'Old scale', s.method, date '2000-01-01'
+    from public.statutory_schedules s where s.body = 'pcb' limit 1
+  returning id into v_sched;
+  insert into public.tax_brackets (schedule_id, chargeable_from, rate_percent, cumulative_tax, sort_order)
+  values (v_sched, 0, 90, 0, 1);
+
+  -- Newer than the one in force, and already over.
+  insert into public.statutory_schedules (body, name, method, effective_from, effective_to)
+  select 'pcb', 'Short-lived scale', s.method, date '2024-01-01', date '2024-06-30'
+    from public.statutory_schedules s where s.body = 'pcb' limit 1
+  returning id into v_sched;
+  insert into public.tax_brackets (schedule_id, chargeable_from, rate_percent, cumulative_tax, sort_order)
+  values (v_sched, 0, 90, 0, 1);
+
+  -- Not in force until next year.
+  insert into public.statutory_schedules (body, name, method, effective_from)
+  select 'pcb', 'Next year''s scale', s.method, pg_temp.today() + 400
+    from public.statutory_schedules s where s.body = 'pcb' limit 1
+  returning id into v_sched;
+  insert into public.tax_brackets (schedule_id, chargeable_from, rate_percent, cumulative_tax, sort_order)
+  values (v_sched, 0, 90, 0, 1);
+
+  -- Another body's, newest of all.
+  insert into public.statutory_schedules (body, name, method, effective_from)
+  select 'epf', 'Not an income tax scale', s.method, pg_temp.today() - 1
+    from public.statutory_schedules s where s.body = 'epf' limit 1
+  returning id into v_sched;
+  insert into public.tax_brackets (schedule_id, chargeable_from, rate_percent, cumulative_tax, sort_order)
+  values (v_sched, 0, 90, 0, 1);
+
+  perform pg_temp.check_eq(
+    'the tax is read from the PCB scale in force today, and no other',
+    app.individual_tax_on(104500, pg_temp.today()), v_before);
+
+  -- And nothing chargeable is no tax, whether or not a scale is in
+  -- force on the day: 1990 has none.
+  perform pg_temp.check_eq('nothing chargeable owes nothing, scale or no scale',
+    app.individual_tax_on(0, date '1990-01-01'), 0);
 end $$;
 
 rollback;
