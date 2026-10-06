@@ -865,4 +865,302 @@ begin
   raise notice 'ok   pos_recipes';
 end $$;
 
+-- =====================================================================
+-- 10. Where the food comes from, what it takes, and what it posts
+--
+-- The 2026-10-06 sweep of `app.pos_deplete_recipes` left 17 of 31
+-- mutants alive against every recipe file. Five are equivalent and the
+-- mutants file says why. The other twelve were never asked, mostly
+-- because the block above has ONE store, which is both the outlet's own
+-- and the company's default -- so "the outlet's warehouse", "the
+-- default", "the first one" and "the only one" were the same row, and
+-- the four rules that choose between them could each be broken without
+-- a number moving. CLAUDE.md's first trap, once more.
+--
+-- Its own company, so nothing above is disturbed, and so that the block
+-- above's company is ANOTHER company with a default store of its own --
+-- which is what the "another company's warehouse" mutant reaches for.
+-- =====================================================================
+do $$
+declare
+  v_org    uuid;
+  v_owner  uuid := pg_temp.test_user();
+  v_first  uuid;   -- made first, NOT the default
+  v_main   uuid;   -- the default, made second
+  v_bar    uuid;   -- outlet A's own store, not the default
+  v_walkin uuid;
+  v_out_a  uuid;   -- has its own store
+  v_out_b  uuid;   -- has none
+  v_reg_a  uuid;
+  v_reg_b  uuid;
+  v_cash   uuid;
+  v_rice   uuid;
+  v_egg    uuid;
+  v_salt   uuid;   -- in the recipe, never counted
+  v_nasi   uuid;
+  v_teh    uuid;   -- sold with no recipe at all
+  v_mods   uuid;
+  v_extra  uuid;   -- an extra egg
+  v_none   uuid;   -- names an ingredient, at a quantity of nothing
+  v_sale   uuid;
+  v_sale_a uuid;
+  v_sale_b uuid;
+  v_line   uuid;
+  v_inv    uuid;
+begin
+  v_org := pg_temp.test_org('Warung Dua Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_org, m, true from unnest(array['pos','inventory']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+  perform pg_temp.sign_in_as(v_owner);
+
+  -- The order matters: the first store made is not the default.
+  insert into public.warehouses (org_id, code, name, is_default)
+  values (v_org, 'STOR', 'Back store', false) returning id into v_first;
+  insert into public.warehouses (org_id, code, name, is_default)
+  values (v_org, 'MAIN', 'Main store', true) returning id into v_main;
+  insert into public.warehouses (org_id, code, name, is_default)
+  values (v_org, 'BAR', 'Bar fridge', false) returning id into v_bar;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'WALK-IN', 'Counter sales', 'customer') returning id into v_walkin;
+
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, cost_price)
+  values (v_org, 'BERAS', 'Beras', 'stock', true, 'KGM', 4.00)
+  returning id into v_rice;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, cost_price)
+  values (v_org, 'TELUR', 'Telur', 'stock', true, 'C62', 0.50)
+  returning id into v_egg;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code)
+  values (v_org, 'GARAM', 'Garam', 'non_stock', false, 'KGM')
+  returning id into v_salt;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, unit_price)
+  values (v_org, 'NASI', 'Nasi goreng', 'service', false, 'C62', 10.00)
+  returning id into v_nasi;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, unit_price)
+  values (v_org, 'TEH', 'Teh tarik', 'service', false, 'C62', 3.00)
+  returning id into v_teh;
+
+  perform public.upsert_pos_recipe(v_org, v_nasi, 1, jsonb_build_array(
+    jsonb_build_object('item', v_rice, 'quantity', 200, 'uom', 'GRM'),
+    jsonb_build_object('item', v_egg,  'quantity', 1,   'uom', 'C62'),
+    jsonb_build_object('item', v_salt, 'quantity', 5,   'uom', 'GRM')));
+
+  -- Ten of each, in every store, so the store a plate came out of is
+  -- the only thing that differs.
+  insert into public.stock_movements
+    (org_id, movement_no, movement_date, movement_type, item_id,
+     warehouse_id, quantity, unit_cost)
+  select v_org, 'OB-' || w.code || '-' || i.code, pg_temp.today(),
+         'opening_balance', i.id, w.id, 10, i.cost_price
+    from public.warehouses w, public.items i
+   where w.org_id = v_org and i.id in (v_rice, v_egg);
+
+  insert into public.pos_outlets
+    (org_id, code, name, business_type, warehouse_id, walk_in_contact_id,
+     prices_include_tax)
+  values (v_org, 'A', 'Outlet with a store', 'food_beverage', v_bar, v_walkin, false)
+  returning id into v_out_a;
+  insert into public.pos_outlets
+    (org_id, code, name, business_type, warehouse_id, walk_in_contact_id,
+     prices_include_tax)
+  values (v_org, 'B', 'Outlet without one', 'food_beverage', null, v_walkin, false)
+  returning id into v_out_b;
+  insert into public.pos_registers (org_id, outlet_id, code, name)
+  values (v_org, v_out_a, 'A1', 'Counter A') returning id into v_reg_a;
+  insert into public.pos_registers (org_id, outlet_id, code, name)
+  values (v_org, v_out_b, 'B1', 'Counter B') returning id into v_reg_b;
+  insert into public.pos_settings (org_id, round_cash_to_5sen) values (v_org, false);
+  perform pg_temp.a_till(v_org);
+  insert into public.pos_tender_types
+    (org_id, code, name, kind, payment_mode_code, counts_in_drawer,
+     gives_change, opens_drawer)
+  values (v_org, 'TUNAI', 'Tunai', 'cash', '01', true, true, true)
+  returning id into v_cash;
+  perform public.open_pos_shift(v_reg_a, 100.00);
+  perform public.open_pos_shift(v_reg_b, 100.00);
+
+  insert into public.pos_modifier_groups (org_id, code, name, min_select, max_select)
+  values (v_org, 'TAMBAH', 'Tambahan', 0, 2) returning id into v_mods;
+  insert into public.pos_modifiers
+    (org_id, group_id, code, name, price_delta, recipe_item_id,
+     recipe_quantity, recipe_uom_code)
+  values (v_org, v_mods, 'TELUR2', 'Telur tambahan', 1.00, v_egg, 1, 'C62')
+  returning id into v_extra;
+  insert into public.pos_modifiers
+    (org_id, group_id, code, name, price_delta, recipe_item_id,
+     recipe_quantity, recipe_uom_code)
+  values (v_org, v_mods, 'PEDAS', 'Lebih pedas', 0, v_egg, 0, 'C62')
+  returning id into v_none;
+  insert into public.item_modifier_groups (org_id, item_id, group_id)
+  values (v_org, v_nasi, v_mods);
+
+  -- ------------------------------------------------------------------
+  -- Outlet A: TWO plates on one line, an extra egg each, and a modifier
+  -- that names the egg at a quantity of nothing.
+  -- ------------------------------------------------------------------
+  v_sale := public.open_pos_sale(v_reg_a);
+  v_line := public.add_pos_sale_line(v_sale, v_nasi, 2, 10.00);
+  perform public.add_line_modifier(v_line, v_extra);
+  perform public.add_line_modifier(v_line, v_none);
+  perform public.complete_pos_sale(
+    v_sale, jsonb_build_array(jsonb_build_object('type', v_cash, 'amount', 22.00)));
+  v_sale_a := v_sale;
+
+  perform pg_temp.check_eq('an outlet with its own store cooks out of it',
+    (select round(sl.quantity, 4) from public.stock_levels sl
+      where sl.item_id = v_rice and sl.warehouse_id = v_bar), 9.6::numeric);
+  perform pg_temp.check_eq('-- and not out of the default',
+    (select round(sl.quantity, 4) from public.stock_levels sl
+      where sl.item_id = v_rice and sl.warehouse_id = v_main), 10::numeric);
+  -- Two plates, an egg each, and an extra egg on EACH plate: four. The
+  -- modifier is per plate, so the line's quantity multiplies it; and a
+  -- modifier that names an ingredient at a quantity of nothing takes
+  -- none of it.
+  perform pg_temp.check_eq(
+    'two plates with an extra egg each take four eggs, not three or five',
+    (select round(sl.quantity, 4) from public.stock_levels sl
+      where sl.item_id = v_egg and sl.warehouse_id = v_bar), 6::numeric);
+  perform pg_temp.check_eq('salt nobody counts is not taken off a shelf',
+    (select count(*)::integer from public.stock_movements sm
+      where sm.item_id = v_salt), 0);
+  perform pg_temp.check_eq('the food cost journal is filed as a stock movement',
+    (select e.source::text from public.gl_entries e
+      where e.source_table = 'pos_sales' and e.source_id = v_sale
+        and e.description like 'Recipe consumption%'), 'stock_movement');
+
+  -- ------------------------------------------------------------------
+  -- Outlet B has no store of its own: the company's DEFAULT, which is
+  -- neither the first store made nor another company's.
+  -- ------------------------------------------------------------------
+  v_sale := public.open_pos_sale(v_reg_b);
+  perform public.add_pos_sale_line(v_sale, v_nasi, 1, 10.00);
+  perform public.complete_pos_sale(
+    v_sale, jsonb_build_array(jsonb_build_object('type', v_cash, 'amount', 10.00)));
+  v_sale_b := v_sale;
+
+  perform pg_temp.check_eq('an outlet with no store cooks out of the default',
+    (select round(sl.quantity, 4) from public.stock_levels sl
+      where sl.item_id = v_rice and sl.warehouse_id = v_main), 9.8::numeric);
+  perform pg_temp.check_eq('-- not the first store made',
+    (select round(sl.quantity, 4) from public.stock_levels sl
+      where sl.item_id = v_rice and sl.warehouse_id = v_first), 10::numeric);
+  perform pg_temp.check_eq('and nothing of this company''s left the building',
+    (select count(*)::integer from public.stock_movements sm
+      where sm.source_table = 'pos_sales' and sm.source_id = v_sale
+        and sm.warehouse_id not in (v_first, v_main, v_bar)), 0);
+
+  -- ------------------------------------------------------------------
+  -- A drink with no recipe consumes nothing, and posts nothing.
+  -- ------------------------------------------------------------------
+  v_sale := public.open_pos_sale(v_reg_a);
+  perform public.add_pos_sale_line(v_sale, v_teh, 1, 3.00);
+  perform public.complete_pos_sale(
+    v_sale, jsonb_build_array(jsonb_build_object('type', v_cash, 'amount', 3.00)));
+  perform pg_temp.check_eq('a sale with no recipe posts no food-cost journal',
+    (select count(*)::integer from public.gl_entries e
+      where e.source_table = 'pos_sales' and e.source_id = v_sale
+        and e.source = 'stock_movement'), 0);
+
+  -- ------------------------------------------------------------------
+  -- And credited, the food goes back to where it came from.
+  --
+  -- `app.pos_return_recipes` chooses the store the same way the
+  -- depletion does, and its four rules were unasserted for the same
+  -- reason: 9b credits a sale from the block above, whose only store is
+  -- both. Eggs are not asserted here -- the return half gives back the
+  -- plate's own egg and not the modifier's, which is a reported finding
+  -- awaiting a decision, and this block does not paper over it.
+  -- ------------------------------------------------------------------
+  select invoice_id into v_inv from public.pos_sales where id = v_sale_a;
+  perform public.credit_sales_invoice(v_inv, null, 'Sent back');
+  perform pg_temp.check_eq('credited, outlet A''s rice goes back to its own store',
+    (select round(sl.quantity, 4) from public.stock_levels sl
+      where sl.item_id = v_rice and sl.warehouse_id = v_bar), 10::numeric);
+  perform pg_temp.check_eq('-- and not into the default',
+    (select round(sl.quantity, 4) from public.stock_levels sl
+      where sl.item_id = v_rice and sl.warehouse_id = v_main), 9.8::numeric);
+
+  select invoice_id into v_inv from public.pos_sales where id = v_sale_b;
+  perform public.credit_sales_invoice(v_inv, null, 'Sent back');
+  perform pg_temp.check_eq('outlet B''s goes back to the default',
+    (select round(sl.quantity, 4) from public.stock_levels sl
+      where sl.item_id = v_rice and sl.warehouse_id = v_main), 10::numeric);
+  perform pg_temp.check_eq('-- not into the first store made',
+    (select round(sl.quantity, 4) from public.stock_levels sl
+      where sl.item_id = v_rice and sl.warehouse_id = v_first), 10::numeric);
+  perform pg_temp.check_eq('and no return left the company either',
+    (select count(*)::integer from public.stock_movements sm
+      where sm.source_table = 'pos_sales' and sm.source_id in (v_sale_a, v_sale_b)
+        and sm.warehouse_id not in (v_first, v_main, v_bar)), 0);
+  perform pg_temp.check_eq('and the salt nobody counts did not come back either',
+    (select count(*)::integer from public.stock_movements sm
+      where sm.item_id = v_salt), 0);
+
+  -- A discount line is not a plate, even when it names the dish it
+  -- discounts. Two plates sold, and a credit note for ONE of them that
+  -- also carries a discount line naming the dish: one plate's rice
+  -- comes back. With food still owing on purpose -- were the whole sale
+  -- credited, "never more than went out" would stop a miscounted line
+  -- before the line-type rule was ever reached, and this would prove
+  -- the clamp a second time.
+  declare
+    v_two  uuid;
+    v_cn   uuid;
+    v_before numeric;
+  begin
+    v_two := public.open_pos_sale(v_reg_a);
+    perform public.add_pos_sale_line(v_two, v_nasi, 2, 10.00);
+    perform public.complete_pos_sale(
+      v_two, jsonb_build_array(jsonb_build_object('type', v_cash, 'amount', 20.00)));
+    select round(sl.quantity, 4) into v_before from public.stock_levels sl
+     where sl.item_id = v_rice and sl.warehouse_id = v_bar;
+
+    insert into public.sales_documents
+      (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+       exchange_rate, status, original_invoice_id)
+    values (v_org, 'credit_note', 'CN-DISC', pg_temp.today(), pg_temp.today(),
+            v_walkin, 'MYR', 1, 'draft',
+            (select invoice_id from public.pos_sales where id = v_two))
+    returning id into v_cn;
+    insert into public.sales_document_lines
+      (org_id, document_id, line_no, line_type, item_id, description,
+       quantity, unit_price)
+    values (v_org, v_cn, 1, 'item',     v_nasi, 'One plate back', 1,  10.00),
+           (v_org, v_cn, 2, 'discount', v_nasi, 'Goodwill',       1,  -1.00);
+    perform public.post_sales_document(v_cn);
+
+    perform pg_temp.check_eq(
+      'a credit for one plate and a discount on it puts back one plate''s rice',
+      (select round(sl.quantity, 4) from public.stock_levels sl
+        where sl.item_id = v_rice and sl.warehouse_id = v_bar),
+      v_before + 0.2);
+  end;
+
+  -- ------------------------------------------------------------------
+  -- A chart without a cost-of-sales account still sells. The plate
+  -- comes off the shelf; there is simply nowhere to post its cost, and
+  -- the counter is not the place to find that out.
+  -- ------------------------------------------------------------------
+  update public.accounts set code = '5299' where org_id = v_org and code = '5200';
+  v_sale := public.open_pos_sale(v_reg_a);
+  perform public.add_pos_sale_line(v_sale, v_nasi, 1, 10.00);
+  perform public.complete_pos_sale(
+    v_sale, jsonb_build_array(jsonb_build_object('type', v_cash, 'amount', 10.00)));
+  perform pg_temp.check_true('-- the plate still came off the shelf',
+    exists (select 1 from public.stock_movements sm
+             where sm.source_table = 'pos_sales' and sm.source_id = v_sale));
+  perform pg_temp.check_eq('and with no 5200 the sale completes without a food-cost journal',
+    (select count(*)::integer from public.gl_entries e
+      where e.source_table = 'pos_sales' and e.source_id = v_sale
+        and e.source = 'stock_movement'), 0);
+
+  raise notice 'ok   pos_recipes 10';
+end $$;
+
 rollback;

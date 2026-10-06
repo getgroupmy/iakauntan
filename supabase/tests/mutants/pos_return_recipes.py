@@ -34,6 +34,35 @@
 # what is there and cannot see what is missing -- which is why it was
 # found by reading the two halves against each other instead.
 #
+# RESULT, 6 October -- SUPERSEDES the 5 October one below: 21 of 28
+# KILLED, 7 EQUIVALENT, control alive. Of the seven left "STILL OPEN"
+# below, three are now killed and four turned out to be equivalent:
+#
+# KILLED by pos_recipes.sql section 10, which has the stores the block
+# above lacks: the food returned into another company's warehouse, and
+# into the default rather than the outlet's own. And a DISCOUNT line
+# naming the dish, on a credit for one plate of two -- food still
+# owing, so the clamp cannot stop the mutant first -- kills the
+# line-type rule.
+#
+# EQUIVALENT, beyond the three proven below:
+#   - "a credit line of zero quantity puts food back": a zero line
+#     contributes zero, and `if v_qty <= 0 then continue` drops it.
+#     (The code.)
+#   - "the food comes back at the LATEST cost" and "... read off a
+#     movement that PUT FOOD BACK": depletion runs once per sale and is
+#     grouped by item, so a sale has exactly ONE outbound movement per
+#     ingredient, made in an earlier transaction than any credit. First,
+#     latest and outbound-only all find that row. The note below asked
+#     for "two outbound layers at different costs"; a sale cannot have
+#     two.  (The caller and the code.)
+#   - "an ingredient nobody counts is put back": what can come back is
+#     clamped to what went out, and an untracked ingredient never went
+#     out. The ONE case that tells them apart is an ingredient whose
+#     tracking is switched OFF between the sale and the credit -- and
+#     what should happen then is itself a question, so it is recorded
+#     rather than asserted.
+#
 # RESULT, 5 October: 29 mutants (28 plus a control).
 #
 #   BEFORE the work, across all five files:  8 of 28, and ONLY

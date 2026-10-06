@@ -222,6 +222,35 @@ begin
     (select sl.quantity from public.stock_levels sl
       where sl.item_id = v_rice and sl.warehouse_id = v_kitchen) < 100);
 
+  -- And the MOVEMENT took what the batches held. The check above reads
+  -- the lot balances, which cannot go below what was allocated to a
+  -- lot, so it held with the clamp deleted and with the clamp turned
+  -- round to take the larger of the two (the 2026-10-06 sweep). In
+  -- production either would fail -- the deferred check that the named
+  -- lots add up to what moved runs at COMMIT -- but this file rolls
+  -- back, so that check never runs here, and the sale "succeeded" with
+  -- 0.4 off a shelf that held 0.12.
+  perform pg_temp.check_eq('the movement took the 0.12 there was, not the 0.4 wanted',
+    (select round(sum(sm.quantity), 4) from public.stock_movements sm
+      where sm.source_table = 'pos_sales' and sm.source_id = v_sale
+        and sm.item_id = v_milk), -0.12::numeric);
+
+  -- With nothing left, one more plate takes no santan at all -- not a
+  -- movement of nothing, which is a row on every stock card saying a
+  -- sale used none of something.
+  v_sale := public.open_pos_sale(v_reg);
+  perform public.add_pos_sale_line(v_sale, v_dish, 1, 12.00);
+  perform public.complete_pos_sale(
+    v_sale, jsonb_build_array(jsonb_build_object('type', v_cash, 'amount', 12.00)));
+  perform pg_temp.check_eq('an exhausted batch gets no movement, not one of zero',
+    (select count(*)::integer from public.stock_movements sm
+      where sm.source_table = 'pos_sales' and sm.source_id = v_sale
+        and sm.item_id = v_milk), 0);
+  perform pg_temp.check_eq('-- while the plate''s rice still moved',
+    (select count(*)::integer from public.stock_movements sm
+      where sm.source_table = 'pos_sales' and sm.source_id = v_sale
+        and sm.item_id = v_rice), 1);
+
   -- ------------------------------------------------------------------
   -- 3. A batch that goes in the van keeps its name and its date
   -- ------------------------------------------------------------------

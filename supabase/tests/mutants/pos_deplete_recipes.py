@@ -34,6 +34,42 @@
 # what is there and cannot see what is missing -- which is why it was
 # found by reading the two halves against each other instead.
 #
+# RESULT, 6 October -- SUPERSEDES the 5 October one below: 25 of 31
+# KILLED, 6 EQUIVALENT, control alive.
+#
+# pos_recipes.sql section 10 (its own company) kills the warehouse four,
+# the modifier's line-quantity multiplier, track_inventory, the
+# no-recipe journal, the missing-5200 refusal and the journal source.
+# Its first block has ONE store, which was both the outlet's own and the
+# default -- so the four rules that choose between them could each be
+# broken without a number moving. lots_across_the_new_sources.sql now
+# asserts the MOVEMENT against an exhausted batch (it read lot balances,
+# which cannot go below what was allocated -- and the deferred check
+# that would refuse an over-take runs at COMMIT, which a rolled-back
+# file never reaches), and that an exhausted batch gets no movement.
+#
+# EQUIVALENT, each for a reason:
+#   - "a sale that is not there": the only caller is the pos_sales
+#     trigger, which passes the row it fired on.  (The caller.)
+#   - "the plate is dated the day the job ran": the only thing that
+#     completes a sale is complete_pos_sale, which sets completed_at =
+#     now() in the transaction the trigger runs in, so
+#     malaysian_day(completed_at) IS app.today().  (The caller.)
+#   - "an EARLIER sale's movements are relinked": the trigger fires
+#     once, on the move to completed, so this sale has no movement
+#     already linked when the update runs.  (The caller.)
+#   - "the cost is read off the FIRST movement": the loop is grouped by
+#     item, so there is one movement per item and per sale -- first and
+#     newest are the same row. Task #83 cleared this read-back for the
+#     same reason; 0745 fixed its sibling in move_document_bundles,
+#     which loops per LINE and had no such grouping.  (The code.)
+#   - "an ingredient the dish needs none of gets a movement": widening
+#     `having > 0` to `>= 0` lets a zero through to `if v_qty <= 0 then
+#     continue`, which drops it.  (The code.)
+#   - "a modifier with no recipe quantity takes an ingredient anyway":
+#     without the guard, a quantity of nothing contributes nothing to
+#     the sum. The guard saves work.  (Arithmetic.)
+#
 # RESULT, 5 October: 32 mutants (31 plus a control).
 #
 #   pos_recipes.sql              12

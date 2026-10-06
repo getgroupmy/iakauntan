@@ -14515,8 +14515,28 @@ owned the cluster. It rolled back and passed, so no result is wrong,
 but a sweep swaps function bodies in and out of the shared database.
 Don't do it.
 
-What is left in task #86 is the earlier gaps: 7 open `pos_return`
-mutants and 18 `pos_deplete` ones, listed in their mutants files.
+**The POS recipe pair, finished:** depletion 25 of 31 killed (6
+equivalent), return 21 of 28 (7 equivalent), each equivalent with its
+reason in the mutants file. `pos_recipes.sql` section 10 is a second
+company with three stores: the outlet's own, a default that is NOT the
+first one made, and a first one that is not the default. The first
+block's single store had been all three at once, so the four rules that
+choose between them were unasserted. Section 10 also covers the
+modifier per plate, an untracked ingredient, a sale with no recipe
+posting no journal, a chart without 5200 still selling, and credits
+going back to the store they came from.
+`lots_across_the_new_sources.sql` now asserts the depletion movement
+against an exhausted batch. It had read lot balances, which cannot go
+below what was allocated. The deferred check that would refuse an
+over-take runs at COMMIT, and a rolled-back test file never reaches it.
+
+**Task #86 is complete.** All 45 money movers are swept. Every survivor
+is either killed by a new assertion or marked equivalent with its
+reason. The three findings awaiting the user (retired accounts still
+posted to, reverse_gl_entry's six columns, the credited plate's
+modifier ingredients) are unchanged. Section 10 deliberately does not
+assert eggs on a credit, because the return half not giving back
+modifier ingredients is that third finding.
 
 ## 5 October: the harness got a pre-flight, and it found three bad mutants
 

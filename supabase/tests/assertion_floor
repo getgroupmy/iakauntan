@@ -876,4 +876,20 @@
 # demo_practice.sql gained "every receipt applied in full".
 # Measured:
 # `all SQL assertions passed (385 files, 14878 assertions executed)`.
-14878
+#
+# 14878 -> 14900: the POS recipe pair, finished. Depletion 25 of 31
+# killed (6 equivalent), return 21 of 28 (7 equivalent). pos_recipes.sql
+# section 10 -- a second company with an outlet's own store, a default
+# that is not the first store made, and a first that is not the default
+# -- because the first block's one store had been all three, and the
+# four rules choosing between them were never asked. Plus the modifier
+# per plate, an untracked ingredient, no journal for a sale with no
+# recipe, a chart without 5200 still selling, credits going back where
+# they came from, and a discount line that names the dish.
+# lots_across_the_new_sources.sql: the depletion MOVEMENT against an
+# exhausted batch (lot balances cannot go below what was allocated, and
+# the deferred lot check runs at COMMIT, which a rolled-back file never
+# reaches), and no movement of zero.
+# Measured:
+# `all SQL assertions passed (385 files, 14900 assertions executed)`.
+14900
