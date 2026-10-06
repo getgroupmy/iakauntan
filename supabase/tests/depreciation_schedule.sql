@@ -123,6 +123,40 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- A period that ends between two runs
+--
+-- Every note above runs to 31 December, after the last depreciation run
+-- -- so a charge that read runs after the period's end agreed with one
+-- that did not, and a mutation sweep left that clause alive in both
+-- files that reach the report. Half a year ends between March's run and
+-- December's: December's charge is not the half-year's, and if it were
+-- counted the accumulated column would stop reconciling.
+--
+-- Not asserted: accumulated depreciation brought forward on an asset
+-- bought inside the period. Nothing can have charged it before it was
+-- bought, so `accum_before` is nil for every such asset whether or not
+-- the report filters it. The writer.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.sched_org();
+begin
+  perform pg_temp.check_eq('half a year reconciles: December is not in it',
+    (select count(*)::integer from public.report_asset_movements(
+       v_org, date '2026-01-01', date '2026-06-30') m
+      where m.accum_closing <> m.accum_opening + m.charge - m.disposals_accum),
+    0);
+  -- March's run, and the van's last charge on the day it was sold.
+  perform pg_temp.check_eq('and its charge is the runs dated inside it',
+    (select sum(m.charge) from public.report_asset_movements(
+       v_org, date '2026-01-01', date '2026-06-30') m),
+    (select sum(e.amount) from public.depreciation_entries e
+       join public.depreciation_runs r on r.id = e.run_id
+      where r.org_id = v_org
+        and r.run_date between date '2026-01-01' and date '2026-06-30'));
+end $$;
+
+-- ---------------------------------------------------------------------
 -- The note against the ledger
 --
 -- The disclosure has to be the same numbers the trial balance carries,
