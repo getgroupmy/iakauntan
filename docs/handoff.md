@@ -388,6 +388,12 @@ in a row superseded each other and `0747`/`0748` sat unapplied for most
 of an afternoon. When a migration is waiting to go out, hold the next
 push until its run's `Apply the migrations` job has finished.
 
+**Applied.** Run `37436991795` (`da601a02`) applied `0747` and `0748`
+to the hosted project on 6 October -- its migrate job's notice reads
+"Applying to the hosted project: `0747` `0748`". Not read back from the
+database itself: the Supabase connector answered "Unauthorized" all
+day, so the proof is CI's, not a `prosrc` query.
+
 **The deploy failures earlier on 6 October were Supabase's, not ours.**
 Three runs failed at `supabase link` (four attempts each) or at an edge
 function deploy; a re-run of the same job an hour later was green.
