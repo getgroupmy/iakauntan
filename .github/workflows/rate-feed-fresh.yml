@@ -1,0 +1,95 @@
+name: Rate feed is current
+
+# Asks the TABLE, not the job. `exchange-rates.yml` reports on whether
+# the fetch was attempted; this reports on whether `exchange_rates` is
+# current, which is the only thing the ledger cares about.
+#
+# Written on 6 October 2026, after the feed had been dead for eleven days
+# -- a TLS handshake failure against Bank Negara -- while the job that
+# feeds it failed loudly every weekday and nobody read it. That job also
+# has two paths that exit 0 having stored nothing, and GitHub disables
+# scheduled workflows on a quiet repository; every one of those reads as
+# a green badge. `scripts/check_rate_feed_fresh.py` says why at length,
+# and why this is neither a SQL assertion nor a step in `ci.yml`.
+#
+# Its own file, for the reason `exchange-rates.yml` gives about itself:
+# an operations timer has no business in the run that decides whether
+# code reaches production. This one fails when nothing in the repository
+# has changed at all.
+
+on:
+  schedule:
+    # 01:15 UTC is 09:15 in Malaysia: the start of the working day, after
+    # the previous evening's fetch has had every chance to run and before
+    # anybody posts a revaluation. Every day, weekends included -- the
+    # gate's thresholds already allow for weekends, and a feed that died
+    # on a Friday should be shouted about on the Sunday it turns stale,
+    # not the Monday after.
+    - cron: '15 1 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: rate-feed-fresh
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Is the newest rate recent?
+    runs-on: ubuntu-latest
+    env:
+      PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || 'ewwcgtnniwqndrzukksm' }}
+      # The service role key, for ONE read of ONE column and nothing else.
+      # More authority than this needs -- the same trade
+      # `exchange-rates.yml` makes and names. The alternative is a
+      # SECURITY DEFINER function granted to anon and a migration to make
+      # it, which is new production surface for a monitoring query.
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts
+          sparse-checkout-cone-mode: true
+
+      - name: Read the newest rate and judge it
+        run: |
+          # No key is NOT "nothing to report". A gate that skips itself
+          # when it cannot look is the failure this file exists to catch,
+          # so it fails, and says what to set.
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::error::SUPABASE_SERVICE_ROLE_KEY is not set, so the rate table could not be read. This gate fails rather than passing blind -- a skipped check reads exactly like a passing one."
+            exit 1
+          fi
+
+          out="$(mktemp)"
+          code="$(curl -sS \
+            "https://${PROJECT_REF}.supabase.co/rest/v1/exchange_rates?select=rate_date&order=rate_date.desc&limit=1" \
+            -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -o "$out" -w '%{http_code}')"
+
+          echo "HTTP $code"
+          cat "$out"; echo
+
+          # Checked separately and FIRST, so an expired key is named as an
+          # expired key. The script would also refuse PostgREST's error
+          # object -- it is not a rate -- but it would call it an empty
+          # table, which sends the reader to the wrong place.
+          if [ "$code" != "200" ]; then
+            echo "::error::Reading exchange_rates answered HTTP $code, so its age is unknown. Check SUPABASE_SERVICE_ROLE_KEY."
+            exit 1
+          fi
+
+          # Not `python3 ... | tee`, read back through PIPESTATUS. That
+          # works under Actions' default `bash -e`, and stops working the
+          # day somebody adds `shell: bash` -- which turns on `pipefail`,
+          # so the failing verdict aborts the step before the summary
+          # below is written and the reason never reaches the page.
+          status=0
+          python3 scripts/check_rate_feed_fresh.py < "$out" > "$out.verdict" || status=$?
+          cat "$out.verdict"
+          {
+            echo "### Exchange rate feed"
+            echo
+            grep -v '^::' "$out.verdict"
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"

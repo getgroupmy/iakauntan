@@ -243,6 +243,16 @@ jobs:
         working-directory: .
         run: python3 scripts/mutate_sql_test.py
 
+      # The rate-feed gate runs on its OWN schedule against production, in
+      # `rate-feed-fresh.yml` -- it fails when nothing in the repository
+      # has changed, so it has no place in the run that decides whether
+      # code ships. Its THRESHOLD logic is code, though, and is tested
+      # here with everything else: a gate that reads an empty table as
+      # fresh is the failure it exists to catch.
+      - name: The rate-feed gate's own logic
+        working-directory: .
+        run: python3 scripts/check_rate_feed_fresh_test.py
+
       - name: Which state a money mover writes that no test names
         working-directory: .
         run: |

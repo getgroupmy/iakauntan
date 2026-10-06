@@ -14334,11 +14334,32 @@ third-party outage, and every repair changes production:
    since `exchange_rates` is keyed by date and re-running rewrites the
    same row.
 
-**A fifth thing is worth doing whichever of those happens: nothing in
-the suite notices a stale rate table.** A check that the newest
-`exchange_rates` row is within a few business days would have caught
-this on 29 September instead of 6 October, and it belongs with the
-other gates rather than in a workflow that only fails when it runs.
+**A fifth thing, now DONE: a gate on the age of the table.** Nothing
+anywhere asked whether `exchange_rates` was current, only whether the
+fetch had been attempted.
+
+* `scripts/check_rate_feed_fresh.py` — the judgement. Warns at **4
+  days** (an ordinary long weekend with a public holiday reaches that)
+  and fails at **7** (no combination of Malaysian weekends and holidays
+  does). An empty table, PostgREST's error object, a malformed reply and
+  a date in the FUTURE all fail: the worst case must not read as the
+  best.
+* `scripts/check_rate_feed_fresh_test.py` — 20 tests, run by `ci.yml`
+  as the 46th self-test. Broken on purpose five ways (the stale
+  boundary, an empty table read as fresh, a future date uncaught, a
+  warning that fails the run, an error object read as a rate): all five
+  killed, control alive.
+* `.github/workflows/rate-feed-fresh.yml` — runs it against production
+  daily at 01:15 UTC, weekends included, with one read of one column.
+  **A missing key FAILS** rather than skipping, because a gate that
+  skips itself when it cannot look is the failure it exists to catch.
+
+Its own file, not a step in `ci.yml`: it fails when nothing in the
+repository has changed, and `exchange-rates.yml` already argued why an
+operations timer does not belong in the run that decides what ships.
+
+**It will be red from its first run until the feed is repaired**, and
+that is correct. Against today's data it says: stale, 11 days.
 
 ## 5 October: the harness got a pre-flight, and it found three bad mutants
 
