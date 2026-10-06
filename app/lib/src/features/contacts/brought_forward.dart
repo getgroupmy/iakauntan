@@ -137,6 +137,11 @@ String statementKindLabel(String kind) => switch (kind) {
   'debit_note' => 'Debit note',
   'refund_note' => 'Refund',
   'receipt' => 'Payment received',
+  // 0747. Set off against what we owed them, their deposit applied, and
+  // their post-dated cheque taken in.
+  'contra' => 'Set off against our bill',
+  'deposit' => 'Deposit applied',
+  'cheque' => 'Cheque received',
   _ => kind.replaceAll('_', ' '),
 };
 

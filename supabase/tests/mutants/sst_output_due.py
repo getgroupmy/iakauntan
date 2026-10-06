@@ -1,11 +1,11 @@
-# Mutants for app.sst_output_due (0456) -- what the SST-02 return says
+# Mutants for app.sst_output_due (0748; first written against 0456) -- what the SST-02 return says
 # is owed for a taxable period: sales tax and non-invoice service tax on
 # the document date, service tax on an invoice when the money arrives
 # (or twelve months after the invoice, whichever is first), with credit
 # notes reducing it. `public.sst_return_lines` is a wrapper over this.
 #
 #     python3 scripts/mutate_sql.py \
-#       supabase/migrations/0456_service_tax_is_due_when_the_money_arrives.sql \
+#       supabase/migrations/0748_the_return_is_made_in_ringgit.sql \
 #       supabase/tests/service_tax_on_payment.sql \
 #       supabase/tests/mutants/sst_output_due.py
 
@@ -143,6 +143,32 @@ m("the figures are not rounded to the sen",
   "  select x.code, x.basis, round(x.net, 2), round(x.tax, 2)",
   "  select x.code, x.basis, x.net, x.tax  -- unrounded",
   "-- unrounded")
+
+# -- 0748: in ringgit -------------------------------------------------
+
+m("a foreign line's tax is declared in its own currency",
+  "sst_output_due",
+  "           round(l.tax_amount * coalesce(d.exchange_rate, 1), 2) as tax",
+  "           round(l.tax_amount, 2) as tax  -- no rate",
+  "-- no rate")
+
+m("a foreign line's value is declared in its own currency",
+  "sst_output_due",
+  "           round(l.line_subtotal * coalesce(d.exchange_rate, 1), 2) as net,",
+  "           round(l.line_subtotal, 2) as net,  -- no rate net",
+  "-- no rate net")
+
+m("a foreign service charge's tax is in its own currency",
+  "sst_output_due",
+  "           round(d.service_charge_tax * coalesce(d.exchange_rate, 1), 2)",
+  "           round(d.service_charge_tax, 2)  -- no rate sc",
+  "-- no rate sc")
+
+m("a foreign service charge is in its own currency",
+  "sst_output_due",
+  "           round(d.service_charge_amount * coalesce(d.exchange_rate, 1), 2),",
+  "           round(d.service_charge_amount, 2),  -- no rate sc net",
+  "-- no rate sc net")
 
 m("CONTROL -- a comment inside the function block",
   "sst_output_due",

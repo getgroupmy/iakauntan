@@ -519,6 +519,280 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- The payables listing, rule by rule
+--
+-- The same sweep of `report_ap_aging` killed 3 of 37 on this file before
+-- this block was added: the payables side had one bill, one payment and
+-- the bucket edges. Each row below is one rule of the report's: a
+-- purchase debit note and what paid it, a purchase credit note, a bill
+-- not posted, void, deleted, or dated after the as-at date, cash paid
+-- and not matched, and part matched, and money
+-- that never reached the ledger -- a payment never posted, one posted
+-- then deleted or voided, a withholding certificate never posted or
+-- voided -- each carrying an allocation, which `app.apply_allocation`
+-- allows because it checks whose money it is and how much, and not
+-- whether it was ever posted.
+--
+-- Not asserted, because no data can tell them apart: an allocation
+-- filed under another company (`payment_allocations` has a composite
+-- foreign key to the document's company and refuses it, 23503), and
+-- `coalesce(exchange_rate, 1)` (the column is NOT NULL), and the
+-- bill's `discount_amount` (`allocation_discount_guard` refuses one
+-- written onto an allocation, and `allocate_with_discount`, the only
+-- door, settles invoices and never bills).
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.aged_org('Rules AP Sdn Bhd');
+  v_supp uuid; v_bill uuid; v_pdn uuid; v_id uuid; v_pay uuid;
+  v_cert uuid;
+begin
+  v_supp := pg_temp.party(v_org, 'S-001', 'Rules Supplies', 'supplier');
+  v_bill := pg_temp.bill(v_org, v_supp, 'bill', 'BILL-1', 1000,
+                         date '2026-02-01', date '2026-03-03');
+
+  -- A purchase debit note adds to what is owed and is paid like a bill.
+  v_pdn := pg_temp.bill(v_org, v_supp, 'purchase_debit_note', 'PDN-1', 300,
+                        date '2026-02-10', date '2026-03-12');
+  perform pg_temp.pay(v_org, v_supp, 'PAY-DN', 100, date '2026-02-20', v_pdn);
+  perform pg_temp.check_eq('a purchase debit note is listed, less what paid it',
+    (select outstanding from public.report_ap_aging(v_org, date '2026-03-31')
+      where doc_no = 'PDN-1'), 200);
+
+  -- A purchase credit note takes away, and stands until reversed.
+  perform pg_temp.bill(v_org, v_supp, 'purchase_credit_note', 'PCN-1', 120,
+                       date '2026-02-12');
+  perform pg_temp.check_eq('a purchase credit note is a negative line',
+    (select outstanding from public.report_ap_aging(v_org, date '2026-03-31')
+      where doc_no = 'PCN-1'), -120);
+
+  -- Bills that are not owed at 31 March, one way each.
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, subtotal, total_amount, balance_amount, status)
+  values (v_org, 'bill', 'BILL-DRAFT', date '2026-02-01', date '2026-03-03',
+          v_supp, 'MYR', 1, 999, 999, 999, 'draft');
+  v_id := pg_temp.bill(v_org, v_supp, 'bill', 'BILL-VOID', 400,
+                       date '2026-02-01', date '2026-03-03');
+  update public.purchase_documents set status = 'void' where id = v_id;
+  v_id := pg_temp.bill(v_org, v_supp, 'bill', 'BILL-GONE', 500,
+                       date '2026-02-01', date '2026-03-03');
+  update public.purchase_documents set deleted_at = now() where id = v_id;
+  perform pg_temp.bill(v_org, v_supp, 'bill', 'BILL-APRIL', 600,
+                       date '2026-04-05', date '2026-05-05');
+  perform pg_temp.check_eq('no bill unposted, void, deleted or not yet raised',
+    (select count(*) from public.report_ap_aging(v_org, date '2026-03-31')
+      where doc_no in ('BILL-DRAFT', 'BILL-VOID', 'BILL-GONE', 'BILL-APRIL')), 0);
+
+  -- Paid out and not matched: a debit on the supplier's account.
+  perform pg_temp.pay(v_org, v_supp, 'PAY-UN', 400, date '2026-03-20');
+  perform pg_temp.check_eq('a payment nobody has matched is a negative line',
+    (select outstanding from public.report_ap_aging(v_org, date '2026-03-31')
+      where doc_no = 'PAY-UN'), -400);
+
+  -- Part matched: three hundred to BILL-1, two hundred still loose.
+  perform pg_temp.pay(v_org, v_supp, 'PAY-PART', 500, date '2026-02-25',
+                      v_bill, 300);
+  perform pg_temp.check_eq('a part-matched payment shows what is left of it',
+    (select outstanding from public.report_ap_aging(v_org, date '2026-03-31')
+      where doc_no = 'PAY-PART'), -200);
+
+  -- Money that never reached the ledger, each matched to BILL-1.
+  insert into public.purchase_payments
+    (org_id, payment_no, payment_date, contact_id, amount, unapplied_amount,
+     currency, exchange_rate, bank_account_id)
+  values (v_org, 'PAY-DRAFT', date '2026-02-27', v_supp, 70, 70, 'MYR', 1,
+          pg_temp.a_bank_account(v_org))
+  returning id into v_pay;
+  insert into public.payment_allocations (org_id, payment_id, bill_id, amount)
+  values (v_org, v_pay, v_bill, 70);
+  v_pay := pg_temp.pay(v_org, v_supp, 'PAY-GONE', 60, date '2026-02-27',
+                       v_bill);
+  update public.purchase_payments set deleted_at = now() where id = v_pay;
+  v_pay := pg_temp.pay(v_org, v_supp, 'PAY-VOID', 50, date '2026-02-27',
+                       v_bill);
+  update public.purchase_payments set status = 'void' where id = v_pay;
+
+  -- One thousand, less the three hundred paid. Nothing else that
+  -- names it reached the ledger.
+  perform pg_temp.check_eq('only money that reached the ledger settles a bill',
+    (select outstanding from public.report_ap_aging(v_org, date '2026-03-31')
+      where doc_no = 'BILL-1'), 700);
+  perform pg_temp.check_eq('and no payment that did not reach it is a line',
+    (select count(*) from public.report_ap_aging(v_org, date '2026-03-31')
+      where doc_no in ('PAY-DRAFT', 'PAY-GONE', 'PAY-VOID')), 0);
+
+  -- And a withholding certificate, which settles a bill only once it
+  -- is posted and only while it stands. One posted and then voided, one
+  -- never posted but matched by hand: neither has moved 2110.
+  v_bill := pg_temp.bill(v_org, v_supp, 'bill', 'BILL-W', 1000,
+                         date '2026-02-01', date '2026-03-03');
+  v_cert := public.create_withholding(v_bill, 'S109B_SPECIAL',
+    p_gross_amount => 1000, p_cert_date => date '2026-02-15');
+  perform public.post_withholding(v_cert);
+  perform pg_temp.check_eq('a posted certificate settles its tax off the bill',
+    (select outstanding from public.report_ap_aging(v_org, date '2026-03-31')
+      where doc_no = 'BILL-W'), 900);
+  update public.withholding_certificates set status = 'void' where id = v_cert;
+  v_cert := public.create_withholding(v_bill, 'S109B_SPECIAL',
+    p_gross_amount => 1000, p_cert_date => date '2026-02-16');
+  insert into public.payment_allocations (org_id, withholding_id, bill_id, amount)
+  values (v_org, v_cert, v_bill, 100);
+  perform pg_temp.check_eq('a void or unposted one settles nothing',
+    (select outstanding from public.report_ap_aging(v_org, date '2026-03-31')
+      where doc_no = 'BILL-W'), 1000);
+
+  perform pg_temp.sign_out();
+end $$;
+
+-- ---------------------------------------------------------------------
+-- The three ways of being paid the listings never saw (0747)
+--
+-- A contra, a deposit applied and a post-dated cheque each credit the
+-- control account and write an allocation, and until `0747` neither
+-- listing read them: one invoice settled each way left the receivables
+-- listing at 7,000.00 with 1210 at 2,200.00. Each is asserted on the
+-- day before its journal and on the day of it, and the listing is
+-- footed to the control account on both days, on both sides.
+--
+-- The deposit is applied with a date in February, on a day in October:
+-- `allocated_at` is the moment the button was pressed, so a listing
+-- that read it instead of `applied_on` would put February's settlement
+-- in October.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.aged_org('Three Ways Sdn Bhd');
+  v_party uuid; v_inv_c uuid; v_inv_d uuid; v_inv_p uuid;
+  v_bill_c uuid; v_bill_d uuid; v_bill_p uuid;
+  v_contra uuid; v_dep uuid; v_pdc uuid; v_owner uuid;
+  v_bank uuid;
+  v_other uuid;
+begin
+  v_owner := (select created_by from public.organizations where id = v_org);
+  v_bank := pg_temp.a_bank_account(v_org);
+  -- One party on both ledgers, which is what a contra needs.
+  v_party := pg_temp.party(v_org, 'B-001', 'Dua Hala Bhd', 'both');
+
+  v_inv_c := pg_temp.sales_doc(v_org, v_party, 'invoice', 'INV-C', 1000,
+                               date '2026-01-10', date '2026-02-09');
+  v_inv_d := pg_temp.sales_doc(v_org, v_party, 'invoice', 'INV-D', 2000,
+                               date '2026-01-10', date '2026-02-09');
+  v_inv_p := pg_temp.sales_doc(v_org, v_party, 'invoice', 'INV-P', 4000,
+                               date '2026-01-10', date '2026-02-09');
+  v_bill_c := pg_temp.bill(v_org, v_party, 'bill', 'BILL-C', 700,
+                           date '2026-01-12', date '2026-02-11');
+  v_bill_d := pg_temp.bill(v_org, v_party, 'bill', 'BILL-D', 900,
+                           date '2026-01-12', date '2026-02-11');
+  v_bill_p := pg_temp.bill(v_org, v_party, 'bill', 'BILL-P', 600,
+                           date '2026-01-12', date '2026-02-11');
+
+  -- 15 February: three hundred set off both ways.
+  v_contra := public.create_contra(v_org, date '2026-02-15',
+    jsonb_build_array(jsonb_build_object('document', v_inv_c, 'amount', 300)),
+    jsonb_build_array(jsonb_build_object('document', v_bill_c, 'amount', 300)),
+    'Agreed');
+
+  -- 20 February: his deposit of 500 applied, and ours of 200 to him.
+  v_dep := public.create_deposit(v_org, 'customer', v_party,
+    date '2026-01-05', 500, v_bank, '02', 'CHQ 1', 'Up front');
+  perform public.apply_deposit(v_dep, v_inv_d, 500, date '2026-02-20');
+  perform public.apply_deposit(
+    public.create_deposit(v_org, 'supplier', v_party, date '2026-01-06', 200,
+                          v_bank, '02', 'CHQ 2', 'Up front'),
+    v_bill_d, 200, date '2026-02-20');
+
+  -- 25 February: his cheque for INV-P taken in, ours for BILL-P written.
+  v_pdc := public.record_pdc(v_org, 'incoming', v_party, '100001',
+    date '2026-03-25', 4000,
+    jsonb_build_array(jsonb_build_object('document', v_inv_p, 'amount', 4000)),
+    v_bank, 'CIMB', date '2026-02-25');
+  perform public.record_pdc(v_org, 'outgoing', v_party, '200001',
+    date '2026-03-25', 600,
+    jsonb_build_array(jsonb_build_object('document', v_bill_p, 'amount', 600)),
+    v_bank, 'MBB', date '2026-02-25');
+
+  -- The day before each.
+  perform pg_temp.check_eq('the day before the contra, the invoice is whole',
+    (select outstanding from public.report_ar_aging(v_org, date '2026-02-14')
+      where doc_no = 'INV-C'), 1000);
+  perform pg_temp.check_eq('and so is the bill',
+    (select outstanding from public.report_ap_aging(v_org, date '2026-02-14')
+      where doc_no = 'BILL-C'), 700);
+  perform pg_temp.check_eq('the day before the deposit was applied, whole',
+    (select outstanding from public.report_ar_aging(v_org, date '2026-02-19')
+      where doc_no = 'INV-D'), 2000);
+  perform pg_temp.check_eq('the day before the cheque came, whole',
+    (select outstanding from public.report_ar_aging(v_org, date '2026-02-24')
+      where doc_no = 'INV-P'), 4000);
+
+  -- And on the day.
+  perform pg_temp.check_eq('a contra settles the invoice on its own date',
+    (select outstanding from public.report_ar_aging(v_org, date '2026-02-15')
+      where doc_no = 'INV-C'), 700);
+  perform pg_temp.check_eq('and the bill',
+    (select outstanding from public.report_ap_aging(v_org, date '2026-02-15')
+      where doc_no = 'BILL-C'), 400);
+  perform pg_temp.check_eq('a deposit settles from the day it was applied',
+    (select outstanding from public.report_ar_aging(v_org, date '2026-02-20')
+      where doc_no = 'INV-D'), 1500);
+  perform pg_temp.check_eq('and a deposit paid away settles the bill',
+    (select outstanding from public.report_ap_aging(v_org, date '2026-02-20')
+      where doc_no = 'BILL-D'), 700);
+  perform pg_temp.check_eq('a cheque taken in settles the invoice',
+    (select count(*) from public.report_ar_aging(v_org, date '2026-02-25')
+      where doc_no = 'INV-P'), 0);
+  perform pg_temp.check_eq('and a cheque written out settles the bill',
+    (select count(*) from public.report_ap_aging(v_org, date '2026-02-25')
+      where doc_no = 'BILL-P'), 0);
+
+  -- The assertion the file exists for, at both dates and on both sides.
+  perform pg_temp.check_eq('the receivables listing foots, before',
+    pg_temp.ar_total(v_org, date '2026-02-14'),
+    pg_temp.control(v_org, '1210', date '2026-02-14'));
+  perform pg_temp.check_eq('and after all three',
+    pg_temp.ar_total(v_org, date '2026-02-28'),
+    pg_temp.control(v_org, '1210', date '2026-02-28'));
+  perform pg_temp.check_eq('which is 2,200.00 of 7,000.00',
+    pg_temp.ar_total(v_org, date '2026-02-28'), 2200);
+  perform pg_temp.check_eq('the payables listing foots, before',
+    pg_temp.ap_total(v_org, date '2026-02-14'),
+    -pg_temp.control(v_org, '2110', date '2026-02-14'));
+  perform pg_temp.check_eq('and after',
+    pg_temp.ap_total(v_org, date '2026-02-28'),
+    -pg_temp.control(v_org, '2110', date '2026-02-28'));
+  perform pg_temp.check_eq('which is 1,100.00 of 2,200.00',
+    pg_temp.ap_total(v_org, date '2026-02-28'), 1100);
+
+  -- Undone: the cheque bounces and the contra is voided. Both delete
+  -- their allocations and both journals are reversed, so as at today
+  -- the invoices are whole again and the listing still foots.
+  perform public.bounce_pdc(v_pdc, 'Refer to drawer', date '2026-03-26');
+  perform public.void_contra(v_contra, 'He changed his mind');
+  perform pg_temp.check_eq('a bounced cheque puts the invoice back',
+    (select outstanding from public.report_ar_aging(v_org)
+      where doc_no = 'INV-P'), 4000);
+  perform pg_temp.check_eq('a voided contra puts the invoice back',
+    (select outstanding from public.report_ar_aging(v_org)
+      where doc_no = 'INV-C'), 1000);
+  perform pg_temp.check_eq('and the listing still foots today',
+    pg_temp.ar_total(v_org, pg_temp.today()),
+    pg_temp.control(v_org, '1210', pg_temp.today()));
+
+  -- Another company's payment is not on this company's payables.
+  v_other := pg_temp.aged_org('Three Ways Other Sdn Bhd');
+  perform pg_temp.pay(v_other,
+    pg_temp.party(v_other, 'S-001', 'Theirs', 'supplier'),
+    'PAY-THEIRS', 333, date '2026-02-01');
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_eq('another company''s payment is not on the listing',
+    (select count(*) from public.report_ap_aging(v_org, date '2026-02-28')
+      where doc_no = 'PAY-THEIRS'), 0);
+
+  perform pg_temp.sign_out();
+end $$;
+
+-- ---------------------------------------------------------------------
 -- Who can read a customer ledger
 -- ---------------------------------------------------------------------
 do $$

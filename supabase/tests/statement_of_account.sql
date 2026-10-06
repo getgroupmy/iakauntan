@@ -438,4 +438,87 @@ begin
     'ageing report';
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The other three ways a customer's account is credited (0747)
+--
+-- Until `0747` the statement listed invoices, notes and receipts and
+-- nothing else, so a customer whose invoice was set off against our
+-- bill, met from his deposit or paid by a post-dated cheque was sent a
+-- statement saying he still owed it -- and the ageing, which had the
+-- same blind spot, agreed with it. Both are now told, and this asserts
+-- each line, the closing balance, and that the two still agree with
+-- each other and with 1210.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org  uuid := pg_temp.soa_org('Penyata Tiga Sdn Bhd');
+  v_cust uuid; v_inv1 uuid; v_inv2 uuid; v_inv3 uuid; v_bill uuid;
+  v_dep  uuid; v_bank uuid; r record;
+begin
+  v_bank := pg_temp.a_bank_account(v_org);
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'B-001', 'Dua Hala Bhd', 'both') returning id into v_cust;
+
+  v_inv1 := pg_temp.sales_doc(v_org, v_cust, 'invoice', 'INV-T1', 1000,
+                              date '2026-03-02', date '2026-04-01');
+  v_inv2 := pg_temp.sales_doc(v_org, v_cust, 'invoice', 'INV-T2', 1500,
+                              date '2026-03-02', date '2026-04-01');
+  v_inv3 := pg_temp.sales_doc(v_org, v_cust, 'invoice', 'INV-T3', 800,
+                              date '2026-03-02', date '2026-04-01');
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'bill', 'BILL-T1', date '2026-03-03', date '2026-04-02',
+          v_cust, 'MYR', 1, 'draft')
+  returning id into v_bill;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, description, quantity, unit_price)
+  values (v_org, v_bill, 1, 'Supplies', 1, 300);
+  perform public.post_purchase_document(v_bill);
+
+  perform public.create_contra(v_org, date '2026-03-05',
+    jsonb_build_array(jsonb_build_object('document', v_inv1, 'amount', 300)),
+    jsonb_build_array(jsonb_build_object('document', v_bill, 'amount', 300)),
+    'Set off');
+  v_dep := public.create_deposit(v_org, 'customer', v_cust,
+    date '2026-02-20', 400, v_bank, '02', 'CHQ 9', 'Up front');
+  perform public.apply_deposit(v_dep, v_inv2, 400, date '2026-03-10');
+  perform public.record_pdc(v_org, 'incoming', v_cust, '300001',
+    date '2026-04-15', 800,
+    jsonb_build_array(jsonb_build_object('document', v_inv3, 'amount', 800)),
+    v_bank, 'RHB', date '2026-03-15');
+
+  select * into r from public.report_statement_of_account(
+    v_cust, date '2026-03-01', date '2026-03-31') s where s.kind = 'contra';
+  perform pg_temp.check_eq('a contra is a credit on the statement, on its day',
+    r.entry_date::text || ' ' || r.credit::text, '2026-03-05 300.00');
+  select * into r from public.report_statement_of_account(
+    v_cust, date '2026-03-01', date '2026-03-31') s where s.kind = 'deposit';
+  perform pg_temp.check_eq('his deposit, on the day it was applied',
+    r.entry_date::text || ' ' || r.credit::text, '2026-03-10 400.00');
+  select * into r from public.report_statement_of_account(
+    v_cust, date '2026-03-01', date '2026-03-31') s where s.kind = 'cheque';
+  perform pg_temp.check_eq('his cheque, on the day it came',
+    r.entry_date::text || ' ' || r.credit::text, '2026-03-15 800.00');
+
+  -- 1,000 + 1,500 + 800 - 300 - 400 - 800
+  perform pg_temp.check_eq('so he is told he owes 1,800.00',
+    public.statement_balance(v_cust, date '2026-03-31'), 1800);
+  perform pg_temp.check_eq('which is what the ageing says',
+    public.statement_balance(v_cust, date '2026-03-31'),
+    (select sum(a.base_outstanding)
+       from public.report_ar_aging(v_org, date '2026-03-31') a
+      where a.contact_id = v_cust));
+  perform pg_temp.check_eq('and what the ledger says',
+    public.statement_balance(v_cust, date '2026-03-31'),
+    (select closing_balance from public.report_trial_balance(
+       v_org, null, date '2026-03-31') where code = '1210'));
+
+  -- Before any of it, none of it.
+  perform pg_temp.check_eq('a statement to the 4th has none of the three',
+    (select count(*) from public.report_statement_of_account(
+       v_cust, date '2026-03-01', date '2026-03-04') s
+      where s.kind in ('contra', 'deposit', 'cheque')), 0);
+end $$;
+
 rollback;

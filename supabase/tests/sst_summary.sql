@@ -287,4 +287,160 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The return is made in ringgit (0748)
+--
+-- Until `0748` both functions summed a foreign-currency document's tax
+-- as it stood on the document: a USD 1,000.00 invoice at 4.20 with 10%
+-- sales tax put RM420.00 into 2130 and 100.00 on the return. Every
+-- amount below is at a different rate so that a figure converted at the
+-- wrong one, or not at all, is a different number -- and the sales tax
+-- is footed to 2130, which is what the return has to agree with.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid;
+  v_owner uuid := pg_temp.test_user();
+  v_cust  uuid; v_supp uuid;
+  v_st    uuid; v_svc uuid;
+  v_doc   uuid; v_rcp uuid;
+  r       record;
+begin
+  v_org := pg_temp.test_org('Cukai Asing Sdn Bhd');
+  perform pg_temp.sign_in_as(v_owner);
+  perform public.create_fiscal_year(v_org, date '2026-01-01');
+
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C1', 'Overseas buyer', 'customer') returning id into v_cust;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'S1', 'Overseas seller', 'supplier') returning id into v_supp;
+  insert into public.tax_codes
+    (org_id, code, name, tax_type_code, rate, applies_to,
+     sales_tax_account_id, purchase_tax_account_id)
+  values (v_org, 'ST10', 'Sales tax 10%', '01', 10, 'both',
+          (select id from public.accounts where org_id = v_org and code = '2130'),
+          (select id from public.accounts where org_id = v_org and code = '1410'))
+  returning id into v_st;
+  insert into public.tax_codes
+    (org_id, code, name, tax_type_code, rate, applies_to,
+     sales_tax_account_id, purchase_tax_account_id)
+  values (v_org, 'SV6', 'Service tax 6%', '02', 6, 'both',
+          (select id from public.accounts where org_id = v_org and code = '2130'),
+          (select id from public.accounts where org_id = v_org and code = '1410'))
+  returning id into v_svc;
+
+  -- Sales tax on a dollar invoice at 4.20.
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'invoice', 'INV-USD', date '2026-03-05', v_cust, 'USD',
+          4.20, 'draft')
+  returning id into v_doc;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, description, quantity, unit_price,
+     tax_code_id, tax_rate)
+  values (v_org, v_doc, 1, 'Goods', 1, 1000, v_st, 10);
+  perform public.post_sales_document(v_doc);
+
+  -- Input tax on a Singapore-dollar bill at 3.40.
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'bill', 'BILL-SGD', date '2026-03-06', v_supp, 'SGD',
+          3.40, 'draft')
+  returning id into v_doc;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, description, quantity, unit_price,
+     tax_code_id, tax_rate)
+  values (v_org, v_doc, 1, 'Parts', 1, 500, v_st, 10);
+  perform public.post_purchase_document(v_doc);
+
+  select * into r from public.report_sst_summary(
+    v_org, date '2026-03-01', date '2026-03-31')
+   where tax_type_code = '01' and direction = 'output';
+  perform pg_temp.check_eq('a dollar invoice''s sales tax is declared in ringgit',
+    r.tax_amount, 420);
+  perform pg_temp.check_eq('and so is the value it was charged on',
+    r.taxable_amount, 4200);
+  perform pg_temp.check_eq('which is what the ledger holds',
+    r.tax_amount,
+    (select round(sum(l.credit - l.debit), 2) from public.gl_lines l
+       join public.accounts a on a.id = l.account_id
+      where a.org_id = v_org and a.code = '2130'));
+  select * into r from public.report_sst_summary(
+    v_org, date '2026-03-01', date '2026-03-31')
+   where tax_type_code = '01' and direction = 'input';
+  perform pg_temp.check_eq('a Singapore bill''s tax is in ringgit too',
+    r.tax_amount::text || '/' || r.taxable_amount::text, '170.00/1700.00');
+
+  perform pg_temp.check_eq('the return reads the same ringgit',
+    (select d.tax_amount::text || '/' || d.taxable_amount::text
+       from app.sst_output_due(v_org, date '2026-03-01', date '2026-03-31') d
+      where d.tax_type_code = '01'), '420.00/4200.00');
+
+  -- Service tax is due when the money arrives (0456). A euro invoice at
+  -- 5.00, half of it paid: half its tax is due, in ringgit.
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'invoice', 'INV-EUR', date '2026-04-02', v_cust, 'EUR',
+          5.00, 'draft')
+  returning id into v_doc;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, description, quantity, unit_price,
+     tax_code_id, tax_rate)
+  values (v_org, v_doc, 1, 'Advice', 1, 1000, v_svc, 6);
+  perform public.post_sales_document(v_doc);
+  insert into public.receipts
+    (org_id, receipt_no, receipt_date, contact_id, amount, unapplied_amount,
+     currency, exchange_rate, bank_account_id)
+  values (v_org, 'RCP-EUR', date '2026-04-20', v_cust, 530, 530, 'EUR', 5.00,
+          pg_temp.a_bank_account(v_org))
+  returning id into v_rcp;
+  insert into public.payment_allocations (org_id, receipt_id, invoice_id, amount)
+  values (v_org, v_rcp, v_doc, 530);
+  perform public.post_receipt(v_rcp);
+
+  perform pg_temp.check_eq('half a euro invoice paid brings half its tax due, in ringgit',
+    (select d.tax_amount::text || '/' || d.taxable_amount::text
+       from app.sst_output_due(v_org, date '2026-04-01', date '2026-04-30') d
+      where d.tax_type_code = '02'), '150.00/2500.00');
+
+  -- A service charge on a dollar bill: what a hotel's foreign guest
+  -- folio carries. The charge and the service tax on it are read from
+  -- the document's header (0418), so they are converted there too.
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, status, service_charge_amount, service_charge_tax,
+     service_charge_tax_code_id)
+  values (v_org, 'invoice', 'INV-SC', date '2026-05-04', v_cust, 'USD',
+          4.50, 'draft', 20, 1.20, v_svc)
+  returning id into v_doc;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, description, quantity, unit_price)
+  values (v_org, v_doc, 1, 'Room', 1, 200);
+  perform public.post_sales_document(v_doc);
+  perform pg_temp.check_eq('a dollar service charge is declared in ringgit',
+    (select s.taxable_amount::text || '/' || s.tax_amount::text
+       from public.report_sst_summary(v_org, date '2026-05-01', date '2026-05-31') s
+      where s.tax_type_code = '02'), '90.00/5.40');
+
+  -- Half the folio paid brings half the charge's tax due.
+  insert into public.receipts
+    (org_id, receipt_no, receipt_date, contact_id, amount, unapplied_amount,
+     currency, exchange_rate, bank_account_id)
+  values (v_org, 'RCP-SC', date '2026-05-20', v_cust, 110, 110, 'USD', 4.50,
+          pg_temp.a_bank_account(v_org))
+  returning id into v_rcp;
+  insert into public.payment_allocations (org_id, receipt_id, invoice_id, amount)
+  values (v_org, v_rcp, v_doc, 110);
+  perform public.post_receipt(v_rcp);
+  perform pg_temp.check_eq('and so is the tax half a payment brings due',
+    (select d.taxable_amount::text || '/' || d.tax_amount::text
+       from app.sst_output_due(v_org, date '2026-05-01', date '2026-05-31') d
+      where d.tax_type_code = '02'), '45.00/2.70');
+
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

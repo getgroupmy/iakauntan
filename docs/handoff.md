@@ -272,35 +272,45 @@ page and renumbering would quietly break the reference.
    Say which and it is a short change. The one real ledger line on the
    heading is a separate thing: `EXP-2026-00001` at GESWANT & CO, item
    2 above.
-9. **The aged listings ignore three of the six ways an invoice or a
-   bill is settled** (found 6 October, by the mutation sweep of
-   `report_ar_aging` / `report_ap_aging`, and measured, not read).
-   Both reports count an allocation only when it comes from a receipt
-   or payment, a credit note, or (payables only) a withholding
-   certificate. A **contra** (`0272`), a **deposit applied** (`0273`)
-   and a **post-dated cheque** (`0275`) each credit the control account
-   in the ledger and write a `payment_allocations` row, and the
-   listing reads none of them. All three post-date `0096`, where the
-   listing was written, and `0739` re-created it without them. One
-   invoice settled each way: **the listing said 7,000.00 and 1210 said
-   2,200.00**; on the payables side 700.00 against 2110's 400.00. Every
-   test of those three features asserts `balance_amount` — "the aged
-   listing stops chasing him" in `post_dated_cheques.sql` is a comment
-   over an assertion on the document, not on the report. The fix is a
-   migration (production), so it waits for a yes. The probe is in this
-   session's scratchpad as `probe_aging.sql`; it is twenty lines to
-   rebuild.
-10. **The SST return declares a foreign-currency invoice in its own
-    currency.** `report_sst_summary` and `app.sst_output_due` — which
-    `sst_taxable_periods` and `sst_return_lines`, i.e. the SST-02
-    screen, read — sum `line_subtotal` and `tax_amount` with no
-    `exchange_rate`. A USD 1,000.00 invoice at 4.20 with 10% sales tax
-    puts **RM420.00** in 2130 and **100.00** on the return. The Flutter
-    side passes the figure through (`repository.dart`, `report_sst_summary`
-    and `sst_return_lines`). Also a production migration, so it also
-    waits. Whether any real company has a taxed foreign-currency
-    document was NOT checked: the Supabase connector answered
-    "Unauthorized" on 6 October.
+9. ~~The aged listings ignore three of the six ways an invoice or a
+   bill is settled~~ — **answered on 6 October ("fix both") and fixed
+   in `0747`.** A contra (`0272`), a deposit applied (`0273`) and a
+   post-dated cheque (`0275`) each credit the control account and write
+   a `payment_allocations` row, and neither listing read them: one
+   invoice settled each way left the receivables listing at 7,000.00
+   with 1210 at 2,200.00 (payables 700.00 against 400.00). Every test of
+   the three asserted `balance_amount`. `0747` reads all three, each from
+   the day its journal is dated; gives `payment_allocations` an
+   `applied_on` that `apply_deposit` now writes (`allocated_at` is when
+   the button was pressed, and `p_date` can be earlier) and backfills it
+   from each deposit's own journal; and tells
+   `report_statement_of_account` the same, because its test asserts it
+   agrees with the ageing to the sen and it had the same blind spot.
+   The Flutter statement labels the three new kinds. Asserted in
+   `aged_balances.sql` ("The three ways of being paid…"),
+   `statement_of_account.sql`, and `brought_forward_test.dart`.
+   **Not changed:** `app.purchase_document_settled_on` already falls
+   back to `allocated_at` for these, which is approximate, not blind.
+10. ~~The SST return declares a foreign-currency invoice in its own
+    currency~~ — **fixed in `0748`.** `report_sst_summary` and
+    `app.sst_output_due` (behind the SST-02 screen) summed
+    `line_subtotal` and `tax_amount` with no `exchange_rate`: USD
+    1,000.00 at 4.20 with 10% put RM420.00 in 2130 and 100.00 on the
+    return. Both now convert every amount, per line, so a foreign
+    document of several lines can differ from the ledger -- which
+    converts the document's tax once -- by a sen of rounding. Asserted in
+    `sst_summary.sql` ("The return is made in ringgit"): sales tax,
+    input tax, a service charge, and service tax brought due by a part
+    payment, each at a different rate. Whether any real company had a
+    taxed foreign document was NOT checked: the Supabase connector
+    answered "Unauthorized" on 6 October.
+11. **Is a contra, an applied deposit or a post-dated cheque "payment
+    received" for service tax?** `app.sst_output_due` brings service
+    tax due on an invoice when money arrives, and it counts receipts
+    only. Whether a set-off, a deposit applied or a cheque not yet
+    cleared is payment for the Service Tax Act is a question for the
+    person who files, not a rounding error -- so `0748` deliberately
+    left it alone. Say which and it is a short change.
 
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the

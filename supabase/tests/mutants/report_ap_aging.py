@@ -1,11 +1,11 @@
-# Mutants for public.report_ap_aging (0739) -- the aged payables: every
+# Mutants for public.report_ap_aging (0747) -- the aged payables: every
 # posted bill, purchase debit note, purchase credit note and unapplied
 # payment, less what was allocated by the as-at date -- by a payment, a
 # credit note or a withholding certificate -- in its own currency and in
 # ringgit, with days overdue and a bucket.
 #
 #     python3 scripts/mutate_sql.py \
-#       supabase/migrations/0739_thirty_nine_defaults_on_the_wrong_clock.sql \
+#       supabase/migrations/0747_the_three_ways_of_being_paid_the_listings_never_saw.sql \
 #       supabase/tests/aged_balances.sql \
 #       supabase/tests/mutants/report_ap_aging.py
 #
@@ -15,7 +15,7 @@
 
 m("an allocation made after the as-at date already reduces the balance",
   "report_ap_aging",
-  "       and coalesce(p.payment_date, cn.doc_date, w.cert_date) <= p_as_at",
+  "       and coalesce(p.payment_date, cn.doc_date, w.cert_date, k.contra_date,\n                    case when n.id is not null then a.applied_on end,\n                    q.received_on) <= p_as_at",
   "       and true  -- any date",
   "-- any date")
 
@@ -51,14 +51,14 @@ m("an allocation from an unposted withholding certificate counts",
 
 m("withholding certificates settle nothing",
   "report_ap_aging",
-  "       and coalesce(p.payment_date, cn.doc_date, w.cert_date) <= p_as_at",
-  "       and coalesce(p.payment_date, cn.doc_date) <= p_as_at  -- no cert",
+  "       and coalesce(p.payment_date, cn.doc_date, w.cert_date, k.contra_date,",
+  "       and coalesce(p.payment_date, cn.doc_date, k.contra_date,  -- no cert",
   "-- no cert")
 
 m("another company's allocations count",
   "report_ap_aging",
-  "     where a.org_id = p_org_id\n       and coalesce(p.payment_date, cn.doc_date, w.cert_date) <= p_as_at",
-  "     where true  -- any org\n       and coalesce(p.payment_date, cn.doc_date, w.cert_date) <= p_as_at",
+  "     where a.org_id = p_org_id\n       and coalesce(p.payment_date, cn.doc_date, w.cert_date, k.contra_date,",
+  "     where true  -- any org\n       and coalesce(p.payment_date, cn.doc_date, w.cert_date, k.contra_date,",
   "-- any org")
 
 # -- documents -----------------------------------------------------------
@@ -240,6 +240,62 @@ m("a stranger reads the listing",
   "   where round(d.outstanding, 2) <> 0\n     and app.is_org_member(p_org_id)",
   "   where round(d.outstanding, 2) <> 0\n     and true  -- stranger",
   "-- stranger")
+
+# -- 0747: the three ways of being paid ---------------------------------
+
+m("a contra settles nothing",
+  "report_ap_aging",
+  "coalesce(p.payment_date, cn.doc_date, w.cert_date, k.contra_date,",
+  "coalesce(p.payment_date, cn.doc_date, w.cert_date,  -- no contra",
+  "-- no contra")
+
+m("an applied deposit settles nothing",
+  "report_ap_aging",
+  "                    case when n.id is not null then a.applied_on end,",
+  "                    null::date,  -- no deposit",
+  "-- no deposit")
+
+m("an applied deposit counts from the day the button was pressed",
+  "report_ap_aging",
+  "                    case when n.id is not null then a.applied_on end,",
+  "                    case when n.id is not null then app.malaysian_day(a.allocated_at) end,  -- pressed",
+  "-- pressed")
+
+m("a post-dated cheque settles nothing",
+  "report_ap_aging",
+  "                    q.received_on) <= p_as_at",
+  "                    null::date) <= p_as_at  -- no cheque",
+  "-- no cheque")
+
+m("a cheque counts from the day it can be banked, not the day it came",
+  "report_ap_aging",
+  "                    q.received_on) <= p_as_at",
+  "                    q.cheque_date) <= p_as_at  -- cheque date",
+  "-- cheque date")
+
+m("a void contra still settles",
+  "report_ap_aging",
+  "       and k.gl_entry_id is not null and k.status <> 'void'",
+  "       and k.gl_entry_id is not null  -- void contra",
+  "-- void contra")
+
+m("a bounced or cancelled cheque still settles",
+  "report_ap_aging",
+  "       and q.status in ('held', 'deposited', 'cleared')",
+  "       and true  -- bounced cheque",
+  "-- bounced cheque")
+
+m("a cheque with no journal settles",
+  "report_ap_aging",
+  "       and q.gl_entry_id is not null\n       and q.status in ('held', 'deposited', 'cleared')",
+  "       and true  -- unposted cheque\n       and q.status in ('held', 'deposited', 'cleared')",
+  "-- unposted cheque")
+
+m("a void deposit still settles",
+  "report_ap_aging",
+  "       and n.gl_entry_id is not null and n.status <> 'void'",
+  "       and n.gl_entry_id is not null  -- void deposit",
+  "-- void deposit")
 
 m("CONTROL: a comment inside the block",
   "report_ap_aging",

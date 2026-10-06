@@ -1,21 +1,43 @@
-# Mutants for public.report_ar_aging (0739) -- the aged receivables:
+# Mutants for public.report_ar_aging (0747) -- the aged receivables:
 # every posted invoice, debit note, credit note, refund note and
 # unapplied receipt, less what was allocated by the as-at date, in its
 # own currency and in ringgit, with days overdue and a bucket.
 #
 #     python3 scripts/mutate_sql.py \
-#       supabase/migrations/0739_thirty_nine_defaults_on_the_wrong_clock.sql \
+#       supabase/migrations/0747_the_three_ways_of_being_paid_the_listings_never_saw.sql \
 #       supabase/tests/aged_balances.sql \
 #       supabase/tests/mutants/report_ar_aging.py
 #
-# RESULT: (pending)
+# RESULT, 6 October, against 0747: 47 mutants and a control. 41
+# KILLED, 6 equivalent, control alive -- across aged_balances.sql and
+# aging_shapes.sql, which between them kill every one that can be.
+#
+# The sweep is what found the defect `0747` fixes. Against 0739 the
+# nine files that reach the function left a debit note, a deleted
+# invoice, and receipts and credit notes that never reached the ledger
+# unasserted; asserting those ("The receivables listing, rule by
+# rule") is when the question "what else writes an allocation?" was
+# asked, and the answer -- contras, deposits, post-dated cheques -- was
+# a listing at 7,000.00 against 1210's 2,200.00.
+#
+# Equivalent, with the reason:
+#   * another company's allocations: `payment_allocations` has a
+#     composite foreign key to the document's company (23503). A table
+#     constraint.
+#   * `coalesce(exchange_rate, 0)`: the column is NOT NULL. A table
+#     constraint.
+#   * a void contra, a bounced or cancelled cheque, a cheque with no
+#     journal, a void deposit: `void_contra`, `bounce_pdc` and
+#     `cancel_pdc` DELETE their allocations, `record_pdc` posts whenever
+#     it allocates and posts nothing otherwise, and `void_deposit`
+#     refuses a deposit that has been applied. The writer.
 
 # -- allocations: both ends in the ledger by the as-at date ------------
 
 m("an allocation made after the as-at date already reduces the balance",
   "report_ar_aging",
-  "     where a.org_id = p_org_id\n       and coalesce(r.receipt_date, cn.doc_date) <= p_as_at",
-  "     where a.org_id = p_org_id\n       and true  -- any date",
+  "       and coalesce(r.receipt_date, cn.doc_date, k.contra_date,\n                    case when n.id is not null then a.applied_on end,\n                    q.received_on) <= p_as_at",
+  "       and true  -- any date",
   "-- any date")
 
 m("an allocation from an unposted receipt counts",
@@ -50,8 +72,8 @@ m("an allocation from an unposted credit note counts",
 
 m("another company's allocations count",
   "report_ar_aging",
-  "     where a.org_id = p_org_id\n       and coalesce(r.receipt_date, cn.doc_date) <= p_as_at",
-  "     where true  -- any org\n       and coalesce(r.receipt_date, cn.doc_date) <= p_as_at",
+  "     where a.org_id = p_org_id\n       and coalesce(r.receipt_date, cn.doc_date, k.contra_date,",
+  "     where true  -- any org\n       and coalesce(r.receipt_date, cn.doc_date, k.contra_date,",
   "-- any org")
 
 # -- documents -----------------------------------------------------------
@@ -245,6 +267,62 @@ m("a stranger reads the listing",
   "   where round(d.outstanding, 2) <> 0\n     and app.is_org_member(p_org_id)",
   "   where round(d.outstanding, 2) <> 0\n     and true  -- stranger",
   "-- stranger")
+
+# -- 0747: the three ways of being paid ---------------------------------
+
+m("a contra settles nothing",
+  "report_ar_aging",
+  "coalesce(r.receipt_date, cn.doc_date, k.contra_date,",
+  "coalesce(r.receipt_date, cn.doc_date,  -- no contra",
+  "-- no contra")
+
+m("an applied deposit settles nothing",
+  "report_ar_aging",
+  "                    case when n.id is not null then a.applied_on end,",
+  "                    null::date,  -- no deposit",
+  "-- no deposit")
+
+m("an applied deposit counts from the day the button was pressed",
+  "report_ar_aging",
+  "                    case when n.id is not null then a.applied_on end,",
+  "                    case when n.id is not null then app.malaysian_day(a.allocated_at) end,  -- pressed",
+  "-- pressed")
+
+m("a post-dated cheque settles nothing",
+  "report_ar_aging",
+  "                    q.received_on) <= p_as_at",
+  "                    null::date) <= p_as_at  -- no cheque",
+  "-- no cheque")
+
+m("a cheque counts from the day it can be banked, not the day it came",
+  "report_ar_aging",
+  "                    q.received_on) <= p_as_at",
+  "                    q.cheque_date) <= p_as_at  -- cheque date",
+  "-- cheque date")
+
+m("a void contra still settles",
+  "report_ar_aging",
+  "       and k.gl_entry_id is not null and k.status <> 'void'",
+  "       and k.gl_entry_id is not null  -- void contra",
+  "-- void contra")
+
+m("a bounced or cancelled cheque still settles",
+  "report_ar_aging",
+  "       and q.status in ('held', 'deposited', 'cleared')",
+  "       and true  -- bounced cheque",
+  "-- bounced cheque")
+
+m("a cheque with no journal settles",
+  "report_ar_aging",
+  "       and q.gl_entry_id is not null\n       and q.status in ('held', 'deposited', 'cleared')",
+  "       and true  -- unposted cheque\n       and q.status in ('held', 'deposited', 'cleared')",
+  "-- unposted cheque")
+
+m("a void deposit still settles",
+  "report_ar_aging",
+  "       and n.gl_entry_id is not null and n.status <> 'void'",
+  "       and n.gl_entry_id is not null  -- void deposit",
+  "-- void deposit")
 
 m("CONTROL: a comment inside the block",
   "report_ar_aging",

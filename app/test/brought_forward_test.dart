@@ -273,6 +273,10 @@ void main() {
       expect(statementKindLabel('debit_note'), 'Debit note');
       expect(statementKindLabel('refund_note'), 'Refund');
       expect(statementKindLabel('receipt'), 'Payment received');
+      // 0747 added three.
+      expect(statementKindLabel('contra'), 'Set off against our bill');
+      expect(statementKindLabel('deposit'), 'Deposit applied');
+      expect(statementKindLabel('cheque'), 'Cheque received');
     });
 
     test('call a receipt a payment, not a receipt', () {
