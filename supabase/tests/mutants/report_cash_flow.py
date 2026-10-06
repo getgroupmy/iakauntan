@@ -91,7 +91,7 @@ m("share capital is working capital",
 m("drawings are working capital",
   "report_cash_flow",
   "                                        'drawings') then 'financing'",
-  "                                        'none') then 'financing'  -- drawings wc",
+  "                                        'reserves') then 'financing'  -- drawings wc",
   "-- drawings wc")
 
 m("cash brought forward includes the first day of the period",
