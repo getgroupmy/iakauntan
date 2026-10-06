@@ -309,4 +309,140 @@ begin
        v_org, null, date '2026-12-31')), 0);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The ledger, rule by rule
+--
+-- A mutation sweep of `report_general_ledger` killed 15 of 28 on this
+-- file. Every survivor but one was a rule the fixture never reached:
+-- a call with no end date; a journal on the period's first day; a
+-- draft before the period; an opening balance on a liability, an
+-- expense, a deleted account, a group heading, or another company's
+-- account; an account with nothing but a balance brought forward; a
+-- journal back-dated after later ones were posted; a contact.
+--
+-- Not asserted, because no data can tell it apart: the brought-forward
+-- sum reading another company's lines on this company's account --
+-- `gl_lines_account_same_org` ties a line's company to its account's.
+-- A table constraint.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_other uuid; v_org uuid; v_owner uuid; v_acc uuid; v_cust uuid;
+  r record;
+begin
+  -- Another company first, with an opening balance of its own, so that
+  -- a ledger that forgot whose accounts it was reading would show it.
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_other := pg_temp.gl_org('Lejar Orang Lain Sdn Bhd');
+  update public.accounts set opening_balance = 777
+   where org_id = v_other and code = '1130';
+
+  v_owner := pg_temp.test_user();
+  perform pg_temp.sign_in_as(v_owner);
+  v_org := pg_temp.gl_fixture('Lejar Peraturan Sdn Bhd');
+  v_owner := (select created_by from public.organizations where id = v_org);
+  perform pg_temp.sign_in_as(v_owner);
+  v_acc := pg_temp.acct(v_org, '1120');
+
+  perform pg_temp.check_eq('another company''s accounts are not in this ledger',
+    (select count(*)::integer from public.report_general_ledger(
+       v_org, null, date '2026-12-31') g
+       join public.accounts a on a.id = g.account_id
+      where a.org_id <> v_org), 0);
+
+  -- No end date is today, not some earlier day.
+  perform pg_temp.check_eq('with no end date the ledger runs to today',
+    (select count(*)::integer from public.report_general_ledger(
+       v_org, null, null, v_acc)), 5);
+
+  -- A period that opens on the day of an entry: brought forward is
+  -- everything before it, and the entry itself is the first line.
+  perform pg_temp.check_eq('a period opening on an entry brings forward only what came before',
+    (select balance from public.report_general_ledger(
+       v_org, date '2026-02-15', date '2026-12-31', v_acc) where is_opening),
+    10000);
+  perform pg_temp.check_eq('and lists that day''s entry',
+    (select count(*)::integer from public.report_general_ledger(
+       v_org, date '2026-02-15', date '2026-12-31', v_acc)
+      where entry_date = date '2026-02-15' and not is_opening), 1);
+
+  -- A draft before the period is not brought forward.
+  insert into public.gl_entries
+    (org_id, entry_no, entry_date, source, description, status,
+     total_debit, total_credit)
+  values (v_org, 'JV-DRAFT-JAN', date '2026-01-20', 'manual', 'Not posted',
+          'draft', 999, 999);
+  insert into public.gl_lines
+    (org_id, entry_id, line_no, account_id, description, debit, credit)
+  values (v_org, (select id from public.gl_entries
+                   where org_id = v_org and entry_no = 'JV-DRAFT-JAN'),
+          1, v_acc, 'Not posted', 999, 0);
+  perform pg_temp.check_eq('a draft before the period is not brought forward',
+    (select balance from public.report_general_ledger(
+       v_org, date '2026-02-01', date '2026-12-31', v_acc) where is_opening),
+    10000);
+
+  -- Opening balances, each signed by what the account is: a liability
+  -- and an expense, neither of them touched by a journal since.
+  update public.accounts set opening_balance = 5000
+   where org_id = v_org and code = '2110';
+  update public.accounts set opening_balance = 100
+   where org_id = v_org and code = '6100';
+  select * into r from public.report_general_ledger(
+    v_org, null, date '2026-12-31', pg_temp.acct(v_org, '2110'));
+  perform pg_temp.check_eq(
+    'a payable brought forward with nothing since still has its page',
+    r.balance, -5000);
+  perform pg_temp.check_eq('an expense brought forward is a debit',
+    (select balance from public.report_general_ledger(
+       v_org, null, date '2026-12-31', pg_temp.acct(v_org, '6100'))
+      where is_opening), 100);
+
+  -- A deleted account and a group heading, each with an opening
+  -- balance somebody typed, are still not ledger accounts.
+  update public.accounts set opening_balance = 300, deleted_at = now()
+   where org_id = v_org and code = '1130';
+  update public.accounts set opening_balance = 400
+   where org_id = v_org and code = '1100';
+  perform pg_temp.check_eq('a deleted account is not in the ledger',
+    (select count(*)::integer from public.report_general_ledger(
+       v_org, null, date '2026-12-31') where code = '1130'), 0);
+  perform pg_temp.check_eq('nor a group heading',
+    (select count(*)::integer from public.report_general_ledger(
+       v_org, null, date '2026-12-31') where code = '1100'), 0);
+
+  -- A line that names a contact says who.
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-1', 'Pelanggan Lejar', 'customer') returning id into v_cust;
+  perform public.post_manual_journal(v_org, date '2026-05-01',
+    jsonb_build_array(
+      jsonb_build_object('account_id', v_acc, 'contact_id', v_cust,
+                         'debit', 50, 'credit', 0, 'description', 'Named'),
+      jsonb_build_object('account_id', pg_temp.acct(v_org, '4100'),
+                         'debit', 0, 'credit', 50, 'description', 'Named')),
+    'A named line');
+  perform pg_temp.check_eq('a line that names a contact says who',
+    (select contact_name from public.report_general_ledger(
+       v_org, null, date '2026-12-31', v_acc)
+      where entry_date = date '2026-05-01'), 'Pelanggan Lejar');
+
+  -- Back-dated: posted last, dated first. The running balance follows
+  -- the date, so the page still reads down.
+  perform public.post_manual_journal(v_org, date '2026-01-05',
+    jsonb_build_array(
+      jsonb_build_object('account_id', v_acc,
+                         'debit', 1000, 'credit', 0, 'description', 'Late'),
+      jsonb_build_object('account_id', pg_temp.acct(v_org, '3100'),
+                         'debit', 0, 'credit', 1000, 'description', 'Late')),
+    'Back-dated');
+  perform pg_temp.check_eq('a journal back-dated later stands where its date puts it',
+    (select balance from public.report_general_ledger(
+       v_org, null, date '2026-12-31', v_acc)
+      where entry_date = date '2026-01-05'), 1000);
+  perform pg_temp.check_eq('and everything after it carries it down',
+    (select balance from public.report_general_ledger(
+       v_org, null, date '2026-12-31', v_acc)
+      where entry_date = date '2026-01-10'), 11000);
+end $$;
+
 rollback;
