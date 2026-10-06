@@ -250,4 +250,133 @@ begin
     v_owed;
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The worklist, rule by rule
+--
+-- A mutation sweep of `report_collections` killed 7 of 18 on the block
+-- above. Its three customers were each owed one invoice, the one nobody
+-- had rung was also the oldest debt -- so "never chased first" and
+-- "oldest first" put it in the same place -- and nobody but the owner
+-- ever asked. This company is built so that each rule moves somebody:
+--
+--   D1  chased in May, rung again on 20 June   two invoices, due Jan and May
+--   D2  never chased                           due 15 May   (the youngest)
+--   D3  promised to pay on 10 June, assigned   due 1 March
+--   D4  chased                                 due 1 April, and a credit
+--                                              note nobody has used
+--
+-- As at 10 June: D2 first (never chased, though youngest), then oldest
+-- first -- D1, D3, D4. D3's promise falls due that day and is not yet
+-- broken; D1's June call has not happened yet.
+--
+-- Not asserted, because no data can tell them apart:
+--   * another company's attempt: `collection_attempts` carries a
+--     composite key to its contact's company. A table constraint.
+--   * a credit balance on the worklist (`<> 0` for `> 0`): the rows are
+--     invoices, and `app.apply_allocation` refuses to put more against
+--     an invoice than it is for, so none is ever negative. The writer.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_owner uuid; v_ac uuid; v_hr uuid; v_stranger uuid;
+  v_d uuid[] := array[]::uuid[]; v_c uuid; v_inv uuid; i integer;
+  r record; v_order text;
+begin
+  v_org := pg_temp.test_org('Senarai Kutipan Sdn Bhd');
+  v_owner := (select created_by from public.organizations where id = v_org);
+  perform public.create_fiscal_year(v_org, date '2026-01-01');
+  select id into v_ac from public.accounts
+   where org_id = v_org and account_type = 'revenue' and not is_group limit 1;
+
+  for i in 1..4 loop
+    insert into public.contacts (org_id, code, name, contact_type)
+    values (v_org, 'D' || i, 'Pelanggan ' || i, 'customer') returning id into v_c;
+    v_d := v_d || v_c;
+  end loop;
+
+  -- The invoices: D1 two, the rest one each.
+  for i in 1..5 loop
+    insert into public.sales_documents
+      (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+       exchange_rate, status)
+    values (v_org, 'invoice', app.next_document_number_internal(v_org, 'invoice'),
+            (array[date '2026-01-01', date '2026-05-01', date '2026-05-15',
+                   date '2026-03-01', date '2026-04-01'])[i],
+            (array[date '2026-01-01', date '2026-05-01', date '2026-05-15',
+                   date '2026-03-01', date '2026-04-01'])[i],
+            v_d[(array[1, 1, 2, 3, 4])[i]], 'MYR', 1, 'draft')
+    returning id into v_inv;
+    insert into public.sales_document_lines
+      (org_id, document_id, line_no, line_type, description, quantity,
+       unit_price, account_id, tax_rate)
+    values (v_org, v_inv, 1, 'item', 'Goods', 1, 1000, v_ac, 0);
+    perform app.post_sales_document_internal(v_inv);
+  end loop;
+  -- And D4's unused credit note.
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'credit_note', 'CN-D4', date '2026-04-05', v_d[4], 'MYR', 1, 'draft')
+  returning id into v_inv;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, description, quantity,
+     unit_price, account_id, tax_rate)
+  values (v_org, v_inv, 1, 'item', 'Returned', 1, 300, v_ac, 0);
+  perform app.post_sales_document_internal(v_inv);
+
+  insert into public.collection_attempts
+    (org_id, contact_id, attempted_on, channel, outcome, created_by)
+  values (v_org, v_d[1], date '2026-05-01', 'call', 'no_answer', v_owner),
+         (v_org, v_d[1], date '2026-06-20', 'call', 'no_answer', v_owner),
+         (v_org, v_d[4], date '2026-05-02', 'email', 'no_answer', v_owner);
+  insert into public.collection_attempts
+    (org_id, contact_id, attempted_on, channel, outcome, promise_date,
+     promise_amount, assigned_to, created_by)
+  values (v_org, v_d[3], date '2026-06-01', 'call', 'promised',
+          date '2026-06-10', 1000, v_owner, v_owner);
+
+  select string_agg(contact_code, ' ' order by ord) into v_order
+    from (select contact_code, row_number() over () as ord
+            from public.report_collections(v_org, date '2026-06-10')) x;
+  perform pg_temp.check_eq(
+    'the customer never rung comes first, then the oldest debt first',
+    v_order, 'D2 D1 D3 D4');
+
+  select * into r from public.report_collections(v_org, date '2026-06-10')
+   where contact_id = v_d[1];
+  perform pg_temp.check_eq('a customer''s oldest debt is its oldest invoice',
+    r.oldest_days, 160);
+  perform pg_temp.check_eq('and a call not yet made is not the last one',
+    r.last_attempt_on::text, '2026-05-01');
+
+  select * into r from public.report_collections(v_org, date '2026-06-10')
+   where contact_id = v_d[3];
+  perform pg_temp.check_true('a promise falling due today is not yet broken',
+    not r.promise_broken);
+  perform pg_temp.check_eq('and the person it is assigned to is named',
+    r.assigned_name,
+    (select coalesce(pr.full_name, pr.email) from public.profiles pr
+      where pr.id = v_owner));
+
+  select * into r from public.report_collections(v_org, date '2026-06-10')
+   where contact_id = v_d[4];
+  perform pg_temp.check_eq('an unused credit note is not chased as a debt',
+    r.outstanding::text || '/' || r.invoices::text, '1000.00/1');
+
+  -- Who may read it.
+  v_hr := pg_temp.another_user('hr.kutipan@test.local');
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_org, v_hr, 'hr_manager', 'active', now());
+  perform pg_temp.sign_in_as(v_hr);
+  perform pg_temp.check_refused('a member who keeps the staff files may not read it',
+    format('select * from public.report_collections(%L)', v_org),
+    '%may not read the sales ledger%', '42501');
+  v_stranger := pg_temp.another_user('orang.luar@kutipan.test');
+  perform pg_temp.sign_in_as(v_stranger);
+  perform pg_temp.check_refused('and a stranger may not either',
+    format('select * from public.report_collections(%L)', v_org),
+    '%Not your company%', '42501');
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;
