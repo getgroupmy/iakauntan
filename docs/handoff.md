@@ -517,6 +517,7 @@ function:
 | `app.set_payslip_pay_date` | `0045` | 3 / 3 | -- | `payslip_access.sql` |
 | `decide_approval` | `0755` | 21 / 21 | -- | `approvals.sql` |
 | `submit_for_approval` | `0167` | 17 / 18 | 1 (same filter as `approval_required`) | `approvals.sql` |
+| `my_approvals` | `0169` | 7 / 9 | 2 (unique step numbers; one approver per rule) | `approvals.sql` |
 
 Every equivalent is written into its mutants file with the reason.
 

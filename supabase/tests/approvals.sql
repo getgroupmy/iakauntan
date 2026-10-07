@@ -703,4 +703,102 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- my_approvals, rule by rule
+--
+-- A sweep of `0169`'s definition killed one mutant of nine: the inbox
+-- was only ever read where it held exactly the one request the reader
+-- could decide. So nothing said a stranger is refused, that another
+-- company's requests, a settled request's leftover steps, a step
+-- further down a chain, a step named for somebody else or a document
+-- the reader raised themselves stay off it.
+--
+-- Two are EQUIVALENT, by the tables: a decided step cannot be listed,
+-- because the inbox takes the lowest PENDING step number and step
+-- numbers are unique per request; and a named step is never listed for
+-- a role, because a rule names exactly one approver
+-- (`approval_rules_one_approver`) and a step copies it, so a named
+-- step's role is null and no role check passes on null.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_other uuid; v_owner uuid; v_partner uuid; v_clerk uuid;
+  v_req uuid;
+begin
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.approvals_org('Meja Kelulusan Sdn Bhd');
+  v_owner := pg_temp.test_user();
+  v_partner := pg_temp.another_user('partner@meja.test');
+  v_clerk := pg_temp.another_user('clerk@meja.test');
+  insert into public.org_members (org_id, user_id, role)
+  values (v_org, v_partner, 'owner'), (v_org, v_clerk, 'admin');
+  perform public.create_fiscal_year(v_org, date '2026-01-01');
+
+  -- Invoices of 1,000 or more: an admin first, then an owner. Of 20,000
+  -- or more, the clerk by name instead of the role at step 3.
+  insert into public.approval_rules
+    (org_id, entity_kind, doc_type, min_amount, step_no, approver_role)
+  values (v_org, 'sales_document', 'invoice', 1000, 1, 'admin'),
+         (v_org, 'sales_document', 'invoice', 1000, 2, 'owner');
+  insert into public.approval_rules
+    (org_id, entity_kind, doc_type, min_amount, step_no, approver_user_id)
+  values (v_org, 'sales_document', 'invoice', 20000, 3, v_clerk);
+
+  -- Waiting at step 1, the admin's: the owners' step 2 is further down.
+  v_req := public.submit_for_approval('sales_document', pg_temp.approval_invoice(v_org, 2000));
+  perform pg_temp.sign_in_as(v_partner);
+  perform pg_temp.check_eq('a step further down the chain is not on my desk yet',
+    (select count(*) from public.my_approvals(v_org)), 0);
+
+  -- Refused at step 1: its step 2 is still pending, and stays off desks.
+  perform pg_temp.sign_in_as(v_clerk);
+  perform public.decide_approval(v_req, false, 'No');
+  perform pg_temp.sign_in_as(v_partner);
+  perform pg_temp.check_eq('nor a refused request''s leftover step',
+    (select count(*) from public.my_approvals(v_org)), 0);
+
+  -- Step 3 names the clerk; the owners do not see it as theirs. Raised
+  -- by the other owner, so it is not hidden from the partner for being
+  -- their own.
+  perform pg_temp.sign_in_as(v_owner);
+  v_req := public.submit_for_approval('sales_document', pg_temp.approval_invoice(v_org, 25000));
+  perform pg_temp.sign_in_as(v_clerk);
+  perform public.decide_approval(v_req, true);
+  perform pg_temp.sign_in_as(v_partner);
+  perform public.decide_approval(v_req, true);
+  perform pg_temp.check_eq('a step named for somebody else is not on my desk',
+    (select count(*) from public.my_approvals(v_org)), 0);
+
+  -- My own document is never on my desk, though I hold the role it asks.
+  perform pg_temp.sign_in_as(v_partner);
+  v_req := public.submit_for_approval('sales_document', pg_temp.approval_invoice(v_org, 3000));
+  perform pg_temp.sign_in_as(v_clerk);
+  perform public.decide_approval(v_req, true);
+  perform pg_temp.sign_in_as(v_partner);
+  perform pg_temp.check_eq('my own document is not on my desk',
+    (select count(*) from public.my_approvals(v_org)), 0);
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_eq('while it is on the other owner''s',
+    (select count(*) from public.my_approvals(v_org) a where a.request_id = v_req), 1);
+
+  -- Another company, where the partner is an owner too, with a request
+  -- waiting for an owner: not on this company's desk.
+  v_other := pg_temp.approvals_org('Meja Jiran Sdn Bhd');
+  insert into public.org_members (org_id, user_id, role) values (v_other, v_partner, 'owner');
+  perform public.create_fiscal_year(v_other, date '2026-01-01');
+  insert into public.approval_rules
+    (org_id, entity_kind, doc_type, min_amount, step_no, approver_role)
+  values (v_other, 'sales_document', 'invoice', 0, 1, 'owner');
+  perform public.submit_for_approval('sales_document', pg_temp.approval_invoice(v_other, 500));
+  perform pg_temp.sign_in_as(v_partner);
+  perform pg_temp.check_eq('another company''s requests are not on this company''s desk',
+    (select count(*) from public.my_approvals(v_org) a
+      where a.request_id in (select id from public.approval_requests where org_id = v_other)), 0);
+
+  perform pg_temp.sign_in_as(pg_temp.another_user('stranger@meja.test'));
+  perform pg_temp.check_refused('a stranger is told it is not their company',
+    format('select * from public.my_approvals(%L)', v_org), '%Not your company%', '42501');
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;
