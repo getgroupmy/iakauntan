@@ -1937,4 +1937,85 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+
+-- ---------------------------------------------------------------------
+-- Presence, ticks and typing, rule by rule
+--
+-- A sweep of `0136`'s presence functions left eight mutants alive.
+-- Nothing went idle, nothing read a conversation before it had been
+-- delivered, delivery was only ever marked by the one person who could
+-- be told apart, and "typing..." was never pinged by an outsider, for
+-- too long, for no time at all, or twice.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_u1 uuid := pg_temp.another_user('u1@presence.test');
+  v_u2 uuid := pg_temp.another_user('u2@presence.test');
+  v_u3 uuid := pg_temp.another_user('u3@presence.test');
+  v_out uuid := pg_temp.another_user('out@presence.test');
+  v_a uuid; v_grp uuid;
+  v_earlier timestamptz := now() - interval '1 hour';
+begin
+  v_a := pg_temp.chat_org('Kehadiran Sdn Bhd', v_u1);
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_a, v_u2, 'accountant', 'active', now()),
+         (v_a, v_u3, 'accountant', 'active', now()),
+         (v_a, v_out, 'accountant', 'active', now());
+  perform pg_temp.sign_in_as(v_u1);
+  perform public.chat_set_access(v_a, v_u1, true);
+  perform public.chat_set_access(v_a, v_u2, true);
+  perform public.chat_set_access(v_a, v_u3, true);
+  perform public.chat_set_access(v_a, v_out, true);
+  v_grp := public.chat_create_group(v_a, 'Hadir',
+    jsonb_build_array(jsonb_build_object('user_id', v_u2, 'org_id', v_a),
+                      jsonb_build_object('user_id', v_u3, 'org_id', v_a)));
+
+  -- The online dot.
+  perform public.chat_heartbeat(true);
+  perform pg_temp.check_eq('somebody gone quiet shows as idle',
+    (select state::text from public.chat_presence where user_id = v_u1), 'idle');
+  perform public.chat_heartbeat(false);
+  perform pg_temp.check_eq('and back, as online',
+    (select state::text from public.chat_presence where user_id = v_u1), 'online');
+
+  -- Ticks: delivered to one phone is not delivered to all of them, and
+  -- reading something is having received it.
+  update public.chat_participants
+     set last_delivered_at = v_earlier, last_read_at = v_earlier
+   where conversation_id = v_grp;
+  perform pg_temp.sign_in_as(v_u2);
+  perform public.chat_mark_delivered(v_grp);
+  perform pg_temp.check_eq('delivery to one phone is not delivery to another',
+    (select last_delivered_at::text from public.chat_participants
+      where conversation_id = v_grp and user_id = v_u3), v_earlier::text);
+  perform pg_temp.sign_in_as(v_u3);
+  perform public.chat_mark_read(v_grp);
+  perform pg_temp.check_eq('reading something counts as receiving it',
+    (select last_delivered_at::text from public.chat_participants
+      where conversation_id = v_grp and user_id = v_u3), now()::text);
+
+  -- Typing.
+  perform pg_temp.sign_in_as(v_out);
+  perform pg_temp.check_refused('somebody outside cannot be typing in it',
+    format('select public.chat_typing_ping(%L, 5)', v_grp),
+    '%Not in this conversation%', '42501');
+  perform pg_temp.sign_in_as(v_u1);
+  perform public.chat_typing_ping(v_grp, 600);
+  perform pg_temp.check_eq('typing lasts thirty seconds at most, whatever is asked',
+    (select expires_at::text from public.chat_typing
+      where conversation_id = v_grp and user_id = v_u1),
+    (now() + interval '30 seconds')::text);
+  perform public.chat_typing_ping(v_grp, 0);
+  perform pg_temp.check_eq('and a second at least',
+    (select expires_at::text from public.chat_typing
+      where conversation_id = v_grp and user_id = v_u1),
+    (now() + interval '1 second')::text);
+  perform public.chat_typing_ping(v_grp, 20);
+  perform pg_temp.check_eq('and pinging again moves it on',
+    (select expires_at::text from public.chat_typing
+      where conversation_id = v_grp and user_id = v_u1),
+    (now() + interval '20 seconds')::text);
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

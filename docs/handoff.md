@@ -579,6 +579,7 @@ function:
 | `chat_enabled` | `0758` | 10 / 10 | -- | `chat.sql` |
 | `chat_start_call` | `0140` | 12 / 12 | -- | `chat.sql` |
 | `chat_request_link`, `chat_decide_link`, `chat_revoke_link`, `chat_set_access` | `0135` | 23 / 23 | -- | `chat.sql` |
+| `chat_heartbeat`, `chat_mark_read`, `chat_mark_delivered`, `chat_typing_ping`, `chat_typing_stop` | `0136` | 13 / 13 | -- | `chat.sql` |
 
 Every equivalent is written into its mutants file with the reason.
 
