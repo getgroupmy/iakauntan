@@ -247,4 +247,92 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- approval_state, rule by rule
+--
+-- A sweep of `0169`'s definition left five mutants alive. Every request
+-- above had one step, held by a role, and was read while it waited: so
+-- nothing said that a settled request is no longer reported as
+-- waiting, that the step reported is the one in FRONT and not decided
+-- nor last, that a step naming a person names them, or that it is not
+-- "waiting on me" for anybody else.
+-- ---------------------------------------------------------------------
+create or replace function pg_temp.as_invoice(p_org uuid, p_amount numeric)
+returns uuid language plpgsql as $$
+declare v_c uuid; v_ac uuid; v_doc uuid;
+begin
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (p_org, 'CU-' || substr(gen_random_uuid()::text, 1, 6), 'Customer', 'customer')
+  returning id into v_c;
+  select id into v_ac from public.accounts
+   where org_id = p_org and account_type = 'revenue' and not is_group limit 1;
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status)
+  values (p_org, 'invoice', app.next_document_number_internal(p_org, 'invoice'),
+          date '2026-02-01', date '2026-03-01', v_c, 'MYR', 1, 'draft')
+  returning id into v_doc;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, description, quantity,
+     unit_price, account_id, tax_rate)
+  values (p_org, v_doc, 1, 'item', 'Work', 1, p_amount, v_ac, 0);
+  return v_doc;
+end $$;
+
+do $$
+declare
+  v_org uuid; v_owner uuid := pg_temp.test_user();
+  v_admin uuid; v_named uuid; v_other uuid;
+  v_doc uuid; v_req uuid; r record;
+begin
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Keadaan Kelulusan Sdn Bhd');
+  insert into public.org_modules (org_id, module_code, is_enabled, enabled_at)
+  values (v_org, 'approvals', true, now())
+  on conflict (org_id, module_code) do update set is_enabled = true;
+  perform public.create_fiscal_year(v_org, date '2026-01-01');
+  v_admin := pg_temp.another_user('admin@keadaan.test');
+  v_named := pg_temp.another_user('named@keadaan.test');
+  v_other := pg_temp.another_user('other@keadaan.test');
+  update public.profiles set full_name = 'Puan Rozita' where id = v_named;
+  insert into public.org_members (org_id, user_id, role)
+  values (v_org, v_admin, 'admin'), (v_org, v_named, 'accountant'),
+         (v_org, v_other, 'accountant');
+  -- An admin first; then Puan Rozita by name.
+  insert into public.approval_rules
+    (org_id, entity_kind, doc_type, min_amount, step_no, approver_role)
+  values (v_org, 'sales_document', 'invoice', 1000, 1, 'admin');
+  insert into public.approval_rules
+    (org_id, entity_kind, doc_type, min_amount, step_no, approver_user_id)
+  values (v_org, 'sales_document', 'invoice', 1000, 2, v_named);
+
+  perform pg_temp.sign_in_as(v_owner);
+  v_doc := pg_temp.as_invoice(v_org, 2000);
+  v_req := public.submit_for_approval('sales_document', v_doc);
+  -- Both steps waiting: the one reported is the first, not the last.
+  perform pg_temp.check_eq('with two steps waiting, the first is the one in front',
+    (select awaiting_step::integer from public.approval_state('sales_document', v_doc)), 1);
+  perform pg_temp.sign_in_as(v_admin);
+  perform public.decide_approval(v_req, true);
+
+  -- Step 1 decided: the step in front is 2, and it names her.
+  perform pg_temp.sign_in_as(v_other);
+  select * into r from public.approval_state('sales_document', v_doc);
+  perform pg_temp.check_eq('the step reported is the one in front, not the decided one',
+    r.awaiting_step::integer, 2);
+  perform pg_temp.check_eq('and a step naming a person names them', r.awaiting_who, 'Puan Rozita');
+  perform pg_temp.check_true('and it is not waiting on anybody else', not r.awaiting_me);
+  perform pg_temp.sign_in_as(v_named);
+  perform pg_temp.check_true('while it is waiting on her',
+    (select awaiting_me from public.approval_state('sales_document', v_doc)));
+
+  -- Settled: approved, nothing waiting.
+  perform public.decide_approval(v_req, true);
+  select * into r from public.approval_state('sales_document', v_doc);
+  perform pg_temp.check_true('an approved document is approved', r.is_approved);
+  perform pg_temp.check_true('and is waiting on nothing',
+    r.request_id is null and r.awaiting_step is null);
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;
