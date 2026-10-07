@@ -541,6 +541,24 @@ page and renumbering would quietly break the reference.
     is a job that never started, not a migration that failed -- check
     the live database before believing either, and re-run rather than
     re-push.
+26. ~~A bill with a header discount cannot be posted; an intercompany
+    bill drops the delivery charge.~~ **Raised and answered 7 October:
+    spread the discount over the lines, and copy the shipping. Built in
+    `0759`.** `post_purchase_document_internal` debited every line at
+    its full net and posted nothing for a header discount, which the
+    totals had already taken off the payable -- "Journal does not
+    balance: debits 10000.00, credits 9500.00" for a 10,000 bill with
+    500 off. Reachable through intercompany bills (they copy the seller's
+    header discount) and recurring bill templates. Now each line is
+    reduced by its share of the net, the largest taking the rounding.
+    Stock bought on such a bill is NOT revalued, so inventory in the
+    ledger reads below the stock valuation by the discount on any stock
+    line; said in the migration. And `accept_intercompany_bill` copied
+    every figure but `shipping_amount`, so an invoice of 9,700 became a
+    bill of 9,500. Found by writing the purchase-side block for
+    `credit_purchase_bill`'s sweep: a bill with a discount could not be
+    posted to be credited. Production had neither kind of bill.
+    **Awaiting deploy.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -612,6 +630,9 @@ function:
 | `post_expense` | `0727` | 22 / 23 | 1 (another company's account cannot be inserted, 0160) | `expense_split.sql` + `expenses.sql` |
 | `upsert_pos_tender_type`, `delete_pos_tender_type` | `0732` | 25 / 25 | -- | `pos_tender_types.sql` |
 | `credit_sales_invoice` | `0440` | 21 / 21 | -- | `credit_note_return.sql` |
+| `credit_purchase_bill` | `0440` | 19 / 20 | 1 (`bill_credit_remaining` refuses a non-bill in the same words) | `bill_credit.sql` |
+| `post_purchase_document_internal` (0759's discount) | `0759` | 6 / 6 | -- | `bill_credit.sql` |
+| `accept_intercompany_bill` | `0759` | 8 / 8 | -- | `intercompany_billing.sql` |
 
 Every equivalent is written into its mutants file with the reason.
 

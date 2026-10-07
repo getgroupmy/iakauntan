@@ -262,4 +262,129 @@ begin
     v_refused);
 end $$;
 
+
+-- ---------------------------------------------------------------------
+-- The delivery charge, and the discount, cross with the invoice  (0759)
+--
+-- `accept_intercompany_bill` copied the totals but not the shipping, and
+-- inserting the lines recomputed the total without it: 10,000 less 500
+-- plus 200 delivery was invoiced at 9,700 and billed at 9,500. And the
+-- 500 header discount it DID copy made the bill unpostable, because the
+-- purchase posting never took a header discount off anything.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_alice uuid := pg_temp.another_user('alice@icship.test');
+  v_bob   uuid := pg_temp.another_user('bob@icship.test');
+  v_group uuid; v_a uuid; v_b uuid; v_cust uuid; v_inv uuid; v_bill uuid;
+begin
+  insert into public.company_groups (name, created_by)
+  values ('Kumpulan Hantar', v_alice) returning id into v_group;
+  v_a := pg_temp.ic_org('Hantar Holdings Sdn Bhd', v_alice, v_group);
+  v_b := pg_temp.ic_org('Hantar Sub Sdn Bhd', v_bob, v_group);
+  perform pg_temp.sign_in_as(v_bob);
+  perform public.create_fiscal_year(v_b, date_trunc('year', pg_temp.today())::date);
+
+  insert into public.contacts (org_id, code, name, contact_type, linked_org_id)
+  values (v_a, 'C-SUB', 'Hantar Sub', 'customer', v_b) returning id into v_cust;
+  insert into public.contacts (org_id, code, name, contact_type, linked_org_id)
+  values (v_b, 'S-HOLD', 'Hantar Holdings', 'supplier', v_a);
+
+  -- Lines in, so the totals are the ones the trigger works out.
+  insert into public.sales_documents (org_id, doc_type, doc_no, contact_id,
+    doc_date, currency, exchange_rate, status, shipping_amount, discount_amount)
+  values (v_a, 'invoice', 'INV-HANTAR', v_cust, pg_temp.today(), 'MYR', 1,
+          'draft', 200, 500)
+  returning id into v_inv;
+  insert into public.sales_document_lines (org_id, document_id, line_no,
+    line_type, description, quantity, unit_price)
+  values (v_a, v_inv, 1, 'item', 'Bekalan', 1, 10000);
+  update public.sales_documents set status = 'posted' where id = v_inv;
+  perform pg_temp.check_eq('the invoice is 10,000 less 500 plus 200',
+    (select total_amount from public.sales_documents where id = v_inv), 9700);
+
+  perform pg_temp.sign_in_as(v_bob);
+  v_bill := public.accept_intercompany_bill(v_inv, v_b);
+  perform pg_temp.check_eq('the bill carries the delivery charge',
+    (select shipping_amount from public.purchase_documents where id = v_bill), 200);
+  perform pg_temp.check_eq('so it owes what the invoice says',
+    (select total_amount from public.purchase_documents where id = v_bill), 9700);
+
+  update public.purchase_document_lines
+     set account_id = (select id from public.accounts where org_id = v_b and code = '6200')
+   where document_id = v_bill;
+  perform public.post_purchase_document(v_bill);
+  perform pg_temp.check_eq('and once its accounts are chosen it posts, discount and all',
+    (select status::text from public.purchase_documents where id = v_bill), 'posted');
+  perform pg_temp.sign_out();
+end $$;
+
+
+-- ---------------------------------------------------------------------
+-- Who may raise the bill, and on what, by the reason given
+--
+-- A sweep of `accept_intercompany_bill` left four mutants alive. Each
+-- refusal above is matched by SQLSTATE, and each guard has another
+-- refusal behind it that answers in its place: a stranger is also not
+-- addressed, an invoice not addressed here also has no supplier, and so
+-- on. So each is asserted by its own sentence. And the due date: every
+-- invoice above fell due exactly when its terms said, which the trigger
+-- on `purchase_documents` works out again, so dropping it passed.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_alice uuid := pg_temp.another_user('alice@icwho.test');
+  v_bob   uuid := pg_temp.another_user('bob@icwho.test');
+  v_zara  uuid := pg_temp.another_user('zara@icwho.test');
+  v_group uuid; v_a uuid; v_b uuid; v_c uuid;
+  v_to_b uuid; v_to_c uuid; v_out uuid; v_bill uuid;
+begin
+  insert into public.company_groups (name, created_by)
+  values ('Kumpulan Siapa', v_alice) returning id into v_group;
+  v_a := pg_temp.ic_org('Siapa Holdings Sdn Bhd', v_alice, v_group);
+  v_b := pg_temp.ic_org('Siapa Sub Sdn Bhd', v_bob, v_group);
+  v_c := pg_temp.ic_org('Siapa Lain Sdn Bhd', v_zara, v_group);
+
+  insert into public.contacts (org_id, code, name, contact_type, linked_org_id)
+  values (v_b, 'S-HOLD', 'Siapa Holdings', 'supplier', v_a);
+
+  -- To B, due in nine days though no terms say so.
+  insert into public.contacts (org_id, code, name, contact_type, linked_org_id)
+  values (v_a, 'C-B', 'Siapa Sub', 'customer', v_b);
+  insert into public.sales_documents (org_id, doc_type, doc_no, contact_id,
+    doc_date, due_date, subtotal, tax_amount, total_amount, base_total_amount, status)
+  values (v_a, 'invoice', 'INV-B',
+          (select id from public.contacts where org_id = v_a and code = 'C-B'),
+          pg_temp.today(), pg_temp.today() + 9, 100, 0, 100, 100, 'posted')
+  returning id into v_to_b;
+  -- To C, which has no supplier on its books for A.
+  insert into public.contacts (org_id, code, name, contact_type, linked_org_id)
+  values (v_a, 'C-C', 'Siapa Lain', 'customer', v_c);
+  insert into public.sales_documents (org_id, doc_type, doc_no, contact_id,
+    doc_date, subtotal, tax_amount, total_amount, base_total_amount, status)
+  values (v_a, 'invoice', 'INV-C', (select id from public.contacts where org_id = v_a and code = 'C-C'),
+          pg_temp.today(), 100, 0, 100, 100, 'posted')
+  returning id into v_to_c;
+
+  perform pg_temp.sign_in_as(v_zara);
+  perform pg_temp.check_refused('somebody who cannot write in B raises no bill there',
+    format('select public.accept_intercompany_bill(%L, %L)', v_to_b, v_b),
+    '%cannot raise bills in this company%', '42501');
+  perform pg_temp.sign_in_as(v_bob);
+  perform pg_temp.check_refused('an invoice addressed elsewhere is not billed here',
+    format('select public.accept_intercompany_bill(%L, %L)', v_to_c, v_b),
+    '%not addressed to this company%', '42501');
+  perform pg_temp.sign_in_as(v_zara);
+  perform pg_temp.check_refused('and no bill is owed to nobody',
+    format('select public.accept_intercompany_bill(%L, %L)', v_to_c, v_c),
+    '%Add a supplier in this company%', null);
+
+  perform pg_temp.sign_in_as(v_bob);
+  v_bill := public.accept_intercompany_bill(v_to_b, v_b);
+  perform pg_temp.check_eq('the due date is the invoice''s, not one worked out again',
+    (select due_date::text from public.purchase_documents where id = v_bill),
+    (pg_temp.today() + 9)::text);
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

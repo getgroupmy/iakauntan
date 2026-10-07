@@ -330,4 +330,271 @@ begin
       'public.credit_purchase_bill(uuid, jsonb, text)', 'execute'));
 end $$;
 
+
+-- ---------------------------------------------------------------------
+-- The buying side, rule by rule
+--
+-- A sweep of `0440`'s `credit_purchase_bill` left thirteen mutants
+-- alive where `credit_note_return.sql` kills every one of the selling
+-- side's. Nothing here tried to credit a purchase order, a bill that is
+-- not there, a draft, or a bill already paid in full (`completed`, which
+-- `apply_allocation` sets and the guard has to admit); nobody without
+-- the right to post tried; and no bill carried shipping, a discount, a
+-- tax code or an account of its own, so a credit could drop all four.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_sup uuid; v_svc uuid; v_acct uuid; v_tax uuid;
+  v_bill uuid; v_line uuid; v_note uuid; v_po uuid; v_draft uuid;
+  v_whole uuid; v_whole_note uuid; v_paid uuid; v_other uuid;
+begin
+  v_org := pg_temp.test_org('Kredit Pembekal Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'S-1', 'Pembekal', 'supplier') returning id into v_sup;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, unit_price)
+  values (v_org, 'SVC', 'Servis', 'service', false, 'C62', 20.00)
+  returning id into v_svc;
+  select id into v_acct from public.accounts
+   where org_id = v_org and code = '6100';
+  insert into public.tax_codes (org_id, code, name, tax_type_code, rate, applies_to)
+  values (v_org, 'SV6K', 'Service tax 6%', '02', 6, 'purchase')
+  returning id into v_tax;
+
+  -- 40 at 20 = 800, carrying RM100 shipping and a RM40 discount, taxed
+  -- and charged to an account of the line's own.
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, status, shipping_amount, discount_amount)
+  values (v_org, 'bill', 'BILL-K', pg_temp.today(), v_sup, 'MYR', 1, 'draft',
+          100, 40)
+  returning id into v_bill;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, uom_code, unit_price, tax_code_id, tax_rate, account_id)
+  values (v_org, v_bill, 1, 'item', v_svc, 'Servis bulanan', 40, 'C62',
+          20.00, v_tax, (select rate from public.tax_codes where id = v_tax),
+          v_acct)
+  returning id into v_line;
+  perform public.post_purchase_document(v_bill);
+
+  -- A quarter of it back.
+  v_note := public.credit_purchase_bill(v_bill,
+    jsonb_build_array(jsonb_build_object('line', v_line, 'quantity', 10)));
+  perform pg_temp.check_true('a credit line keeps the bill''s price',
+    (select unit_price = 20.00 from public.purchase_document_lines
+      where document_id = v_note));
+  perform pg_temp.check_true('and its tax',
+    (select tax_code_id = v_tax and tax_rate > 0
+       from public.purchase_document_lines where document_id = v_note));
+  perform pg_temp.check_true('and the account it was charged to',
+    (select account_id = v_acct from public.purchase_document_lines
+      where document_id = v_note));
+  perform pg_temp.check_eq('a quarter of the goods takes a quarter of the shipping',
+    (select shipping_amount from public.purchase_documents where id = v_note), 25.00);
+  perform pg_temp.check_eq('and a quarter of the discount',
+    (select discount_amount from public.purchase_documents where id = v_note), 10.00);
+
+  -- The whole of a second bill: the note is the bill, charges and all,
+  -- which it only is if the totals were worked out AFTER the charges.
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, status, shipping_amount, discount_amount)
+  values (v_org, 'bill', 'BILL-W', pg_temp.today(), v_sup, 'MYR', 1, 'draft',
+          30, 12)
+  returning id into v_whole;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, uom_code, unit_price, account_id)
+  values (v_org, v_whole, 1, 'item', v_svc, 'Servis', 5, 'C62', 20.00, v_acct);
+  perform public.post_purchase_document(v_whole);
+  v_whole_note := public.credit_purchase_bill(v_whole);
+  perform pg_temp.check_eq('a whole credit comes to what the bill came to',
+    (select total_amount from public.purchase_documents where id = v_whole_note),
+    (select total_amount from public.purchase_documents where id = v_whole));
+
+  -- A bill whose lines net to nothing still carried its delivery.
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, status, shipping_amount)
+  values (v_org, 'bill', 'BILL-0', pg_temp.today(), v_sup, 'MYR', 1, 'draft', 18)
+  returning id into v_other;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, uom_code, unit_price, account_id)
+  values (v_org, v_other, 1, 'item', v_svc, 'Percuma', 1, 'C62', 0, v_acct);
+  perform public.post_purchase_document(v_other);
+  -- Into a variable first: called inside a WHERE it runs once per row,
+  -- and the second call finds nothing left to credit.
+  v_note := public.credit_purchase_bill(v_other);
+  perform pg_temp.check_eq('a free line credited whole gives back all the delivery',
+    (select shipping_amount from public.purchase_documents where id = v_note), 18.00);
+
+  -- Paid in full, and still creditable.
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'bill', 'BILL-P', pg_temp.today(), v_sup, 'MYR', 1, 'draft')
+  returning id into v_paid;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, uom_code, unit_price, account_id)
+  values (v_org, v_paid, 1, 'item', v_svc, 'Servis', 2, 'C62', 20.00, v_acct);
+  perform public.post_purchase_document(v_paid);
+  update public.purchase_documents set status = 'completed' where id = v_paid;
+  perform pg_temp.check_true('a bill paid in full can still be credited',
+    public.credit_purchase_bill(v_paid) is not null);
+
+  -- What is not a bill to credit.
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'purchase_order', 'PO-K', pg_temp.today(), v_sup, 'MYR', 1, 'posted')
+  returning id into v_po;
+  -- EQUIVALENT, for the sweep: dropping `credit_purchase_bill`'s own
+  -- `doc_type = 'bill'`. `bill_credit_remaining`, which it calls before
+  -- a line is written, asks the same and refuses in the same words, and
+  -- the raise unwinds the note header inserted before it.
+  perform pg_temp.check_refused('a purchase order is not a bill',
+    format('select public.credit_purchase_bill(%L)', v_po),
+    '%No such bill%', 'P0002');
+  perform pg_temp.check_refused('nor is a bill that is not there',
+    format('select public.credit_purchase_bill(%L)', gen_random_uuid()),
+    '%No such bill%', 'P0002');
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'bill', 'BILL-D', pg_temp.today(), v_sup, 'MYR', 1, 'draft')
+  returning id into v_draft;
+  perform pg_temp.check_refused('a draft bill has nothing in the ledger to credit',
+    format('select public.credit_purchase_bill(%L)', v_draft),
+    '%That bill is draft%', '23514');
+  perform pg_temp.sign_in_as(pg_temp.another_user('luar@kredit.test'));
+  perform pg_temp.check_refused('and somebody without the right to post credits nothing',
+    format('select public.credit_purchase_bill(%L)', v_bill),
+    '%needs permission%', '42501');
+  perform pg_temp.sign_out();
+end $$;
+
+
+-- ---------------------------------------------------------------------
+-- A bill's discount comes off its costs  (0759)
+--
+-- Until 0759 a bill with a header discount could not be posted at all:
+-- the total took the discount off what was owed and the posting put it
+-- nowhere, so the journal was short by exactly the discount. It now
+-- comes off the lines, by each one's share of the net, the LARGEST
+-- taking what rounding leaves -- so 100.01 off 600 / 300 / 100 is 30.00
+-- and 10.00 off the smaller two and 60.01 off the rent.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_sup uuid; v_bill uuid; v_entry uuid; v_note uuid;
+  v_rent uuid; v_util uuid; v_print uuid;
+begin
+  v_org := pg_temp.test_org('Diskaun Bil Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'S-1', 'Tuan Rumah', 'supplier') returning id into v_sup;
+  select id into v_rent  from public.accounts where org_id = v_org and code = '6200';
+  select id into v_util  from public.accounts where org_id = v_org and code = '6210';
+  select id into v_print from public.accounts where org_id = v_org and code = '6230';
+
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, status, discount_amount)
+  values (v_org, 'bill', 'BILL-DSK', pg_temp.today(), v_sup, 'MYR', 1, 'draft',
+          100.01)
+  returning id into v_bill;
+  -- Smallest first, so "the first line" and "the largest" differ.
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, description,
+     quantity, unit_price, account_id)
+  values (v_org, v_bill, 1, 'item', 'Cetak',   1, 100, v_print),
+         (v_org, v_bill, 2, 'item', 'Utiliti', 1, 300, v_util),
+         (v_org, v_bill, 3, 'item', 'Sewa',    1, 600, v_rent);
+
+  v_entry := public.post_purchase_document(v_bill);
+  perform pg_temp.check_true('a bill with a discount posts',
+    v_entry is not null);
+  -- The total is rounded to five sen and the odd sen goes to 4990, so
+  -- the payable is read against the bill's own total, not 899.99.
+  perform pg_temp.check_eq('owing what the bill says is owed',
+    (select sum(l.credit) from public.gl_lines l
+      join public.accounts a on a.id = l.account_id
+     where l.entry_id = v_entry and a.code = '2110'),
+    (select total_amount from public.purchase_documents where id = v_bill));
+  perform pg_temp.check_eq('which is the thousand less the discount, to five sen',
+    (select total_amount from public.purchase_documents where id = v_bill), 900.00);
+  perform pg_temp.check_eq('the rent, the largest, takes the sen left over',
+    (select sum(debit) from public.gl_lines
+      where entry_id = v_entry and account_id = v_rent), 539.99);
+  perform pg_temp.check_eq('utilities their own share',
+    (select sum(debit) from public.gl_lines
+      where entry_id = v_entry and account_id = v_util), 270.00);
+  perform pg_temp.check_eq('and printing theirs',
+    (select sum(debit) from public.gl_lines
+      where entry_id = v_entry and account_id = v_print), 90.00);
+
+  -- Five sen off the same three, where rounding DOES leave something:
+  -- 0.005, 0.015 and 0.03 round to 0.01, 0.02 and 0.03, which is 0.06.
+  -- The largest takes what is left of the 0.05 after the other two --
+  -- 0.02 -- rather than its own rounded 0.03, and nobody is short.
+  declare v_small uuid; v_small_entry uuid;
+  begin
+    insert into public.purchase_documents
+      (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+       exchange_rate, status, discount_amount)
+    values (v_org, 'bill', 'BILL-SEN', pg_temp.today(), v_sup, 'MYR', 1, 'draft', 0.05)
+    returning id into v_small;
+    insert into public.purchase_document_lines
+      (org_id, document_id, line_no, line_type, description,
+       quantity, unit_price, account_id)
+    values (v_org, v_small, 1, 'item', 'Cetak',   1, 100, v_print),
+           (v_org, v_small, 2, 'item', 'Utiliti', 1, 300, v_util),
+           (v_org, v_small, 3, 'item', 'Sewa',    1, 600, v_rent);
+    v_small_entry := public.post_purchase_document(v_small);
+    perform pg_temp.check_eq('of five sen, the rent takes the two left over',
+      (select sum(debit) from public.gl_lines
+        where entry_id = v_small_entry and account_id = v_rent), 599.98);
+    perform pg_temp.check_eq('and printing its own one, not the remainder',
+      (select sum(debit) from public.gl_lines
+        where entry_id = v_small_entry and account_id = v_print), 99.99);
+  end;
+
+  -- In dollars, the discount is converted with everything else: USD10
+  -- off USD100 at 4.50 is RM45 off RM450.
+  declare v_usd uuid; v_usd_entry uuid;
+  begin
+    insert into public.purchase_documents
+      (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+       exchange_rate, status, discount_amount)
+    values (v_org, 'bill', 'BILL-USD', pg_temp.today(), v_sup, 'USD', 4.5, 'draft', 10)
+    returning id into v_usd;
+    insert into public.purchase_document_lines
+      (org_id, document_id, line_no, line_type, description,
+       quantity, unit_price, account_id)
+    values (v_org, v_usd, 1, 'item', 'Sewa luar negara', 1, 100, v_rent);
+    v_usd_entry := public.post_purchase_document(v_usd);
+    perform pg_temp.check_eq('a dollar discount is taken off in ringgit',
+      (select sum(debit) from public.gl_lines
+        where entry_id = v_usd_entry and account_id = v_rent), 405.00);
+  end;
+
+  -- Credited whole, it all comes back: the note carries the whole
+  -- discount and is posted by the same rule, the other way.
+  v_note := public.credit_purchase_bill(v_bill);
+  perform pg_temp.check_eq('a whole credit takes the rent back to nothing',
+    (select sum(l.debit - l.credit) from public.gl_lines l
+      join public.purchase_documents d on d.gl_entry_id = l.entry_id
+     where d.id in (v_bill, v_note) and l.account_id = v_rent), 0);
+  perform pg_temp.check_eq('and the supplier is owed nothing',
+    (select sum(l.credit - l.debit) from public.gl_lines l
+      join public.purchase_documents d on d.gl_entry_id = l.entry_id
+      join public.accounts a on a.id = l.account_id
+     where d.id in (v_bill, v_note) and a.code = '2110'), 0);
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

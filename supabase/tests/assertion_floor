@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-15540
+15678
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1016,3 +1016,8 @@
 # rule by rule; and 0758, chat for a suspended member, a closed company
 # and a closed account. run_locally.sh at 0758: 386 files, 15540
 # assertions.
+#
+# 7 October: 15678. Chat readers, calls and presence, five money movers
+# and the tender editor swept rule by rule, and 0759 (a bill's header
+# discount, the intercompany delivery charge). run_locally.sh at 0759:
+# 386 files, 15678 assertions.
