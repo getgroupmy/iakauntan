@@ -1826,4 +1826,115 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+
+-- ---------------------------------------------------------------------
+-- Linking two companies, rule by rule
+--
+-- A sweep of `0135`'s link functions and `chat_set_access` left fifteen
+-- mutants alive. Every request above was an owner asking a real, other,
+-- unlinked company, and every answer was a yes -- so who may ask, a
+-- company asking itself or nobody, a refusal, a second answer, the
+-- other side asking back, and the kind of link a group's companies get
+-- were all unasserted. So was who may switch chat on, and for whom.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_own_a uuid := pg_temp.another_user('owner-a@link.test');
+  v_acct_a uuid := pg_temp.another_user('acct-a@link.test');
+  v_own_b uuid := pg_temp.another_user('owner-b@link.test');
+  v_own_c uuid := pg_temp.another_user('owner-c@link.test');
+  v_a uuid; v_b uuid; v_c uuid; v_d uuid; v_grp uuid;
+  v_link uuid; v_ac uuid; v_bd uuid; v_hi_owner uuid;
+begin
+  v_a := pg_temp.chat_org('Pautan A Sdn Bhd', v_own_a);
+  v_b := pg_temp.chat_org('Pautan B Sdn Bhd', v_own_b);
+  v_c := pg_temp.chat_org('Pautan C Sdn Bhd', v_own_c);
+  v_d := pg_temp.chat_org('Pautan D Sdn Bhd', v_own_b);
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_a, v_acct_a, 'accountant', 'active', now());
+  -- A and C are one group's companies; B and D belong to no group.
+  insert into public.company_groups (name, created_by)
+  values ('Kumpulan Pautan', v_own_a) returning id into v_grp;
+  update public.organizations set group_id = v_grp where id in (v_a, v_c);
+
+  -- Asking.
+  perform pg_temp.sign_in_as(v_acct_a);
+  perform pg_temp.check_refused('an accountant cannot link the company',
+    format('select public.chat_request_link(%L, %L)', v_a, v_b),
+    '%may not link this company%', '42501');
+  perform pg_temp.sign_in_as(v_own_a);
+  perform pg_temp.check_refused('nor anybody link a company to itself',
+    format('select public.chat_request_link(%L, %L)', v_a, v_a),
+    '%already linked to itself%', '22023');
+  perform pg_temp.sign_in_as(v_own_a);
+  perform pg_temp.check_refused('nor to a company that is not there',
+    format('select public.chat_request_link(%L, %L)', v_a, gen_random_uuid()),
+    '%No such company%', 'P0002');
+  perform pg_temp.sign_in_as(v_own_a);
+  v_ac := public.chat_request_link(v_a, v_c, null);
+  perform pg_temp.check_eq('two companies of one group link as a group',
+    (select kind::text from public.chat_links where id = v_ac), 'group');
+  v_link := public.chat_request_link(v_a, v_b, 'Pembekal');
+  perform pg_temp.check_eq('a company outside it links as external',
+    (select kind::text from public.chat_links where id = v_link), 'external');
+  perform pg_temp.sign_in_as(v_own_b);
+  v_bd := public.chat_request_link(v_b, v_d, null);
+  perform pg_temp.check_eq('and two companies in no group are not one group',
+    (select kind::text from public.chat_links where id = v_bd), 'external');
+
+  -- Answering.
+  perform pg_temp.check_refused('a link that is not there cannot be answered',
+    format('select public.chat_decide_link(%L, true)', gen_random_uuid()),
+    '%No such link%', 'P0002');
+  perform pg_temp.sign_in_as(v_own_b);
+  perform public.chat_decide_link(v_link, false);
+  perform pg_temp.check_eq('a refusal is a refusal',
+    (select status::text from public.chat_links where id = v_link), 'rejected');
+  perform pg_temp.check_true('and they are not linked',
+    not app.chat_orgs_linked(v_a, v_b));
+  perform pg_temp.check_true('signed by whoever refused',
+    (select decided_by from public.chat_links where id = v_link) = v_own_b);
+  perform pg_temp.check_refused('and an answer is not given twice',
+    format('select public.chat_decide_link(%L, true)', v_link),
+    '%That link is already rejected%', '22023');
+
+  -- The side that refused asks back. Now the OTHER side answers, and
+  -- the old refusal no longer reads as decided.
+  perform pg_temp.sign_in_as(v_own_b);
+  perform public.chat_request_link(v_b, v_a, 'Mari berbual');
+  perform pg_temp.check_true('asking back makes them the asker',
+    (select requested_by_org from public.chat_links where id = v_link) = v_b);
+  perform pg_temp.check_true('with the old answer cleared',
+    (select decided_by is null from public.chat_links where id = v_link));
+  perform pg_temp.sign_in_as(v_own_a);
+  perform public.chat_decide_link(v_link, true);
+  perform pg_temp.check_true('and the company first asked can now say yes',
+    app.chat_orgs_linked(v_a, v_b));
+  perform pg_temp.check_refused('a link already made is not asked for again',
+    format('select public.chat_request_link(%L, %L)', v_a, v_b),
+    '%already linked%', '23505');
+
+  -- Either side may end it -- including the one filed second.
+  v_hi_owner := case when v_a > v_b then v_own_a else v_own_b end;
+  perform pg_temp.sign_in_as(v_hi_owner);
+  perform public.chat_revoke_link(v_link);
+  perform pg_temp.check_eq('the company filed second can end a link too',
+    (select status::text from public.chat_links where id = v_link), 'revoked');
+
+  -- Switching chat on.
+  perform pg_temp.sign_in_as(v_acct_a);
+  perform pg_temp.check_refused('an accountant cannot switch chat on',
+    format('select public.chat_set_access(%L, %L, true)', v_a, v_acct_a),
+    '%may not change who can use chat%', '42501');
+  perform pg_temp.sign_in_as(v_own_a);
+  perform pg_temp.check_refused('nor anybody switch it on for a stranger',
+    format('select public.chat_set_access(%L, %L, true)', v_a, v_own_b),
+    '%not a member of this company%', '22023');
+  perform pg_temp.sign_in_as(v_own_a);
+  perform public.chat_set_access(v_a, v_acct_a, true);
+  perform pg_temp.check_true('while the owner switches on their own staff',
+    app.chat_enabled(v_a, v_acct_a));
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;
