@@ -118,10 +118,10 @@ class _RuleSheetState extends ConsumerState<_RuleSheet> {
                   value: 'purchase_document',
                   child: Text('Purchase documents'),
                 ),
-                DropdownMenuItem(
-                  value: 'journal',
-                  child: Text('Manual journals'),
-                ),
+                // Not manual journals. A journal posts the moment it is
+                // saved, so a rule on it could never be met -- it stopped
+                // every journal it covered from posting at all. The
+                // database refuses one too (0756).
               ],
               onChanged: (v) => setState(() {
                 _kind = v!;

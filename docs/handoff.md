@@ -482,6 +482,18 @@ page and renumbering would quietly break the reference.
     devices, own conversations), the imports (guarded by
     `check_open_item_run`'s `can_post`) and chat (whose `chat_enabled`
     reads `org_members`).
+23. ~~An approval rule on manual journals can never be met.~~ **Raised
+    and answered 7 October: stop offering it. Built in `0756`.** A
+    journal has no draft state (`0633`, deliberately) and posts on save;
+    `refuse_unapproved_posting` checks it at that commit, and it cannot
+    be sent for approval before it exists. So "journals over RM1,000
+    need an admin" stopped every such journal posting at all, approved
+    or not -- reproduced locally -- and the rule editor offered it to
+    every company. Production had no journal rules. The table now
+    refuses one (insert, or moving a rule onto journals) with the
+    reason, and the editor no longer offers it; the widget test fails
+    with the option put back. Journal approval, if wanted, needs a
+    pending state of its own first.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

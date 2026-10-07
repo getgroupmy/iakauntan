@@ -801,4 +801,34 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- No approval rules on manual journals (0756)
+--
+-- A journal posts when it is saved and has no draft state (0633), so a
+-- rule on journals could never be met: the posting gate refused the
+-- journal unapproved, and it could not be sent for approval before it
+-- existed. The rule stopped every journal it covered from posting at
+-- all. It is refused where rules are written, with the reason.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_rule uuid;
+begin
+  v_org := pg_temp.approvals_org('Jurnal Tanpa Kelulusan Sdn Bhd');
+  perform pg_temp.check_refused('a rule on manual journals is refused, and says why',
+    format($q$insert into public.approval_rules
+      (org_id, entity_kind, min_amount, step_no, approver_role)
+      values (%L, 'journal', 1000, 1, 'admin')$q$, v_org),
+    '%posts the moment it is saved%', '23514');
+
+  insert into public.approval_rules
+    (org_id, entity_kind, min_amount, step_no, approver_role)
+  values (v_org, 'purchase_document', 1000, 1, 'admin')
+  returning id into v_rule;
+  perform pg_temp.check_true('while a rule on purchases is written as ever', v_rule is not null);
+  perform pg_temp.check_refused('and cannot be moved onto journals afterwards',
+    format('update public.approval_rules set entity_kind = %L where id = %L', 'journal', v_rule),
+    '%posts the moment it is saved%', '23514');
+end $$;
+
 rollback;

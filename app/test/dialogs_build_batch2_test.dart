@@ -2234,6 +2234,14 @@ void main() {
           find.textContaining('until Nurul Huda binti Ismail has approved'),
           findsOneWidget);
       expect(find.textContaining('null'), findsNothing);
+
+      // WHAT A RULE MAY APPLY TO. Sales and purchases, and not manual
+      // journals: a journal posts on save, so a rule on it could never
+      // be met and blocked every journal it covered (0756).
+      await tester.tap(find.text('Purchase documents'));
+      await tester.pumpAndSettle();
+      expect(find.text('Sales documents'), findsWidgets);
+      expect(find.text('Manual journals'), findsNothing);
     });
   });
 
