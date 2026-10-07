@@ -481,7 +481,13 @@ page and renumbering would quietly break the reference.
     found only functions that act on the caller's own rows (profile,
     devices, own conversations), the imports (guarded by
     `check_open_item_run`'s `can_post`) and chat (whose `chat_enabled`
-    reads `org_members`).
+    reads `org_members`). That last was wrong: it read the table and
+    not the status. See item 25. A scan for the same shape at 0758 --
+    every function reading `org_members` with no status test -- found
+    the rest to be lists, lifecycle code, or guards that ask
+    `is_org_member` first. `build_claim_chain`'s role tests ignore
+    status too, but only to choose 'pending' over 'skipped', and the
+    owner is in both role sets, so it cannot matter.
 23. ~~An approval rule on manual journals can never be met.~~ **Raised
     and answered 7 October: stop offering it. Built in `0756`.** A
     journal has no draft state (`0633`, deliberately) and posts on save;
@@ -522,7 +528,19 @@ page and renumbering would quietly break the reference.
     both active in open companies. Now it asks what `is_org_member` asks,
     minus support access. The module gate, which the file's header
     calls the first of three, had no assertion either; it has one now.
-    **Awaiting deploy.**
+    **Applied, and read back** (7 October, read-only): recorded; the
+    live function asks for an active membership, an open company and an
+    open account; still SECURITY DEFINER, `authenticated` yes, `anon`
+    no; both production chat users still have chat.
+    **The trap paid for on the way:** the first "Apply the migrations"
+    for `fb9cb525` FAILED WITHOUT RUNNING A STEP -- no log (404), no
+    annotations, `completed_at` earlier than `started_at` -- and so did
+    the previous run's three deploy jobs. Nothing was wrong with the
+    migration: production simply did not have it. `rerun-failed-jobs`
+    on that run applied it. So a red "Apply the migrations" with no log
+    is a job that never started, not a migration that failed -- check
+    the live database before believing either, and re-run rather than
+    re-push.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
