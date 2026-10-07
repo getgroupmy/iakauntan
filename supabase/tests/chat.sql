@@ -1485,4 +1485,167 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+
+-- ---------------------------------------------------------------------
+-- Answering, refusing and hanging up, rule by rule
+--
+-- A sweep of `0140`'s `chat_join_call`, `chat_decline_call` and
+-- `chat_leave_call` left fifteen mutants alive. The one call above that
+-- anybody declined was a live call in a room, so the rule the comment
+-- on `chat_decline_call` is about -- IN A PAIR, ONE REFUSAL ENDS IT --
+-- had never once run: a refusal that ended nothing passed. Nobody
+-- joined a call that was over or not there, rejoined after leaving, was
+-- still being rung when the caller hung up, or hung up on a call that
+-- had already ended some other way. `0139`'s `chat_leave` had one
+-- survivor too: nothing tried to leave a direct conversation.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_u1 uuid := pg_temp.another_user('u1@answer.test');
+  v_u2 uuid := pg_temp.another_user('u2@answer.test');
+  v_u3 uuid := pg_temp.another_user('u3@answer.test');
+  v_out uuid := pg_temp.another_user('out@answer.test');
+  v_late uuid := pg_temp.another_user('late@answer.test');
+  v_a uuid; v_grp uuid; v_dm uuid; v_call uuid;
+  v_earlier timestamptz := now() - interval '1 hour';
+begin
+  v_a := pg_temp.chat_org('Jawab Panggilan Sdn Bhd', v_u1);
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_a, v_u2, 'accountant', 'active', now()),
+         (v_a, v_u3, 'accountant', 'active', now()),
+         (v_a, v_out, 'accountant', 'active', now()),
+         (v_a, v_late, 'accountant', 'active', now());
+  perform pg_temp.sign_in_as(v_u1);
+  perform public.chat_set_access(v_a, v_u1, true);
+  perform public.chat_set_access(v_a, v_u2, true);
+  perform public.chat_set_access(v_a, v_u3, true);
+  perform public.chat_set_access(v_a, v_out, true);
+  perform public.chat_set_access(v_a, v_late, true);
+  v_grp := public.chat_create_group(v_a, 'Bilik',
+    jsonb_build_array(jsonb_build_object('user_id', v_u2, 'org_id', v_a),
+                      jsonb_build_object('user_id', v_u3, 'org_id', v_a)));
+  v_dm := public.chat_start_direct(v_a, v_u2, v_a);
+
+  -- Joining.
+  perform pg_temp.check_refused('a call that is not there cannot be joined',
+    format('select public.chat_join_call(%L)', gen_random_uuid()),
+    '%No such call%', 'P0002');
+  perform pg_temp.sign_in_as(v_u1);
+  v_call := public.chat_start_call(v_grp, 'voice');
+  perform pg_temp.sign_in_as(v_u2);
+  perform public.chat_join_call(v_call);
+  perform pg_temp.check_eq('whoever answers is in the call',
+    (select state::text from public.chat_call_participants
+      where call_id = v_call and user_id = v_u2), 'joined');
+  perform pg_temp.check_eq('and the call says when it was answered',
+    (select answered_at::text from public.chat_calls where id = v_call),
+    now()::text);
+
+  -- Back in after hanging up: the first answer still stands.
+  update public.chat_call_participants set joined_at = v_earlier
+   where call_id = v_call and user_id = v_u2;
+  perform public.chat_leave_call(v_call);
+  perform public.chat_join_call(v_call);
+  perform pg_temp.check_eq('somebody who hangs up and rejoins is in again',
+    (select state::text from public.chat_call_participants
+      where call_id = v_call and user_id = v_u2), 'joined');
+  perform pg_temp.check_eq('from when they first answered',
+    (select joined_at::text from public.chat_call_participants
+      where call_id = v_call and user_id = v_u2), v_earlier::text);
+  perform pg_temp.check_true('and no longer marked as gone',
+    (select left_at is null from public.chat_call_participants
+      where call_id = v_call and user_id = v_u2));
+
+  -- Somebody added after the call began was never rung, so joining is
+  -- the first row they have in it -- the INSERT, not the conflict.
+  perform pg_temp.sign_in_as(v_u1);
+  perform public.chat_add_participant(v_grp, v_late, v_a);
+  perform pg_temp.sign_in_as(v_late);
+  perform public.chat_join_call(v_call);
+  perform pg_temp.check_eq('somebody added mid-call who joins is in it',
+    (select state::text from public.chat_call_participants
+      where call_id = v_call and user_id = v_late), 'joined');
+
+  perform pg_temp.sign_in_as(v_u1);
+  perform public.chat_end_call(v_call);
+  -- Out of the room again, so the room below is the three it was.
+  perform pg_temp.sign_in_as(v_late);
+  perform public.chat_leave(v_grp);
+  -- A pair is not a room: there is no leaving it, only ignoring it.
+  perform pg_temp.sign_in_as(v_u2);
+  perform pg_temp.check_refused('a direct conversation cannot be left',
+    format('select public.chat_leave(%L)', v_dm),
+    '%cannot be left, only ignored%', '22023');
+  perform pg_temp.sign_in_as(v_u2);
+  perform pg_temp.check_eq('and both people are still in it',
+    (select count(*) from public.chat_participants where conversation_id = v_dm), 2);
+  perform pg_temp.sign_in_as(v_u3);
+  perform pg_temp.check_refused('a call that is over cannot be joined',
+    format('select public.chat_join_call(%L)', v_call),
+    '%That call is over%', '22023');
+
+  -- Refusing in a room: nothing ends while somebody is still being rung.
+  perform pg_temp.sign_in_as(v_u1);
+  v_call := public.chat_start_call(v_grp, 'voice');
+  perform pg_temp.sign_in_as(v_out);
+  perform pg_temp.check_refused('somebody outside the room cannot refuse its call',
+    format('select public.chat_decline_call(%L)', v_call),
+    '%No such call%', 'P0002');
+  perform pg_temp.sign_in_as(v_u2);
+  perform public.chat_decline_call(v_call);
+  perform pg_temp.check_eq('a refusal is dated',
+    (select left_at::text from public.chat_call_participants
+      where call_id = v_call and user_id = v_u2), now()::text);
+  -- EQUIVALENT, for the sweep: dropping the test for somebody who has
+  -- ANSWERED from this refusal. While a call is ringing nobody but the
+  -- caller can have answered -- `chat_join_call` turns it live in the
+  -- same locked transaction, and clients may only select these tables --
+  -- so that half of the condition is never what keeps a call open.
+  perform pg_temp.check_eq('one refusal while another phone rings ends nothing',
+    (select status::text from public.chat_calls where id = v_call), 'ringing');
+  perform pg_temp.sign_in_as(v_u3);
+  perform public.chat_decline_call(v_call);
+  perform pg_temp.check_eq('the last refusal in a room does',
+    (select status::text from public.chat_calls where id = v_call), 'declined');
+
+  -- Refusing in a pair.
+  perform pg_temp.sign_in_as(v_u1);
+  v_call := public.chat_start_call(v_dm, 'voice');
+  perform pg_temp.sign_in_as(v_u2);
+  perform public.chat_decline_call(v_call);
+  perform pg_temp.check_eq('in a pair, one refusal ends it',
+    (select status::text from public.chat_calls where id = v_call), 'declined');
+  perform pg_temp.check_eq('dated',
+    (select ended_at::text from public.chat_calls where id = v_call), now()::text);
+  perform pg_temp.check_eq('and saying why',
+    (select end_reason from public.chat_calls where id = v_call), 'declined');
+
+  -- The caller is still marked in it. Hanging up now is hanging up on a
+  -- call that is already over, which must not rewrite how it ended.
+  perform pg_temp.sign_in_as(v_u1);
+  perform public.chat_leave_call(v_call);
+  perform pg_temp.check_eq('hanging up on a refused call leaves it refused',
+    (select status::text from public.chat_calls where id = v_call), 'declined');
+
+  -- Hanging up while the others are still being rung.
+  v_call := public.chat_start_call(v_grp, 'voice');
+  perform public.chat_leave_call(v_call);
+  perform pg_temp.check_eq('a phone still ringing keeps the call open',
+    (select status::text from public.chat_calls where id = v_call), 'ringing');
+
+  -- And the last one out keeps a reason already recorded.
+  update public.chat_calls set end_reason = 'network dropped' where id = v_call;
+  perform pg_temp.sign_in_as(v_u2);
+  perform public.chat_decline_call(v_call);
+  perform pg_temp.sign_in_as(v_u3);
+  perform public.chat_join_call(v_call);
+  perform public.chat_leave_call(v_call);
+  perform pg_temp.check_eq('the last one out ends it',
+    (select status::text from public.chat_calls where id = v_call), 'ended');
+  perform pg_temp.check_eq('without overwriting a reason already recorded',
+    (select end_reason from public.chat_calls where id = v_call),
+    'network dropped');
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

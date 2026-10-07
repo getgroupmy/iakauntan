@@ -559,6 +559,8 @@ function:
 | `chat_create_group` | `0139` | 9 / 9 | -- | `chat.sql` |
 | `chat_start_direct` | `0757` | 12 / 13 | 1 (no direct conversation holds three) | `chat.sql` |
 | `chat_add_participant` | `0139` | 5 / 5 | -- | `chat.sql` |
+| `chat_join_call`, `chat_decline_call`, `chat_leave_call` | `0140` | 23 / 24 | 1 (nobody but the caller has answered a ringing call) | `chat.sql` |
+| `chat_leave` | `0139` | 3 / 3 | -- | `chat.sql` |
 
 Every equivalent is written into its mutants file with the reason.
 
