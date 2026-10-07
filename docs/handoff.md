@@ -508,6 +508,21 @@ page and renumbering would quietly break the reference.
     **Applied, and read back** (7 October, read-only): recorded, the
     live check is `v_me = p_other_user` alone, still SECURITY DEFINER,
     `authenticated` yes, `anon` no.
+25. ~~A suspended member keeps chat.~~ **Raised and answered 7 October:
+    fix it. Built in `0758`.** `app.chat_enabled` (0135), the gate under
+    every chat permission, asked only that an `org_members` row EXIST.
+    Every other guard asks for 'active'. Reproduced locally: suspended
+    by an administrator, a member went on reading the conversation,
+    sending into it and starting calls, in their company and in every
+    company linked to it. The same went for a closed company and a
+    closed account. Item 22's scan passed chat over because "its
+    `chat_enabled` reads `org_members`". It did, but not the status,
+    which is the trap: **a guard that reads the right table is not
+    a guard that reads the right column.** Production had two chat users,
+    both active in open companies. Now it asks what `is_org_member` asks,
+    minus support access. The module gate, which the file's header
+    calls the first of three, had no assertion either; it has one now.
+    **Awaiting deploy.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -561,6 +576,7 @@ function:
 | `chat_add_participant` | `0139` | 5 / 5 | -- | `chat.sql` |
 | `chat_join_call`, `chat_decline_call`, `chat_leave_call` | `0140` | 23 / 24 | 1 (nobody but the caller has answered a ringing call) | `chat.sql` |
 | `chat_leave` | `0139` | 3 / 3 | -- | `chat.sql` |
+| `chat_enabled` | `0758` | 10 / 10 | -- | `chat.sql` |
 
 Every equivalent is written into its mutants file with the reason.
 

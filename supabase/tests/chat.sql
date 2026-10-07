@@ -1648,4 +1648,122 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+
+-- ---------------------------------------------------------------------
+-- Suspended, closed and closed down: out of the chat as out of all else
+--
+-- `0758`. `app.chat_enabled` asked only that an `org_members` row
+-- EXISTED, so a member an administrator had suspended went on reading
+-- the conversation, sending into it and starting calls -- while every
+-- other guard, asking for 'active', had already shut them out. The same
+-- went for a closed company and a closed account. Each case below is
+-- paired with the same person let back in, so a refusal for some other
+-- reason cannot pass for this one.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_boss uuid := pg_temp.another_user('boss@suspend.test');
+  v_gone uuid := pg_temp.another_user('gone@suspend.test');
+  v_third uuid := pg_temp.another_user('third@suspend.test');
+  v_a uuid; v_x uuid; v_dm uuid; v_n int; v_role text; v_ok boolean;
+begin
+  v_a := pg_temp.chat_org('Digantung Sdn Bhd', v_boss);
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_a, v_gone, 'accountant', 'active', now()),
+         (v_a, v_third, 'accountant', 'active', now());
+  -- Still active somewhere else, so being suspended HERE is the only
+  -- thing that can say no: a membership in another company is not one
+  -- in this.
+  v_x := pg_temp.chat_org('Syarikat Lain Sdn Bhd', v_third);
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_x, v_gone, 'accountant', 'active', now());
+  perform pg_temp.sign_in_as(v_boss);
+  perform public.chat_set_access(v_a, v_boss, true);
+  perform public.chat_set_access(v_a, v_gone, true);
+  perform public.chat_set_access(v_a, v_third, true);
+  v_dm := public.chat_start_direct(v_a, v_gone, v_a);
+  insert into public.chat_messages (conversation_id, sender_id, sender_org_id, body)
+  values (v_dm, v_boss, v_a, 'Laporan bulan ini');
+
+  -- The control: an active member reads it.
+  perform pg_temp.sign_in_as(v_gone);
+  begin
+    set local role authenticated;
+    v_role := current_user;
+    select count(*) into v_n from public.chat_messages where conversation_id = v_dm;
+  end;
+  reset role;
+  perform pg_temp.check_true('the test ran under row level security',
+    v_role = 'authenticated');
+  perform pg_temp.check_eq('an active member reads the conversation', v_n, 1);
+
+  -- Suspended.
+  update public.org_members set status = 'suspended'
+   where org_id = v_a and user_id = v_gone;
+  perform pg_temp.check_true('a suspended member has no chat',
+    app.chat_enabled(v_a, v_gone) is false);
+  perform pg_temp.sign_in_as(v_gone);
+  begin
+    set local role authenticated;
+    select count(*) into v_n from public.chat_messages where conversation_id = v_dm;
+    begin
+      insert into public.chat_messages (conversation_id, sender_id, sender_org_id, body)
+      values (v_dm, v_gone, v_a, 'Masih di sini');
+      v_ok := true;
+    exception when insufficient_privilege then v_ok := false;
+    end;
+  end;
+  reset role;
+  perform pg_temp.check_eq('nor reads what was said to them', v_n, 0);
+  perform pg_temp.check_true('nor says anything more', not v_ok);
+  perform pg_temp.check_refused('nor rings anybody from it',
+    format('select public.chat_start_call(%L, %L)', v_dm, 'voice'),
+    '%not in this conversation%', '42501');
+  perform pg_temp.sign_in_as(v_third);
+  perform pg_temp.check_refused('and nobody opens a new conversation with them',
+    format('select public.chat_start_direct(%L, %L, %L)', v_a, v_gone, v_a),
+    '%not switched on for that person%', '42501');
+
+  -- Let back in: the same person, the same conversation.
+  update public.org_members set status = 'active'
+   where org_id = v_a and user_id = v_gone;
+  perform pg_temp.check_true('reinstated, they have chat again',
+    app.chat_enabled(v_a, v_gone) is true);
+
+  -- A closed company.
+  update public.organizations set deleted_at = now() where id = v_a;
+  perform pg_temp.check_true('nobody chats in a closed company',
+    app.chat_enabled(v_a, v_gone) is false);
+  update public.organizations set deleted_at = null where id = v_a;
+  perform pg_temp.check_true('and reopened, they do',
+    app.chat_enabled(v_a, v_gone) is true);
+
+  -- A closed account.
+  update public.profiles set deleted_at = now() where id = v_gone;
+  perform pg_temp.check_true('a closed account has no chat',
+    app.chat_enabled(v_a, v_gone) is false);
+  perform pg_temp.check_true('while the colleague beside it still does',
+    app.chat_enabled(v_a, v_third) is true);
+  update public.profiles set deleted_at = null where id = v_gone;
+
+  -- The first gate, which nothing above reaches: the company has chat.
+  update public.org_modules set is_enabled = false
+   where org_id = v_a and module_code = 'chat';
+  perform pg_temp.check_true('a company with chat switched off has none',
+    app.chat_enabled(v_a, v_gone) is false);
+  update public.org_modules set is_enabled = true, expires_at = now() - interval '1 day'
+   where org_id = v_a and module_code = 'chat';
+  perform pg_temp.check_true('nor one whose chat has run out',
+    app.chat_enabled(v_a, v_gone) is false);
+  update public.org_modules set expires_at = now() + interval '1 day'
+   where org_id = v_a and module_code = 'chat';
+  perform pg_temp.check_true('while one paid up to tomorrow does',
+    app.chat_enabled(v_a, v_gone) is true);
+  update public.org_modules set is_enabled = false
+   where org_id = v_x and module_code = 'chat';
+  perform pg_temp.check_true('and another company switching it off is not this one',
+    app.chat_enabled(v_a, v_gone) is true);
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;
