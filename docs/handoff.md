@@ -583,6 +583,9 @@ function:
 | `chat_expire_calls`, `chat_incoming_calls`, `chat_active_call` | `0140` | 17 / 18 | 1 (no call ends with a phone still ringing in time) | `chat.sql` |
 | `chat_orgs_linked`, `chat_participant_org` | `0135` | 6 / 6 | -- | `chat.sql` |
 | `chat_can_join` | `0139` | 3 / 3 | -- | `chat.sql` |
+| `chat_directory`, `chat_who_is_typing` | `0136` | 9 / 10 | 1 (`is_enabled` asked twice of one row) | `chat.sql` |
+| `chat_links_for`, `chat_access_list` | `0135` | 10 / 10 | -- | `chat.sql` |
+| `chat_members` | `0139` | 4 / 4 | -- | `chat.sql` |
 
 Every equivalent is written into its mutants file with the reason.
 

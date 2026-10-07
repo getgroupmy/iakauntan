@@ -2169,4 +2169,112 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+
+-- ---------------------------------------------------------------------
+-- Who is listed, and to whom, rule by rule
+--
+-- A sweep of the chat readers -- `chat_directory`, `chat_who_is_typing`
+-- (0136), `chat_access_list` (0135) and `chat_members` (0139) -- left
+-- twelve mutants alive. Two of them would have been leaks: nobody
+-- outside a room asked who was in it, and nobody without chat asked for
+-- the directory of every linked company's staff. The rest: a company
+-- whose chat lapsed, presence gone stale, typing that had expired or
+-- was your own, an invitation nobody accepted, and somebody switched
+-- off reading as switched on.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_own_a uuid := pg_temp.another_user('owner-a@listed.test');
+  v_on uuid := pg_temp.another_user('on@listed.test');
+  v_off uuid := pg_temp.another_user('off@listed.test');
+  v_out uuid := pg_temp.another_user('out@listed.test');
+  v_own_b uuid := pg_temp.another_user('owner-b@listed.test');
+  v_a uuid; v_b uuid; v_link uuid; v_grp uuid;
+begin
+  v_a := pg_temp.chat_org('Senarai A Sdn Bhd', v_own_a);
+  v_b := pg_temp.chat_org('Senarai B Sdn Bhd', v_own_b);
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_a, v_on, 'accountant', 'active', now()),
+         (v_a, v_off, 'accountant', 'active', now()),
+         (v_a, v_out, 'accountant', 'active', now());
+  insert into public.org_members (org_id, user_id, invited_email, role, status)
+  values (v_a, null, 'belum-terima@listed.test', 'accountant', 'invited');
+  perform pg_temp.sign_in_as(v_own_a);
+  perform public.chat_set_access(v_a, v_own_a, true);
+  perform public.chat_set_access(v_a, v_on, true);
+  perform public.chat_set_access(v_a, v_off, false);
+  perform public.chat_set_access(v_a, v_out, true);
+  v_link := public.chat_request_link(v_a, v_b, null);
+  perform pg_temp.sign_in_as(v_own_b);
+  perform public.chat_set_access(v_b, v_own_b, true);
+  perform public.chat_decide_link(v_link, true);
+
+  -- The directory.
+  perform pg_temp.sign_in_as(v_own_a);
+  perform pg_temp.check_true('a colleague is in the directory as one of us',
+    (select is_cross_company from public.chat_directory(v_a) where user_id = v_on) is false);
+  perform pg_temp.check_true('somebody at a linked company, as one of them',
+    (select is_cross_company from public.chat_directory(v_a) where user_id = v_own_b) is true);
+  -- EQUIVALENT, for the sweep: dropping `chat_directory`'s
+  -- `a.is_enabled`. The `chat_enabled(a.org_id, a.user_id)` beside it
+  -- asks the same row the same question.
+  perform pg_temp.check_eq('somebody switched off is not in it',
+    (select count(*) from public.chat_directory(v_a) where user_id = v_off), 0);
+  update public.org_modules set is_enabled = false
+   where org_id = v_b and module_code = 'chat';
+  perform pg_temp.check_eq('nor anybody whose company''s chat has lapsed',
+    (select count(*) from public.chat_directory(v_a) where user_id = v_own_b), 0);
+  update public.org_modules set is_enabled = true
+   where org_id = v_b and module_code = 'chat';
+  perform pg_temp.sign_in_as(v_off);
+  perform pg_temp.check_eq('and somebody without chat is shown nobody at all',
+    (select count(*) from public.chat_directory(v_a)), 0);
+
+  -- Presence: the dot goes grey when the heartbeats stop.
+  perform pg_temp.sign_in_as(v_on);
+  perform public.chat_heartbeat(false);
+  perform pg_temp.sign_in_as(v_own_a);
+  perform pg_temp.check_eq('somebody here now shows online',
+    (select state from public.chat_directory(v_a) where user_id = v_on), 'online');
+  update public.chat_presence set last_seen_at = now() - interval '10 minutes'
+   where user_id = v_on;
+  perform pg_temp.check_eq('somebody not seen for ten minutes shows offline',
+    (select state from public.chat_directory(v_a) where user_id = v_on), 'offline');
+
+  -- A room, and who may see into it.
+  v_grp := public.chat_create_group(v_a, 'Senarai',
+    jsonb_build_array(jsonb_build_object('user_id', v_on, 'org_id', v_a)));
+  perform pg_temp.check_eq('in the room, its members read as offline too',
+    (select state from public.chat_members(v_grp) where user_id = v_on), 'offline');
+  perform pg_temp.check_true('and you are told which one is you',
+    (select is_me from public.chat_members(v_grp) where user_id = v_own_a)
+    and not (select is_me from public.chat_members(v_grp) where user_id = v_on));
+  perform pg_temp.sign_in_as(v_out);
+  perform pg_temp.check_eq('somebody outside the room is not told who is in it',
+    (select count(*) from public.chat_members(v_grp)), 0);
+
+  -- Typing.
+  perform pg_temp.sign_in_as(v_on);
+  perform public.chat_typing_ping(v_grp, 10);
+  perform pg_temp.check_eq('you are not shown typing to yourself',
+    (select count(*) from public.chat_who_is_typing(v_grp)), 0);
+  perform pg_temp.sign_in_as(v_out);
+  perform pg_temp.check_eq('nor is somebody outside the room told who is',
+    (select count(*) from public.chat_who_is_typing(v_grp)), 0);
+  perform pg_temp.sign_in_as(v_own_a);
+  perform pg_temp.check_eq('while somebody in it is',
+    (select count(*) from public.chat_who_is_typing(v_grp)), 1);
+  update public.chat_typing set expires_at = now() - interval '1 second'
+   where conversation_id = v_grp and user_id = v_on;
+  perform pg_temp.check_eq('until it lapses',
+    (select count(*) from public.chat_who_is_typing(v_grp)), 0);
+
+  -- The switchboard.
+  perform pg_temp.check_eq('the switchboard lists people, not invitations',
+    (select count(*) from public.chat_access_list(v_a)), 4);
+  perform pg_temp.check_true('and somebody switched off reads as off',
+    (select is_enabled from public.chat_access_list(v_a) where user_id = v_off) is false);
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;
