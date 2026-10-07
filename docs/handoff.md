@@ -604,6 +604,8 @@ function:
 | `chat_directory`, `chat_who_is_typing` | `0136` | 9 / 10 | 1 (`is_enabled` asked twice of one row) | `chat.sql` |
 | `chat_links_for`, `chat_access_list` | `0135` | 10 / 10 | -- | `chat.sql` |
 | `chat_members` | `0139` | 4 / 4 | -- | `chat.sql` |
+| `chat_thread` | `0144` | 13 / 13 | -- | `chat.sql` |
+| `chat_my_conversations` | `0139` | 10 / 10 | -- | `chat.sql` |
 
 Every equivalent is written into its mutants file with the reason.
 

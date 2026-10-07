@@ -2277,4 +2277,123 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+
+-- ---------------------------------------------------------------------
+-- The thread and the inbox, rule by rule
+--
+-- A sweep of `chat_thread` (0144) and `chat_my_conversations` (0139)
+-- left fifteen mutants alive. In the thread: nobody outside a room asked
+-- for its messages -- the function is SECURITY DEFINER, so that one
+-- guard is all that stands between a stranger and the whole
+-- conversation -- nobody turned a page, and no page was ever big enough
+-- for a limit to bite. In the inbox: nobody had conversations in two
+-- companies, nobody without chat opened it, and the unread count never
+-- met your own message, a taken-back one, or one already read.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_me uuid := pg_temp.another_user('me@inbox.test');
+  v_a1 uuid := pg_temp.another_user('a1@inbox.test');
+  v_a2 uuid := pg_temp.another_user('a2@inbox.test');
+  v_b1 uuid := pg_temp.another_user('b1@inbox.test');
+  v_out uuid := pg_temp.another_user('out@inbox.test');
+  v_a uuid; v_b uuid; v_dm_a uuid; v_dm_b uuid; v_grp uuid; v_bulk uuid;
+  v_t0 timestamptz := now() - interval '1 hour';
+begin
+  v_a := pg_temp.chat_org('Peti Masuk A Sdn Bhd', v_a1);
+  v_b := pg_temp.chat_org('Peti Masuk B Sdn Bhd', v_b1);
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_a, v_me, 'accountant', 'active', now()),
+         (v_a, v_a2, 'accountant', 'active', now()),
+         (v_a, v_out, 'accountant', 'active', now()),
+         (v_b, v_me, 'accountant', 'active', now());
+  perform pg_temp.sign_in_as(v_a1);
+  perform public.chat_set_access(v_a, v_a1, true);
+  perform public.chat_set_access(v_a, v_a2, true);
+  perform public.chat_set_access(v_a, v_me, true);
+  perform public.chat_set_access(v_a, v_out, true);
+  perform pg_temp.sign_in_as(v_b1);
+  perform public.chat_set_access(v_b, v_b1, true);
+  perform public.chat_set_access(v_b, v_me, true);
+
+  perform pg_temp.sign_in_as(v_me);
+  v_dm_a := public.chat_start_direct(v_a, v_a1, v_a);
+  v_dm_b := public.chat_start_direct(v_b, v_b1, v_b);
+  v_grp := public.chat_create_group(v_a, 'Bertiga',
+    jsonb_build_array(jsonb_build_object('user_id', v_a1, 'org_id', v_a),
+                      jsonb_build_object('user_id', v_a2, 'org_id', v_a)));
+  v_bulk := public.chat_create_group(v_a, 'Banyak',
+    jsonb_build_array(jsonb_build_object('user_id', v_a1, 'org_id', v_a)));
+
+  -- What was said in A's conversation, in order. I last read it at t0.
+  insert into public.chat_messages
+    (conversation_id, sender_id, sender_org_id, body, created_at)
+  values (v_dm_a, v_a1, v_a, 'sudah dibaca', v_t0 - interval '1 minute'),
+         (v_dm_a, v_a1, v_a, 'satu',         v_t0 + interval '1 minute'),
+         (v_dm_a, v_a1, v_a, 'dua',          v_t0 + interval '2 minutes'),
+         (v_dm_a, v_me, v_a, 'saya',         v_t0 + interval '3 minutes');
+  insert into public.chat_messages
+    (conversation_id, sender_id, sender_org_id, body, created_at, deleted_at)
+  values (v_dm_a, v_a1, v_a, 'ditarik balik', v_t0 + interval '4 minutes', now());
+  update public.chat_participants set last_read_at = v_t0
+   where conversation_id = v_dm_a and user_id = v_me;
+  insert into public.chat_typing (conversation_id, user_id, expires_at)
+  values (v_dm_a, v_a1, now() - interval '1 second');
+
+  -- The inbox.
+  perform pg_temp.check_eq('a company''s inbox holds its own conversations',
+    (select count(*) from public.chat_my_conversations(v_a)
+      where conversation_id = v_dm_b), 0);
+  perform pg_temp.check_eq('while the other company''s holds the other',
+    (select count(*) from public.chat_my_conversations(v_b)
+      where conversation_id = v_dm_b), 1);
+  perform pg_temp.check_eq('unread is what they said since I last looked, still standing',
+    (select unread from public.chat_my_conversations(v_a)
+      where conversation_id = v_dm_a), 2);
+  perform pg_temp.check_eq('and the last thing said is the last thing not taken back',
+    (select last_message from public.chat_my_conversations(v_a)
+      where conversation_id = v_dm_a), 'saya');
+  perform pg_temp.check_true('typing that has lapsed is not typing',
+    (select they_are_typing from public.chat_my_conversations(v_a)
+      where conversation_id = v_dm_a) is false);
+  perform pg_temp.check_true('a group has no one counterpart',
+    (select other_user_id is null from public.chat_my_conversations(v_a)
+      where conversation_id = v_grp));
+  perform pg_temp.check_true('and a room of one company is not cross-company',
+    (select is_cross_company from public.chat_my_conversations(v_a)
+      where conversation_id = v_grp) is false);
+  perform pg_temp.sign_in_as(v_a1);
+  perform public.chat_set_access(v_a, v_me, false);
+  perform pg_temp.sign_in_as(v_me);
+  perform pg_temp.check_eq('switched off, the inbox is empty',
+    (select count(*) from public.chat_my_conversations(v_a)), 0);
+  perform pg_temp.sign_in_as(v_a1);
+  perform public.chat_set_access(v_a, v_me, true);
+
+  -- The thread.
+  perform pg_temp.sign_in_as(v_out);
+  perform pg_temp.check_eq('somebody outside a conversation reads none of it',
+    (select count(*) from public.chat_thread(v_dm_a)), 0);
+  perform pg_temp.sign_in_as(v_me);
+  perform pg_temp.check_eq('while somebody in it reads all of it',
+    (select count(*) from public.chat_thread(v_dm_a)), 5);
+  perform pg_temp.check_true('somebody else''s message carries no ticks',
+    (select state is null from public.chat_thread(v_dm_a) where body = 'dua'));
+  perform pg_temp.check_eq('the page before a message is what came before it',
+    (select count(*) from public.chat_thread(v_dm_a, v_t0 + interval '2 minutes')), 2);
+
+  insert into public.chat_messages (conversation_id, sender_id, sender_org_id, body, created_at)
+  select v_bulk, v_a1, v_a, 'mesej ' || g, v_t0 + make_interval(secs => g)
+    from generate_series(1, 210) g;
+  perform pg_temp.check_eq('a page is fifty unless asked',
+    (select count(*) from public.chat_thread(v_bulk)), 50);
+  perform pg_temp.check_eq('and fifty when asked for no size at all',
+    (select count(*) from public.chat_thread(v_bulk, null, null)), 50);
+  perform pg_temp.check_eq('two hundred at most, whatever is asked',
+    (select count(*) from public.chat_thread(v_bulk, null, 500)), 200);
+  perform pg_temp.check_eq('and one at least',
+    (select count(*) from public.chat_thread(v_bulk, null, 0)), 1);
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;
