@@ -494,6 +494,9 @@ page and renumbering would quietly break the reference.
     reason, and the editor no longer offers it; the widget test fails
     with the option put back. Journal approval, if wanted, needs a
     pending state of its own first.
+    **Applied, and read back** (7 October, read-only): recorded, the
+    `approval_rules_no_journal` trigger is present, its function is not
+    callable by `authenticated`, and production has no journal rules.
 24. ~~Starting a chat with yourself under your other company shows a raw
     database error.~~ **Raised and answered 7 October: refuse it
     plainly. Built in `0757`.** `chat_start_direct` (0135) refused
