@@ -235,6 +235,28 @@ begin
   -- that reaches the profit and loss.
   perform pg_temp.check_eq('a foreign transfer moves no cash either',
     pg_temp.cf(v_org, 'Net movement in cash'), 90000 - 100);
+  perform pg_temp.check_true('and the transfer says who posted it',
+    (select posted_by from public.bank_transfers where id = v_id) is not null);
+
+  -- The other way, with a fee. 100 USD sent at 4.50 is 450 ringgit, of
+  -- which the bank kept 5 USD -- 22.50 ringgit, at the SENDING rate,
+  -- because it came out of the dollars -- and 460 ringgit landed: the
+  -- bank's rate was better than the table's, so this one is a gain, and
+  -- a gain is income (4920), not a smaller loss on 6500.
+  v_id := public.create_bank_transfer(
+    p_from_account_id => v_usd, p_to_account_id => v_myr,
+    p_amount_sent => 100, p_transfer_date => date '2026-03-01',
+    p_amount_received => 460, p_bank_charges => 5);
+  perform public.post_bank_transfer(v_id);
+  perform pg_temp.check_eq('a fee in dollars is booked at the dollar rate',
+    (select sum(l.debit) from public.gl_lines l
+      join public.bank_transfers t on t.gl_entry_id = l.entry_id
+     where t.id = v_id and l.description like 'Bank charges %'),
+    22.50);
+  perform pg_temp.check_eq('a gain on exchange is not a smaller loss',
+    pg_temp.balance(v_org, '6500'), 100);
+  perform pg_temp.check_true('it is income of its own',
+    pg_temp.balance(v_org, '4920') <> 0);
 
   perform pg_temp.sign_out();
 end $$;

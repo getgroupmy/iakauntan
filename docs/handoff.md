@@ -607,6 +607,7 @@ function:
 | `chat_thread` | `0144` | 13 / 13 | -- | `chat.sql` |
 | `chat_my_conversations` | `0139` | 10 / 10 | -- | `chat.sql` |
 | `post_withholding` | `0099` | 13 / 13 | -- | `withholding_shapes.sql` |
+| `post_bank_transfer` | `0635` | 16 / 16 | -- | `bank_transfers.sql` |
 
 Every equivalent is written into its mutants file with the reason.
 
