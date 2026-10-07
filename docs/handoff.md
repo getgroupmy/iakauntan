@@ -473,7 +473,15 @@ page and renumbering would quietly break the reference.
     steps named them. Reproduced locally (a removed accountant approved
     an invoice). Role steps were never affected. Production had no rule
     or step naming a person. The named step now also asks
-    `app.is_org_member`, and refuses in its own words.
+    `app.is_org_member`, and refuses in its own words. **Applied, and
+    read back** (7 October, read-only): recorded, the check is in the
+    live body, still SECURITY DEFINER, `authenticated` yes, `anon` no.
+    A scan for the same shape -- client-callable functions that compare
+    a stored user with `auth.uid()` and ask nothing about membership --
+    found only functions that act on the caller's own rows (profile,
+    devices, own conversations), the imports (guarded by
+    `check_open_item_run`'s `can_post`) and chat (whose `chat_enabled`
+    reads `org_members`).
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
