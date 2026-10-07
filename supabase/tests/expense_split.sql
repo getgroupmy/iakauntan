@@ -908,4 +908,34 @@ begin
     (select matter_id is null from public.expenses where id = v_exp));
 end $$;
 
+
+-- ---------------------------------------------------------------------
+-- Two lines of the same size
+--
+-- The largest line takes the rounding, and of two equally large the
+-- FIRST does: `order by amount desc, line_no`. Every split above had a
+-- largest line, so the tie-break was never asked. 10.01 and 10.01 at
+-- 3.333: each converts to 33.36, the whole to 66.73, and the sen that
+-- is left over goes on line one.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.split_org('Seri Sama Sdn Bhd');
+  v_bank uuid; v_exp uuid; v_entry uuid;
+begin
+  v_bank := pg_temp.a_bank(v_org, '1121', 'Maybank Current', 9000.00);
+  v_exp := pg_temp.an_expense(v_org, 'EXP-T', '6280', 20.02, 0, 20.02,
+                              v_bank, 'USD', 3.333);
+  perform public.set_expense_split(v_exp, jsonb_build_array(
+    jsonb_build_object('account_id', pg_temp.acct(v_org, '6250'),
+                       'description', 'Satu', 'amount', 10.01),
+    jsonb_build_object('account_id', pg_temp.acct(v_org, '6260'),
+                       'description', 'Dua', 'amount', 10.01)));
+  v_entry := public.post_expense(v_exp);
+  perform pg_temp.check_eq('of two equal lines the first takes the sen left over',
+    pg_temp.leg(v_entry, '6250'), 33.37);
+  perform pg_temp.check_eq('and the second converts on its own',
+    pg_temp.leg(v_entry, '6260'), 33.36);
+end $$;
+
 rollback;

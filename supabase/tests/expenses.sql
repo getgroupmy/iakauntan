@@ -184,6 +184,13 @@ begin
     v_said like '%EXP-2%');
   perform pg_temp.check_true('and says what to choose',
     v_said like '%paid from%');
+  -- And it is THIS refusal. The one below it -- "not one of this
+  -- company's" -- also names the expense and says "paid from", so
+  -- without this the guard 0727 added could be deleted and the next one
+  -- would answer for it, telling somebody who chose nothing that they
+  -- chose a stranger's account.
+  perform pg_temp.check_true('saying that none was chosen, not the wrong one',
+    v_said like '%does not say which account it was paid from%');
 
   -- Nothing behind it. A refusal that half-posted would be worse than
   -- the fallback it replaces.
@@ -240,6 +247,10 @@ end $$;
 -- be written that way, and finding out is the useful part: the
 -- POSTING is never reached, because `0160` already makes the row
 -- impossible.
+--
+-- EQUIVALENT, for the sweep of `post_expense`: dropping
+-- `and b.org_id = v_exp.org_id` from the lookup. No expense row can
+-- name another company's bank account for it to find.
 --
 --     expenses_bank_account_same_org
 --       foreign key (org_id, bank_account_id)
