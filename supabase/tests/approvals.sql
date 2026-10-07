@@ -507,4 +507,126 @@ begin
   end;
 end $$;
 
+-- ---------------------------------------------------------------------
+-- decide_approval, rule by rule
+--
+-- A sweep of the function over this file and `approval_state.sql` left
+-- ten mutants alive, and the one that matters most was the self-approval
+-- guard: whoever raised a document in this file never held the role
+-- that clears it, so the role check always refused them first and the
+-- guard was never what spoke. The rest were refusals tried without
+-- reading their words, and the record a decision leaves -- who, when,
+-- what they said, and when the request itself was settled -- which
+-- nothing read.
+--
+-- And one thing no mutant could find, because it was not there: a step
+-- that names a PERSON was theirs even after they left the company. 0755.
+-- ---------------------------------------------------------------------
+create or replace function pg_temp.approval_invoice(p_org uuid, p_amount numeric)
+returns uuid language plpgsql as $$
+declare v_c uuid; v_ac uuid; v_doc uuid;
+begin
+  select id into v_c from public.contacts where org_id = p_org and code = 'CU-RULES';
+  if v_c is null then
+    insert into public.contacts (org_id, code, name, contact_type)
+    values (p_org, 'CU-RULES', 'Rules customer', 'customer') returning id into v_c;
+  end if;
+  select id into v_ac from public.accounts
+   where org_id = p_org and account_type = 'revenue' and not is_group limit 1;
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status)
+  values (p_org, 'invoice', app.next_document_number_internal(p_org, 'invoice'),
+          date '2026-02-01', date '2026-03-01', v_c, 'MYR', 1, 'draft')
+  returning id into v_doc;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, description, quantity,
+     unit_price, account_id, tax_rate)
+  values (p_org, v_doc, 1, 'item', 'Work', 1, p_amount, v_ac, 0);
+  return v_doc;
+end $$;
+
+do $$
+declare
+  v_org uuid; v_owner uuid; v_partner uuid; v_named uuid;
+  v_req uuid; v_state app.approval_status; r record;
+begin
+  v_org := pg_temp.approvals_org('Kelulusan Peraturan Sdn Bhd');
+  v_owner := pg_temp.test_user();
+  v_partner := pg_temp.another_user('partner@kelulusan.test');
+  v_named := pg_temp.another_user('named@kelulusan.test');
+  insert into public.org_members (org_id, user_id, role)
+  values (v_org, v_partner, 'owner'), (v_org, v_named, 'accountant');
+  perform public.create_fiscal_year(v_org, date '2026-01-01');
+
+  -- Invoices of 5,000 or more need an owner; of 50,000 or more, the
+  -- named accountant.
+  insert into public.approval_rules
+    (org_id, entity_kind, doc_type, min_amount, step_no, approver_role)
+  values (v_org, 'sales_document', 'invoice', 5000, 1, 'owner');
+
+  perform pg_temp.check_refused('a request that is not there says so',
+    format('select public.decide_approval(%L, true)', gen_random_uuid()),
+    '%No such approval request%', 'P0002');
+
+  -- THE RAISER HOLDS THE ROLE. The owner raises it and is an owner; the
+  -- role check lets them through, and the self-approval guard is what
+  -- stops them.
+  v_req := public.submit_for_approval('sales_document', pg_temp.approval_invoice(v_org, 9000));
+  perform pg_temp.check_refused('whoever raised it cannot clear it, though they hold the role',
+    format('select public.decide_approval(%L, true)', v_req),
+    '%You raised this%', '42501');
+
+  -- The other owner can. What the decision leaves behind.
+  perform pg_temp.sign_in_as(v_partner);
+  v_state := public.decide_approval(v_req, true, 'Checked against the quote');
+  select * into r from public.approval_steps where request_id = v_req;
+  perform pg_temp.check_eq('the step records who decided', r.decided_by, v_partner);
+  perform pg_temp.check_eq('and when', r.decided_at::text, now()::text);
+  perform pg_temp.check_eq('and what they said', r.note, 'Checked against the quote');
+  perform pg_temp.check_eq('and the request is settled when its last step is',
+    (select decided_at::text from public.approval_requests where id = v_req), now()::text);
+  perform pg_temp.check_refused('a settled request says so',
+    format('select public.decide_approval(%L, false)', v_req),
+    '%already approved%', '22023');
+
+  -- A refusal: the step says rejected and the request is dated.
+  perform pg_temp.sign_in_as(v_owner);
+  v_req := public.submit_for_approval('sales_document', pg_temp.approval_invoice(v_org, 7000));
+  perform pg_temp.sign_in_as(v_partner);
+  perform public.decide_approval(v_req, false, 'Wrong customer');
+  perform pg_temp.check_eq('a refused step says it refused',
+    (select status::text from public.approval_steps where request_id = v_req), 'rejected');
+  perform pg_temp.check_eq('and the refusal is dated',
+    (select decided_at::text from public.approval_requests where id = v_req), now()::text);
+
+  -- Nothing left to decide, on a request still marked pending.
+  perform pg_temp.sign_in_as(v_owner);
+  v_req := public.submit_for_approval('sales_document', pg_temp.approval_invoice(v_org, 6000));
+  update public.approval_steps set status = 'cancelled' where request_id = v_req;
+  perform pg_temp.sign_in_as(v_partner);
+  perform pg_temp.check_refused('a request with no step waiting says so',
+    format('select public.decide_approval(%L, true)', v_req),
+    '%Nothing left to decide%', '22023');
+
+  -- A STEP THAT NAMES A PERSON, who then leaves.
+  perform pg_temp.sign_in_as(v_owner);
+  insert into public.approval_rules
+    (org_id, entity_kind, doc_type, min_amount, step_no, approver_user_id)
+  values (v_org, 'sales_document', 'invoice', 50000, 2, v_named);
+  v_req := public.submit_for_approval('sales_document', pg_temp.approval_invoice(v_org, 60000));
+  perform pg_temp.sign_in_as(v_partner);
+  perform public.decide_approval(v_req, true, 'Fine by the owners');
+  perform pg_temp.sign_in_as(v_owner);
+  delete from public.org_members where org_id = v_org and user_id = v_named;
+  perform pg_temp.sign_in_as(v_named);
+  perform pg_temp.check_refused('somebody named on a step who has left decides nothing',
+    format('select public.decide_approval(%L, true)', v_req),
+    '%no longer a member of this company%', '42501');
+  perform pg_temp.check_eq('and the step still waits',
+    (select status::text from public.approval_steps where request_id = v_req and step_no = 2),
+    'pending');
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

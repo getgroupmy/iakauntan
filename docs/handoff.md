@@ -464,6 +464,16 @@ page and renumbering would quietly break the reference.
     **Applied, and read back** (6 October, read-only): the live
     `roll_leave_year` skips all three statuses and is still not
     executable by `authenticated`.
+22. ~~A named approver who has left the company can still decide.~~
+    **Raised and answered 7 October: fix it. Built in `0755`.** An
+    approval rule can name a person instead of a role, and
+    `decide_approval` (0167) checked such a step with
+    `approver_user_id <> auth.uid()` alone -- never membership. Somebody
+    removed from the company could approve or reject the documents whose
+    steps named them. Reproduced locally (a removed accountant approved
+    an invoice). Role steps were never affected. Production had no rule
+    or step naming a person. The named step now also asks
+    `app.is_org_member`, and refuses in its own words.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -505,6 +515,7 @@ function:
 | `open_appraisal_cycle`, `submit_self_appraisal` | `0379` | 23 / 23 | -- | `appraisals.sql` |
 | `renew_employee_document` | `0388` | 15 / 16 | 1 (null comparison) | `employee_documents.sql` |
 | `app.set_payslip_pay_date` | `0045` | 3 / 3 | -- | `payslip_access.sql` |
+| `decide_approval` | `0755` | 21 / 21 | -- | `approvals.sql` |
 
 Every equivalent is written into its mutants file with the reason.
 

@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-15328
+15440
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -996,3 +996,9 @@
 # is outside a bounded grant) and 0754 (a retired employee has no next
 # leave year). run_locally.sh at 0754 counted 15326 before the 0754
 # block's two assertions were added to leave_year_shapes.sql.
+#
+# 15328 -> 15440, 7 October: attendance (the night close and the
+# correction), leavers, the wall terminal's punch, appraisals, employee
+# documents and the payslip's own pay date, rule by rule -- and 0755,
+# which the approvals block found: a named approver who had left could
+# still decide. run_locally.sh at 0755: 386 files, 15440 assertions.
