@@ -2018,4 +2018,115 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+
+-- ---------------------------------------------------------------------
+-- What rings, what shows, and what the deadline closes, rule by rule
+--
+-- A sweep of `0140`'s `chat_expire_calls`, `chat_incoming_calls` and
+-- `chat_active_call` left fourteen mutants alive. The one call ever
+-- expired was the only call open, ringing and past its deadline, so
+-- nothing said a LIVE call or one still within its deadline survives
+-- the sweep, when a missed call ended, why, or what became of the
+-- phones on it. Four calls here, one of each, expired together.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_u1 uuid := pg_temp.another_user('u1@expire.test');
+  v_u2 uuid := pg_temp.another_user('u2@expire.test');
+  v_u3 uuid := pg_temp.another_user('u3@expire.test');
+  v_out uuid := pg_temp.another_user('out@expire.test');
+  v_a uuid; v_g1 uuid; v_g2 uuid; v_g3 uuid; v_g4 uuid;
+  v_missed uuid; v_live uuid; v_ringing uuid; v_reasoned uuid; v_n int;
+  v_rang_out timestamptz := now() - interval '10 minutes';
+  v_three jsonb;
+begin
+  v_a := pg_temp.chat_org('Tamat Tempoh Sdn Bhd', v_u1);
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_a, v_u2, 'accountant', 'active', now()),
+         (v_a, v_u3, 'accountant', 'active', now()),
+         (v_a, v_out, 'accountant', 'active', now());
+  perform pg_temp.sign_in_as(v_u1);
+  perform public.chat_set_access(v_a, v_u1, true);
+  perform public.chat_set_access(v_a, v_u2, true);
+  perform public.chat_set_access(v_a, v_u3, true);
+  perform public.chat_set_access(v_a, v_out, true);
+  v_three := jsonb_build_array(jsonb_build_object('user_id', v_u2, 'org_id', v_a),
+                               jsonb_build_object('user_id', v_u3, 'org_id', v_a));
+  v_g1 := public.chat_create_group(v_a, 'Satu', v_three);
+  v_g2 := public.chat_create_group(v_a, 'Dua', v_three);
+  v_g3 := public.chat_create_group(v_a, 'Tiga', v_three);
+  v_g4 := public.chat_create_group(v_a, 'Empat',
+    jsonb_build_array(jsonb_build_object('user_id', v_u2, 'org_id', v_a)));
+
+  -- Anything the blocks above left to expire, out of the way, so the
+  -- count below is of these four calls alone.
+  perform public.chat_expire_calls();
+
+  -- Rang out, one person having declined and one never answering.
+  v_missed := public.chat_start_call(v_g1, 'voice');
+  perform pg_temp.sign_in_as(v_u2);
+  perform public.chat_decline_call(v_missed);
+  -- Answered, and long past its ringing deadline.
+  perform pg_temp.sign_in_as(v_u1);
+  v_live := public.chat_start_call(v_g2, 'voice');
+  perform pg_temp.sign_in_as(v_u2);
+  perform public.chat_join_call(v_live);
+  -- Still within its deadline.
+  perform pg_temp.sign_in_as(v_u1);
+  v_ringing := public.chat_start_call(v_g3, 'voice');
+  -- Rang out, with a reason already recorded.
+  v_reasoned := public.chat_start_call(v_g4, 'voice');
+  update public.chat_calls set ringing_until = v_rang_out
+   where id in (v_missed, v_live, v_reasoned);
+  update public.chat_calls set end_reason = 'network dropped' where id = v_reasoned;
+
+  -- Before the deadline does anything: the banner and the phone.
+  perform pg_temp.check_eq('the banner shows a call that is ringing',
+    (select status from public.chat_active_call(v_g3)), 'ringing');
+  perform pg_temp.check_eq('and counts as in it only who has answered',
+    (select joined from public.chat_active_call(v_g2)), 2);
+  perform pg_temp.sign_in_as(v_out);
+  perform pg_temp.check_eq('somebody outside the room sees no banner',
+    (select count(*) from public.chat_active_call(v_g3)), 0);
+  perform pg_temp.sign_in_as(v_u3);
+  -- EQUIVALENT, for the sweep: dropping `chat_incoming_calls`' test that
+  -- the call is still ringing or live. No call is over while a phone on
+  -- it is still ringing within its deadline: `chat_end_call` leaves
+  -- everybody, `chat_decline_call` and `chat_leave_call` end a call only
+  -- when nobody is still being rung, and `chat_start_call` and
+  -- `chat_expire_calls` close only calls already past their deadline.
+  -- Clients may only select these tables.
+  perform pg_temp.check_eq('a phone rings for a call within its deadline',
+    (select count(*) from public.chat_incoming_calls() i where i.id = v_ringing), 1);
+  perform public.chat_leave(v_g3);
+  perform pg_temp.check_eq('and stops when its owner leaves the room',
+    (select count(*) from public.chat_incoming_calls() i where i.id = v_ringing), 0);
+
+  perform pg_temp.sign_in_as(v_u1);
+  v_n := public.chat_expire_calls();
+  perform pg_temp.check_eq('two calls rang out', v_n, 2);
+  perform pg_temp.check_eq('the one nobody answered is missed',
+    (select status::text from public.chat_calls where id = v_missed), 'missed');
+  perform pg_temp.check_eq('as of when it stopped ringing',
+    (select ended_at::text from public.chat_calls where id = v_missed), v_rang_out::text);
+  perform pg_temp.check_eq('because nobody answered',
+    (select end_reason from public.chat_calls where id = v_missed), 'nobody answered');
+  perform pg_temp.check_eq('and the phone still ringing on it stops',
+    (select state::text from public.chat_call_participants
+      where call_id = v_missed and user_id = v_u3), 'left');
+  perform pg_temp.check_eq('while somebody who declined it still declined it',
+    (select state::text from public.chat_call_participants
+      where call_id = v_missed and user_id = v_u2), 'declined');
+  perform pg_temp.check_eq('a reason already recorded is kept',
+    (select end_reason from public.chat_calls where id = v_reasoned), 'network dropped');
+  perform pg_temp.check_eq('a live call is not missed, deadline or not',
+    (select status::text from public.chat_calls where id = v_live), 'live');
+  perform pg_temp.check_eq('nor is anybody still being rung for it hung up',
+    (select state::text from public.chat_call_participants
+      where call_id = v_live and user_id = v_u3), 'ringing');
+  perform pg_temp.check_eq('and a call within its deadline still rings',
+    (select status::text from public.chat_calls where id = v_ringing), 'ringing');
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;
