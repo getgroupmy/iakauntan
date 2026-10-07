@@ -353,4 +353,88 @@ begin
   raise notice 'pos_tender_types.sql: all assertions passed';
 end $$;
 
+
+-- ---------------------------------------------------------------------
+-- What an amendment leaves alone, and whose tender it is, rule by rule
+--
+-- A sweep of `0732` left eight mutants alive. Every amendment above
+-- either named the account or left the DEFAULT one in place, which the
+-- trigger would have put back anyway -- so clearing it passed. Nothing
+-- amended a cheque tender kept in the drawer, or one switched off. And
+-- nothing tried to amend ANOTHER company's tender through this one's
+-- id, or a tender that does not exist, or to delete one as a stranger.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_me    uuid := pg_temp.test_user();
+  v_other uuid := pg_temp.another_user('orang-luar@tt.test');
+  v_org uuid; v_them uuid; v_second uuid;
+  v_card uuid; v_cheque uuid; v_off uuid; v_theirs uuid; v_new uuid;
+begin
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.tt_org('Kedai Pinda Sdn Bhd');
+  v_them := pg_temp.tt_org('Kedai Seberang Sdn Bhd');
+  perform pg_temp.sign_in_as(v_me);
+  v_second := pg_temp.test_bank_account(v_org, 'CIMB simpanan');
+
+  -- A card banked to the SECOND account, then amended without one.
+  v_card := public.upsert_pos_tender_type(
+    null, v_org, 'KAD', 'Kad', 'card'::app.pos_tender_kind, '03', v_second);
+  perform public.upsert_pos_tender_type(
+    v_card, v_org, 'KAD', 'Kad debit', 'card'::app.pos_tender_kind, '03');
+  perform pg_temp.check_true('an amendment keeps an account somebody chose',
+    (select bank_account_id = v_second from public.pos_tender_types where id = v_card));
+
+  -- Cheques over the counter go in the drawer: asked for, and kept.
+  v_cheque := public.upsert_pos_tender_type(
+    null, v_org, 'CEK', 'Cek', 'card'::app.pos_tender_kind, '02',
+    p_counts_in_drawer => true);
+  perform pg_temp.check_true('a tender told to count in the drawer does',
+    (select counts_in_drawer from public.pos_tender_types where id = v_cheque));
+  perform public.upsert_pos_tender_type(
+    v_cheque, v_org, 'CEK', 'Cek bank', 'card'::app.pos_tender_kind, '02',
+    p_counts_in_drawer => null);
+  perform pg_temp.check_true('and still does after an edit that does not say',
+    (select counts_in_drawer from public.pos_tender_types where id = v_cheque));
+
+  -- Switched off, then amended by a caller that says nothing of it.
+  v_off := public.upsert_pos_tender_type(
+    null, v_org, 'BAUCER', 'Baucer', 'card'::app.pos_tender_kind, '03',
+    p_active => false);
+  perform public.upsert_pos_tender_type(
+    v_off, v_org, 'BAUCER', 'Baucer hadiah', 'card'::app.pos_tender_kind, '03',
+    p_active => null);
+  perform pg_temp.check_true('a tender switched off stays off through an edit',
+    (select not is_active from public.pos_tender_types where id = v_off));
+  v_new := public.upsert_pos_tender_type(
+    null, v_org, 'QR', 'DuitNow QR', 'card'::app.pos_tender_kind, '03',
+    p_active => null);
+  perform pg_temp.check_true('while a new one with nothing said is on',
+    (select is_active from public.pos_tender_types where id = v_new));
+
+  -- Another company's tender, through this company's door.
+  v_theirs := public.upsert_pos_tender_type(
+    null, v_them, 'TUNAI', 'Tunai mereka', 'cash'::app.pos_tender_kind, '01');
+  perform pg_temp.check_refused('another company''s tender is not amended through this one',
+    format('select public.upsert_pos_tender_type(%L, %L, %L, %L, %L::app.pos_tender_kind)',
+      v_theirs, v_org, 'TUNAI2', 'Diambil alih', 'cash'),
+    '%No such tender in this company%', 'P0002');
+  perform pg_temp.check_eq('and is as it was',
+    (select name from public.pos_tender_types where id = v_theirs), 'Tunai mereka');
+  perform pg_temp.sign_in_as(v_me);
+  perform pg_temp.check_refused('nor is a tender that does not exist',
+    format('select public.upsert_pos_tender_type(%L, %L, %L, %L, %L::app.pos_tender_kind)',
+      gen_random_uuid(), v_org, 'HANTU', 'Hantu', 'cash'),
+    '%No such tender in this company%', 'P0002');
+
+  -- A stranger deletes nothing.
+  perform pg_temp.sign_in_as(v_other);
+  perform pg_temp.check_refused('a stranger cannot delete a tender',
+    format('select public.delete_pos_tender_type(%L)', v_new),
+    '%not permitted%', '42501');
+  perform pg_temp.sign_in_as(v_me);
+  perform pg_temp.check_true('which is still there for the shop to delete',
+    public.delete_pos_tender_type(v_new));
+end $$;
+
 rollback;
