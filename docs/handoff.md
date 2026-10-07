@@ -505,6 +505,9 @@ page and renumbering would quietly break the reference.
     `chat_participants`' primary key ("duplicate key value...").
     Nothing was created or exposed. Now refused in any company, with
     the sentence that was already there.
+    **Applied, and read back** (7 October, read-only): recorded, the
+    live check is `v_me = p_other_user` alone, still SECURITY DEFINER,
+    `authenticated` yes, `anon` no.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
