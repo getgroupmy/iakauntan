@@ -1207,4 +1207,79 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Ending a call, rule by rule
+--
+-- A sweep of `0140`'s `chat_end_call` left seven mutants alive. The one
+-- call it was tried on had only people still in it, no reason already
+-- recorded, no second call anywhere, and was live: so nothing said the
+-- call it ends is dated, that whoever declined is not marked as having
+-- left, that an earlier leaving time or reason is kept, that another
+-- call is left alone, or that a call already over is not ended again.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_u1 uuid := pg_temp.another_user('e1@endcall.test');
+  v_u2 uuid := pg_temp.another_user('e2@endcall.test');
+  v_u3 uuid := pg_temp.another_user('e3@endcall.test');
+  v_a uuid; v_g1 uuid; v_g2 uuid; v_call uuid; v_other uuid;
+  v_earlier timestamptz := now() - interval '1 hour';
+begin
+  v_a := pg_temp.chat_org('End Call Sdn Bhd', v_u1);
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_a, v_u2, 'accountant', 'active', now()),
+         (v_a, v_u3, 'accountant', 'active', now());
+  perform pg_temp.sign_in_as(v_u1);
+  perform public.chat_set_access(v_a, v_u1, true);
+  perform public.chat_set_access(v_a, v_u2, true);
+  perform public.chat_set_access(v_a, v_u3, true);
+  v_g1 := public.chat_create_group(v_a, 'Satu',
+    jsonb_build_array(jsonb_build_object('user_id', v_u2, 'org_id', v_a),
+                      jsonb_build_object('user_id', v_u3, 'org_id', v_a)));
+  v_g2 := public.chat_create_group(v_a, 'Dua',
+    jsonb_build_array(jsonb_build_object('user_id', v_u2, 'org_id', v_a)));
+
+  perform pg_temp.check_refused('a call that is not there says so',
+    format('select public.chat_end_call(%L)', gen_random_uuid()), '%No such call%', 'P0002');
+  perform pg_temp.sign_in_as(v_u1);
+
+  v_call := public.chat_start_call(v_g1, 'voice');
+  v_other := public.chat_start_call(v_g2, 'voice');
+  perform pg_temp.sign_in_as(v_u2);
+  perform public.chat_start_call(v_g1, 'voice');           -- answers
+  perform pg_temp.sign_in_as(v_u3);
+  perform public.chat_decline_call(v_call);
+  -- Already marked with a leaving time and a reason, as a dropped line
+  -- would leave them.
+  update public.chat_call_participants set left_at = v_earlier
+   where call_id = v_call and user_id = v_u2;
+  update public.chat_calls set end_reason = 'network dropped' where id = v_call;
+
+  perform pg_temp.sign_in_as(v_u1);
+  perform public.chat_end_call(v_call);
+  perform pg_temp.check_eq('an ended call is dated',
+    (select ended_at::text from public.chat_calls where id = v_call), now()::text);
+  perform pg_temp.check_eq('a reason already recorded is kept',
+    (select end_reason from public.chat_calls where id = v_call), 'network dropped');
+  perform pg_temp.check_eq('a leaving time already recorded is kept',
+    (select left_at::text from public.chat_call_participants
+      where call_id = v_call and user_id = v_u2), v_earlier::text);
+  perform pg_temp.check_eq('somebody who declined is still somebody who declined',
+    (select state::text from public.chat_call_participants
+      where call_id = v_call and user_id = v_u3), 'declined');
+  perform pg_temp.check_eq('and the call in the other room is still ringing',
+    (select status::text from public.chat_calls where id = v_other), 'ringing');
+  perform pg_temp.check_eq('with its people still in it',
+    (select count(*) from public.chat_call_participants
+      where call_id = v_other and state in ('joined', 'ringing')), 2);
+
+  -- A call already over is not ended a second time.
+  update public.chat_calls set status = 'missed', ended_at = v_earlier where id = v_call;
+  perform public.chat_end_call(v_call);
+  perform pg_temp.check_eq('a missed call stays missed',
+    (select status::text || ' ' || ended_at::text from public.chat_calls where id = v_call),
+    'missed ' || v_earlier::text);
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;
