@@ -269,7 +269,26 @@ begin
       v_msg like '%not something to agree to%');
   end;
 
+  -- Rule by rule (a sweep of `0274`'s approve_budget left six alive):
+  -- somebody who may not post cannot agree a budget, whatever is in it.
+  perform pg_temp.sign_in_as(pg_temp.another_user('sales@sinar-budget.test'));
+  insert into public.org_members (org_id, user_id, role)
+  values (v_org, (select id from auth.users where email = 'sales@sinar-budget.test'), 'sales')
+  on conflict do nothing;
+  perform pg_temp.check_refused('somebody who may not post cannot agree a budget',
+    format('select public.approve_budget(%L)', v_dept), '%Insufficient privileges%', '42501');
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  perform pg_temp.check_refused('a budget that is not there says so',
+    format('select public.approve_budget(%L)', gen_random_uuid()), '%No such budget%', 'P0002');
+
   perform public.approve_budget(v_dept);
+  perform pg_temp.check_true('an agreed budget records who agreed it, and when',
+    (select approved_by = pg_temp.test_user() and approved_at = now()
+       from public.budgets where id = v_dept));
+  perform pg_temp.check_eq('and only that budget is agreed',
+    (select status::text from public.budgets where id = v_bud), 'draft');
+  perform pg_temp.check_refused('an agreed budget is not agreed twice',
+    format('select public.approve_budget(%L)', v_dept), '%already approved%', '23514');
   begin
     perform public.set_budget_lines(v_dept, jsonb_build_array(
       jsonb_build_object('account', v_tel, 'period', v_p1, 'amount', 400)));
