@@ -190,6 +190,58 @@ begin
   exception when sqlstate '23514' then
     raise notice 'ok   another organization''s account is refused';
   end;
+
+  -- The same refusals, each by its own sentence. Matching the SQLSTATE
+  -- alone let every one of these guards be deleted without a failure:
+  -- `create_gl_entry_internal` raises 23514 too, for its own reasons,
+  -- and the two-sided negative case above trips on whichever side is
+  -- left. One rule per call, and the reason it gives.
+  perform pg_temp.sign_in_as(
+    (select created_by from public.organizations where id = v_org));
+  perform pg_temp.check_refused('lines that are not a list are refused as such',
+    format('select public.post_manual_journal(%L, %L, %L::jsonb, %L)',
+      v_org, date '2026-03-31', '{"account_id": "x"}', 'not a list'),
+    '%Lines must be an array%', '22023');
+  perform pg_temp.sign_in_as(
+    (select created_by from public.organizations where id = v_org));
+  perform pg_temp.check_refused('a line with no account says which',
+    format('select public.post_manual_journal(%L, %L, %L::jsonb, %L)',
+      v_org, date '2026-03-31',
+      jsonb_build_array(
+        jsonb_build_object('account_id', '', 'debit', 100, 'credit', 0),
+        jsonb_build_object('account_id', v_accrual, 'debit', 0, 'credit', 100)),
+      'no account'),
+    '%Line 1 has no account%', '23514');
+  perform pg_temp.sign_in_as(
+    (select created_by from public.organizations where id = v_org));
+  perform pg_temp.check_refused('a negative debit alone is refused',
+    format('select public.post_manual_journal(%L, %L, %L::jsonb, %L)',
+      v_org, date '2026-03-31',
+      jsonb_build_array(
+        jsonb_build_object('account_id', v_expense, 'debit', -100, 'credit', 0),
+        jsonb_build_object('account_id', v_accrual, 'debit', 0, 'credit', 0)),
+      'negative debit'),
+    '%Line 1 has a negative amount%', '23514');
+  perform pg_temp.sign_in_as(
+    (select created_by from public.organizations where id = v_org));
+  perform pg_temp.check_refused('and a negative credit alone',
+    format('select public.post_manual_journal(%L, %L, %L::jsonb, %L)',
+      v_org, date '2026-03-31',
+      jsonb_build_array(
+        jsonb_build_object('account_id', v_expense, 'debit', 0, 'credit', 0),
+        jsonb_build_object('account_id', v_accrual, 'debit', 0, 'credit', -100)),
+      'negative credit'),
+    '%Line 2 has a negative amount%', '23514');
+  perform pg_temp.sign_in_as(
+    (select created_by from public.organizations where id = v_org));
+  perform pg_temp.check_refused('a line on both sides says so',
+    format('select public.post_manual_journal(%L, %L, %L::jsonb, %L)',
+      v_org, date '2026-03-31',
+      jsonb_build_array(
+        jsonb_build_object('account_id', v_expense, 'debit', 100, 'credit', 100),
+        jsonb_build_object('account_id', v_accrual, 'debit', 50, 'credit', 50)),
+      'both columns'),
+    '%Line 1 is both a debit and a credit%', '23514');
 end $$;
 
 -- ---------------------------------------------------------------------
