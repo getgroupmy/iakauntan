@@ -343,6 +343,13 @@ begin
     (select sum(l.credit) from public.gl_lines l
       join public.accounts a on a.id = l.account_id
       where l.entry_id = v_entry and a.code = '2145'), 4500);
+  -- MUTANT: the allocation against the bill made at `v_base` rather than
+  -- `c.tax_amount`. The bill is in dollars, so it comes down by the
+  -- thousand dollars withheld -- not by 4,500 of them, which would mark
+  -- a USD10,000 bill nearly half paid by a USD1,000 certificate.
+  perform pg_temp.check_eq('and the dollar bill comes down by a thousand dollars',
+    (select amount from public.payment_allocations where withholding_id = v_id),
+    1000);
 
   -- MUTANT: `coalesce(ct.payable_account_id, ...)` replaced by the
   -- chart's 2110 alone. A supplier can be given a payable account of its
@@ -428,6 +435,7 @@ begin
   perform pg_temp.check_eq('a posted certificate says so', r.status::text,
     'posted');
   perform pg_temp.check_true('and knows when', r.posted_at is not null);
+  perform pg_temp.check_true('and who', r.posted_by is not null);
 
   -- MUTANT: `if c.tax_amount = 0` -> false. A rate of nought is a valid
   -- rate to record -- an exemption certificate under a treaty -- and it
