@@ -611,6 +611,7 @@ function:
 | `post_manual_journal` | `0089` | 14 / 14 | -- | `manual_journal.sql` |
 | `post_expense` | `0727` | 22 / 23 | 1 (another company's account cannot be inserted, 0160) | `expense_split.sql` + `expenses.sql` |
 | `upsert_pos_tender_type`, `delete_pos_tender_type` | `0732` | 25 / 25 | -- | `pos_tender_types.sql` |
+| `credit_sales_invoice` | `0440` | 21 / 21 | -- | `credit_note_return.sql` |
 
 Every equivalent is written into its mutants file with the reason.
 
