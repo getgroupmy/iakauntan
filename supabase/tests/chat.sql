@@ -2129,4 +2129,44 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+
+-- ---------------------------------------------------------------------
+-- Which company somebody speaks for
+--
+-- A sweep of `0135`'s helpers left `chat_participant_org` alive with
+-- the conversation dropped from its question: nobody in this file was
+-- in two conversations for two different companies, so "whichever
+-- company they were found under first" was always the right one. The
+-- insert policy on `chat_messages` asks this to decide whose letterhead
+-- a message goes out on.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_two uuid := pg_temp.another_user('two-hats@speak.test');
+  v_a1 uuid := pg_temp.another_user('a1@speak.test');
+  v_b1 uuid := pg_temp.another_user('b1@speak.test');
+  v_a uuid; v_b uuid; v_in_a uuid; v_in_b uuid;
+begin
+  v_a := pg_temp.chat_org('Bercakap A Sdn Bhd', v_a1);
+  v_b := pg_temp.chat_org('Bercakap B Sdn Bhd', v_b1);
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_a, v_two, 'accountant', 'active', now()),
+         (v_b, v_two, 'accountant', 'active', now());
+  perform pg_temp.sign_in_as(v_a1);
+  perform public.chat_set_access(v_a, v_a1, true);
+  perform public.chat_set_access(v_a, v_two, true);
+  perform pg_temp.sign_in_as(v_b1);
+  perform public.chat_set_access(v_b, v_b1, true);
+  perform public.chat_set_access(v_b, v_two, true);
+
+  perform pg_temp.sign_in_as(v_two);
+  v_in_a := public.chat_start_direct(v_a, v_a1, v_a);
+  v_in_b := public.chat_start_direct(v_b, v_b1, v_b);
+  perform pg_temp.check_true('in A''s conversation they speak for A',
+    app.chat_participant_org(v_in_a, v_two) = v_a);
+  perform pg_temp.check_true('and in B''s, for B',
+    app.chat_participant_org(v_in_b, v_two) = v_b);
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

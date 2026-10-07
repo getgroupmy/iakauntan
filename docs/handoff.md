@@ -581,6 +581,8 @@ function:
 | `chat_request_link`, `chat_decide_link`, `chat_revoke_link`, `chat_set_access` | `0135` | 23 / 23 | -- | `chat.sql` |
 | `chat_heartbeat`, `chat_mark_read`, `chat_mark_delivered`, `chat_typing_ping`, `chat_typing_stop` | `0136` | 13 / 13 | -- | `chat.sql` |
 | `chat_expire_calls`, `chat_incoming_calls`, `chat_active_call` | `0140` | 17 / 18 | 1 (no call ends with a phone still ringing in time) | `chat.sql` |
+| `chat_orgs_linked`, `chat_participant_org` | `0135` | 6 / 6 | -- | `chat.sql` |
+| `chat_can_join` | `0139` | 3 / 3 | -- | `chat.sql` |
 
 Every equivalent is written into its mutants file with the reason.
 
