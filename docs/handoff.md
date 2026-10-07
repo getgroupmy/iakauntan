@@ -542,6 +542,7 @@ function:
 | `approve_budget` | `0274` | 8 / 8 | -- | `budgets.sql` |
 | `chat_edit_message`, `chat_delete_message` | `0144` | 16 / 16 | -- | `chat.sql` |
 | `chat_end_call` | `0140` | 10 / 10 | -- | `chat.sql` |
+| `chat_create_group` | `0139` | 9 / 9 | -- | `chat.sql` |
 
 Every equivalent is written into its mutants file with the reason.
 

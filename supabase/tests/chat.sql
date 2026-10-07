@@ -1282,4 +1282,79 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Making a group, rule by rule
+--
+-- A sweep of `0139`'s `chat_create_group` left seven mutants alive --
+-- every guard it has. Groups here were only ever made by somebody
+-- switched on, with a name, with members switched on, from one company.
+-- So nothing said that somebody signed out, or switched off, cannot make
+-- one; that it needs a name and a member; that the name is kept as
+-- meant; that a member switched off is not added; or -- the one that
+-- reaches across a tenancy -- that somebody from a company not linked
+-- for chat is not added either.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_a1 uuid := pg_temp.another_user('a1@groups.test');
+  v_a2 uuid := pg_temp.another_user('a2@groups.test');
+  v_a3 uuid := pg_temp.another_user('a3@groups.test');
+  v_b1 uuid := pg_temp.another_user('b1@groups.test');
+  v_a uuid; v_b uuid; v_grp uuid;
+begin
+  v_a := pg_temp.chat_org('Kumpulan A Sdn Bhd', v_a1);
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_a, v_a2, 'accountant', 'active', now()),
+         (v_a, v_a3, 'accountant', 'active', now());
+  v_b := pg_temp.chat_org('Kumpulan B Sdn Bhd', v_b1);
+  perform pg_temp.sign_in_as(v_b1);
+  perform public.chat_set_access(v_b, v_b1, true);
+  perform pg_temp.sign_in_as(v_a1);
+  perform public.chat_set_access(v_a, v_a1, true);
+  perform public.chat_set_access(v_a, v_a2, true);
+  -- a3 is never switched on.
+
+  perform pg_temp.sign_out();
+  perform pg_temp.check_refused('nobody signed in makes a group',
+    format('select public.chat_create_group(%L, %L, %L::jsonb)', v_a, 'G',
+      jsonb_build_array(jsonb_build_object('user_id', v_a2, 'org_id', v_a))),
+    '%Not signed in%', '42501');
+  perform pg_temp.sign_in_as(v_a3);
+  perform pg_temp.check_refused('nor somebody whose chat is off',
+    format('select public.chat_create_group(%L, %L, %L::jsonb)', v_a, 'G',
+      jsonb_build_array(jsonb_build_object('user_id', v_a2, 'org_id', v_a))),
+    '%not switched on for you%', '42501');
+
+  perform pg_temp.sign_in_as(v_a1);
+  perform pg_temp.check_refused('a group needs a name',
+    format('select public.chat_create_group(%L, %L, %L::jsonb)', v_a, '   ',
+      jsonb_build_array(jsonb_build_object('user_id', v_a2, 'org_id', v_a))),
+    '%needs a name%', '22023');
+  perform pg_temp.sign_in_as(v_a1);
+  perform pg_temp.check_refused('and somebody in it',
+    format('select public.chat_create_group(%L, %L, %L::jsonb)', v_a, 'G', '[]'),
+    '%needs somebody in it%', '22023');
+  perform pg_temp.sign_in_as(v_a1);
+  perform pg_temp.check_refused('a member whose chat is off is not added',
+    format('select public.chat_create_group(%L, %L, %L::jsonb)', v_a, 'G',
+      jsonb_build_array(jsonb_build_object('user_id', v_a3, 'org_id', v_a))),
+    '%not switched on for one of those people%', '42501');
+  perform pg_temp.sign_in_as(v_a1);
+  perform pg_temp.check_refused(
+    'nor somebody from a company not linked for chat, though their chat is on',
+    format('select public.chat_create_group(%L, %L, %L::jsonb)', v_a, 'G',
+      jsonb_build_array(jsonb_build_object('user_id', v_a2, 'org_id', v_a),
+                        jsonb_build_object('user_id', v_b1, 'org_id', v_b))),
+    '%not linked%', '42501');
+
+  perform pg_temp.sign_in_as(v_a1);
+  v_grp := public.chat_create_group(v_a, '  Pasukan Akaun  ',
+    jsonb_build_array(jsonb_build_object('user_id', v_a2, 'org_id', v_a)));
+  perform pg_temp.check_eq('a group''s name is kept as meant',
+    (select title from public.chat_conversations where id = v_grp), 'Pasukan Akaun');
+  perform pg_temp.check_eq('and it holds its creator and its member',
+    (select count(*) from public.chat_participants where conversation_id = v_grp), 2);
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;
