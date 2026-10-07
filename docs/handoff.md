@@ -558,6 +558,7 @@ function:
 | `chat_end_call` | `0140` | 10 / 10 | -- | `chat.sql` |
 | `chat_create_group` | `0139` | 9 / 9 | -- | `chat.sql` |
 | `chat_start_direct` | `0757` | 12 / 13 | 1 (no direct conversation holds three) | `chat.sql` |
+| `chat_add_participant` | `0139` | 5 / 5 | -- | `chat.sql` |
 
 Every equivalent is written into its mutants file with the reason.
 

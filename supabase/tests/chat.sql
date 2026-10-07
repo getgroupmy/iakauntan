@@ -1439,4 +1439,50 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Adding to a group, rule by rule
+--
+-- A sweep of `0139`'s `chat_add_participant` left two mutants alive:
+-- nothing tried adding somebody to a group from OUTSIDE it, nor adding
+-- somebody whose chat is switched off. The first is a room's membership
+-- decided by somebody who is not in the room.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_u1 uuid := pg_temp.another_user('u1@addto.test');
+  v_u2 uuid := pg_temp.another_user('u2@addto.test');
+  v_out uuid := pg_temp.another_user('out@addto.test');
+  v_off uuid := pg_temp.another_user('off@addto.test');
+  v_new uuid := pg_temp.another_user('new@addto.test');
+  v_a uuid; v_grp uuid;
+begin
+  v_a := pg_temp.chat_org('Tambah Ahli Sdn Bhd', v_u1);
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_a, v_u2, 'accountant', 'active', now()),
+         (v_a, v_out, 'accountant', 'active', now()),
+         (v_a, v_off, 'accountant', 'active', now()),
+         (v_a, v_new, 'accountant', 'active', now());
+  perform pg_temp.sign_in_as(v_u1);
+  perform public.chat_set_access(v_a, v_u1, true);
+  perform public.chat_set_access(v_a, v_u2, true);
+  perform public.chat_set_access(v_a, v_out, true);
+  perform public.chat_set_access(v_a, v_new, true);
+  v_grp := public.chat_create_group(v_a, 'Dalam',
+    jsonb_build_array(jsonb_build_object('user_id', v_u2, 'org_id', v_a)));
+
+  perform pg_temp.sign_in_as(v_out);
+  perform pg_temp.check_refused('somebody outside a group cannot add people to it',
+    format('select public.chat_add_participant(%L, %L, %L)', v_grp, v_new, v_a),
+    '%not in this conversation%', '42501');
+  perform pg_temp.sign_in_as(v_u1);
+  perform pg_temp.check_refused('nor is anybody added whose chat is off',
+    format('select public.chat_add_participant(%L, %L, %L)', v_grp, v_off, v_a),
+    '%not switched on for that person%', '42501');
+  perform pg_temp.sign_in_as(v_u1);
+  perform public.chat_add_participant(v_grp, v_new, v_a);
+  perform pg_temp.check_eq('while somebody in it adds somebody switched on',
+    (select count(*) from public.chat_participants where conversation_id = v_grp), 3);
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;
