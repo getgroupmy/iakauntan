@@ -540,6 +540,7 @@ function:
 | `my_approvals` | `0169` | 7 / 9 | 2 (unique step numbers; one approver per rule) | `approvals.sql` |
 | `approval_state` | `0169` | 11 / 11 | -- | `approval_state.sql` |
 | `approve_budget` | `0274` | 8 / 8 | -- | `budgets.sql` |
+| `chat_edit_message`, `chat_delete_message` | `0144` | 16 / 16 | -- | `chat.sql` |
 
 Every equivalent is written into its mutants file with the reason.
 

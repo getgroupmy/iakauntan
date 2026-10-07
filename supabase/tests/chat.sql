@@ -1140,4 +1140,71 @@ begin
     (select count(*) from public.chat_links_for(v_b)), 0);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Editing and deleting, rule by rule
+--
+-- A sweep of `0144`'s two functions left seven mutants alive: a message
+-- that is not there, a deleted message edited back to life, a message
+-- edited to nothing, a second deletion moving the date the first one
+-- set, and somebody whose chat was switched off still editing and
+-- deleting -- none of which the block above tried.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_ana uuid := pg_temp.another_user('ana@edit-rules.test');
+  v_ben uuid := pg_temp.another_user('ben@edit-rules.test');
+  v_org uuid; v_conv uuid; v_m1 uuid; v_m2 uuid; v_m3 uuid;
+begin
+  v_org := pg_temp.chat_org('Edit Rules Sdn Bhd', v_ana);
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_org, v_ben, 'accountant', 'active', now());
+  perform pg_temp.sign_in_as(v_ana);
+  perform public.chat_set_access(v_org, v_ana, true);
+  perform public.chat_set_access(v_org, v_ben, true);
+  v_conv := public.chat_start_direct(v_org, v_ben, v_org);
+  insert into public.chat_messages (conversation_id, sender_id, sender_org_id, body)
+  values (v_conv, v_ana, v_org, 'one') returning id into v_m1;
+  insert into public.chat_messages (conversation_id, sender_id, sender_org_id, body)
+  values (v_conv, v_ana, v_org, 'two') returning id into v_m2;
+  insert into public.chat_messages (conversation_id, sender_id, sender_org_id, body)
+  values (v_conv, v_ana, v_org, 'three') returning id into v_m3;
+
+  perform pg_temp.check_refused('a message that is not there cannot be edited',
+    format('select public.chat_edit_message(%L, %L)', gen_random_uuid(), 'x'),
+    '%No such message%');
+  perform pg_temp.sign_in_as(v_ana);
+  perform pg_temp.check_refused('nor deleted',
+    format('select public.chat_delete_message(%L)', gen_random_uuid()),
+    '%No such message%');
+  perform pg_temp.sign_in_as(v_ana);
+
+  perform pg_temp.check_refused('a message is not edited down to nothing',
+    format('select public.chat_edit_message(%L, %L)', v_m2, '   '),
+    '%cannot be empty%');
+  perform pg_temp.sign_in_as(v_ana);
+
+  perform public.chat_delete_message(v_m1);
+  perform pg_temp.check_refused('a deleted message is not edited back',
+    format('select public.chat_edit_message(%L, %L)', v_m1, 'back again'),
+    '%was deleted%', '42501');
+  perform pg_temp.sign_in_as(v_ana);
+  -- Deleted an hour ago, deleted again now: still an hour ago.
+  update public.chat_messages set deleted_at = now() - interval '1 hour' where id = v_m1;
+  perform public.chat_delete_message(v_m1);
+  perform pg_temp.check_eq('deleting again does not move when it was deleted',
+    (select deleted_at::text from public.chat_messages where id = v_m1),
+    (now() - interval '1 hour')::text);
+
+  -- Chat switched off for her: her own words are no longer hers to touch.
+  perform public.chat_set_access(v_org, v_ana, false);
+  perform pg_temp.check_refused('somebody whose chat was switched off cannot edit',
+    format('select public.chat_edit_message(%L, %L)', v_m3, 'changed'),
+    '%not in that conversation%', '42501');
+  perform pg_temp.sign_in_as(v_ana);
+  perform pg_temp.check_refused('nor delete',
+    format('select public.chat_delete_message(%L)', v_m3),
+    '%not in that conversation%', '42501');
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;
