@@ -629,4 +629,78 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- submit_for_approval, rule by rule
+--
+-- A sweep of `0167`'s definition left twelve mutants alive. Every
+-- document submitted here matched exactly the rules there were, so
+-- nothing said which rules make a step: not a retired one, not one for
+-- another kind or type, not one whose amount this document does not
+-- reach, and not two for the same step. And the refusals -- no such
+-- document, somebody who may not write, nothing to approve, approved
+-- already -- were never met.
+--
+-- One is EQUIVALENT: a request left with no steps. `approval_required`
+-- filters the rules exactly as the step loop does, so a document it
+-- says needs approval always has at least one.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_owner uuid; v_partner uuid; v_viewer uuid;
+  v_doc uuid; v_req uuid;
+begin
+  v_org := pg_temp.approvals_org('Hantar Peraturan Sdn Bhd');
+  v_owner := pg_temp.test_user();
+  v_partner := pg_temp.another_user('partner@hantar.test');
+  v_viewer := pg_temp.another_user('auditor@hantar.test');
+  insert into public.org_members (org_id, user_id, role)
+  values (v_org, v_partner, 'admin'), (v_org, v_viewer, 'auditor');
+  perform public.create_fiscal_year(v_org, date '2026-01-01');
+
+  -- Step 1 twice (an owner, then later an admin: the older one stands),
+  -- a step 2 that only a larger invoice reaches, a retired step 3, and
+  -- steps for credit notes and for purchases.
+  insert into public.approval_rules
+    (org_id, entity_kind, doc_type, min_amount, step_no, approver_role, created_at)
+  values (v_org, 'sales_document', 'invoice', 5000, 1, 'owner', now() - interval '1 day'),
+         (v_org, 'sales_document', 'invoice', 5000, 1, 'admin', now());
+  insert into public.approval_rules
+    (org_id, entity_kind, doc_type, min_amount, step_no, approver_role, is_active)
+  values (v_org, 'sales_document', 'invoice', 50000, 2, 'admin', true),
+         (v_org, 'sales_document', 'invoice', 0, 3, 'admin', false),
+         (v_org, 'sales_document', 'credit_note', 0, 4, 'admin', true),
+         (v_org, 'purchase_document', null, 0, 5, 'admin', true);
+
+  perform pg_temp.check_refused('a document that is not there says so',
+    format('select public.submit_for_approval(%L, %L)', 'sales_document', gen_random_uuid()),
+    '%No such document%', 'P0002');
+  perform pg_temp.check_refused('a document no rule covers is not sent up',
+    format('select public.submit_for_approval(%L, %L)', 'sales_document',
+           pg_temp.approval_invoice(v_org, 100)),
+    '%Nothing needs approving here%', '22023');
+
+  v_doc := pg_temp.approval_invoice(v_org, 9000);
+  perform pg_temp.sign_in_as(v_viewer);
+  perform pg_temp.check_refused('somebody who may not write may not send it up',
+    format('select public.submit_for_approval(%L, %L)', 'sales_document', v_doc),
+    '%You may not submit this%', '42501');
+  perform pg_temp.sign_in_as(v_owner);
+  v_req := public.submit_for_approval('sales_document', v_doc);
+  perform pg_temp.check_eq('the request carries the document''s amount',
+    (select amount from public.approval_requests where id = v_req), 9000);
+  perform pg_temp.check_eq('and only the steps whose rules this document meets',
+    (select string_agg(step_no || ':' || approver_role, ',' order by step_no)
+       from public.approval_steps where request_id = v_req), '1:owner');
+
+  -- Approved, it is not sent up again.
+  perform pg_temp.sign_in_as(v_partner);
+  update public.org_members set role = 'owner' where org_id = v_org and user_id = v_partner;
+  perform public.decide_approval(v_req, true);
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_refused('an approved document is not sent up again',
+    format('select public.submit_for_approval(%L, %L)', 'sales_document', v_doc),
+    '%already been approved%', '22023');
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;
