@@ -1357,4 +1357,86 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Starting a direct conversation, rule by rule
+--
+-- A sweep of `0135`'s `chat_start_direct` left nine mutants alive. Every
+-- pair here was two switched-on people in linked companies with no
+-- other conversation between them: so being signed out or switched off,
+-- talking to oneself, a group or a conversation with somebody else
+-- standing in for the pair's, and speaking for another company were all
+-- unasserted -- and the sweep turned up 0757: yourself under your other
+-- company passed the self check and failed on a primary key.
+--
+-- One is EQUIVALENT: reusing a "direct" conversation with more than two
+-- people in it. There is no such conversation -- `chat_add_participant`
+-- refuses a third person on a direct one, and a client cannot insert a
+-- participant.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_a1 uuid := pg_temp.another_user('a1@direct.test');
+  v_a2 uuid := pg_temp.another_user('a2@direct.test');
+  v_a3 uuid := pg_temp.another_user('a3@direct.test');
+  v_b1 uuid := pg_temp.another_user('b1@direct.test');
+  v_a uuid; v_b uuid; v_grp uuid; v_dm uuid; v_dm2 uuid; v_cross uuid;
+begin
+  v_a := pg_temp.chat_org('Terus A Sdn Bhd', v_a1);
+  v_b := pg_temp.chat_org('Terus B Sdn Bhd', v_b1);
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_a, v_a2, 'accountant', 'active', now()),
+         (v_a, v_a3, 'accountant', 'active', now()),
+         (v_b, v_a1, 'accountant', 'active', now());
+  perform pg_temp.chat_link(v_a, v_a1, v_b, v_b1);
+  perform pg_temp.sign_in_as(v_a1);
+  perform public.chat_set_access(v_a, v_a1, true);
+  perform public.chat_set_access(v_a, v_a2, true);
+  perform pg_temp.sign_in_as(v_b1);
+  perform public.chat_set_access(v_b, v_b1, true);
+  perform public.chat_set_access(v_b, v_a1, true);
+  -- a3 is never switched on.
+
+  perform pg_temp.sign_out();
+  perform pg_temp.check_refused('nobody signed in starts a conversation',
+    format('select public.chat_start_direct(%L, %L, %L)', v_a, v_a2, v_a),
+    '%Not signed in%', '42501');
+  perform pg_temp.sign_in_as(v_a1);
+  perform pg_temp.check_refused('nobody talks to themselves',
+    format('select public.chat_start_direct(%L, %L, %L)', v_a, v_a1, v_a),
+    '%with yourself%', '22023');
+  -- Nor under their other company (0757). Before it, this passed the
+  -- check and failed on the participants' primary key, unreadably.
+  perform pg_temp.check_refused('nor to themselves under their other company',
+    format('select public.chat_start_direct(%L, %L, %L)', v_a, v_a1, v_b),
+    '%with yourself%', '22023');
+  perform pg_temp.sign_in_as(v_a3);
+  perform pg_temp.check_refused('somebody switched off starts nothing',
+    format('select public.chat_start_direct(%L, %L, %L)', v_a, v_a2, v_a),
+    '%not switched on for you%', '42501');
+  perform pg_temp.sign_in_as(v_a1);
+  perform pg_temp.check_refused('nor is anybody switched off talked to',
+    format('select public.chat_start_direct(%L, %L, %L)', v_a, v_a3, v_a),
+    '%not switched on for that person%', '42501');
+  perform pg_temp.sign_in_as(v_a1);
+
+  -- A group of exactly these two is not their direct conversation.
+  v_grp := public.chat_create_group(v_a, 'Berdua',
+    jsonb_build_array(jsonb_build_object('user_id', v_a2, 'org_id', v_a)));
+  v_dm := public.chat_start_direct(v_a, v_a2, v_a);
+  perform pg_temp.check_true('a group of two is not the pair''s direct conversation',
+    v_dm <> v_grp and (select is_direct from public.chat_conversations where id = v_dm));
+  perform pg_temp.check_eq('and pressing again finds the same one',
+    public.chat_start_direct(v_a, v_a2, v_a), v_dm);
+
+  -- Speaking for B to a2 is a different conversation from speaking for A.
+  perform pg_temp.sign_in_as(v_a1);
+  v_dm2 := public.chat_start_direct(v_b, v_a2, v_a);
+  perform pg_temp.check_true('speaking for another company is another conversation',
+    v_dm2 <> v_dm);
+  -- And a conversation with a2 is not one with b1.
+  perform pg_temp.check_true('nor is a conversation with somebody else',
+    public.chat_start_direct(v_a, v_b1, v_b) not in (v_dm, v_dm2));
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

@@ -494,6 +494,14 @@ page and renumbering would quietly break the reference.
     reason, and the editor no longer offers it; the widget test fails
     with the option put back. Journal approval, if wanted, needs a
     pending state of its own first.
+24. ~~Starting a chat with yourself under your other company shows a raw
+    database error.~~ **Raised and answered 7 October: refuse it
+    plainly. Built in `0757`.** `chat_start_direct` (0135) refused
+    yourself only within one company; someone in two linked companies
+    could pick themselves under the other, pass the check, and meet
+    `chat_participants`' primary key ("duplicate key value...").
+    Nothing was created or exposed. Now refused in any company, with
+    the sentence that was already there.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -543,6 +551,7 @@ function:
 | `chat_edit_message`, `chat_delete_message` | `0144` | 16 / 16 | -- | `chat.sql` |
 | `chat_end_call` | `0140` | 10 / 10 | -- | `chat.sql` |
 | `chat_create_group` | `0139` | 9 / 9 | -- | `chat.sql` |
+| `chat_start_direct` | `0757` | 12 / 13 | 1 (no direct conversation holds three) | `chat.sql` |
 
 Every equivalent is written into its mutants file with the reason.
 
