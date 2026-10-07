@@ -577,6 +577,7 @@ function:
 | `chat_join_call`, `chat_decline_call`, `chat_leave_call` | `0140` | 23 / 24 | 1 (nobody but the caller has answered a ringing call) | `chat.sql` |
 | `chat_leave` | `0139` | 3 / 3 | -- | `chat.sql` |
 | `chat_enabled` | `0758` | 10 / 10 | -- | `chat.sql` |
+| `chat_start_call` | `0140` | 12 / 12 | -- | `chat.sql` |
 
 Every equivalent is written into its mutants file with the reason.
 

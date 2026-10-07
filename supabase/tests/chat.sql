@@ -1766,4 +1766,64 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+
+-- ---------------------------------------------------------------------
+-- Placing a call, rule by rule
+--
+-- A sweep of `0140`'s `chat_start_call` left six mutants alive. Nothing
+-- pressed call on a conversation whose last call had rung out unanswered,
+-- nor on a live call whose ringing deadline had passed -- which every
+-- live call's has, a minute in -- and nothing read back what kind of
+-- call was placed or when the caller joined it.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_u1 uuid := pg_temp.another_user('u1@place.test');
+  v_u2 uuid := pg_temp.another_user('u2@place.test');
+  v_u3 uuid := pg_temp.another_user('u3@place.test');
+  v_a uuid; v_grp uuid; v_call uuid; v_next uuid;
+  v_rang_out timestamptz := now() - interval '10 minutes';
+begin
+  v_a := pg_temp.chat_org('Buat Panggilan Sdn Bhd', v_u1);
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_a, v_u2, 'accountant', 'active', now()),
+         (v_a, v_u3, 'accountant', 'active', now());
+  perform pg_temp.sign_in_as(v_u1);
+  perform public.chat_set_access(v_a, v_u1, true);
+  perform public.chat_set_access(v_a, v_u2, true);
+  perform public.chat_set_access(v_a, v_u3, true);
+  v_grp := public.chat_create_group(v_a, 'Talian',
+    jsonb_build_array(jsonb_build_object('user_id', v_u2, 'org_id', v_a),
+                      jsonb_build_object('user_id', v_u3, 'org_id', v_a)));
+
+  v_call := public.chat_start_call(v_grp, 'video');
+  perform pg_temp.check_eq('a video call is a video call',
+    (select kind::text from public.chat_calls where id = v_call), 'video');
+  perform pg_temp.check_eq('and the caller is in it from now',
+    (select joined_at::text from public.chat_call_participants
+      where call_id = v_call and user_id = v_u1), now()::text);
+
+  -- It rang out ten minutes ago and nobody answered.
+  update public.chat_calls set ringing_until = v_rang_out where id = v_call;
+  v_next := public.chat_start_call(v_grp, 'voice');
+  perform pg_temp.check_true('pressing call after one rang out places a new one',
+    v_next <> v_call);
+  perform pg_temp.check_eq('the one that rang out is missed',
+    (select status::text from public.chat_calls where id = v_call), 'missed');
+  perform pg_temp.check_eq('as of when it stopped ringing, not now',
+    (select ended_at::text from public.chat_calls where id = v_call),
+    v_rang_out::text);
+  perform pg_temp.check_eq('and a voice call is a voice call',
+    (select kind::text from public.chat_calls where id = v_next), 'voice');
+
+  -- Answered, and long past its ringing deadline: still the call to join.
+  perform pg_temp.sign_in_as(v_u2);
+  perform public.chat_join_call(v_next);
+  update public.chat_calls set ringing_until = v_rang_out where id = v_next;
+  perform pg_temp.sign_in_as(v_u3);
+  perform pg_temp.check_true('pressing call on a live call joins it, deadline or not',
+    public.chat_start_call(v_grp, 'voice') = v_next);
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;
