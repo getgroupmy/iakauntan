@@ -1423,4 +1423,79 @@ begin
 end $$;
 
 
+
+-- ---------------------------------------------------------------------
+-- Settling a deposit, rule by rule
+--
+-- A sweep of `settle_deposit` (0728) left five mutants alive. Nothing
+-- settled a deposit that is not there; every refund named its account,
+-- so neither the deposit's own account as the default nor the refusal
+-- when there is none (a row from before 0728) was ever reached; nobody
+-- with purchases but not sales settled a supplier's deposit; and no
+-- SUPPLIER deposit was refunded, so the money coming back INTO the bank
+-- was never read.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_owner uuid := pg_temp.test_user();
+  v_clerk uuid := pg_temp.another_user('kerani-deposit@example.test');
+  v_org uuid; v_cust uuid; v_sup uuid; v_bank uuid; v_type uuid;
+  v_cdep uuid; v_sdep uuid; v_old uuid;
+begin
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Deposit Rules Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_org, m, true from unnest(array['sales','purchases','accounting']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+  perform pg_temp.sign_in_as(v_owner);
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'CUST', 'Encik Rahim', 'customer') returning id into v_cust;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'SUP', 'Kilang Pintu', 'supplier') returning id into v_sup;
+  v_bank := pg_temp.test_bank_account(v_org, 'Current account', 'current', 'MYR', 0, 0, '512345670000');
+
+  v_cdep := public.create_deposit(v_org, 'customer', v_cust, pg_temp.today(), 1000, v_bank);
+  v_sdep := public.create_deposit(v_org, 'supplier', v_sup, pg_temp.today(), 600, v_bank);
+
+  perform pg_temp.check_refused('a deposit that is not there settles nothing',
+    format('select public.settle_deposit(%L, %L, 100, null)', gen_random_uuid(), 'refund'),
+    '%No such deposit%', 'P0002');
+
+  -- No account named: the deposit's own is the one the refund leaves.
+  perform pg_temp.sign_in_as(v_owner);
+  perform public.settle_deposit(v_cdep, 'refund', 300, null);
+  perform pg_temp.check_eq('a refund naming no account leaves the deposit''s own',
+    (select current_balance from public.bank_accounts where id = v_bank), 1000 - 600 - 300);
+
+  -- A supplier giving our money back: it comes INTO the bank.
+  perform public.settle_deposit(v_sdep, 'refund', 200, null);
+  perform pg_temp.check_eq('a supplier''s refund puts the money back in the bank',
+    (select current_balance from public.bank_accounts where id = v_bank), 1000 - 600 - 300 + 200);
+
+  -- A row from before 0728, when a deposit could name no account.
+  v_old := public.create_deposit(v_org, 'customer', v_cust, pg_temp.today(), 50, v_bank);
+  update public.deposit_notes set bank_account_id = null where id = v_old;
+  perform pg_temp.check_refused('and one that names no account at all asks which',
+    format('select public.settle_deposit(%L, %L, 50, null)', v_old, 'refund'),
+    '%Say which account the refund is paid out of%', '23514');
+
+  -- Purchases, and sales read only: a supplier's deposit, not a customer's.
+  insert into public.org_members (org_id, user_id, role) values (v_org, v_clerk, 'sales');
+  insert into public.access_types (org_id, name)
+  values (v_org, 'Purchases only') returning id into v_type;
+  insert into public.access_type_modules (access_type_id, module_code, access)
+  values (v_type, 'sales', 'read'), (v_type, 'purchases', 'write');
+  update public.org_members set access_type_id = v_type
+   where org_id = v_org and user_id = v_clerk;
+  perform pg_temp.sign_in_as(v_clerk);
+  perform public.settle_deposit(v_sdep, 'refund', 100, null);
+  perform pg_temp.check_eq('somebody on purchases settles a supplier''s deposit',
+    (select refunded_amount from public.deposit_notes where id = v_sdep), 300);
+  perform pg_temp.check_refused('but not a customer''s',
+    format('select public.settle_deposit(%L, %L, 100, null)', v_cdep, 'refund'),
+    '%not permitted to write%', '42501');
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

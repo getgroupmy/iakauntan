@@ -651,6 +651,7 @@ function:
 | `post_purchase_document_internal` (0759's discount) | `0759` | 6 / 6 | -- | `bill_credit.sql` |
 | `accept_intercompany_bill` | `0759` | 8 / 8 | -- | `intercompany_billing.sql` |
 | `allocate_with_discount`, `allocate_payment_with_discount` | `0760` | 20 / 20 | -- | `settlement_discount.sql` |
+| `settle_deposit` | `0728` | 19 / 19 | -- | `deposits.sql` |
 
 Every equivalent is written into its mutants file with the reason.
 
