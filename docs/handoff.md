@@ -594,6 +594,22 @@ page and renumbering would quietly break the reference.
     write-doors gate did not flag it because the policy and the function
     ask for the same PERMISSION -- what the function adds is rules, and
     the gate reads permissions. **Awaiting deploy.**
+29. ~~An accountant can unlock a locked year-end period.~~ **Raised and
+    answered 8 October: close it, periods and years both. Built in
+    `0762`.** Found by scanning for 0761's shape -- a table clients may
+    write that a SECURITY DEFINER function also writes under rules its
+    policy does not repeat. `set_fiscal_period_status` and the year
+    close/reopen functions ask for an owner or admin, and "locked is
+    terminal"; the tables asked only `can_post`. Reproduced: the owner
+    locked January, an accountant was refused by the function and then
+    reopened it with a plain UPDATE. Now both tables are written only by
+    their five functions. Production had 408 periods, none closed or
+    locked. **The scan's other hits** were checked and are not this:
+    approvals are closed (`false` policies), and documents, lines and
+    allocations are written directly ON PURPOSE as drafts, with triggers
+    guarding what is posted. Still worth a look on the same list:
+    `payroll_runs` and `withholding_certificates` (write policies of `*`)
+    and `bank_transactions` / `stock_movements`. **Awaiting deploy.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

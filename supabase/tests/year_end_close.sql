@@ -607,4 +607,93 @@ begin
 end $$;
 
 
+
+-- ---------------------------------------------------------------------
+-- Opened only by somebody allowed to  (0762)
+--
+-- `fiscal_periods` and `fiscal_years` were writable by anybody who may
+-- post, so the owner-or-admin rule in `set_fiscal_period_status`,
+-- `close_fiscal_year` and `reopen_fiscal_year` -- and "a locked period
+-- cannot be reopened" -- bound nobody who wrote the table instead. An
+-- accountant unlocked a locked January with a plain UPDATE. Now only the
+-- functions write either table; the accountant is refused both ways, and
+-- the owner still locks through the function.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_owner uuid := pg_temp.test_user();
+  v_acct uuid := pg_temp.another_user('akauntan@kunci.test');
+  v_org uuid; v_p uuid; v_y uuid; v_role text; v_n integer;
+begin
+  v_org := pg_temp.test_org('Kunci Tempoh Sdn Bhd');
+  perform pg_temp.sign_in_as(v_owner);
+  perform public.create_fiscal_year(v_org, date '2026-01-01');
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_org, v_acct, 'accountant', 'active', now());
+  select id into v_p from public.fiscal_periods where org_id = v_org order by start_date limit 1;
+  select id into v_y from public.fiscal_years where org_id = v_org limit 1;
+
+  perform public.set_fiscal_period_status(v_p, 'locked');
+  perform pg_temp.check_eq('the owner locks January through the function',
+    (select status::text from public.fiscal_periods where id = v_p), 'locked');
+
+  perform pg_temp.sign_in_as(v_acct);
+  perform pg_temp.check_refused('an accountant may not reopen it through the function',
+    format('select public.set_fiscal_period_status(%L, %L)', v_p, 'open'),
+    '%Only an owner or admin%', '42501');
+
+  perform pg_temp.sign_in_as(v_acct);
+  begin
+    set local role authenticated;
+    v_role := current_user;
+    begin
+      update public.fiscal_periods set status = 'open' where id = v_p;
+      get diagnostics v_n = row_count;
+    exception when insufficient_privilege then v_n := -1;
+    end;
+  end;
+  reset role;
+  perform pg_temp.check_true('the test ran under row level security',
+    v_role = 'authenticated');
+  perform pg_temp.check_eq('nor straight into the table', v_n, -1);
+  perform pg_temp.check_eq('so January is still locked',
+    (select status::text from public.fiscal_periods where id = v_p), 'locked');
+
+  perform pg_temp.sign_in_as(v_acct);
+  begin
+    set local role authenticated;
+    begin
+      update public.fiscal_years set status = 'closed' where id = v_y;
+      get diagnostics v_n = row_count;
+    exception when insufficient_privilege then v_n := -1;
+    end;
+  end;
+  reset role;
+  perform pg_temp.check_eq('nor can a year be marked closed without its closing entry', v_n, -1);
+
+  perform pg_temp.sign_in_as(v_acct);
+  begin
+    set local role authenticated;
+    begin
+      delete from public.fiscal_periods where id = v_p;
+      get diagnostics v_n = row_count;
+    exception when insufficient_privilege then v_n := -1;
+    end;
+  end;
+  reset role;
+  perform pg_temp.check_eq('nor a period deleted', v_n, -1);
+  perform pg_temp.check_eq('which is still there',
+    (select count(*)::integer from public.fiscal_periods where id = v_p), 1);
+
+  -- Reading is untouched: the year screen embeds the periods.
+  perform pg_temp.sign_in_as(v_acct);
+  begin
+    set local role authenticated;
+    select count(*) into v_n from public.fiscal_periods where org_id = v_org;
+  end;
+  reset role;
+  perform pg_temp.check_eq('while the accountant still reads all twelve', v_n, 12);
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;
