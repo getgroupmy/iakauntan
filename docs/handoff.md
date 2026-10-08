@@ -629,7 +629,10 @@ page and renumbering would quietly break the reference.
     `payroll_runs` was looked at and is a different case: its status
     writers need the same `can_run_payroll` the policy does, so a direct
     write is an integrity question, not an escalation -- not raised yet.
-    **Awaiting deploy.**
+    **Applied, and read back** (8 October, read-only): recorded;
+    `authenticated` holds only SELECT; one policy left
+    (`withholding_certificates_select`); RLS on; the three functions still
+    SECURITY DEFINER.
 31. ~~A posted receipt, supplier payment or bank transfer can be
     rewritten under its journal.~~ **Raised and answered 8 October:
     freeze posted receipts and payments; close `bank_transfers`. Built in
