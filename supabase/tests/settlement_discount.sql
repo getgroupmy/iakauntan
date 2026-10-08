@@ -685,4 +685,187 @@ begin
     r.deadline is null and not r.still_open);
 end $$;
 
+
+-- ---------------------------------------------------------------------
+-- In another currency  (0760)
+--
+-- Both sides posted the discount as ringgit at a rate of 1, using the
+-- document-currency figure: USD20 off a USD invoice at 4.50 took RM20
+-- off the receivable, and the invoice showing nothing owed sat beside a
+-- ledger still holding RM70. The discount is a share of the document's
+-- own figure and settles part of a balance recorded at the document's
+-- rate, so it is converted at that rate.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.test_org('Diskaun Dolar Sdn Bhd');
+  v_cust uuid; v_sup uuid; v_bank uuid; v_terms uuid;
+  v_inv uuid; v_rcp uuid; v_bill uuid; v_pay uuid; v_alloc uuid;
+  v_today date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
+begin
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-1', 'Buyer Inc', 'customer') returning id into v_cust;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'S-1', 'Seller Inc', 'supplier') returning id into v_sup;
+  insert into public.bank_accounts (org_id, account_id, name, bank_name, currency)
+  values (v_org, (select id from public.accounts where org_id = v_org and code = '1110'),
+          'USD account', 'Maybank', 'USD') returning id into v_bank;
+  v_terms := pg_temp.sd_terms(v_org, '2-10-N30', 30, 'net', 2, 10);
+
+  -- Selling.
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
+     status, payment_term_id)
+  values (v_org, 'invoice', 'INV-USD', v_today, v_cust, 'USD', 4.5, 'draft', v_terms)
+  returning id into v_inv;
+  insert into public.sales_document_lines (org_id, document_id, line_no, description, quantity, unit_price)
+  values (v_org, v_inv, 1, 'Goods', 1, 1000);
+  perform public.post_sales_document(v_inv);
+  insert into public.receipts (org_id, receipt_no, receipt_date, contact_id,
+     bank_account_id, amount, unapplied_amount, currency, exchange_rate)
+  values (v_org, 'RCP-USD', v_today, v_cust, v_bank, 980, 980, 'USD', 4.5)
+  returning id into v_rcp;
+  perform public.post_receipt(v_rcp);
+  v_alloc := public.allocate_with_discount(v_rcp, v_inv, 980, 20);
+
+  perform pg_temp.check_eq('a dollar invoice settled with a discount owes nothing',
+    (select balance_amount from public.sales_documents where id = v_inv), 0);
+  perform pg_temp.check_eq('and the receivable agrees, in ringgit',
+    (select coalesce(sum(l.debit - l.credit), 0) from public.gl_lines l
+       join public.accounts a on a.id = l.account_id
+      where a.org_id = v_org and a.code = '1210'), 0);
+  perform pg_temp.check_eq('the twenty dollars given is ninety ringgit of discount',
+    (select coalesce(sum(l.debit - l.credit), 0) from public.gl_lines l
+       join public.accounts a on a.id = l.account_id
+      where a.org_id = v_org and a.code = '4300'), 90);
+  perform pg_temp.check_eq('and twenty in the invoice''s own currency',
+    (select sum(l.fc_debit) from public.gl_lines l
+       join public.payment_allocations pa on pa.discount_entry_id = l.entry_id
+       join public.accounts a on a.id = l.account_id
+      where pa.id = v_alloc and a.code = '4300'), 20);
+  perform pg_temp.check_eq('the allocation keeps the discount in dollars',
+    (select discount_amount from public.payment_allocations where id = v_alloc), 20);
+
+  -- Buying.
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
+     status, payment_term_id)
+  values (v_org, 'bill', 'BILL-USD', v_today, v_sup, 'USD', 4.5, 'draft', v_terms)
+  returning id into v_bill;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, description, quantity, unit_price, account_id)
+  values (v_org, v_bill, 1, 'item', 'Materials', 1, 1000,
+          (select id from public.accounts where org_id = v_org and code = '5100'));
+  perform public.post_purchase_document(v_bill);
+  insert into public.purchase_payments (org_id, payment_no, payment_date,
+     contact_id, bank_account_id, amount, unapplied_amount, currency, exchange_rate)
+  values (v_org, 'PAY-USD', v_today, v_sup, v_bank, 980, 980, 'USD', 4.5)
+  returning id into v_pay;
+  perform public.post_purchase_payment(v_pay);
+  perform public.allocate_payment_with_discount(v_pay, v_bill, 980, 20);
+
+  perform pg_temp.check_eq('a dollar bill settled with a discount owes nothing',
+    (select balance_amount from public.purchase_documents where id = v_bill), 0);
+  perform pg_temp.check_eq('and the payable agrees, in ringgit',
+    (select coalesce(sum(l.credit - l.debit), 0) from public.gl_lines l
+       join public.accounts a on a.id = l.account_id
+      where a.org_id = v_org and a.code = '2110'), 0);
+  perform pg_temp.check_eq('the twenty dollars taken is ninety ringgit of income',
+    (select coalesce(sum(l.credit - l.debit), 0) from public.gl_lines l
+       join public.accounts a on a.id = l.account_id
+      where a.org_id = v_org and a.code = '4900'), 90);
+  perform pg_temp.sign_out();
+end $$;
+
+
+-- ---------------------------------------------------------------------
+-- What is not there, and whose it is, rule by rule
+--
+-- A sweep of 0760's two functions left five mutants alive. Nothing
+-- allocated a receipt or payment that does not exist, nothing tried to
+-- settle ANOTHER company's invoice or bill with this one's money -- the
+-- person below is a member of both, so membership alone does not stop
+-- it -- and the supplier side never asked for a discount on terms that
+-- offer none.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_other uuid; v_cust uuid; v_ocust uuid; v_sup uuid; v_osup uuid;
+  v_bank uuid; v_terms uuid; v_oterms uuid; v_plain uuid;
+  v_rcp uuid; v_pay uuid; v_their_inv uuid; v_their_bill uuid; v_flat_bill uuid;
+  v_today date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
+begin
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Milik Siapa Sdn Bhd');
+  v_other := pg_temp.test_org('Syarikat Sebelah Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  perform public.create_fiscal_year(v_other, date_trunc('year', pg_temp.today())::date);
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-1', 'Pembeli', 'customer') returning id into v_cust;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_other, 'C-1', 'Pembeli sebelah', 'customer') returning id into v_ocust;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'S-1', 'Pembekal', 'supplier') returning id into v_sup;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_other, 'S-1', 'Pembekal sebelah', 'supplier') returning id into v_osup;
+  insert into public.bank_accounts (org_id, account_id, name, bank_name, currency)
+  values (v_org, (select id from public.accounts where org_id = v_org and code = '1110'),
+          'Current account', 'Maybank', 'MYR') returning id into v_bank;
+  v_terms := pg_temp.sd_terms(v_org, '2-10-N30', 30, 'net', 2, 10);
+  v_plain := pg_temp.sd_terms(v_org, 'N30', 30, 'net');
+  v_oterms := pg_temp.sd_terms(v_other, '2-10-N30', 30, 'net', 2, 10);
+
+  insert into public.receipts (org_id, receipt_no, receipt_date, contact_id,
+     bank_account_id, amount, unapplied_amount, currency, exchange_rate)
+  values (v_org, 'RCP-1', v_today, v_cust, v_bank, 980, 980, 'MYR', 1)
+  returning id into v_rcp;
+  perform public.post_receipt(v_rcp);
+  insert into public.purchase_payments (org_id, payment_no, payment_date,
+     contact_id, bank_account_id, amount, unapplied_amount, currency, exchange_rate)
+  values (v_org, 'PAY-1', v_today, v_sup, v_bank, 980, 980, 'MYR', 1)
+  returning id into v_pay;
+  perform public.post_purchase_payment(v_pay);
+
+  v_their_inv := pg_temp.sd_invoice(v_other, 'INV-S', v_ocust, v_oterms, 1000, v_today);
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
+     status, payment_term_id)
+  values (v_other, 'bill', 'BILL-S', v_today, v_osup, 'MYR', 1, 'draft', v_oterms)
+  returning id into v_their_bill;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, description, quantity, unit_price, account_id)
+  values (v_other, v_their_bill, 1, 'item', 'Bahan', 1, 1000,
+          (select id from public.accounts where org_id = v_other and code = '5100'));
+  perform public.post_purchase_document(v_their_bill);
+
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
+     status, payment_term_id)
+  values (v_org, 'bill', 'BILL-FLAT', v_today, v_sup, 'MYR', 1, 'draft', v_plain)
+  returning id into v_flat_bill;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, description, quantity, unit_price, account_id)
+  values (v_org, v_flat_bill, 1, 'item', 'Bahan', 1, 1000,
+          (select id from public.accounts where org_id = v_org and code = '5100'));
+  perform public.post_purchase_document(v_flat_bill);
+
+  perform pg_temp.check_refused('a receipt that is not there allocates nothing',
+    format('select public.allocate_with_discount(%L, %L, 100, 0)', gen_random_uuid(), v_their_inv),
+    '%No such receipt%', 'P0002');
+  perform pg_temp.check_refused('nor does a payment that is not there',
+    format('select public.allocate_payment_with_discount(%L, %L, 100, 0)', gen_random_uuid(), v_flat_bill),
+    '%No such payment%', 'P0002');
+  perform pg_temp.check_refused('this company''s receipt does not settle another''s invoice',
+    format('select public.allocate_with_discount(%L, %L, 980, 20)', v_rcp, v_their_inv),
+    '%No such invoice%', 'P0002');
+  perform pg_temp.check_refused('nor its payment another''s bill',
+    format('select public.allocate_payment_with_discount(%L, %L, 980, 20)', v_pay, v_their_bill),
+    '%No such bill%', 'P0002');
+  perform pg_temp.check_refused('and a supplier on plain terms gives no discount',
+    format('select public.allocate_payment_with_discount(%L, %L, 980, 20)', v_pay, v_flat_bill),
+    '%offer no settlement discount%', '23514');
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

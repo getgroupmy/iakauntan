@@ -564,6 +564,18 @@ page and renumbering would quietly break the reference.
     still SECURITY DEFINER; `accept_intercompany_bill` executable by
     `authenticated` and not `anon`, the internal posting function by
     neither.
+27. ~~A settlement discount on a foreign document is posted
+    unconverted.~~ **Raised and answered 8 October: at the document's
+    rate. Built in `0760`.** `allocate_with_discount` and
+    `allocate_payment_with_discount` posted the discount in base at a
+    rate of 1 with the document-currency figure. Reproduced on both
+    sides: a USD1,000 invoice at 4.50 settled with USD980 and a USD20
+    discount showed nothing owed while the receivable held RM70 and the
+    discount read RM20 instead of RM90. Now converted at the invoice's or
+    bill's rate, with the journal in the document's currency. Every
+    document in `settlement_discount.sql` had been in ringgit. Production
+    had no settlement discount taken and no foreign document on discount
+    terms. **Awaiting deploy.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -638,6 +650,7 @@ function:
 | `credit_purchase_bill` | `0440` | 19 / 20 | 1 (`bill_credit_remaining` refuses a non-bill in the same words) | `bill_credit.sql` |
 | `post_purchase_document_internal` (0759's discount) | `0759` | 6 / 6 | -- | `bill_credit.sql` |
 | `accept_intercompany_bill` | `0759` | 8 / 8 | -- | `intercompany_billing.sql` |
+| `allocate_with_discount`, `allocate_payment_with_discount` | `0760` | 20 / 20 | -- | `settlement_discount.sql` |
 
 Every equivalent is written into its mutants file with the reason.
 
