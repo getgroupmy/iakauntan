@@ -1666,4 +1666,101 @@ begin
 end $$;
 
 
+
+-- ---------------------------------------------------------------------
+-- Closed only by closing it  (0761), and the rest rule by rule
+--
+-- `authenticated` could insert, update and delete `bank_reconciliations`
+-- directly, so a "completed" reconciliation out by any amount could be
+-- written without the function, and every real close before its date
+-- refused. Now only the two functions write the table.
+--
+-- And a sweep of `complete_bank_reconciliation` (0716) left two
+-- mutants: nothing asked it to close an account that is not there, and
+-- no reconciliation still IN PROGRESS sat after the one being closed --
+-- only a completed one may stand in the way.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_owner uuid := pg_temp.test_user();
+  v_org uuid; v_bank uuid; v_other uuid; v_rec uuid; v_role text; v_ok boolean;
+begin
+  v_org := pg_temp.test_org('Rekonsil Tertutup Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  perform pg_temp.sign_in_as(v_owner);
+  v_bank := pg_temp.test_bank_account(v_org, 'Current account');
+  v_other := pg_temp.test_bank_account(v_org, 'Second account');
+
+  -- The table, directly, as the owner: nothing written.
+  begin
+    set local role authenticated;
+    v_role := current_user;
+    begin
+      insert into public.bank_reconciliations
+        (org_id, bank_account_id, statement_date, statement_balance,
+         book_balance, difference, status, completed_at, completed_by)
+      values (v_org, v_bank, date '2026-12-31', 99999, 0, 99999,
+              'completed', now(), v_owner);
+      v_ok := true;
+    exception when insufficient_privilege then v_ok := false;
+    end;
+  end;
+  reset role;
+  perform pg_temp.check_true('the test ran under row level security',
+    v_role = 'authenticated');
+  perform pg_temp.check_true('a completed reconciliation cannot be written straight into the table',
+    not v_ok);
+
+  -- The control: the function closes, and what it closed cannot be
+  -- edited or deleted round it either.
+  perform pg_temp.sign_in_as(v_owner);
+  v_rec := public.complete_bank_reconciliation(v_bank, date '2026-01-31', 0);
+  -- EQUIVALENT, for the sweep of `complete_bank_reconciliation`: storing
+  -- `p_statement_balance` without its `round(..., 2)`. The column is
+  -- numeric(18,2) and rounds whatever it is given.
+  perform pg_temp.check_true('while closing it the proper way works',
+    v_rec is not null);
+  begin
+    set local role authenticated;
+    begin
+      update public.bank_reconciliations set statement_balance = 5
+       where id = v_rec;
+      v_ok := true;
+    exception when insufficient_privilege then v_ok := false;
+    end;
+  end;
+  reset role;
+  perform pg_temp.check_true('nor can a closed one be rewritten', not v_ok);
+  perform pg_temp.sign_in_as(v_owner);
+  begin
+    set local role authenticated;
+    begin
+      delete from public.bank_reconciliations where id = v_rec;
+      v_ok := true;
+    exception when insufficient_privilege then v_ok := false;
+    end;
+  end;
+  reset role;
+  perform pg_temp.check_true('or deleted round reopen''s rules', not v_ok);
+  perform pg_temp.check_eq('and it is still there',
+    (select count(*) from public.bank_reconciliations where id = v_rec), 1);
+
+  -- An account that is not there.
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_refused('an account that is not there is not reconciled',
+    format('select public.complete_bank_reconciliation(%L, %L, 0)', gen_random_uuid(), date '2026-02-28'),
+    '%not found%', 'P0002');
+
+  -- One still in progress, later, does not stand in the way. Written as
+  -- the table's owner: nothing a client can do makes one now.
+  insert into public.bank_reconciliations
+    (org_id, bank_account_id, statement_date, statement_balance,
+     book_balance, difference, status)
+  values (v_org, v_other, date '2026-12-31', 0, 0, 0, 'in_progress');
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_true('a reconciliation still in progress later does not block this one',
+    public.complete_bank_reconciliation(v_other, date '2026-03-31', 0) is not null);
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

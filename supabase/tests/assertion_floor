@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-15691
+15705
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1025,3 +1025,7 @@
 # 8 October: 15691. 0760, a settlement discount on a foreign document
 # converted at the document's rate, and its two functions swept.
 # run_locally.sh at 0760: 386 files, 15691 assertions.
+#
+# 8 October: 15705. settle_deposit and complete_bank_reconciliation
+# swept, and 0761 (a reconciliation is closed only by closing it).
+# run_locally.sh at 0761: 386 files, 15705 assertions.

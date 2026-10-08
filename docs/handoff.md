@@ -575,7 +575,25 @@ page and renumbering would quietly break the reference.
     bill's rate, with the journal in the document's currency. Every
     document in `settlement_discount.sql` had been in ringgit. Production
     had no settlement discount taken and no foreign document on discount
-    terms. **Awaiting deploy.**
+    terms. **Applied, and read back** (8 October, read-only): recorded;
+    both live functions convert at the document's rate; both SECURITY
+    DEFINER, `authenticated` yes, `anon` no. Its run's Android build
+    failed on `setup-java`'s GitHub API rate limit -- infrastructure,
+    re-run -- AFTER "Apply the migrations" had already succeeded.
+28. ~~A completed bank reconciliation can be written straight into the
+    table.~~ **Raised and answered 8 October: close it. Built in
+    `0761`.** `bank_reconciliations` had insert, update and delete for
+    `authenticated` since `0006`, behind policies asking only `can_post`,
+    so `complete_bank_reconciliation`'s rules -- nil difference, forward
+    only, lines stamped -- bound nobody who called the table. Reproduced:
+    an owner wrote a "completed" reconciliation out by RM99,999, which
+    then refused the real October close. A delete reopened one silently
+    (the lines' foreign key is `on delete set null`). Now 0740's shape:
+    grant revoked, write policies dropped. The app only ever used the two
+    SECURITY DEFINER functions. Production had no reconciliations. The
+    write-doors gate did not flag it because the policy and the function
+    ask for the same PERMISSION -- what the function adds is rules, and
+    the gate reads permissions. **Awaiting deploy.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -652,6 +670,7 @@ function:
 | `accept_intercompany_bill` | `0759` | 8 / 8 | -- | `intercompany_billing.sql` |
 | `allocate_with_discount`, `allocate_payment_with_discount` | `0760` | 20 / 20 | -- | `settlement_discount.sql` |
 | `settle_deposit` | `0728` | 19 / 19 | -- | `deposits.sql` |
+| `complete_bank_reconciliation` | `0716` | 14 / 15 | 1 (the column rounds the balance) | `bank_reconciliation.sql` |
 
 Every equivalent is written into its mutants file with the reason.
 
