@@ -558,7 +558,12 @@ page and renumbering would quietly break the reference.
     bill of 9,500. Found by writing the purchase-side block for
     `credit_purchase_bill`'s sweep: a bill with a discount could not be
     posted to be credited. Production had neither kind of bill.
-    **Awaiting deploy.**
+    **Applied, and read back** (8 October, read-only): recorded; the
+    live posting function spreads the discount (`v_disc - v_run`) and
+    the live `accept_intercompany_bill` copies `d.shipping_amount`; both
+    still SECURITY DEFINER; `accept_intercompany_bill` executable by
+    `authenticated` and not `anon`, the internal posting function by
+    neither.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
