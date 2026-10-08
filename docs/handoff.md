@@ -654,8 +654,13 @@ page and renumbering would quietly break the reference.
     payment to `void` or `deleted_at` as fixture states. Nothing in the
     product does that to a posted row, so such a row can only predate
     0764; each fixture now lifts the trigger for that one statement and
-    says why. Still not looked at from the same list: `tax_filings`,
-    `tax_estimate_payments` (no guard at all) and `payroll_runs`.
+    says why. The rest of the list was then looked at and NOT raised:
+    `tax_filings` and `tax_estimate_payments` are written by functions
+    asking the same `can_post` their policies ask, adding only
+    validation (a known filing type, an instalment number within the
+    count), and neither touches the ledger; `payroll_runs` is the same
+    with `can_run_payroll`. Direct writes there are a data-quality gap,
+    not an escalation or a figure disagreeing with a journal.
     **Awaiting deploy.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
