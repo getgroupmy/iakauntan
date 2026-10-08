@@ -593,7 +593,10 @@ page and renumbering would quietly break the reference.
     SECURITY DEFINER functions. Production had no reconciliations. The
     write-doors gate did not flag it because the policy and the function
     ask for the same PERMISSION -- what the function adds is rules, and
-    the gate reads permissions. **Awaiting deploy.**
+    the gate reads permissions. **Applied, and read back** (8 October,
+    read-only): recorded; `authenticated` holds only SELECT; one policy
+    left (`bank_reconciliations_select`); RLS on; both functions still
+    SECURITY DEFINER.
 29. ~~An accountant can unlock a locked year-end period.~~ **Raised and
     answered 8 October: close it, periods and years both. Built in
     `0762`.** Found by scanning for 0761's shape -- a table clients may
