@@ -329,7 +329,12 @@ begin
                              date '2026-01-10', date '2026-02-10');
   v_void := pg_temp.ag_receipt(v_org, v_cust, 'RC-VOID', 2000,
                                date '2026-01-20');
+  -- A posted receipt marked void can only predate 0764, which freezes a
+  -- posted row; the report still has to read one right. So the trigger
+  -- is lifted for this one fixture statement and put straight back.
+  alter table public.receipts disable trigger receipts_posted_is_posted;
   update public.receipts set status = 'void' where id = v_void;
+  alter table public.receipts enable trigger receipts_posted_is_posted;
   perform pg_temp.check_eq('a voided receipt is not on the listing',
     (select count(*) from public.report_ar_aging(v_org, date '2026-03-31') a
       where a.document_id = v_void), 0);
@@ -346,7 +351,12 @@ begin
   perform pg_temp.check_eq('a live receipt settles its invoice',
     (select count(*) from public.report_ar_aging(v_org, date '2026-03-31') a
       where a.document_id = v_late), 0);
+  -- A posted receipt marked void can only predate 0764, which freezes a
+  -- posted row; the report still has to read one right. So the trigger
+  -- is lifted for this one fixture statement and put straight back.
+  alter table public.receipts disable trigger receipts_posted_is_posted;
   update public.receipts set status = 'void' where id = v_rec;
+  alter table public.receipts enable trigger receipts_posted_is_posted;
   perform pg_temp.check_eq('and a voided one gives the invoice back',
     (select a.outstanding from public.report_ar_aging(
        v_org, date '2026-03-31') a where a.document_id = v_late), 3000);

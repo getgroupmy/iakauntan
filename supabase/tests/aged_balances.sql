@@ -502,7 +502,12 @@ begin
   -- And one posted and then deleted.
   v_rcp := pg_temp.receipt(v_org, v_cust, 'RCP-GONE', 150, date '2026-02-17',
                            v_inv);
+  -- A posted receipt marked deleted can only predate 0764, which freezes a
+  -- posted row; the report still has to read one right. So the trigger
+  -- is lifted for this one fixture statement and put straight back.
+  alter table public.receipts disable trigger receipts_posted_is_posted;
   update public.receipts set deleted_at = now() where id = v_rcp;
+  alter table public.receipts enable trigger receipts_posted_is_posted;
 
   perform pg_temp.check_eq(
     'only money that reached the ledger settles an invoice',
@@ -608,10 +613,20 @@ begin
   values (v_org, v_pay, v_bill, 70);
   v_pay := pg_temp.pay(v_org, v_supp, 'PAY-GONE', 60, date '2026-02-27',
                        v_bill);
+  -- A posted supplier payment marked deleted can only predate 0764, which freezes a
+  -- posted row; the report still has to read one right. So the trigger
+  -- is lifted for this one fixture statement and put straight back.
+  alter table public.purchase_payments disable trigger purchase_payments_posted_is_posted;
   update public.purchase_payments set deleted_at = now() where id = v_pay;
+  alter table public.purchase_payments enable trigger purchase_payments_posted_is_posted;
   v_pay := pg_temp.pay(v_org, v_supp, 'PAY-VOID', 50, date '2026-02-27',
                        v_bill);
+  -- A posted supplier payment marked void can only predate 0764, which freezes a
+  -- posted row; the report still has to read one right. So the trigger
+  -- is lifted for this one fixture statement and put straight back.
+  alter table public.purchase_payments disable trigger purchase_payments_posted_is_posted;
   update public.purchase_payments set status = 'void' where id = v_pay;
+  alter table public.purchase_payments enable trigger purchase_payments_posted_is_posted;
 
   -- One thousand, less the three hundred paid. Nothing else that
   -- names it reached the ledger.

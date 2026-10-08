@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-15721
+15732
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1035,3 +1035,7 @@
 #
 # 8 October: 15721. 0763, withholding certificates written only by
 # their functions. run_locally.sh at 0763: 386 files, 15721 assertions.
+#
+# 8 October: 15732. 0764, posted receipts and payments frozen and bank
+# transfers written only by function. run_locally.sh at 0764: 386 files,
+# 15732 assertions.

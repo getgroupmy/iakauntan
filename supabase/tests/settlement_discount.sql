@@ -868,4 +868,108 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+
+-- ---------------------------------------------------------------------
+-- A posted receipt says what was received  (0764)
+--
+-- Only the journal link of a posted receipt or payment was guarded, so
+-- a posted RM1,000 receipt could be rewritten to RM50,000 -- unapplied,
+-- and ready to clear invoices nobody paid -- under a journal still
+-- saying RM1,000. Once posted, only what allocating recomputes may
+-- change; a draft is as editable as it was.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_owner uuid := pg_temp.test_user();
+  v_org uuid; v_cust uuid; v_sup uuid; v_bank uuid; v_terms uuid;
+  v_rcp uuid; v_draft uuid; v_pay uuid; v_inv uuid; v_n integer; v_role text;
+  v_today date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
+begin
+  v_org := pg_temp.test_org('Resit Beku Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  perform pg_temp.sign_in_as(v_owner);
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-1', 'Pelanggan', 'customer') returning id into v_cust;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'S-1', 'Pembekal', 'supplier') returning id into v_sup;
+  insert into public.bank_accounts (org_id, account_id, name, bank_name, currency)
+  values (v_org, (select id from public.accounts where org_id = v_org and code = '1110'),
+          'Current account', 'Maybank', 'MYR') returning id into v_bank;
+  v_terms := pg_temp.sd_terms(v_org, 'N30', 30, 'net');
+
+  insert into public.receipts (org_id, receipt_no, receipt_date, contact_id,
+     bank_account_id, amount, unapplied_amount, currency, exchange_rate)
+  values (v_org, 'RCP-1', v_today, v_cust, v_bank, 1000, 1000, 'MYR', 1)
+  returning id into v_rcp;
+  perform public.post_receipt(v_rcp);
+  insert into public.receipts (org_id, receipt_no, receipt_date, contact_id,
+     bank_account_id, amount, unapplied_amount, currency, exchange_rate)
+  values (v_org, 'RCP-DRAFT', v_today, v_cust, v_bank, 200, 200, 'MYR', 1)
+  returning id into v_draft;
+  insert into public.purchase_payments (org_id, payment_no, payment_date,
+     contact_id, bank_account_id, amount, unapplied_amount, currency, exchange_rate)
+  values (v_org, 'PAY-1', v_today, v_sup, v_bank, 700, 700, 'MYR', 1)
+  returning id into v_pay;
+  perform public.post_purchase_payment(v_pay);
+
+  -- The posted receipt, rewritten straight through the table.
+  begin
+    set local role authenticated;
+    v_role := current_user;
+    begin
+      update public.receipts set amount = 50000, unapplied_amount = 50000 where id = v_rcp;
+      v_n := 1;
+    exception when insufficient_privilege then v_n := -1;
+    end;
+  end;
+  reset role;
+  perform pg_temp.check_true('the test ran under row level security',
+    v_role = 'authenticated');
+  perform pg_temp.check_eq('a posted receipt cannot be made to say more was received', v_n, -1);
+  perform pg_temp.check_eq('it still says what its journal says',
+    (select amount from public.receipts where id = v_rcp), 1000);
+
+  perform pg_temp.sign_in_as(v_owner);
+  begin
+    set local role authenticated;
+    begin
+      delete from public.receipts where id = v_rcp;
+      v_n := 1;
+    exception when insufficient_privilege then v_n := -1;
+    end;
+  end;
+  reset role;
+  perform pg_temp.check_eq('nor be deleted from under its journal', v_n, -1);
+
+  perform pg_temp.sign_in_as(v_owner);
+  begin
+    set local role authenticated;
+    begin
+      update public.purchase_payments set amount = 7 where id = v_pay;
+      v_n := 1;
+    exception when insufficient_privilege then v_n := -1;
+    end;
+  end;
+  reset role;
+  perform pg_temp.check_eq('and a posted supplier payment the same', v_n, -1);
+
+  -- A draft is the app's to edit.
+  perform pg_temp.sign_in_as(v_owner);
+  begin
+    set local role authenticated;
+    update public.receipts set amount = 250, unapplied_amount = 250 where id = v_draft;
+  end;
+  reset role;
+  perform pg_temp.check_eq('while a draft is as editable as it was',
+    (select amount from public.receipts where id = v_draft), 250);
+
+  -- And allocating still moves what it recomputes.
+  perform pg_temp.sign_in_as(v_owner);
+  v_inv := pg_temp.sd_invoice(v_org, 'INV-1', v_cust, v_terms, 400, v_today);
+  perform public.allocate_with_discount(v_rcp, v_inv, 400);
+  perform pg_temp.check_eq('and setting the posted receipt against an invoice still works',
+    (select unapplied_amount from public.receipts where id = v_rcp), 600);
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

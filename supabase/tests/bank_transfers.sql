@@ -664,4 +664,43 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+
+-- ---------------------------------------------------------------------
+-- Written only by its functions  (0764)
+--
+-- `bank_transfers` had one write policy for every command asking only
+-- `can_post`, and only the journal link was guarded: a posted transfer
+-- could be rewritten under its journal, or deleted. The app only reads
+-- the table.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.tr_org('Pindahan Tetap Sdn Bhd');
+  v_a uuid; v_b uuid; v_id uuid; v_n integer; v_role text;
+begin
+  v_a := pg_temp.bank(v_org, 'Maybank', '1121', 'MYR');
+  v_b := pg_temp.bank(v_org, 'CIMB', '1122', 'MYR');
+  v_id := public.create_bank_transfer(v_a, v_b, 500, date '2026-03-01');
+  perform public.post_bank_transfer(v_id);
+  perform pg_temp.check_true('a transfer is still made and posted through the functions',
+    (select gl_entry_id is not null from public.bank_transfers where id = v_id));
+
+  begin
+    set local role authenticated;
+    v_role := current_user;
+    begin
+      update public.bank_transfers set amount_sent = 5, amount_received = 5 where id = v_id;
+      v_n := 1;
+    exception when insufficient_privilege then v_n := -1;
+    end;
+  end;
+  reset role;
+  perform pg_temp.check_true('the test ran under row level security',
+    v_role = 'authenticated');
+  perform pg_temp.check_eq('a posted transfer cannot be rewritten under its journal', v_n, -1);
+  perform pg_temp.check_eq('and still says five hundred',
+    (select amount_sent from public.bank_transfers where id = v_id), 500);
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

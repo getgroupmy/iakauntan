@@ -630,6 +630,30 @@ page and renumbering would quietly break the reference.
     writers need the same `can_run_payroll` the policy does, so a direct
     write is an integrity question, not an escalation -- not raised yet.
     **Awaiting deploy.**
+31. ~~A posted receipt, supplier payment or bank transfer can be
+    rewritten under its journal.~~ **Raised and answered 8 October:
+    freeze posted receipts and payments; close `bank_transfers`. Built in
+    `0764`.** The next on the list. All three were guarded only by
+    `refuse_reposting`, which protects the journal link. Reproduced: a
+    posted RM1,000 receipt rewritten to RM50,000, unapplied, under a
+    journal still saying RM1,000 -- enough to clear invoices nobody paid.
+    Receipts and payments KEEP their client write grant, because the app
+    inserts drafts; a trigger now freezes every column of a posted row
+    except `unapplied_amount` (which `apply_allocation` recomputes) and
+    refuses a CLIENT deleting one. The full suite caught the first draft
+    refusing every delete: `demo_rebuild.sql` and `demo_practice.sql`
+    tear down whole companies through SECURITY DEFINER code, which runs
+    as the table's owner, and a company deleted outright cascades the
+    same way -- so the delete refusal is for `authenticated`/`anon` only,
+    while the update freeze holds for everybody. `bank_transfers` is read-only to clients, like
+    0761. **Three test fixtures changed with it:** `aged_balances.sql`,
+    `aging_shapes.sql` and `email_receipt.sql` set a POSTED receipt or
+    payment to `void` or `deleted_at` as fixture states. Nothing in the
+    product does that to a posted row, so such a row can only predate
+    0764; each fixture now lifts the trigger for that one statement and
+    says why. Still not looked at from the same list: `tax_filings`,
+    `tax_estimate_payments` (no guard at all) and `payroll_runs`.
+    **Awaiting deploy.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

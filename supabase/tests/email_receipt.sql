@@ -401,7 +401,12 @@ begin
 
   -- A deleted receipt is not evidence of anything, and sending one is
   -- how a customer ends up holding a document the company has voided.
+  -- A posted receipt marked deleted can only predate 0764, which freezes a
+  -- posted row; the report still has to read one right. So the trigger
+  -- is lifted for this one fixture statement and put straight back.
+  alter table public.receipts disable trigger receipts_posted_is_posted;
   update public.receipts set deleted_at = now() where id = v_gone;
+  alter table public.receipts enable trigger receipts_posted_is_posted;
   begin
     perform public.email_receipt(v_gone);
     raise exception 'FAIL: emailed a deleted receipt';
