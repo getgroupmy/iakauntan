@@ -792,4 +792,70 @@ begin
 end $$;
 
 
+
+-- =====================================================================
+-- A posted certificate stays as it was posted  (0763)
+--
+-- `withholding_certificates` could be written directly by anybody who
+-- may post, and only the journal link was guarded: a posted
+-- certificate's tax was cut from 10,000 to 1 under a journal still
+-- saying 10,000, and a posted certificate could be deleted, taking its
+-- allocation against the bill with it. Now only the three functions
+-- write the table.
+-- =====================================================================
+do $$
+declare
+  v_owner uuid := pg_temp.test_user();
+  v_org uuid; v_supp uuid; v_bill uuid; v_id uuid; v_n integer; v_role text;
+begin
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.ws_org('Sijil Tetap Sdn Bhd');
+  perform pg_temp.sign_in_as(v_owner);
+  v_supp := pg_temp.ws_supplier(v_org, 'S-1', 'Overseas Ltd');
+  v_bill := pg_temp.ws_bill(v_org, v_supp, 'BILL-1', 100000);
+  v_id := public.create_withholding(v_bill, 'S109B_SPECIAL', p_gross_amount => 100000);
+  perform pg_temp.check_true('a certificate is still raised and posted through the functions',
+    public.post_withholding(v_id) is not null);
+
+  begin
+    set local role authenticated;
+    v_role := current_user;
+    begin
+      update public.withholding_certificates set tax_amount = 1 where id = v_id;
+      get diagnostics v_n = row_count;
+    exception when insufficient_privilege then v_n := -1;
+    end;
+  end;
+  reset role;
+  perform pg_temp.check_true('the test ran under row level security',
+    v_role = 'authenticated');
+  perform pg_temp.check_eq('a posted certificate''s tax cannot be rewritten under its journal',
+    v_n, -1);
+  perform pg_temp.check_eq('and still says what was posted',
+    (select tax_amount from public.withholding_certificates where id = v_id), 10000);
+
+  perform pg_temp.sign_in_as(v_owner);
+  begin
+    set local role authenticated;
+    begin
+      delete from public.withholding_certificates where id = v_id;
+      get diagnostics v_n = row_count;
+    exception when insufficient_privilege then v_n := -1;
+    end;
+  end;
+  reset role;
+  perform pg_temp.check_eq('nor deleted', v_n, -1);
+  perform pg_temp.check_eq('so the bill keeps its allocation',
+    (select count(*)::integer from public.payment_allocations where withholding_id = v_id), 1);
+
+  perform pg_temp.sign_in_as(v_owner);
+  begin
+    set local role authenticated;
+    select count(*) into v_n from public.withholding_certificates where org_id = v_org;
+  end;
+  reset role;
+  perform pg_temp.check_eq('while it is still there to read', v_n, 1);
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

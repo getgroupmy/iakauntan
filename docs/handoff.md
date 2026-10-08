@@ -613,6 +613,19 @@ page and renumbering would quietly break the reference.
     guarding what is posted. Still worth a look on the same list:
     `payroll_runs` and `withholding_certificates` (write policies of `*`)
     and `bank_transactions` / `stock_movements`. **Awaiting deploy.**
+30. ~~A posted withholding certificate can be rewritten or deleted.~~
+    **Raised and answered 8 October: close it. Built in `0763`.** The
+    next on 29's list. `withholding_certificates` had one `for all`
+    write policy asking `can_post`, and `refuse_reposting` guards only
+    the journal link. Reproduced: a posted certificate's tax cut from
+    RM10,000 to RM1 under a journal still saying RM10,000; a direct
+    delete cascaded away its allocation against the bill. The app never
+    wrote the table. Now only `create_withholding`, `post_withholding`
+    and `remit_withholding` do. Production had no certificates.
+    `payroll_runs` was looked at and is a different case: its status
+    writers need the same `can_run_payroll` the policy does, so a direct
+    write is an integrity question, not an escalation -- not raised yet.
+    **Awaiting deploy.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
