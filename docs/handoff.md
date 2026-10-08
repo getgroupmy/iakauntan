@@ -612,7 +612,11 @@ page and renumbering would quietly break the reference.
     allocations are written directly ON PURPOSE as drafts, with triggers
     guarding what is posted. Still worth a look on the same list:
     `payroll_runs` and `withholding_certificates` (write policies of `*`)
-    and `bank_transactions` / `stock_movements`. **Awaiting deploy.**
+    and `bank_transactions` / `stock_movements`. **Applied, and read
+    back** (8 October, read-only): recorded; `authenticated` holds only
+    SELECT on both tables; the only policies left are
+    `fiscal_periods_select` and `fiscal_years_select`; RLS on; the five
+    functions still SECURITY DEFINER.
 30. ~~A posted withholding certificate can be rewritten or deleted.~~
     **Raised and answered 8 October: close it. Built in `0763`.** The
     next on 29's list. `withholding_certificates` had one `for all`
