@@ -42,7 +42,7 @@ grant select on t_pay to authenticated;
 do $$
 declare
   v_org uuid; v_owner uuid := pg_temp.test_user(); v_hr uuid; v_emp uuid;
-  v_period uuid;
+  v_period uuid; v_posted_period uuid;
   v_open_run uuid; v_open_slip uuid; v_open_line uuid;
   v_run uuid; v_slip uuid; v_line uuid;
 begin
@@ -58,6 +58,12 @@ begin
     (org_id, code, period_start, period_end, pay_date)
   values (v_org, '2026-08', date '2026-08-01', date '2026-08-31',
           date '2026-08-31') returning id into v_period;
+  -- The posted run is July's. Both used to be August's, two runs over
+  -- one period, which `0769` refuses: each would pay everybody for it.
+  insert into public.pay_periods
+    (org_id, code, period_start, period_end, pay_date)
+  values (v_org, '2026-07', date '2026-07-01', date '2026-07-31',
+          date '2026-07-31') returning id into v_posted_period;
 
   -- One run still being worked on, and one that has been posted. The
   -- pair is the whole point: the rule has to bite on the second and
@@ -77,7 +83,7 @@ begin
           false, false, false, false) returning id into v_open_line;
 
   insert into public.payroll_runs (org_id, run_no, period_id, status)
-  values (v_org, 'PR-POSTED', v_period, 'posted') returning id into v_run;
+  values (v_org, 'PR-POSTED', v_posted_period, 'posted') returning id into v_run;
   insert into public.payslips
     (org_id, run_id, employee_id, employee_no, employee_name,
      basic_salary, gross_pay, total_deductions, net_pay,

@@ -2040,15 +2040,19 @@ begin
              + interval '2 month -1 day')::date,
           pg_temp.today() + 31) returning id into v_second;
 
+  -- This measured "without a key, one pay period gets two payroll runs,
+  -- with two run numbers burnt" -- 0738's reason for the key. `0769`
+  -- refuses a second live run for a period outright, keyed or not, so
+  -- the double cannot happen now and the measurement is of the refusal.
   perform public.create_payroll_run(v_org, v_period, 'Bulan ini');
-  perform public.create_payroll_run(v_org, v_period, 'Bulan ini');
-  perform pg_temp.check_eq(
-    'without a key, one pay period gets two payroll runs',
-    (select count(*)::integer from public.payroll_runs
-      where org_id = v_org and period_id = v_period), 2);
-  perform pg_temp.check_eq('with two run numbers burnt',
+  perform pg_temp.check_refused(
+    'without a key, a second run for the period is refused (0769)',
+    format('select public.create_payroll_run(%L, %L, %L)',
+           v_org, v_period, 'Bulan ini'),
+    'Pay period P1 already has payroll run %', '23505');
+  perform pg_temp.check_eq('so one run, and one run number burnt',
     (select count(distinct run_no)::integer from public.payroll_runs
-      where org_id = v_org), 2);
+      where org_id = v_org), 1);
 
   v_first := public.create_payroll_run(
     p_org_id := v_org, p_period_id := v_second, p_description := 'Bulan depan',

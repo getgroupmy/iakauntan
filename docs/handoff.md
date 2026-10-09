@@ -787,7 +787,11 @@ page and renumbering would quietly break the reference.
     from `0457`, md5-verified against production by replay. Swept: 16 /
     16 (`statutory_remittance.py`) after one assertion added for the
     reference a second recording keeps; `mutate.py` on the screen 5 / 5.
-    **Awaiting deploy.**
+    **Applied, and read back** (9 October, read-only, after run
+    37879258774 on `140957d`): recorded; the nil refusal in the live
+    function; the report's two new columns and its overdue reading the
+    amount; the due list filtering on `short_amount`; `anon` cannot run
+    the report, `authenticated` can; the comment carried over the drop.
 35. ~~A CP204 instalment with anything paid on it is paid.~~ **Raised
     and answered 9 October: the same fix as 0767. Built in `0768`.**
     The schedule already said what was OUTSTANDING; the summary behind
@@ -804,6 +808,28 @@ page and renumbering would quietly break the reference.
     than 0 when it could not. Both restated from `0673`, md5-verified by
     replay. Swept 14 / 14 (`tax_instalment.py`) after one assertion for
     a missing estimate. **Awaiting deploy.**
+36. ~~Two payroll runs for one pay period pay everybody twice.~~
+    **Raised and answered 9 October: one live run per period. Built in
+    `0769`.** Found sweeping `create_payroll_run`, which asked only
+    `can_run_payroll`; `calculate_payroll_run` pays every employee
+    active in the period their whole basic salary, and there are no run
+    types. Reproduced: two January runs, both posted -- a RM5,000
+    employee had two payslips and RM10,000; the salary journal doubled;
+    EPF owed went from RM1,200 to RM2,400. The app's "New run" offered
+    January again. No production period had a second run. Now a partial
+    unique index allows one run per period that is not void, and
+    `create_payroll_run` (restated from `0037`, md5 f3539b22 by replay)
+    refuses first, naming the run that exists. Four fixtures had relied
+    on the double -- `posted_payslip_is_frozen.sql` kept a calculated
+    and a posted run in one period, and the posted one is now July's; `payroll_periods.sql` asserted "a second run against
+    the same period is allowed" for a company that voids a run and
+    raises another -- which still works, a void run does not hold its
+    period, and is now asserted; `idempotency.sql` measured the double
+    as 0738's reason for the key; `payroll_engine_sweep.sql` raised a
+    second run to recalculate under a new levy table, and now
+    recalculates the same run, which is what the refusal tells a person
+    to do. Swept 3 / 4 plus one equivalent (`create_payroll_run.py`).
+    **Awaiting deploy.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -892,6 +918,7 @@ function:
 | `mark_payroll_paid` | `0051` | 5 / 5 | -- | `statutory.sql` (one only after asserting `paid_at`) |
 | `record_tax_instalment`, `tax_estimate_payment_summary` | `0768` | 14 / 14 | -- | `tax_estimate_payments.sql` (one more assertion for a missing estimate) |
 | `apply_tax_submission`, `dismiss_tax_submission` | `0626` | 8 / 8 | -- | `tax_details.sql` (four only after its rule-by-rule block) |
+| `create_payroll_run` | `0769` | 3 / 4 | 1 (another company's run cannot name this period: `payroll_runs_period_same_org`) | `payroll_periods.sql` |
 
 Every equivalent is written into its mutants file with the reason.
 

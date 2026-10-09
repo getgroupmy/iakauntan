@@ -211,10 +211,18 @@ begin
   perform pg_temp.check_eq('with nobody on it yet', r.employee_count, 0);
   perform pg_temp.check_eq('and nothing computed', r.total_gross, 0);
 
-  -- Two runs against one period are numbered in sequence rather than
-  -- colliding: a company that voids a run and raises another needs both.
-  perform pg_temp.check_true('a second run against the same period is allowed',
-    public.create_payroll_run(v_org, v_period, 'July, again') is not null);
+  -- A second LIVE run against one period is refused (0769). Every run
+  -- pays every employee for the whole period, so it could only be the
+  -- first one paid again. This said "allowed", for a company that voids
+  -- a run and raises another -- which still works, because a void run
+  -- does not hold its period: the 0769 block at the end of this file.
+  perform pg_temp.check_refused('a second live run against the same period is refused',
+    format('select public.create_payroll_run(%L, %L, %L)', v_org, v_period, 'July, again'),
+    'Pay period 2026-07 already has payroll run %', '23505');
+  -- Runs against two periods are numbered in sequence, not colliding.
+  perform pg_temp.check_true('a run against the next period is raised',
+    public.create_payroll_run(v_org, public.ensure_pay_period(v_org, 2026, 8),
+                              'August') is not null);
   perform pg_temp.check_eq('and the numbers do not collide',
     (select count(distinct run_no) from public.payroll_runs
       where org_id = v_org), 2);
@@ -318,6 +326,47 @@ begin
     raise notice 'ok   a non-member cannot raise a payroll run';
   end;
   perform pg_temp.sign_out();
+end $$;
+
+-- ---------------------------------------------------------------------
+-- 0769: one payroll for one pay period
+--
+-- Reproduced before it: two January runs, both posted, paid a RM5,000
+-- employee RM10,000 and doubled the EPF owed. The refusal in
+-- `create_payroll_run` is asserted above; these are the index under it,
+-- the way back through a void run, and the idempotent wrapper.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_period uuid; v_run uuid; v_again uuid; v_keyed uuid;
+begin
+  v_org := pg_temp.test_org('Satu Gaji Sebulan Sdn Bhd');
+  v_period := public.ensure_pay_period(v_org, 2026, 3);
+  v_run := public.create_payroll_run(v_org, v_period, 'March');
+
+  -- Whatever writes the row: the table is writable by somebody who may
+  -- run payroll, and two people can press the button at once.
+  perform pg_temp.check_refused('a second live run cannot be written straight in either',
+    format($q$insert into public.payroll_runs (org_id, period_id, run_no)
+              values (%L, %L, 'PAY-DIRECT')$q$, v_org, v_period),
+    '%payroll_runs_one_live_per_period%', '23505');
+
+  -- A void run does not hold its period.
+  update public.payroll_runs set status = 'void' where id = v_run;
+  v_again := public.create_payroll_run(v_org, v_period, 'March, raised again');
+  perform pg_temp.check_true('once the first is void, the period takes another',
+    v_again is not null and v_again <> v_run);
+
+  -- The idempotent wrapper: the same key hands back the same run, and a
+  -- new key is refused like anything else.
+  v_period := public.ensure_pay_period(v_org, 2026, 4);
+  v_keyed := public.create_payroll_run(v_org, v_period, 'April', 'key-april-1');
+  perform pg_temp.check_eq('a replay of the same key is the same run',
+    public.create_payroll_run(v_org, v_period, 'April', 'key-april-1'), v_keyed);
+  perform pg_temp.check_refused('and a new key for the same period is refused',
+    format('select public.create_payroll_run(%L, %L, %L, %L)',
+           v_org, v_period, 'April', 'key-april-2'),
+    'Pay period % already has payroll run %', '23505');
 end $$;
 
 rollback;

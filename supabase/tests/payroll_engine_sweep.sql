@@ -1293,7 +1293,8 @@ begin
      set effective_to = date '2026-09-30'
    where body = 'hrdf' and id <> v_sched;
 
-  v_run := public.create_payroll_run(v_org, v_period);
+  -- The same run, recalculated. This raised a second run for the period,
+  -- which `0769` refuses: every run pays everybody for the whole period.
   perform public.calculate_payroll_run(v_run);
   select hrdf into v_amt
     from public.payslips where run_id = v_run and employee_no = 'H1';
