@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-16187
+16212
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1095,3 +1095,8 @@
 # 9 October: 16187. import_journals and rollback_import_batch swept, and
 # 0774: a contact code in a journal file has to be somebody.
 # run_locally.sh at 0774: 386 files, 16187 assertions.
+#
+# 9 October: 16212. close_matter and reopen_matter swept, and 0775: a
+# matter is closed or archived by any road only when the client account
+# holds nothing for it. run_locally.sh at 0775: 386 files, 16212
+# assertions.

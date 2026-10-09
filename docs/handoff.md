@@ -969,6 +969,35 @@ page and renumbering would quietly break the reference.
     company, in any case; an empty column is still allowed. Restated
     from `0633`, whose text production runs exactly (96953790...);
     production had imported no journals. Swept 5 / 5.
+    **Applied, and read back** (9 October, read-only, after run
+    37909859849 on `fe0b33d`): recorded; the live
+    `app.validate_journal_rows` hashes to c93dce3b..., the same as the
+    local build, and carries the new refusal; still STABLE; execute
+    granted to `authenticated` and `service_role`, not `anon`; the
+    comment names `0774`. The run before it (`19585c7`) was red on
+    `check_blind_catches.py` -- the first version of the journal block
+    caught the deleted-contact case with a blind `when others`, 42
+    against a budget of 41 -- and `fe0b33d`, which asserts it by
+    `check_refused`, put it back at 41. That gate is not in
+    `run_locally.sh`; run the CI gates that read `supabase/tests/`
+    (`check_blind_catches`, `check_test_clock`) before a test-only push.
+42. ~~A legal matter holding client money can be closed by hand.~~
+    **Raised and answered 9 October: guard the table. Built in
+    `0775`.** Found sweeping `close_matter`: its refusal -- no closing
+    while the client account holds money for the file, the Legal
+    Profession (Accounts) Rules route to unclaimed client money -- lived
+    in the function only, and `matters_update` lets any member who can
+    write set `status` and `closed_date` directly. Measured: one UPDATE,
+    as an ordinary member, closed a matter holding RM5,000. Now a
+    SECURITY DEFINER trigger asks every change INTO closed or archived
+    the same two questions in the same words (money held, closing before
+    opening); leaving closed is never refused, and a closed file's other
+    fields stay editable. Production held four matters, all open, two
+    holding money -- nothing existing is refused. Swept 7 / 7.
+    NOT RAISED YET, found on the way: a client receipt can still be
+    POSTED to a closed matter (measured), which recreates exactly the
+    state the rule exists to prevent; whether a late receipt should be
+    refused, or should reopen the file, is a question for the user.
     **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
@@ -1150,6 +1179,9 @@ function:
 | `import_journals` | `0633` | 13 / 16 | 3 | `import_journals.sql` (eight before its block: numeric account codes, no contacts, no undescribed entries, nothing below the sen; equivalent: `create_gl_entry_internal` rounds every line itself, and since `0774` the validator refuses a deleted contact first) |
 | `validate_journal_rows` (contact check) | `0774` | 5 / 5 | -- | `import_journals.sql` (new in `0774`) |
 | `rollback_import_batch` | `0610` | 9 / 10 | 1 | `import_provenance.sql` (four before its block: one batch, one company, its owner, no children; equivalent: no delete is ever skipped silently, so nothing is "kept") |
+| `close_matter` | `0372` | 20 / 22 | 2 | `matter_closing.sql` (nine before its block; the money rule could be walked round by a table UPDATE -- `0775`; equivalent since then: its money and date checks, which the trigger repeats word for word) |
+| `reopen_matter` | `0372` | 8 / 8 | -- | `matter_closing.sql` (three before its block: no archived matter was ever reopened) |
+| `app.matter_closes_only_when_empty` | `0775` | 7 / 7 | -- | `matter_closing.sql` (new in `0775`; a late receipt on a closed file is what tells "on the way in" from "every time") |
 
 Every equivalent is written into its mutants file with the reason.
 
