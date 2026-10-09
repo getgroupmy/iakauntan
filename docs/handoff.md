@@ -842,6 +842,7 @@ function:
 | `upsert_account` (0766's guards) | `0766` | 10 / 10 | -- | `chart_of_accounts.sql` |
 | `raise_rent_invoices` | `0585` | 16 / 16 | -- | `property.sql` (ten only after its rule-by-rule block; three were shadowed by `rent_preview`'s own refusal, separated by a viewer) |
 | `raise_strata_charges` | `0585` | 19 / 19 | -- | `property.sql` (thirteen only after its rule-by-rule block; it had no assertion that a period is not raised twice) |
+| `transfer_document` | `0646` | 31 / 31 | -- | six files: 18 by `transfer.sql`, the other 13 each by one of `approvals`, `document_dates`, `prospect_quotation`, `transfer_carries_the_price_agreed`, `transfer_shapes` (listed in the mutants file) |
 
 Every equivalent is written into its mutants file with the reason.
 
