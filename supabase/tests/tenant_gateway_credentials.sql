@@ -463,4 +463,136 @@ begin
   perform pg_temp.sign_in_as(v_owner);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The keys a waiting payment needs stay  (`0779`)
+--
+-- A payment started in the last day and still pending will be
+-- confirmed against the keys of its own company, acquirer and mode, so
+-- those keys are not removed under it. One older than a day is a
+-- checkout somebody abandoned and holds nothing; neither does one
+-- already paid, one in the other mode, through another acquirer, or
+-- another company's. Switching the acquirer off is never refused.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_owner uuid := pg_temp.test_user();
+  v_org   uuid := pg_temp.test_org('Kunci Menunggu Sdn Bhd');
+  v_them  uuid;
+  v_cus   uuid;
+  v_doc   uuid;
+  v_doc2  uuid;
+begin
+  perform pg_temp.allow_many_companies();
+  v_them := pg_temp.test_org('Kunci Jiran Sdn Bhd');
+  perform pg_temp.sign_in_as(v_owner);
+
+  perform public.set_org_payment_gateway(
+    v_org, 'billplz', 'sandbox', 'sk_test', 'col_t', 'xsig_t', false);
+  perform public.set_org_payment_gateway(
+    v_org, 'billplz', 'production', 'sk_live', 'col_l', 'xsig_l', true);
+  perform public.set_org_payment_gateway(
+    v_org, 'toyyibpay', 'production', 'tp_live', 'cat_l', 'tsig_l', false);
+  perform public.set_org_payment_gateway(
+    v_them, 'billplz', 'production', 'sk_their', 'col_x', 'xsig_x', true);
+
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-1', 'Pelanggan Sdn Bhd', 'customer') returning id into v_cus;
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'invoice', 'INV-1', pg_temp.today(), v_cus, 'MYR', 1,
+          'draft') returning id into v_doc;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_them, 'C-1', 'Pelanggan Jiran', 'customer') returning id into v_cus;
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_them, 'invoice', 'INV-1', pg_temp.today(), v_cus, 'MYR', 1,
+          'draft') returning id into v_doc2;
+
+  insert into public.sales_gateway_payments
+    (org_id, document_id, gateway_code, mode, provider_ref, amount, state,
+     created_at)
+  values
+    -- Two live Billplz payments on their way back.
+    (v_org, v_doc, 'billplz', 'production', 'live-1', 100, 'pending',
+     now() - interval '2 hours'),
+    (v_org, v_doc, 'billplz', 'production', 'live-2', 100, 'pending',
+     now() - interval '23 hours'),
+    -- Abandoned: older than a day.
+    (v_org, v_doc, 'billplz', 'production', 'live-old', 100, 'pending',
+     now() - interval '25 hours'),
+    -- Already confirmed.
+    (v_org, v_doc, 'billplz', 'production', 'live-paid', 100, 'paid',
+     now() - interval '1 hour'),
+    -- One in the sandbox.
+    (v_org, v_doc, 'billplz', 'sandbox', 'test-1', 100, 'pending',
+     now() - interval '1 hour'),
+    -- Through the other acquirer.
+    (v_org, v_doc, 'toyyibpay', 'production', 'tp-1', 100, 'pending',
+     now() - interval '1 hour'),
+    -- Another company's.
+    (v_them, v_doc2, 'billplz', 'production', 'their-1', 100, 'pending',
+     now() - interval '1 hour');
+
+  perform pg_temp.check_refused(
+    'live keys stay while two live payments are on their way back',
+    format('select public.clear_org_payment_gateway(%L, %L, %L)',
+           v_org, 'billplz', 'production'),
+    '2 payments started through Billplz in the last day are still waiting '
+    'to be confirmed. Wait a day, or switch the acquirer off now, which '
+    'stops new ones.', '23514');
+  perform pg_temp.check_refused(
+    'and the sandbox''s, while its one is, said in the singular',
+    format('select public.clear_org_payment_gateway(%L, %L, %L)',
+           v_org, 'billplz', 'sandbox'),
+    '1 payment started through Billplz in the last day is still waiting '
+    'to be confirmed. Wait a day, or switch the acquirer off now, which '
+    'stops new ones.', '23514');
+  perform pg_temp.check_eq('both modes'' keys are still there',
+    (select count(*)::integer from public.org_payment_gateways
+      where org_id = v_org and gateway_code = 'billplz'), 2);
+
+  -- Switching off is what the refusal offers, and it is not refused.
+  perform public.set_org_payment_gateway(
+    v_org, 'billplz', 'production', null, null, null, false);
+  perform pg_temp.check_true('switching the acquirer off is not refused',
+    not (select is_active from public.org_payment_gateways
+          where org_id = v_org and gateway_code = 'billplz'
+            and mode = 'production'));
+
+  -- A day on, the two have been confirmed or abandoned, and the keys
+  -- go -- with the paid one, the old one, and the sandbox, other
+  -- acquirer and other company's waiting payments still where they were.
+  update public.sales_gateway_payments
+     set created_at = now() - interval '25 hours'
+   where provider_ref in ('live-1', 'live-2');
+  perform public.clear_org_payment_gateway(v_org, 'billplz', 'production');
+  perform pg_temp.check_eq('a day on, the live keys go',
+    (select count(*)::integer from public.org_payment_gateways
+      where org_id = v_org and gateway_code = 'billplz'
+        and mode = 'production'), 0);
+  perform pg_temp.check_eq('and the sandbox''s stay',
+    (select count(*)::integer from public.org_payment_gateways
+      where org_id = v_org and gateway_code = 'billplz'
+        and mode = 'sandbox'), 1);
+
+  perform pg_temp.check_refused(
+    'the other company''s waiting payment holds its own keys',
+    format('select public.clear_org_payment_gateway(%L, %L, %L)',
+           v_them, 'billplz', 'production'),
+    '1 payment started through Billplz in the last day is still waiting '
+    'to be confirmed. Wait a day, or switch the acquirer off now, which '
+    'stops new ones.', '23514');
+  perform pg_temp.check_refused(
+    'and the other acquirer''s, its, named by its own name',
+    format('select public.clear_org_payment_gateway(%L, %L, %L)',
+           v_org, 'toyyibpay', 'production'),
+    '1 payment started through toyyibPay in the last day is still waiting '
+    'to be confirmed. Wait a day, or switch the acquirer off now, which '
+    'stops new ones.', '23514');
+
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

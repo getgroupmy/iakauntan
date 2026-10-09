@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0778",
+    "version": "0779",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -26807,7 +26807,7 @@
       "post": {
         "operationId": "clear_org_payment_gateway",
         "summary": "Removes a company's own acquirer credentials for one gateway in one mode, live or test",
-        "description": "Removes a company's own acquirer credentials for one gateway in one mode, live or test. Customers stop being offered that gateway on a shared invoice -- `shared_payment_options` returns only gateways that are configured and active with a settlement account. Payments already taken are unaffected; what ends is the ability to take more. Needs `can_admin`.\n\n`public.clear_org_payment_gateway(p_org_id uuid, p_gateway text, p_mode text)` Writes. Requires a signed-in user.",
+        "description": "Removes a company's own acquirer credentials for one gateway in one mode, live or test. Customers stop being offered that gateway on a shared invoice -- `shared_payment_options` returns only gateways that are configured and active with a settlement account. Payments already taken are unaffected; what ends is the ability to take more. Refused while a payment through that acquirer in that mode was started in the last day and is still pending, because its callback is checked against these keys (`0779`); switching the acquirer off is not refused. Needs `can_admin`.\n\n`public.clear_org_payment_gateway(p_org_id uuid, p_gateway text, p_mode text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],

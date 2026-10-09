@@ -1072,6 +1072,26 @@ page and renumbering would quietly break the reference.
     offers only open ones, but `time_entries_write` asks nothing about
     the project's state -- the twin of item 43 for jobs. Not raised yet.
     **Still to read back.**
+46. ~~Gateway keys removed under a payment on its way back.~~ **Raised,
+    answered "refuse with payments pending", raised AGAIN with two facts
+    the first question lacked, and answered "refuse only recent ones".
+    Built in `0779`.** `clear_org_payment_gateway` deleted a mode's keys
+    while a payment in that mode was pending; its callback is checked
+    against those keys (`app.shared_payment_signature_key` read
+    'xsig_live', then null -- measured), so the money would arrive and
+    the invoice never settle. The facts: nothing lets anybody mark a
+    pending payment failed -- only the acquirer's callback moves it --
+    and every abandoned checkout leaves a pending row for good, so
+    refusing on ANY pending payment would lock the keys in after one.
+    Now refused while a payment through that acquirer, in that mode, for
+    that company, started in the last day, is pending: "2 payments
+    started through Billplz in the last day are still waiting to be
+    confirmed. Wait a day, or switch the acquirer off now, which stops
+    new ones." Switching off is never refused. NOT COVERED: a customer
+    paying a bill older than a day after the keys are gone. Restated
+    from `0412` (production hash 41b08b29..., identical); production
+    held no gateway configuration and no gateway payment. Swept 15 / 15.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -1273,7 +1293,7 @@ function:
 | `update_leave_contact` | `0395` | 10 / 10 | -- | `leave_requests.sql` (seven before: no draft, none ending today, none missing) |
 | `remove_pos_sale_line` | `0225` | 6 / 6 | -- | `pos_fnb.sql` (three before: three files removed lines, none asked a refusal but the kitchen one) |
 | `send_order_to_kitchen` | `0220` | 14 / 14 | -- | `pos_fnb.sql` (six before its block: parked table bills only, every item routed, no notes, the docket's header never read) |
-| `clear_org_payment_gateway` | `0412` | 4 / 4 | -- | `tenant_gateway_credentials.sql` (one before: nothing else held keys in the mode cleared; noted: clearing keys strands a pending payment's callback) |
+| `clear_org_payment_gateway` | `0779` | 15 / 15 | -- | `tenant_gateway_credentials.sql` (one before: nothing else held keys in the mode cleared; then raised: clearing keys stranded a pending payment's callback -- `0779`) |
 | `clear_einvoice_credentials` | `0107` | 3 / 3 | -- | `einvoice_credentials.sql` (none before: "just that environment" was asserted on a company with only that one) |
 
 Every equivalent is written into its mutants file with the reason.
