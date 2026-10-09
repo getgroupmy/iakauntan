@@ -1069,6 +1069,7 @@ function:
 | `set_fiscal_period_status` | `0053` | 8 / 8 | -- | `ledger.sql` (7; three only after its rule-by-rule block) + `year_end_close.sql` (the accountant) |
 | `match_bank_transaction` | `0772` | 17 / 17 | -- | `bank_reconciliation.sql` (four only after its `0772` block: the line that does not exist and another company's payment, expense or journal) |
 | `suggest_bank_matches` (0772's account filter) | `0772` | 4 / 4 | -- | `bank_reconciliation.sql` |
+| `resync_bank_balance` | `0175` | 7 / 8 | 1 (the `posted` filter: nothing writes a journal that is not posted, as the test file's header already said) | `bank_balance_resync.sql` (the not-found message only after it was asserted) |
 
 Every equivalent is written into its mutants file with the reason.
 

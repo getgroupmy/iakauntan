@@ -156,6 +156,13 @@ begin
   end;
   perform pg_temp.check_true('a bank account that does not exist is refused',
     not v_took);
+  -- By its own sentence. "Refused" alone was satisfied with the
+  -- not-found check removed: the permission check below it refuses a
+  -- null company too, as 'Insufficient privileges', and a mutation sweep
+  -- (`mutants/resync_bank_balance.py`) found that passing.
+  perform pg_temp.check_refused('and is said not to exist',
+    format('select public.resync_bank_balance(%L)', gen_random_uuid()),
+    'Bank account % not found');
 
   perform pg_temp.sign_in_as(pg_temp.another_user('stranger@example.test'));
   begin
