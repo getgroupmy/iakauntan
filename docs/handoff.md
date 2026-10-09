@@ -758,7 +758,36 @@ page and renumbering would quietly break the reference.
     replay the source you restate from into a rolled-back transaction
     and compare its `md5(pg_get_functiondef(...))` with production's.
     `0766` was rebuilt on `0550` that way (a6e8d692 both). **Search
-    migrations for a function with `grep -i`.** **Awaiting deploy.**
+    migrations for a function with `grep -i`.** **Applied, and read
+    back** (9 October, read-only, after run 37869163563 on `3589b09`):
+    recorded; production's `upsert_account` hashes to 2fb4b588..., the
+    same as the local build; both guards present, `0550`'s pairing rule
+    still there, the kept-parent clause there; grants unchanged
+    (`authenticated`, `service_role`); DEVINDER's 1200 and GESWANT's
+    1300 still leaves, untouched, as answered.
+34. ~~A remittance of any amount settles the contribution.~~ **Raised
+    and answered 9 October: refuse nil, and show the shortfall. Built in
+    `0767`.** Found sweeping `record_statutory_remittance`.
+    `report_statutory_remittances` decided KWSP / PERKESO / LHDN had been
+    paid by whether a payment ROW existed; the amount was never read
+    back, and `report_statutory_due` dropped anything with a row.
+    Reproduced against an overdue RM1,200 of EPF: RM0 or RM1 made it
+    "not overdue" and unchased; a negative amount was accepted. The app
+    could send the nil unasked -- the amount box is free text read with
+    `double.tryParse(...) ?? 0`, so a cleared box or "1,234.50" recorded
+    RM0 and said "Recorded". Production had no remittances against its
+    nine posted payrolls. Now: nil or less is refused; the report
+    returns `paid_amount` and `short_amount` (appended, so the drop and
+    recreate moves no existing column) and a contribution is overdue
+    until what was sent covers it -- more is allowed, for arrears; the
+    due list chases anything short. The screen shows "RM x short",
+    keeps the button and withholds the tick; the dialog reads the comma
+    and, after a short payment, says to enter the TOTAL sent, because
+    recording again replaces the figure. All three functions restated
+    from `0457`, md5-verified against production by replay. Swept: 16 /
+    16 (`statutory_remittance.py`) after one assertion added for the
+    reference a second recording keeps; `mutate.py` on the screen 5 / 5.
+    **Awaiting deploy.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -843,6 +872,7 @@ function:
 | `raise_rent_invoices` | `0585` | 16 / 16 | -- | `property.sql` (ten only after its rule-by-rule block; three were shadowed by `rent_preview`'s own refusal, separated by a viewer) |
 | `raise_strata_charges` | `0585` | 19 / 19 | -- | `property.sql` (thirteen only after its rule-by-rule block; it had no assertion that a period is not raised twice) |
 | `transfer_document` | `0646` | 31 / 31 | -- | six files: 18 by `transfer.sql`, the other 13 each by one of `approvals`, `document_dates`, `prospect_quotation`, `transfer_carries_the_price_agreed`, `transfer_shapes` (listed in the mutants file) |
+| `record_statutory_remittance`, `report_statutory_remittances`, `report_statutory_due` | `0767` | 16 / 16 | -- | `statutory_remittances.sql` (the sweep found 34; one more assertion for the second recording's reference) |
 
 Every equivalent is written into its mutants file with the reason.
 

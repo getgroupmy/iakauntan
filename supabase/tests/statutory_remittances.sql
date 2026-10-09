@@ -548,4 +548,64 @@ begin
           where period_id = v_period and code = 'epf'));
 end $$;
 
+-- ---------------------------------------------------------------------
+-- 0767: a remittance settles what it covers
+--
+-- The reports asked only whether a payment had been RECORDED. RM0, or
+-- RM1, against RM1,200 of overdue EPF made it "not overdue" and took
+-- it off the list that chases it; a negative amount was taken too. The
+-- app could send the nil without meaning to -- a cleared box, or
+-- "1,234.50", parsed to 0. Each refusal and each figure here has its
+-- partner: what is still short, and then what settles it.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v record;
+  r record;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  select * into v from pg_temp.paid_payroll(
+    'Kilang Kurang Bayar Sdn Bhd', 2026, 1, (app.today() - interval '13 months')::date);
+  select * into r from public.report_statutory_remittances(v.org) where code = 'epf';
+  perform pg_temp.check_true('the EPF is overdue and owed in full',
+    r.is_overdue and r.paid_amount is null and r.short_amount = r.total_amount
+    and r.total_amount > 0);
+
+  perform pg_temp.check_refused('nil is not a remittance',
+    format('select public.record_statutory_remittance(%L, %L, %L, 0)', v.org, v.period, 'epf'),
+    'A remittance is for something: 0.00 is not an amount sent to anybody.', '23514');
+  perform pg_temp.check_refused('nor is a negative amount',
+    format('select public.record_statutory_remittance(%L, %L, %L, -50)', v.org, v.period, 'socso'),
+    'A remittance is for something: -50.00 is not an amount sent to anybody.', '23514');
+  perform pg_temp.check_true('so nothing was recorded',
+    not exists (select 1 from public.statutory_remittances where org_id = v.org));
+
+  -- RM1 of it: recorded, and still owed.
+  perform public.record_statutory_remittance(v.org, v.period, 'epf', 1, app.today(), 'KWSP/SHORT');
+  select * into r from public.report_statutory_remittances(v.org) where code = 'epf';
+  perform pg_temp.check_eq('a short payment is recorded as what it was', r.paid_amount, 1.00::numeric);
+  perform pg_temp.check_eq('and the rest is still short', r.short_amount, r.total_amount - 1);
+  perform pg_temp.check_true('so it is still overdue', r.is_overdue);
+  perform pg_temp.check_true('and still chased',
+    exists (select 1 from public.report_statutory_due(v.org, 3650) d
+             where d.code = 'epf' and d.is_overdue));
+
+  -- The whole of it: settled.
+  perform public.record_statutory_remittance(v.org, v.period, 'epf', r.total_amount, app.today(), 'KWSP/FULL');
+  select * into r from public.report_statutory_remittances(v.org) where code = 'epf';
+  perform pg_temp.check_true('the whole amount settles it',
+    not r.is_overdue and r.short_amount = 0 and r.paid_amount = r.total_amount);
+  perform pg_temp.check_eq('and the record carries the second payment''s reference',
+    r.reference, 'KWSP/FULL');
+  perform pg_temp.check_true('and it stops being chased',
+    not exists (select 1 from public.report_statutory_due(v.org, 3650) d where d.code = 'epf'));
+
+  -- More than is owed, which is how arrears are paid: settled, never
+  -- short by a negative amount.
+  perform public.record_statutory_remittance(v.org, v.period, 'socso', 9999, app.today(), 'PERKESO/ARREARS');
+  select * into r from public.report_statutory_remittances(v.org) where code = 'socso';
+  perform pg_temp.check_true('paying more settles it too, and is short by nothing',
+    not r.is_overdue and r.short_amount = 0 and r.paid_amount = 9999);
+end $$;
+
 rollback;

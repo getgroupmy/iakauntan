@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show SupabaseClient;
 import 'package:iakauntan/src/core/providers.dart';
+import 'package:iakauntan/src/data/repository.dart';
 import 'package:iakauntan/src/features/hr/statutory_remittances_screen.dart';
 
 /// What a posted payroll leaves owing, and to whom, as the screen shows it.
@@ -37,6 +39,8 @@ void main() {
     String? paidOn,
     String? reference,
     bool overdue = false,
+    num? paidAmount,
+    num shortAmount = 0,
   }) => {
     'period_id': period,
     'period_code': period,
@@ -44,19 +48,30 @@ void main() {
     'due_date': dueDate,
     'is_overdue': overdue,
     'name': name,
+    // What the report returns beside the name, and what the dialog
+    // sends back as `p_code`.
+    'code': name.toLowerCase(),
     'authority': authority,
     'employee_amount': employee,
     'employer_amount': employer,
     'total_amount': total,
     'paid_on': paidOn,
     'reference': reference,
+    'paid_amount': paidAmount,
+    'short_amount': shortAmount,
   };
 
-  Widget wrap(List<Map<String, dynamic>> rows, {bool canRun = true}) =>
+  Widget wrap(
+    List<Map<String, dynamic>> rows, {
+    bool canRun = true,
+    Repo? repo,
+  }) =>
       ProviderScope(
         overrides: [
           statutoryRemittancesProvider.overrideWith((ref) async => rows),
+          statutoryDueProvider.overrideWith((ref) async => const []),
           canRunPayrollProvider.overrideWithValue(canRun),
+          if (repo != null) repoProvider.overrideWithValue(repo),
         ],
         child: const MaterialApp(home: StatutoryRemittancesScreen()),
       );
@@ -219,4 +234,105 @@ void main() {
     expect(find.text('Mark sent'), findsNothing);
     expect(find.textContaining('RM 1,100.00'), findsWidgets);
   });
+
+  group('a short payment is not a payment (0767)', () {
+    setUpAll(() => _unusedClient);
+
+    testWidgets('it keeps its button and says how much is short', (
+      tester,
+    ) async {
+      // Sent, but RM1 of RM1,200. The database keeps it overdue; the
+      // screen used to put a tick on anything with a date sent, and
+      // take the button away.
+      await tester.pumpWidget(
+        wrap([
+          row(
+            period: '2026-01',
+            name: 'EPF',
+            authority: 'KWSP',
+            total: 1200,
+            paidOn: '2026-02-10',
+            reference: 'FPX 1',
+            paidAmount: 1,
+            shortAmount: 1199,
+            overdue: true,
+          ),
+        ]),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('RM 1,199.00 short'), findsOneWidget);
+      expect(find.text('Mark sent'), findsOneWidget);
+      expect(find.byIcon(Icons.check_circle_outline), findsNothing);
+    });
+
+    testWidgets('and one paid in full gets its tick', (tester) async {
+      // The control, in its own tree: the same row with nothing short.
+      await tester.pumpWidget(
+        wrap([
+          row(
+            period: '2026-01',
+            name: 'EPF',
+            authority: 'KWSP',
+            total: 1200,
+            paidOn: '2026-02-10',
+            paidAmount: 1200,
+          ),
+        ]),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('short'), findsNothing);
+      expect(find.text('Mark sent'), findsNothing);
+      expect(find.byIcon(Icons.check_circle_outline), findsOneWidget);
+    });
+
+    testWidgets('an amount written with a comma is sent as that amount', (
+      tester,
+    ) async {
+      // `double.tryParse('1,234.50')` is null, and the dialog sent 0 --
+      // which the database recorded as the contribution having gone.
+      final repo = _RecordingRepo();
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.physicalSize = const Size(1200, 900);
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        wrap([
+          row(period: '2026-01', name: 'EPF', authority: 'KWSP', total: 1100),
+        ], repo: repo),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Mark sent'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextField, '1100.00'),
+        '1,234.50',
+      );
+      await tester.tap(find.text('Record it'));
+      await tester.pumpAndSettle();
+
+      final sent = repo.calls
+          .where((c) => c.$1 == 'record_statutory_remittance')
+          .toList();
+      expect(sent, hasLength(1));
+      expect(sent.single.$2!['p_amount'], 1234.5);
+    });
+  });
 }
+
+/// The real repository, so its mapping to `p_amount` is what is
+/// asserted, with the network taken out underneath it.
+class _RecordingRepo extends Repo {
+  _RecordingRepo() : super(_unusedClient, 'org-1');
+
+  final List<(String, Map<String, dynamic>?)> calls = [];
+
+  @override
+  Future<dynamic> callRpc(String fn, {Map<String, dynamic>? params}) async {
+    calls.add((fn, params));
+    return null;
+  }
+}
+
+final _unusedClient = SupabaseClient('https://example.invalid', 'not-a-key');

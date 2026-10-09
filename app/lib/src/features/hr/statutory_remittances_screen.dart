@@ -124,6 +124,11 @@ class _BodyTile extends ConsumerWidget {
     final paidOn = DateTime.tryParse('${row['paid_on'] ?? ''}');
     final due = DateTime.tryParse('${row['due_date'] ?? ''}');
     final overdue = row['is_overdue'] == true;
+    // What is still owed after what was sent (0767). A payment recorded
+    // for less than the contribution does not settle it, so it gets no
+    // tick and keeps its button.
+    final short = (row['short_amount'] as num?)?.toDouble() ?? 0;
+    final settled = paidOn != null && short <= 0;
     final employee = (row['employee_amount'] as num?)?.toDouble() ?? 0;
     final employer = (row['employer_amount'] as num?)?.toDouble() ?? 0;
 
@@ -141,6 +146,7 @@ class _BodyTile extends ConsumerWidget {
           if (paidOn != null)
             'sent ${Fmt.date(paidOn)}'
                 '${row['reference'] == null ? '' : ' · ${row['reference']}'}'
+                '${short > 0 ? ' · ${Fmt.money(short)} short' : ''}'
           else if (due == null)
             'no statutory date — by arrangement'
           else
@@ -167,7 +173,7 @@ class _BodyTile extends ConsumerWidget {
                 Fmt.money((row['total_amount'] as num?)?.toDouble() ?? 0),
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
-              if (paidOn != null) ...[
+              if (settled) ...[
                 const SizedBox(width: 8),
                 Icon(
                   Icons.check_circle_outline,
@@ -179,7 +185,7 @@ class _BodyTile extends ConsumerWidget {
           ),
         ),
         actions: [
-          if (paidOn == null && canRun)
+          if (!settled && canRun)
             RowAction(
               label: 'Mark sent',
               actionKey: 'mark-sent-${row['name']}',
@@ -242,9 +248,15 @@ class _SendDialogState extends ConsumerState<_SendDialog> {
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Amount sent',
                 prefixText: 'RM ',
+                // Recording again replaces what was recorded, so after a
+                // short payment the figure wanted is the TOTAL sent.
+                helperText: widget.row['paid_amount'] == null
+                    ? null
+                    : '${Fmt.money((widget.row['paid_amount'] as num).toDouble())} '
+                          'recorded so far. Enter the total sent for the month.',
               ),
             ),
             const SizedBox(height: 12),
@@ -283,7 +295,14 @@ class _SendDialogState extends ConsumerState<_SendDialog> {
               action: () => repo.recordStatutoryRemittance(
                 periodId: widget.row['period_id'] as String,
                 code: widget.row['code'] as String,
-                amount: double.tryParse(_amount.text.trim()) ?? 0,
+                // "1,234.50" is how a ringgit amount is written, and
+                // `tryParse` refuses the comma: it used to send 0, which
+                // recorded the contribution as paid (0767). What still
+                // does not parse goes as 0 and the database refuses it.
+                amount: double.tryParse(
+                      _amount.text.replaceAll(RegExp(r'[,\s]'), ''),
+                    ) ??
+                    0,
                 paidOn: _on,
                 reference: _reference.text.trim().isEmpty
                     ? null

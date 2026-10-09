@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0766",
+    "version": "0767",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -57046,7 +57046,7 @@
       "post": {
         "operationId": "record_statutory_remittance",
         "summary": "Records a payment over to KWSP, PERKESO or the Inland Revenue Board against a pay period",
-        "description": "Records a payment over to KWSP, PERKESO or the Inland Revenue Board against a pay period. ONLY AGAINST A POSTED PAYROLL: recording a payment to KWSP for a run still in draft would be recording a payment of a figure that can still change. The code must be one the system knows somebody is owed under. Needs `can_run_payroll`, which is its own permission -- what people are paid is not something everybody who may edit a customer should see.\n\n`public.record_statutory_remittance(p_org_id uuid, p_period_id uuid, p_code text, p_amount numeric, p_paid_on date, p_reference text)` Writes. Requires a signed-in user.",
+        "description": "Records a payment over to KWSP, PERKESO or the Inland Revenue Board against a pay period. ONLY AGAINST A POSTED PAYROLL: recording a payment to KWSP for a run still in draft would be recording a payment of a figure that can still change. The code must be one the system knows somebody is owed under. Needs `can_run_payroll`, which is its own permission -- what people are paid is not something everybody who may edit a customer should see. REFUSES AN AMOUNT OF NIL OR LESS (0767): a recorded payment is what the reports read as the contribution having gone.\n\n`public.record_statutory_remittance(p_org_id uuid, p_period_id uuid, p_code text, p_amount numeric, p_paid_on date, p_reference text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -63083,7 +63083,7 @@
       "post": {
         "operationId": "report_statutory_remittances",
         "summary": "What a posted payroll leaves the company owing KWSP, PERKESO, LHDN and HRD Corp, with the fifteenth of the\u2026",
-        "description": "What a posted payroll leaves the company owing KWSP, PERKESO, LHDN and HRD Corp, with the fifteenth of the following month against each, and whether it went. See 0457.\n\n`public.report_statutory_remittances(p_org_id uuid, p_from date, p_to date)` Reads only. Requires a signed-in user.",
+        "description": "What a posted payroll leaves the company owing KWSP, PERKESO, LHDN and HRD Corp, with the fifteenth of the following month against each, and whether it went. See 0457. A contribution is settled only when what was sent covers it: `paid_amount` is what was recorded and `short_amount` what is still owed, and one short-paid stays overdue (0767).\n\n`public.report_statutory_remittances(p_org_id uuid, p_from date, p_to date)` Reads only. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -63170,6 +63170,12 @@
                       },
                       "is_overdue": {
                         "type": "boolean"
+                      },
+                      "paid_amount": {
+                        "type": "number"
+                      },
+                      "short_amount": {
+                        "type": "number"
                       }
                     }
                   }
