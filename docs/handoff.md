@@ -1215,6 +1215,7 @@ function:
 | `set_einvoice_version`, `set_einvoice_signing_certificate`, `clear_einvoice_signing_certificate` | `0615` | 19 / 20 | 1 | `einvoice_signing_certificate.sql` (ten before its block; equivalent: the environment column is NOT NULL; noted: clearing the certificate of a 1.1 company is not refused) |
 | `close_project`, `reopen_project` | `0389` | 14 / 14 | -- | `project_budget.sql` (twelve before: one company with one job carrying hours; noted: `projects_update` closes a job over unbilled hours directly) |
 | `close_lead`, `reopen_lead` | `0373` | 12 / 12 | -- | `win_loss.sql` (four before its block: one clean lead, its owner) |
+| `close_opportunity`, `reopen_opportunity` | `0422`, `0373` | 20 / 20 | -- | `win_loss.sql` (twelve before its block: one won and one lost stage per pipeline, one pipeline, the owner) |
 
 Every equivalent is written into its mutants file with the reason.
 

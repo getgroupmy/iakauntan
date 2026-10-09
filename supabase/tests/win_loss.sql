@@ -392,4 +392,77 @@ begin
   perform pg_temp.sign_in_as(pg_temp.test_user());
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Deals, rule by rule
+--
+-- Every pipeline above has ONE won and ONE lost stage, every deal is
+-- the owner's and closes with a clean competitor, and nothing reopens
+-- into a stage of another pipeline -- so closing into the first of two
+-- lost stages rather than the last, a pipeline with nowhere to close
+-- into, a padded competitor, a missing deal, a stranger, and a reopen
+-- into somebody else's pipeline all passed.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid;
+  p       record;
+  v_other uuid;
+  v_ostage uuid;
+  v_late  uuid;
+  v_deal  uuid;
+  v_bare  uuid;
+  v_bdeal uuid;
+begin
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Urus Niaga Satu Satu Sdn Bhd');
+  select * into p from pg_temp.wl_pipeline(v_org);
+  -- A second lost stage, after the first: the card lands in the LAST.
+  insert into public.pipeline_stages
+    (org_id, pipeline_id, name, probability, stage_type, sort_order)
+  values (v_org, p.pipeline, 'Lost, archived', 0, 'lost', 7) returning id into v_late;
+
+  v_deal := pg_temp.wl_deal(v_org, p.pipeline, p.qualify, 'OP-A', 1000);
+  perform public.close_opportunity(v_deal, 'lost', 'Price', '  Syarikat Saingan  ');
+  perform pg_temp.check_true('a lost deal lands in the last lost column',
+    (select stage_id from public.opportunities where id = v_deal) = v_late);
+  perform pg_temp.check_eq('and the competitor is kept without its spaces',
+    (select competitor from public.opportunities where id = v_deal), 'Syarikat Saingan');
+
+  -- Another pipeline's open stage is not this deal's to reopen into.
+  insert into public.pipelines (org_id, name) values (v_org, 'Retail') returning id into v_other;
+  insert into public.pipeline_stages
+    (org_id, pipeline_id, name, probability, stage_type, sort_order)
+  values (v_org, v_other, 'Quote', 40, 'open', 1) returning id into v_ostage;
+  perform public.reopen_opportunity(v_deal, v_ostage);
+  perform pg_temp.check_true('a stage from another pipeline is not used',
+    (select stage_id from public.opportunities where id = v_deal) = p.qualify);
+
+  -- A pipeline with nothing to close into says so.
+  insert into public.pipelines (org_id, name) values (v_org, 'Bare') returning id into v_bare;
+  insert into public.pipeline_stages
+    (org_id, pipeline_id, name, probability, stage_type, sort_order)
+  values (v_org, v_bare, 'Only', 10, 'open', 1);
+  v_bdeal := pg_temp.wl_deal(v_org, v_bare,
+    (select id from public.pipeline_stages where pipeline_id = v_bare), 'OP-B', 100);
+  perform pg_temp.check_refused('a pipeline with no lost stage says so',
+    format('select public.close_opportunity(%L, %L, %L)', v_bdeal, 'lost', 'Price'),
+    'This pipeline has no lost stage to close into.%', 'P0002');
+
+  perform pg_temp.check_refused('closing a deal that does not exist is said so',
+    format('select public.close_opportunity(%L, %L)', gen_random_uuid(), 'won'),
+    'No such opportunity.', 'P0002');
+  perform pg_temp.check_refused('and reopening one',
+    format('select public.reopen_opportunity(%L)', gen_random_uuid()),
+    'No such opportunity.', 'P0002');
+
+  perform public.close_opportunity(v_deal, 'won');
+  perform pg_temp.sign_in_as(pg_temp.another_user('orang.luar@urusniaga.test'));
+  perform pg_temp.check_refused('a stranger does not reopen this company''s deals',
+    format('select public.reopen_opportunity(%L)', v_deal), 'not permitted to reopen a deal', '42501');
+  perform pg_temp.check_refused('nor close them',
+    format('select public.close_opportunity(%L, %L, %L)', v_bdeal, 'lost', 'x'),
+    'not permitted to close a deal', '42501');
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+end $$;
+
 rollback;
