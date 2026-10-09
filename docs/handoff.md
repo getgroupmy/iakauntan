@@ -1037,6 +1037,7 @@ function:
 | `void_rent_run` | `0585` | 16 / 16 | -- | `property.sql` (nine only after its rule-by-rule assertions) |
 | `void_strata_charge_run` | `0585` | 16 / 16 | -- | `property.sql` (fourteen only after its rule-by-rule assertions; one call stood behind it) |
 | `demo_company`, `demo_amanah_accounts`, `demo_last_lodged_year_end` | `0771` | 5 / 6 | -- (the sixth survives June to December only, when the old formula and the new agree; `run_at_dates.sh` kills it January to May) | `demo_rebuild.sql` |
+| `set_fiscal_period_status` | `0053` | 8 / 8 | -- | `ledger.sql` (7; three only after its rule-by-rule block) + `year_end_close.sql` (the accountant) |
 
 Every equivalent is written into its mutants file with the reason.
 

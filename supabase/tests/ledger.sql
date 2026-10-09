@@ -500,4 +500,44 @@ begin
   perform pg_temp.check_eq('so it balances, at the 80 posted', v_dr, 80.00::numeric);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- `set_fiscal_period_status`, rule by rule
+--
+-- A mutation sweep (`mutants/set_fiscal_period_status.py`) left three
+-- rules with nothing in any file to tell them from their absence: the
+-- period that does not exist, a status that is none of the three, and
+-- a locked period set back to CLOSED -- the reopening above asks only
+-- for `open`, and "not out of locked" is the whole rule.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_per uuid; v_next uuid;
+begin
+  v_org := pg_temp.test_org('Tempoh Satu Persatu Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date '2026-01-01');
+  select id into v_per from public.fiscal_periods
+   where org_id = v_org and start_date = date '2026-03-01';
+  select id into v_next from public.fiscal_periods
+   where org_id = v_org and start_date = date '2026-04-01';
+
+  perform pg_temp.check_refused('a period that does not exist is said so',
+    format('select public.set_fiscal_period_status(%L, %L)', gen_random_uuid(), 'closed'),
+    'Fiscal period not found', 'P0002');
+  -- By its own sentence, not the table's check constraint, which would
+  -- refuse it too but say nothing a person could act on.
+  perform pg_temp.check_refused('a status that is none of the three is named',
+    format('select public.set_fiscal_period_status(%L, %L)', v_per, 'archived'),
+    'Unknown period status archived', '22023');
+
+  perform public.set_fiscal_period_status(v_per, 'locked');
+  perform pg_temp.check_refused('a locked period is not set back to closed either',
+    format('select public.set_fiscal_period_status(%L, %L)', v_per, 'closed'),
+    'A locked period cannot be reopened', '22023');
+  perform public.set_fiscal_period_status(v_per, 'locked');
+  perform pg_temp.check_eq('locking it again changes nothing and is allowed',
+    (select status from public.fiscal_periods where id = v_per), 'locked');
+  perform pg_temp.check_eq('and the month after it is untouched',
+    (select status from public.fiscal_periods where id = v_next), 'open');
+end $$;
+
 rollback;
