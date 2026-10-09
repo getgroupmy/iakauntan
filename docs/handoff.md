@@ -1202,6 +1202,8 @@ function:
 | `delete_contact` | `0654` | 9 / 9 | -- | `contact_delete.sql` (six before its block; the module guard is reached only by a read-only access type, since `contacts` is core -- and its sentence then blames the module) |
 | `clear_tax_instalment` | `0673` | 4 / 4 | -- | `tax_estimate_payments.sql` (one before its block: one payment, cleared against the root it was recorded on) |
 | `platform_close_account` | `0619` | 8 / 8 | -- | `account_closure.sql` (one before its block: the ledger close was read only after a posting revived the account) |
+| `save_payment_method` | `0635` | 10 / 10 | -- | `payment_methods.sql` (three before its block: no edit was ever made, and no second company) |
+| `archive_payment_method` | `0635` | 5 / 5 | -- | `payment_methods.sql` (two before its block) |
 
 Every equivalent is written into its mutants file with the reason.
 

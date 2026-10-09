@@ -759,6 +759,74 @@ begin
   raise notice 'ok   paying a supplier: who, when, whose account, and what was charged';
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Saving and archiving, rule by rule
+--
+-- Everything above saves new methods with clean names in one company,
+-- never edits one, and archives one live method once -- so a save that
+-- kept a padded name, cleared another company's default, edited an
+-- archived or foreign method or a missing one without a word, or
+-- ignored an edited fee, passed; as did an archive that left the method
+-- switched on or archived it twice.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid;
+  v_them  uuid;
+  v_mine  uuid;
+  v_dflt  uuid;
+  v_their uuid;
+  v_gone  uuid;
+begin
+  perform pg_temp.allow_many_companies();
+  v_them := pg_temp.test_org('Syarikat Jiran Bayar');
+  v_their := public.save_payment_method(v_them, 'Their default', null, '01',
+    null, null, 0, 0, true, true, 0, null);
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Kaedah Bayar Satu Satu');
+
+  v_dflt := public.save_payment_method(v_org, '  Cash  ', null, '01',
+    null, null, 0, 0, true, true, 0, null);
+  perform pg_temp.check_eq('a new method''s name is trimmed',
+    (select name from public.payment_methods where id = v_dflt), 'Cash');
+  perform pg_temp.check_true('making ours the default leaves another company''s alone',
+    (select is_default from public.payment_methods where id = v_their));
+
+  v_mine := public.save_payment_method(v_org, 'Card', null, '03',
+    null, null, 1.5, 0, false, true, 1, null);
+  perform public.save_payment_method(v_org, '  Card terminal  ', v_mine, '03',
+    null, null, 2.25, 0, false, true, 1, null);
+  perform pg_temp.check_eq('an edit trims the name too',
+    (select name from public.payment_methods where id = v_mine), 'Card terminal');
+  perform pg_temp.check_eq('and takes the new fee',
+    (select charge_percent from public.payment_methods where id = v_mine), 2.25);
+
+  perform pg_temp.check_refused('a method that is not there is not edited',
+    format('select public.save_payment_method(%L, %L, %L)', v_org, 'Ghost', gen_random_uuid()),
+    'Payment method % not found', 'P0002');
+  perform pg_temp.check_refused('nor is another company''s',
+    format('select public.save_payment_method(%L, %L, %L)', v_org, 'Theirs now', v_their),
+    'Payment method % not found', 'P0002');
+  perform pg_temp.check_eq('which keeps its own name',
+    (select name from public.payment_methods where id = v_their), 'Their default');
+
+  v_gone := public.save_payment_method(v_org, 'Cheque', null, '02',
+    null, null, 0, 0, false, true, 2, null);
+  perform public.archive_payment_method(v_gone);
+  perform pg_temp.check_true('an archived method is switched off as well as put away',
+    (select not is_active and deleted_at is not null
+       from public.payment_methods where id = v_gone));
+  perform pg_temp.check_refused('an archived method is not edited',
+    format('select public.save_payment_method(%L, %L, %L)', v_org, 'Cheque again', v_gone),
+    'Payment method % not found', 'P0002');
+  perform pg_temp.check_refused('nor archived a second time',
+    format('select public.archive_payment_method(%L)', v_gone),
+    'Payment method % not found', 'P0002');
+  perform pg_temp.check_refused('and one that never existed is said not to',
+    format('select public.archive_payment_method(%L)', gen_random_uuid()),
+    'Payment method % not found', 'P0002');
+end $$;
+
 
 rollback;
 
