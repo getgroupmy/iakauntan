@@ -10,6 +10,14 @@
 -- `post_sales_document` would post the same invoice a second time —
 -- two journals and RM2,000 for one RM1,000 sale.
 --
+-- `0781`. What `0402` left open on purpose -- the status and the paid
+-- and outstanding figures, because posting, voiding and payments move
+-- them -- was open to the client as well: a posted invoice set to
+-- 'void' left the ageing with its journal still in the ledger. Those
+-- three now move only by the database's own hand, and the payment
+-- control below is a real payment rather than a write standing in for
+-- one.
+--
 -- ---------------------------------------------------------------------
 -- Everything that matters runs under `set local role authenticated`
 --
@@ -100,6 +108,10 @@ begin
   values (v_org, v_bill, 1, 'Bahan', 5, 40) returning id into v_bill_line;
   v_bill_entry := public.post_purchase_document(v_bill);
 
+  -- Made here, as the owner, so the payment below finds an account to
+  -- bank to without the client having to set one up.
+  perform pg_temp.a_bank_account(v_org);
+
   v_acct := pg_temp.another_user('beku@example.test');
   insert into public.org_members (org_id, user_id, role, status)
   values (v_org, v_acct, 'accountant', 'active');
@@ -114,7 +126,7 @@ select set_config('request.jwt.claims',
 set local role authenticated;
 
 do $$
-declare c record; v_msg text; v_second uuid;
+declare c record; v_msg text; v_second uuid; v_rcp uuid;
 begin
   select * into c from t_doc;
 
@@ -322,9 +334,22 @@ begin
   -- The positive controls, and the reason this is a named list rather
   -- than a blunt freeze. Each of these is a write the application makes
   -- to a posted document every day.
-  update public.sales_documents
-     set paid_amount = 400, balance_amount = 600, status = 'partial'
-   where id = c.inv;
+  -- A payment, recorded the way the application records one: a receipt
+  -- and an allocation, with `app.apply_allocation` writing the
+  -- invoice's figures from inside its own trigger. Until `0781` this
+  -- control wrote those figures directly, which is the write `0781`
+  -- now refuses a client -- and which is why it was standing in for a
+  -- payment rather than being one.
+  insert into public.receipts
+    (org_id, receipt_no, receipt_date, contact_id, amount,
+     unapplied_amount, currency, exchange_rate, bank_account_id)
+  values (c.org, 'RCP-1', pg_temp.today(),
+          (select contact_id from public.sales_documents where id = c.inv),
+          400, 400, 'MYR', 1, pg_temp.a_bank_account(c.org))
+  returning id into v_rcp;
+  insert into public.payment_allocations (org_id, receipt_id, invoice_id, amount)
+  values (c.org, v_rcp, c.inv, 400);
+  perform public.post_receipt(v_rcp);
   perform pg_temp.check_eq('a payment still lands on a posted invoice',
     (select paid_amount || '/' || status from public.sales_documents
       where id = c.inv), '400.00/partial');
@@ -351,6 +376,125 @@ begin
   perform pg_temp.check_eq('and progress still climbs the chain',
     (select quantity_invoiced from public.sales_document_lines
       where id = c.inv_line), 10);
+
+  -- ------------------------------------------------------------------
+  -- What happened to it, written by the client  (`0781`)
+  -- ------------------------------------------------------------------
+  -- A document's status and its paid and outstanding figures follow
+  -- from posting, voiding and payments. Before `0781` a client could
+  -- write them straight: a posted invoice set to 'void' left the
+  -- ageing with its journal still in the ledger.
+  begin
+    update public.sales_documents set status = 'void' where id = c.inv;
+    v_msg := null;
+  exception when insufficient_privilege then
+    get stacked diagnostics v_msg = message_text;
+  end;
+  perform pg_temp.check_eq('a posted invoice is not voided by writing its status',
+    v_msg,
+    'The status of INV-POSTED follows from what happened to it -- '
+    'posting, voiding, payments -- and is not written directly (partial '
+    '-> void). Post it, void it, or record the payment instead.');
+  begin
+    update public.sales_documents set balance_amount = 0 where id = c.inv;
+    v_msg := null;
+  exception when insufficient_privilege then
+    get stacked diagnostics v_msg = message_text;
+  end;
+  perform pg_temp.check_eq('nor settled by writing its balance',
+    v_msg,
+    'The balance amount of INV-POSTED follows from what happened to it '
+    '-- posting, voiding, payments -- and is not written directly '
+    '(600.00 -> 0.00). Post it, void it, or record the payment instead.');
+  begin
+    update public.sales_documents set paid_amount = 1000 where id = c.inv;
+    v_msg := null;
+  exception when insufficient_privilege then
+    get stacked diagnostics v_msg = message_text;
+  end;
+  perform pg_temp.check_eq('nor paid by writing what was paid',
+    v_msg,
+    'The paid amount of INV-POSTED follows from what happened to it -- '
+    'posting, voiding, payments -- and is not written directly (400.00 '
+    '-> 1000.00). Post it, void it, or record the payment instead.');
+  begin
+    update public.purchase_documents set status = 'void' where id = c.bill;
+    v_msg := null;
+  exception when insufficient_privilege then
+    get stacked diagnostics v_msg = message_text;
+  end;
+  perform pg_temp.check_true('a posted bill is not voided that way either',
+    v_msg like 'The status of BILL-POSTED follows from what happened to it%');
+  begin
+    update public.sales_documents set status = 'posted' where id = c.draft;
+    v_msg := null;
+  exception when insufficient_privilege then
+    get stacked diagnostics v_msg = message_text;
+  end;
+  perform pg_temp.check_true('and a draft is not posted by writing that it is',
+    v_msg like 'The status of INV-DRAFT follows from what happened to it%'
+    and v_msg like '%(draft -> posted)%');
+  perform pg_temp.check_eq('so each still says what happened to it',
+    (select string_agg(doc_no || ' ' || status || ' ' || paid_amount
+                       || ' ' || balance_amount, ', ' order by doc_no)
+       from public.sales_documents where id in (c.inv, c.draft)),
+    'INV-DRAFT draft 0.00 1000.00, INV-POSTED partial 400.00 600.00');
+  perform pg_temp.check_eq('and the bill',
+    (select status::text from public.purchase_documents where id = c.bill),
+    'posted');
+
+  -- A document a client makes is a draft with nothing paid; it becomes
+  -- anything else by being posted and paid.
+  begin
+    insert into public.sales_documents
+      (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+       exchange_rate, status)
+    values (c.org, 'invoice', 'INV-BORN-POSTED', pg_temp.today(),
+            (select contact_id from public.sales_documents where id = c.inv),
+            'MYR', 1, 'posted');
+    v_msg := null;
+  exception when insufficient_privilege then
+    get stacked diagnostics v_msg = message_text;
+  end;
+  perform pg_temp.check_eq('a client does not make a document already posted',
+    v_msg,
+    'A document is created as a draft with nothing paid on it (this one '
+    'said posted, with 0.00 paid). It becomes posted by posting it, and '
+    'paid by recording payments against it.');
+  begin
+    insert into public.purchase_documents
+      (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+       exchange_rate, paid_amount)
+    values (c.org, 'bill', 'BILL-BORN-PAID', pg_temp.today(),
+            (select contact_id from public.purchase_documents where id = c.bill),
+            'MYR', 1, 100);
+    v_msg := null;
+  exception when insufficient_privilege then
+    get stacked diagnostics v_msg = message_text;
+  end;
+  perform pg_temp.check_eq('nor a draft with something already paid on it',
+    v_msg,
+    'A document is created as a draft with nothing paid on it (this one '
+    'said draft, with 100.00 paid). It becomes posted by posting it, and '
+    'paid by recording payments against it.');
+
+  -- And the road the application takes still runs end to end: a draft
+  -- made by the client, its lines adding up its balance from inside
+  -- their trigger, posted by the function.
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate)
+  values (c.org, 'invoice', 'INV-CLIENT', pg_temp.today(),
+          (select contact_id from public.sales_documents where id = c.inv),
+          'MYR', 1)
+  returning id into v_second;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, description, quantity, unit_price)
+  values (c.org, v_second, 1, 'Widget', 3, 100);
+  perform public.post_sales_document(v_second);
+  perform pg_temp.check_eq('a client''s own draft is totalled and posted',
+    (select status || ' ' || balance_amount from public.sales_documents
+      where id = v_second), 'posted 300.00');
 
   -- And the document that has not been posted is untouched by any of
   -- this: correcting one before it goes to the ledger is the ordinary
@@ -406,7 +550,9 @@ declare
     'rounding_method'];
   -- Deliberately still writable on a posted document, and why:
   --   money that moves after posting ... paid_amount, applied_amount,
-  --     balance_amount, status
+  --     balance_amount, status. Moved by posting, voiding and payments
+  --     only: since `0781` a client's own statement may not write
+  --     status, paid_amount or balance_amount at all.
   --   LHDN's answer .................... einvoice_id, einvoice_status,
   --     is_consolidated, requires_self_billed
   --   progress and fulfilment .......... fulfilment_status, parent_id,

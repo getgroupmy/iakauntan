@@ -1114,6 +1114,33 @@ page and renumbering would quietly break the reference.
     3b6438d2... and c6deb7dc..., identical); production held no bill
     line on a fixed asset account. Swept 26 / 26 and 12 / 12.
     **Still to read back.**
+48. ~~A client can void, post or settle a document by writing its
+    status.~~ **Raised and answered 9 October: guard the columns. Built
+    in `0781`.** `refuse_posted_document_change` freezes the figures a
+    journal was built from; `status`, `paid_amount` and
+    `balance_amount` were never on that list, and `*_documents_update`
+    (`can_write`) let any member write them. Measured as a member who
+    may write but not post: a posted RM1,000 invoice set to 'void' left
+    the AR ageing while its journal stayed in the ledger; a posted bill
+    the same; a draft set to 'posted' read as posted with no journal; a
+    posted invoice set to paid with nothing owing -- which
+    `settle_shared_payment`, by its code, would then mark paid with no
+    receipt. Now a trigger (`app.document_state_is_the_databases`,
+    deliberately NOT a definer) refuses a client's own statement --
+    role authenticated or anon, at the top trigger depth -- that
+    changes any of the three, and a client's insert of anything but a
+    draft with nothing paid. Definer functions run as their owner and
+    pass; `app.apply_allocation` and the line recalculation write from
+    inside another trigger and pass. The app never wrote these columns
+    itself. `posted_document_is_frozen.sql`'s payment control used to
+    write the three figures directly, standing in for a payment; it is
+    now a receipt and an allocation. Production held no document in a
+    state this refuses to reach (ten demo purchase orders read
+    'completed' with no journal, correctly). Swept 10 / 10.
+    NOT COVERED, named so nobody assumes it is: no function voids a
+    BILL, so a wrong posted bill is undone only by a purchase credit
+    note against it.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -1310,6 +1337,7 @@ function:
 | `close_project`, `reopen_project` | `0389` | 14 / 14 | -- | `project_budget.sql` (twelve before: one company with one job carrying hours; noted: `projects_update` closes a job over unbilled hours directly) |
 | `capitalise_bill_line` | `0780` | 26 / 26 | -- | `capitalisation.sql` (9 of 20 before its block: every bill dated today, in ringgit, one line, nothing named; raised: a paid bill was "not posted" -- `0780`) |
 | `report_uncapitalised_purchases` | `0780` | 12 / 12 | -- | `capitalisation.sql` (three by `0780`'s blocks: the paid, the part-paid, and a dollar bill's amount) |
+| `app.document_state_is_the_databases` | `0781` | 10 / 10 | -- | `posted_document_is_frozen.sql` (new in `0781`; the depth mutants killed by a real payment, which replaced a control that wrote the figures itself) |
 | `app.project_closes_only_when_billed` | `0778` | 11 / 11 | -- | `project_budget.sql` (new in `0778`; SECURITY DEFINER flipped by hand, equivalent while every member reads every time entry) |
 | `close_lead`, `reopen_lead` | `0373` | 12 / 12 | -- | `win_loss.sql` (four before its block: one clean lead, its owner) |
 | `close_opportunity`, `reopen_opportunity` | `0422`, `0373` | 20 / 20 | -- | `win_loss.sql` (twelve before its block: one won and one lost stage per pipeline, one pipeline, the owner) |
