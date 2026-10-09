@@ -815,6 +815,24 @@ begin
   perform pg_temp.check_eq('leaving nothing behind to explain',
     (select count(*) from public.pos_sale_line_voids v where v.sale_id = v_split), 0);
 
+  -- Its three refusals, which nothing had asked: a line that is not
+  -- there, a bill that is no longer open (v_n3 was voided above), and
+  -- somebody who may not sell.
+  perform pg_temp.check_refused('a line that is not there is said so',
+    format('select public.remove_pos_sale_line(%L)', gen_random_uuid()),
+    'No such line.', 'P0002');
+  perform pg_temp.check_refused('a line does not come off a voided bill',
+    format('select public.remove_pos_sale_line(%L)',
+           (select l.id from public.pos_sale_lines l where l.sale_id = v_n3 limit 1)),
+    'That bill is voided and cannot be edited. Raise a credit note instead.', '23514');
+  v_vline := public.add_pos_sale_line(v_split, v_teh, 1, 3.00);
+  perform pg_temp.sign_in_as(pg_temp.another_user('orang.luar@warung.test'));
+  perform pg_temp.check_refused('a stranger does not take a line off',
+    format('select public.remove_pos_sale_line(%L)', v_vline),
+    'not permitted to sell for this organization', '42501');
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  perform public.remove_pos_sale_line(v_vline);
+
   -- Now one the kitchen has been told about.
   v_vline := public.add_pos_sale_line(v_split, v_teh, 2, 3.00);
   perform public.send_order_to_kitchen(v_split);

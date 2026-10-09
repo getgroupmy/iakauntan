@@ -1218,6 +1218,7 @@ function:
 | `close_opportunity`, `reopen_opportunity` | `0422`, `0373` | 20 / 20 | -- | `win_loss.sql` (twelve before its block: one won and one lost stage per pipeline, one pipeline, the owner) |
 | `close_requisition` | `0394` | 13 / 13 | -- | `vacancies.sql` (nine before its block: one open vacancy, the owner, twenty days old) |
 | `update_leave_contact` | `0395` | 10 / 10 | -- | `leave_requests.sql` (seven before: no draft, none ending today, none missing) |
+| `remove_pos_sale_line` | `0225` | 6 / 6 | -- | `pos_fnb.sql` (three before: three files removed lines, none asked a refusal but the kitchen one) |
 
 Every equivalent is written into its mutants file with the reason.
 
