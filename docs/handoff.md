@@ -886,9 +886,12 @@ page and renumbering would quietly break the reference.
     37891399569 on `752f96a`): recorded; the three functions hash to the
     local build (0b362574..., 8bbff096..., f46f0604...); none executable
     by `anon` or `authenticated`; `demo_last_lodged_year_end` answers
-    2026-12-31 on 9 June 2027 and 2025-12-31 a day earlier. Still to
-    check: that the next scheduled rebuild (11:00 UTC) succeeds and
-    leaves every demo company with two fiscal years.
+    2026-12-31 on 9 June 2027 and 2025-12-31 a day earlier. **Checked
+    after the next scheduled rebuild** (read-only, 9 October 11:09 UTC):
+    the 11:00 run in `app.demo_rebuild_runs` finished at 11:00:28 with
+    `ok = true` and no error, and all 13 demo companies hold exactly
+    two fiscal years. The real test is still 1 January, which
+    `run_at_dates.sh` stands in for until then.
 39. ~~A statement line is matched to another account's document.~~
     **Raised and answered 9 October: refuse + filter. Built in
     `0772`.** Found sweeping `match_bank_transaction`, and measured: a
@@ -1020,7 +1023,13 @@ page and renumbering would quietly break the reference.
     closing) and money going out are allowed. Clients may only read the
     table, so every write already came through a function; this sits
     under all of them. Production held no closed or archived matter.
-    Swept 6 / 6. **Still to read back.**
+    Swept 6 / 6.
+    **Applied, and read back** (9 October, read-only, after run
+    37919495600 on `009f9c6`, green): recorded; the live
+    `app.closed_matter_takes_no_money` hashes to 2f6cdc40..., the same
+    as the local build; SECURITY DEFINER, executable by nobody but its
+    owner; the trigger fires BEFORE INSERT OR DELETE OR UPDATE on
+    `client_account_transactions`; the comment names `0776`.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
