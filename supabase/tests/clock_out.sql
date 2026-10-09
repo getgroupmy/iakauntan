@@ -252,6 +252,12 @@ begin
   exception when sqlstate '42501' then v_took := false;
   end;
   perform pg_temp.check_true('only HR closes somebody else''s day', not v_took);
+  -- Nor starts it. Asked here since `0789` restated `clock_in`; a sweep
+  -- of it found nothing asking.
+  perform pg_temp.check_refused('only HR starts somebody else''s day',
+    format('select public.clock_in(p_org_id => %L, p_employee_id => %L)',
+           v_org, v_emp),
+    'Only HR may clock in on behalf of another employee', '42501');
 
   -- And with nobody named, the same caller is told what is actually
   -- wrong: they have no record of their own.
@@ -280,6 +286,58 @@ begin
   perform pg_temp.check_eq('and it is that employee''s row that moved',
     (select ot_normal_minutes from public.attendance_records where id = v_id),
     120);
+
+  -- `0789`. The same HR manager, naming somebody in ANOTHER company --
+  -- one they have no part in, whose day began this morning. The day
+  -- was found by employee alone, so it was closed, this caller's
+  -- location written onto it, and the minutes worked handed back.
+  declare
+    v_elsewhere uuid := pg_temp.test_org('Syarikat Sebelah Sdn Bhd');
+    v_staff     uuid := pg_temp.another_user('pekerja-sebelah@example.test');
+    v_their_day uuid;
+    v_msg       text;
+  begin
+    insert into public.employees
+      (org_id, employee_no, user_id, full_name, hire_date, employment_status)
+    values (v_elsewhere, 'S1', v_staff, 'Pekerja Sebelah',
+            pg_temp.today() - 30, 'active')
+    returning id into v_e_other;
+    perform pg_temp.sign_in_as(v_staff);
+    v_their_day := public.clock_in(p_org_id => v_elsewhere, p_method => 'web');
+
+    perform pg_temp.sign_in_as(v_other);
+    perform pg_temp.check_true('the HR manager has no part in the other company',
+      not exists (select 1 from public.org_members m
+                   where m.org_id = v_elsewhere and m.user_id = v_other));
+    perform pg_temp.check_refused(
+      'HR cannot close the day of another company''s employee',
+      format('select public.clock_out(p_org_id => %L, p_address => %L, p_employee_id => %L)',
+             v_org, 'from the wrong company', v_e_other),
+      'No such employee in this company.', 'P0002');
+    perform pg_temp.check_true('and that day is still open, with nothing written on it',
+      (select clock_out is null and clock_out_address is null
+         from public.attendance_records where id = v_their_day));
+    perform pg_temp.check_refused(
+      'nor start the day of another company''s employee',
+      format('select public.clock_in(p_org_id => %L, p_employee_id => %L)',
+             v_org, v_e_other),
+      'No such employee in this company.', 'P0002');
+    perform pg_temp.check_eq('so that employee still has one day, their own',
+      (select count(*)::integer from public.attendance_records
+        where employee_id = v_e_other), 1);
+  end;
+
+  -- `0789`, the other half. `clock_in` compared with `<>`, the slip
+  -- `0285` fixed here: for an HR manager not on the payroll the HR
+  -- branch never ran, and they were told their own record was missing.
+  delete from public.attendance_records
+   where employee_id = v_emp
+     and work_date = (now() at time zone 'Asia/Kuala_Lumpur')::date;
+  v_id := public.clock_in(p_org_id => v_org, p_employee_id => v_emp);
+  perform pg_temp.check_true(
+    'HR not on the payroll may start somebody else''s day',
+    (select employee_id = v_emp and org_id = v_org and clock_in is not null
+       from public.attendance_records where id = v_id));
 
   perform pg_temp.sign_out();
 end $$;

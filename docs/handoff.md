@@ -1291,6 +1291,24 @@ page and renumbering would quietly break the reference.
     itself checked by hand (put back as nulls-distinct, `pos.sql` fails
     "expected 1, got 3"; a no-op control passes).
     **Still to read back.**
+56. ~~HR of one company can close the day of another company's
+    employee.~~ **Raised and answered 9 October: fix both. Built in
+    `0789`.** `clock_in` and `clock_out` take `p_employee_id` for HR
+    punching on somebody's behalf, asked `can_manage_hr(p_org_id)`, and
+    never asked whether the employee works in `p_org_id`; `clock_out`
+    then finds the day by employee alone. Measured: HR of one company,
+    no member of a second, closed the second company's employee's day,
+    wrote its own location on it, and was handed back the minutes
+    worked. `clock_in` was refused only by accident -- it still compared
+    with `<>`, the slip `0285` fixed in `clock_out`, so an HR manager
+    not on the payroll could not clock anybody in. Both now refuse "No
+    such employee in this company.", and `clock_in` compares with `is
+    distinct from`. The app never names an employee; the API's road.
+    Restated from `0075` (`clock_in`: production runs its text with the
+    two comments stripped, 77c26432... once they are) and `0363`
+    (`clock_out`, c6e1aa59..., identical). Production held no
+    attendance record. Swept 6 / 6.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -1501,6 +1519,7 @@ function:
 | `ingest_exchange_rates` | `0104` | 16 / 16 | -- | `exchange_rate_feed.sql` (ten before its block; noted: a non-numeric rate or date fails the whole batch, and a slashed date reads by DateStyle -- unreachable through `fetch-rates`) |
 | `import_items` | `0103` | 25 / 25 | -- | `csv_import.sql` (ten before its block: one import and one preview of three kinds of bad row; the service check's comment claims untracked stock "posts to inventory" -- measured, it is expensed like non_stock) |
 | `revoke_document_share` | `0094` | 5 / 5 | -- | `document_share.sql` (two before its block: "anybody revokes" survived; one document only) |
+| `clock_in`, `clock_out` (the company check) | `0789` | 6 / 6 | -- | `clock_out.sql` (new in `0789`; nothing had asked that a member who is not HR cannot clock somebody else in) |
 | `apply_pos_coupon` | `0256` | 14 / 16 | 2 | `pos.sql` (five before its assertions; found `0788`, a voucher typed twice taken twice; equivalent: the refresh rewrites a typed voucher's amount and reason) |
 | `app.recalc_pos_sale` (trim), `redeem_loyalty_points` | `0787` | 8 / 11 | 3 | `pos_loyalty.sql` (new in `0787`; equivalent: the recalculation's trim corrects whatever the redemption priced; the loyalty guard had never been asked with the till on and the scheme off) |
 | `app.document_state_is_the_databases` | `0781` | 10 / 10 | -- | `posted_document_is_frozen.sql` (new in `0781`; the depth mutants killed by a real payment, which replaced a control that wrote the figures itself) |
