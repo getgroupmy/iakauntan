@@ -579,6 +579,12 @@ begin
   perform app.post_sales_document_internal(v_doc);
   v_token := public.share_document(v_doc);
   perform public.begin_shared_payment(v_token, 'billplz', 'bpz_two_1', null);
+  -- The payment row first: it is what the acquirer is asked to charge,
+  -- and a start that wrote MYR beside a hundred dollars would ask for a
+  -- hundred ringgit.
+  perform pg_temp.check_eq('the payment is started in the currency billed',
+    (select currency from public.sales_gateway_payments
+      where gateway_code = 'billplz' and provider_ref = 'bpz_two_1'), 'USD');
 
   perform pg_temp.check_eq('a payment in dollars settles',
     public.settle_shared_payment('billplz', 'bpz_two_1', true, 100.00),
@@ -732,6 +738,83 @@ begin
     'already_paid');
 
   raise notice 'ok   the second acquirer, the second currency, and the shapes between';
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Starting a payment, rule by rule  (`begin_shared_payment`, 0413)
+--
+-- Every company above runs its acquirers in sandbox, every reference
+-- was typed clean, every balance was whole ringgit, and no start had a
+-- checkout page -- so a start that assumed sandbox, kept a padded
+-- reference, rounded the amount, or dropped or never refreshed the
+-- page built the row the assertions expected. A company that has gone
+-- live, on an invoice with sen in it, asks each.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid;
+  v_cust  uuid;
+  v_item  uuid;
+  v_doc   uuid;
+  v_bank  uuid;
+  v_token text;
+  v_pay   uuid;
+begin
+  v_org := pg_temp.test_org('Kedai Sudah Live Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'CUST', 'Puan Ani', 'customer') returning id into v_cust;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, unit_price)
+  values (v_org, 'SVC', 'Alterations', 'service', false, 'C62', 123.45)
+  returning id into v_item;
+  v_bank := pg_temp.test_bank_account(v_org, 'Maybank current');
+  perform public.set_org_payment_gateway(
+    v_org, 'billplz', 'production', 'sk_live', 'col_live', 'xsig_live', true);
+  perform public.set_org_payment_settlement(
+    v_org, 'billplz', 'production', v_bank, '03');
+
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'invoice', 'INV-LIVE-1', pg_temp.today(), pg_temp.today(),
+          v_cust, 'MYR', 1, 'draft')
+  returning id into v_doc;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, uom_code, unit_price)
+  values (v_org, v_doc, 1, 'item', v_item, 'Alterations', 1, 'C62', 123.45);
+  perform app.post_sales_document_internal(v_doc);
+  v_token := public.share_document(v_doc);
+
+  perform pg_temp.check_refused('an acquirer this company has not set up is not offered',
+    format('select public.begin_shared_payment(%L, %L, %L, %L)',
+           v_token, 'toyyibpay', 'tp_live', null),
+    'That way of paying is not available.', 'P0002');
+  perform pg_temp.check_refused('a blank reference is not the acquirer''s reference',
+    format('select public.begin_shared_payment(%L, %L, %L, %L)',
+           v_token, 'billplz', '   ', null),
+    'A payment needs the acquirer''s own reference', '23514');
+
+  v_pay := public.begin_shared_payment(
+    v_token, 'billplz', '  bpz_live_1  ', 'https://www.billplz.com/bills/live_1');
+  perform pg_temp.check_true('the payment is filed under the reference trimmed',
+    v_pay = (select id from public.sales_gateway_payments
+              where gateway_code = 'billplz' and provider_ref = 'bpz_live_1'));
+  perform pg_temp.check_eq('in the mode the company runs, which is live',
+    (select mode from public.sales_gateway_payments where id = v_pay), 'production');
+  perform pg_temp.check_eq('for what is owed to the sen',
+    (select amount from public.sales_gateway_payments where id = v_pay), 123.45);
+  perform pg_temp.check_eq('with the page the customer pays on',
+    (select checkout_url from public.sales_gateway_payments where id = v_pay),
+    'https://www.billplz.com/bills/live_1');
+
+  perform pg_temp.check_true('started again, it is the same payment',
+    public.begin_shared_payment(
+      v_token, 'billplz', 'bpz_live_1', 'https://www.billplz.com/bills/live_1b') = v_pay);
+  perform pg_temp.check_eq('pointed at the newest page',
+    (select checkout_url from public.sales_gateway_payments where id = v_pay),
+    'https://www.billplz.com/bills/live_1b');
 end $$;
 
 
