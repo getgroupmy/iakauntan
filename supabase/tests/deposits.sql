@@ -380,6 +380,7 @@ declare
   v_in   uuid;
   v_out  uuid;
   v_msg  text;
+  v_rev  uuid;
   v_owner uuid := pg_temp.test_user();
 begin
   perform pg_temp.sign_in_as(v_owner);
@@ -484,6 +485,34 @@ begin
   exception when insufficient_privilege then
     raise notice 'ok   and a supplier deposit under purchases, which this company gave up';
   end;
+
+  -- ------------------------------------------------------------------
+  -- What a void leaves on the note, and the day it is dated
+  -- ------------------------------------------------------------------
+  -- Every void above was of a deposit taken today, so a reversal dated
+  -- the deposit's own day and one dated today were the same entry; and
+  -- nothing read who voided it, when, why, or what came back. Dated
+  -- today on purpose (`0421`), unlike a bank transfer's void: a deposit
+  -- voided in a later month is undone in that month.
+  v_in := public.create_deposit(v_org, 'customer', v_cust, pg_temp.today() - 20,
+                                250, v_bank, '02', 'CHQ 49', null);
+  v_rev := public.void_deposit(v_in, '  Paid twice by mistake  ');
+  perform pg_temp.check_true('the void hands back the reversal it wrote',
+    v_rev is not null
+    and v_rev = (select n.void_entry_id from public.deposit_notes n where n.id = v_in));
+  perform pg_temp.check_true('dated the day it was voided, not the day the money came',
+    (select e.entry_date from public.gl_entries e where e.id = v_rev) = pg_temp.today());
+  perform pg_temp.check_eq('the reason is kept, without the spaces round it',
+    (select n.void_reason from public.deposit_notes n where n.id = v_in),
+    'Paid twice by mistake');
+  perform pg_temp.check_true('with who voided it',
+    (select n.voided_by from public.deposit_notes n where n.id = v_in) = v_owner);
+  perform pg_temp.check_true('and when',
+    (select n.voided_at from public.deposit_notes n where n.id = v_in) = now());
+
+  perform pg_temp.check_refused('voiding a deposit that does not exist is said so',
+    format('select public.void_deposit(%L, %L)', gen_random_uuid(), 'Gone'),
+    'No such deposit.', 'P0002');
 end $$;
 
 -- ---------------------------------------------------------------------
