@@ -997,8 +997,24 @@ page and renumbering would quietly break the reference.
     NOT RAISED YET, found on the way: a client receipt can still be
     POSTED to a closed matter (measured), which recreates exactly the
     state the rule exists to prevent; whether a late receipt should be
-    refused, or should reopen the file, is a question for the user.
+    refused, or should reopen the file, is a question for the user --
+    raised and answered the same day: item 43.
     **Still to read back.**
+43. ~~Client money can arrive on a closed matter.~~ **Raised and
+    answered 9 October: refuse; reopen first. Built in `0776`.** The
+    other half of item 42. `receive_client_money` and
+    `transfer_between_matters` both put money onto a closed or archived
+    matter -- measured with a receipt -- and none of the four
+    client-money functions looked at the status. Now a trigger on
+    `client_account_transactions` refuses ANY change that would raise
+    what a closed or archived file holds -- a receipt, a transfer in, an
+    amount raised, a row moved onto it, a payment out voided or deleted
+    -- with "Matter T-1 is closed. Reopen it before taking money for
+    it."; a change that moves nothing (posting a payment drafted before
+    closing) and money going out are allowed. Clients may only read the
+    table, so every write already came through a function; this sits
+    under all of them. Production held no closed or archived matter.
+    Swept 6 / 6. **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -1181,7 +1197,8 @@ function:
 | `rollback_import_batch` | `0610` | 9 / 10 | 1 | `import_provenance.sql` (four before its block: one batch, one company, its owner, no children; equivalent: no delete is ever skipped silently, so nothing is "kept") |
 | `close_matter` | `0372` | 20 / 22 | 2 | `matter_closing.sql` (nine before its block; the money rule could be walked round by a table UPDATE -- `0775`; equivalent since then: its money and date checks, which the trigger repeats word for word) |
 | `reopen_matter` | `0372` | 8 / 8 | -- | `matter_closing.sql` (three before its block: no archived matter was ever reopened) |
-| `app.matter_closes_only_when_empty` | `0775` | 7 / 7 | -- | `matter_closing.sql` (new in `0775`; a late receipt on a closed file is what tells "on the way in" from "every time") |
+| `app.matter_closes_only_when_empty` | `0775` | 6 / 7 | 1 | `matter_closing.sql` (new in `0775`; equivalent since `0776`: "asked every time" needs a closed file holding money, which `0776` makes impossible) |
+| `app.closed_matter_takes_no_money` | `0776` | 6 / 6 | -- | `matter_closing.sql` (new in `0776`; a file paid in and out before closing, its payment still a draft) |
 | `delete_contact` | `0654` | 9 / 9 | -- | `contact_delete.sql` (six before its block; the module guard is reached only by a read-only access type, since `contacts` is core -- and its sentence then blames the module) |
 
 Every equivalent is written into its mutants file with the reason.

@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-16212
+16226
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1100,3 +1100,7 @@
 # matter is closed or archived by any road only when the client account
 # holds nothing for it. run_locally.sh at 0775: 386 files, 16212
 # assertions.
+#
+# 9 October: 16226. delete_contact swept, and 0776: a closed or
+# archived matter takes no client money by any change to the ledger.
+# run_locally.sh at 0776: 386 files, 16226 assertions.

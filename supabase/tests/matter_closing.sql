@@ -413,22 +413,21 @@ begin
   perform pg_temp.check_eq('and closing without one leaves them as they were',
     (select notes from public.matters where id = v_keep), 'Keep this.');
 
-  -- A late cheque for a file already closed. `0775` asks about money
-  -- only on the way INTO closed, so the file that has just received it
-  -- can still have its date put right -- and reopened, which is what
-  -- somebody will do next.
-  insert into public.client_account_transactions
-    (org_id, matter_id, transaction_no, transaction_date, transaction_type,
-     bank_account_id, amount, description)
-  values (v_org, v_keep, 'CT-R5', date '2026-07-02', 'receipt', v_bank, 200, 'Late cheque')
-  returning id into v_txn;
-  perform public.post_client_transaction(v_txn);
+  -- A late cheque for a file already closed. Before `0776` the closed
+  -- file took it and then held money nobody was looking at; now it is
+  -- refused, and the file is reopened first -- after which it is taken.
+  perform pg_temp.check_refused('a late cheque is not taken onto a closed file',
+    format('select public.receive_client_money(%L, 200, %L, %L)',
+           v_keep, date '2026-07-02', 'Late cheque'),
+    'Matter R-5 is closed. Reopen it before taking money for it.', '23514');
   update public.matters set closed_date = date '2026-07-01' where id = v_keep;
-  perform pg_temp.check_eq('a closed file that money reached later can still be corrected',
+  perform pg_temp.check_eq('a closed file''s date can still be put right',
     (select closed_date from public.matters where id = v_keep)::text, '2026-07-01');
   perform public.reopen_matter(v_keep);
-  perform pg_temp.check_eq('and reopened',
-    (select status::text from public.matters where id = v_keep), 'open');
+  perform public.receive_client_money(v_keep, 200, date '2026-07-02', 'Late cheque');
+  perform pg_temp.check_eq('reopened, it takes the cheque',
+    (select coalesce(sum(amount), 0) from public.client_account_transactions
+      where matter_id = v_keep and status <> 'void'), 200.00);
 
   -- Reopening: the guards, and an archived file.
   perform pg_temp.sign_in_as(v_clerk);
@@ -517,6 +516,96 @@ begin
   perform pg_temp.check_eq('while an empty one closed by hand, was edited, and came back',
     (select status::text || ' / ' || description from public.matters where id = c.shut),
     'open / Closed by hand');
+end $$;
+
+-- =====================================================================
+-- A closed file takes no money  (`0776`)
+--
+-- The other half of `0775`: money cannot ARRIVE on a closed or
+-- archived matter by any change to the client ledger -- a receipt, a
+-- transfer in, a payment out voided or deleted. A change that leaves
+-- the balance where it was, like posting a payment drafted before the
+-- file closed, is not refused.
+-- =====================================================================
+do $$
+declare
+  v_org   uuid;
+  v_owner uuid := pg_temp.test_user();
+  v_bank  uuid;
+  v_them  uuid;
+  v_shut  uuid;
+  v_live  uuid;
+  v_arch  uuid;
+  v_in    uuid;
+  v_out   uuid;
+begin
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Fail Tertutup & Rakan', array['legal']);
+  perform public.create_fiscal_year(v_org, date '2026-01-01');
+  perform pg_temp.sign_in_as(v_owner);
+  perform public.setup_legal_module(v_org);
+  select b.id into v_bank from public.bank_accounts b
+   where b.org_id = v_org and b.is_client_account;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'CL1', 'Puan Salmah', 'customer') returning id into v_them;
+  insert into public.matters (org_id, matter_no, name, client_id, opened_date, fee_earner)
+  values (v_org, 'T-1', 'Paid out, then closed', v_them, date '2026-01-05', v_owner),
+         (v_org, 'T-2', 'Still live, holds money', v_them, date '2026-01-05', v_owner),
+         (v_org, 'T-3', 'Archived', v_them, date '2026-01-05', v_owner);
+  select id into v_shut from public.matters where org_id = v_org and matter_no = 'T-1';
+  select id into v_live from public.matters where org_id = v_org and matter_no = 'T-2';
+  select id into v_arch from public.matters where org_id = v_org and matter_no = 'T-3';
+
+  -- T-1: a thousand in, posted; a thousand out, drafted but not yet
+  -- posted. It nets to nothing, so it closes.
+  insert into public.client_account_transactions
+    (org_id, matter_id, transaction_no, transaction_date, transaction_type,
+     bank_account_id, amount, description)
+  values (v_org, v_shut, 'CT-T1', date '2026-02-02', 'receipt', v_bank, 1000, 'In')
+  returning id into v_in;
+  perform public.post_client_transaction(v_in);
+  insert into public.client_account_transactions
+    (org_id, matter_id, transaction_no, transaction_date, transaction_type,
+     bank_account_id, amount, description)
+  values (v_org, v_shut, 'CT-T2', date '2026-03-02', 'payment', v_bank, -1000, 'Out')
+  returning id into v_out;
+  perform public.close_matter(v_shut, date '2026-03-31');
+  perform public.receive_client_money(v_live, 500, date '2026-02-02', 'On account');
+  update public.matters set status = 'archived' where id = v_arch;
+
+  perform pg_temp.check_refused('a receipt is not taken onto a closed file',
+    format('select public.receive_client_money(%L, 50, %L)', v_shut, date '2026-04-01'),
+    'Matter T-1 is closed. Reopen it before taking money for it.', '23514');
+  perform pg_temp.check_refused('nor a transfer in from another file',
+    format('select public.transfer_between_matters(%L, %L, 50, %L)',
+           v_live, v_shut, date '2026-04-01'),
+    'Matter T-1 is closed. Reopen it before taking money for it.', '23514');
+  perform pg_temp.check_refused('nor onto an archived one',
+    format('select public.receive_client_money(%L, 50, %L)', v_arch, date '2026-04-01'),
+    'Matter T-3 is archived. Reopen it before taking money for it.', '23514');
+  perform pg_temp.check_eq('and the live file it would have come from still has it',
+    (select sum(amount) from public.client_account_transactions
+      where matter_id = v_live and status <> 'void'), 500.00);
+
+  -- Posting the payment drafted before closing moves nothing: allowed.
+  perform public.post_client_transaction(v_out);
+  perform pg_temp.check_eq('a payment drafted before closing can still be posted',
+    (select status::text from public.client_account_transactions where id = v_out), 'posted');
+
+  -- Undoing it would put the thousand back on the closed file.
+  perform pg_temp.check_refused('voiding a payment out of a closed file is refused',
+    format('update public.client_account_transactions set status = %L where id = %L',
+           'void', v_out),
+    'Matter T-1 is closed. Reopen it before taking money for it.', '23514');
+  perform pg_temp.check_refused('as is raising a receipt on it',
+    format('update public.client_account_transactions set amount = 1200 where id = %L', v_in),
+    'Matter T-1 is closed. Reopen it before taking money for it.', '23514');
+  perform pg_temp.check_refused('and so is deleting the payment out',
+    format('delete from public.client_account_transactions where id = %L', v_out),
+    'Matter T-1 is closed. Reopen it before taking money for it.', '23514');
+  perform pg_temp.check_eq('so the closed file still holds nothing',
+    (select sum(amount) from public.client_account_transactions
+      where matter_id = v_shut and status <> 'void'), 0.00);
 end $$;
 
 rollback;

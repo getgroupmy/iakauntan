@@ -10,10 +10,13 @@
 #       supabase/tests/matter_closing.sql \
 #       supabase/tests/mutants/matter_closes_only_when_empty.py
 #
-# RESULT: 7 mutants and a control, all killed by `matter_closing.sql`.
-# "Asked every time" needed a closed file that money reached AFTER it
-# closed: a late receipt can be posted to a closed matter, and the file
-# must still be correctable and reopenable.
+# RESULT: 7 mutants and a control. 6 killed by `matter_closing.sql`.
+#
+# One is EQUIVALENT since `0776`: "a closed file is asked about money
+# again on every change". It was killed by a late receipt posted to a
+# closed file, which then had its date corrected; `0776` refuses that
+# receipt, and every other road onto a closed file, so a closed or
+# archived matter can no longer hold money and asking again finds none.
 
 m("archiving is not asked about the money",
   "matter_closes_only_when_empty",
