@@ -1084,6 +1084,7 @@ function:
 | `settle_pos_stalls` | `0268` | 20 / 20 | -- | `pos_food_court.sql` (nine only after its rule-by-rule section; the bill's dates invisible while every settlement was one day) |
 | `recognise_revenue` | `0310` | 12 / 12 | -- | `revenue_recognition.sql` (five only after its rule-by-rule block: three invoices sharing period ends, one credited in full) |
 | `settle_gateway_payment` | `0491` | 15 / 15 | -- | `gateway_payments.sql` (four only after they were asserted: case, spaces, `failed`, `paid_at`) |
+| `platform_mark_invoice_paid` | `0491` | 6 / 6 | -- | `platform_console.sql` (5) + `module_subscription.sql` (the mail); nothing added |
 
 Every equivalent is written into its mutants file with the reason.
 
