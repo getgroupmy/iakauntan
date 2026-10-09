@@ -1086,6 +1086,7 @@ function:
 | `settle_gateway_payment` | `0491` | 15 / 15 | -- | `gateway_payments.sql` (four only after they were asserted: case, spaces, `failed`, `paid_at`) |
 | `platform_mark_invoice_paid` | `0491` | 6 / 6 | -- | `platform_console.sql` (5) + `module_subscription.sql` (the mail); nothing added |
 | `platform_topup_credit` | `0421` | 15 / 15 | -- | `ocr_credit.sql` (seven only after its rule-by-rule assertions) |
+| `run_item_conversion` | `0422` | 16 / 16 | -- | `stock_transfers.sql` (eight only after its rule-by-rule block) |
 
 Every equivalent is written into its mutants file with the reason.
 

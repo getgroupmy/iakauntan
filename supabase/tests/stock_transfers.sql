@@ -1361,4 +1361,127 @@ begin
 end $$;
 
 
+-- ---------------------------------------------------------------------
+-- `run_item_conversion`, rule by rule
+--
+-- A mutation sweep (`mutants/run_item_conversion.py`) left eight of its
+-- sixteen with nothing in any of the four files that call it to tell
+-- them from their absence: the conversion that does not exist, who may
+-- run one, running it no times, which store is the default and the
+-- company with none, the exact amount the store holds, a company that
+-- allows negative stock, and more than the batches hold. The default
+-- store needed a second store made FIRST: with the default the only
+-- one, "the default" and "any store" were the same row.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_owner uuid := pg_temp.test_user();
+  v_org uuid; v_bare uuid; v_shop uuid; v_kitchen uuid;
+  v_chicken uuid; v_breast uuid; v_lotted uuid; v_piece uuid;
+  v_conv uuid; v_lconv uuid; v_bconv uuid; v_bchicken uuid; v_bbreast uuid;
+begin
+  v_org := pg_temp.test_org('Potong Satu Persatu Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_org, m, true from unnest(array['inventory','pos']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+  perform pg_temp.sign_in_as(v_owner);
+
+  -- The shop first, so it is the store a careless "any store" finds.
+  insert into public.warehouses (org_id, code, name)
+  values (v_org, 'KEDAI', 'The shop') returning id into v_shop;
+  insert into public.warehouses (org_id, code, name, is_default)
+  values (v_org, 'DAPUR', 'Central kitchen', true) returning id into v_kitchen;
+
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, cost_price)
+  values (v_org, 'AYAM', 'Ayam sebiji', 'stock', true, 'C62', 12.00)
+  returning id into v_chicken;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code)
+  values (v_org, 'DADA', 'Dada ayam', 'stock', true, 'C62')
+  returning id into v_breast;
+  insert into public.stock_movements
+    (org_id, movement_no, movement_date, movement_type, item_id,
+     warehouse_id, quantity, unit_cost)
+  values (v_org, 'RC-1', pg_temp.today(), 'opening_balance', v_chicken, v_kitchen, 3, 12.00);
+  v_conv := public.upsert_item_conversion(
+    null, v_org, 'AYAM2', 'Potong dua', v_chicken, 1, 'C62',
+    jsonb_build_array(jsonb_build_object('item', v_breast, 'quantity', 2, 'share', 100)));
+
+  perform pg_temp.check_refused('a conversion that does not exist is said so',
+    format('select public.run_item_conversion(%L, 1, null)', gen_random_uuid()),
+    'No such conversion.', 'P0002');
+  perform pg_temp.check_refused('nor is one run no times',
+    format('select public.run_item_conversion(%L, 0, null)', v_conv),
+    'How many times?', '23514');
+  perform pg_temp.sign_in_as(pg_temp.another_user('luar-potong@example.test'));
+  perform pg_temp.check_refused('somebody outside the company runs none of it',
+    format('select public.run_item_conversion(%L, 1, null)', v_conv),
+    'not permitted to write for this organization', '42501');
+  perform pg_temp.sign_in_as(v_owner);
+
+  -- No store named: the default one, which is where the chickens are.
+  perform public.run_item_conversion(v_conv, 1, null);
+  perform pg_temp.check_true('with no store named, the default one is used',
+    (select sm.warehouse_id = v_kitchen from public.stock_movements sm
+      where sm.source_table = 'item_conversions' and sm.source_id = v_conv
+        and sm.item_id = v_chicken));
+  -- Exactly what is left is enough.
+  perform pg_temp.check_eq('exactly what the store holds is enough',
+    public.run_item_conversion(v_conv, 2, v_kitchen), 24::numeric);
+
+  -- A company that allows negative stock cuts up what it has not got.
+  insert into public.pos_settings (org_id, allow_negative_stock)
+  values (v_org, true)
+  on conflict (org_id) do update set allow_negative_stock = true;
+  perform pg_temp.check_true('and one that allows negative stock may go below none',
+    public.run_item_conversion(v_conv, 1, v_kitchen) is not null);
+
+  -- A bird whose stock arrived before anybody tracked it by batch: the
+  -- store holds four, the batches hold none, and it is the batches that
+  -- are cut. (Batch-tracked stock cannot arrive without a batch, so the
+  -- tracking is switched on after.)
+  update public.pos_settings set allow_negative_stock = false where org_id = v_org;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, cost_price)
+  values (v_org, 'AYAM-B', 'Ayam berkelompok', 'stock', true, 'C62', 12.00)
+  returning id into v_bchicken;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code)
+  values (v_org, 'DADA-B', 'Dada berkelompok', 'stock', true, 'C62')
+  returning id into v_bbreast;
+  insert into public.stock_movements
+    (org_id, movement_no, movement_date, movement_type, item_id,
+     warehouse_id, quantity, unit_cost)
+  values (v_org, 'RC-2', pg_temp.today(), 'opening_balance', v_bchicken, v_kitchen, 4, 12.00);
+  update public.items set tracking = 'batch' where id = v_bchicken;
+  v_bconv := public.upsert_item_conversion(
+    null, v_org, 'AYAMB2', 'Potong berkelompok', v_bchicken, 1, 'C62',
+    jsonb_build_array(jsonb_build_object('item', v_bbreast, 'quantity', 2, 'share', 100)));
+  perform pg_temp.check_refused('more than its batches hold is not cut up',
+    format('select public.run_item_conversion(%L, 1, %L)', v_bconv, v_kitchen),
+    'The batches of it in that store come to %', '23514');
+
+  -- And a company with no store at all is told so.
+  v_bare := pg_temp.test_org('Tiada Stor Sdn Bhd');
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  values (v_bare, 'inventory', true)
+  on conflict (org_id, module_code) do update set is_enabled = true;
+  perform pg_temp.sign_in_as(v_owner);
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code)
+  values (v_bare, 'X', 'Whole', 'stock', true, 'C62') returning id into v_lotted;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code)
+  values (v_bare, 'Y', 'Piece', 'stock', true, 'C62') returning id into v_piece;
+  v_lconv := public.upsert_item_conversion(
+    null, v_bare, 'XY', 'Cut', v_lotted, 1, 'C62',
+    jsonb_build_array(jsonb_build_object('item', v_piece, 'quantity', 2, 'share', 100)));
+  perform pg_temp.check_refused('a company with no store is told so',
+    format('select public.run_item_conversion(%L, 1, null)', v_lconv),
+    'This company has no store to do it in.', 'P0002');
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;
