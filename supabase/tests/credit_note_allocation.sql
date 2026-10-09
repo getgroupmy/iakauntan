@@ -392,4 +392,72 @@ begin
       where id in (v_inv, v_cn) and status::text <> 'posted'), 0);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- `allocate_credit_note`, rule by rule
+--
+-- A mutation sweep (`mutants/allocate_credit_note.py`) left eight of its
+-- refusals with nothing here or in `knock_off.sql` to tell them from
+-- their absence. Each is asked below, with a debit note as the case that
+-- must still go through.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.org_with_year('Nota Satu Persatu Sdn Bhd');
+  v_other uuid;
+  v_cust uuid; v_cn uuid; v_gone_cn uuid; v_void_cn uuid;
+  v_inv uuid; v_dn uuid; v_draft uuid; v_void_inv uuid; v_gone_inv uuid; v_theirs uuid;
+  v_no text;
+begin
+  v_cust := pg_temp.cust(v_org, 'C-SP', 'Pelanggan Satu');
+  v_cn := pg_temp.doc(v_org, v_cust, 'credit_note', 'CN-SP1', 500, date '2026-03-01');
+  v_inv := pg_temp.doc(v_org, v_cust, 'invoice', 'INV-SP1', 1000, date '2026-02-01');
+
+  -- The credit note side.
+  perform pg_temp.check_refused('a credit note that does not exist is said so',
+    format('select public.allocate_credit_note(%L, %L, 10)', gen_random_uuid(), v_inv),
+    'No such credit note.', 'P0002');
+  v_gone_cn := pg_temp.doc(v_org, v_cust, 'credit_note', 'CN-SP2', 100, date '2026-03-01');
+  update public.sales_documents set deleted_at = now() where id = v_gone_cn;
+  perform pg_temp.check_refused('nor does a deleted one',
+    format('select public.allocate_credit_note(%L, %L, 10)', v_gone_cn, v_inv),
+    'No such credit note.', 'P0002');
+  v_void_cn := pg_temp.doc(v_org, v_cust, 'credit_note', 'CN-SP3', 100, date '2026-03-01');
+  perform public.void_sales_document(v_void_cn, 'salah');
+  perform pg_temp.check_refused('a void credit note credits nothing',
+    format('select public.allocate_credit_note(%L, %L, 10)', v_void_cn, v_inv),
+    'Credit note CN-SP3 has not been posted.', '22023');
+
+  -- The invoice side.
+  perform pg_temp.check_refused('an invoice that does not exist is said so',
+    format('select public.allocate_credit_note(%L, %L, 10)', v_cn, gen_random_uuid()),
+    'No such invoice.', 'P0002');
+  perform pg_temp.allow_many_companies();
+  v_other := pg_temp.org_with_year('Nota Syarikat Lain Sdn Bhd');
+  v_theirs := pg_temp.doc(v_other, pg_temp.cust(v_other, 'C-THEM', 'Bukan Kami'),
+                          'invoice', 'INV-THEM', 100, date '2026-02-01');
+  perform pg_temp.check_refused('another company''s invoice is not here',
+    format('select public.allocate_credit_note(%L, %L, 10)', v_cn, v_theirs),
+    'No such invoice.', 'P0002');
+  v_gone_inv := pg_temp.doc(v_org, v_cust, 'invoice', 'INV-SP2', 100, date '2026-02-01');
+  update public.sales_documents set deleted_at = now() where id = v_gone_inv;
+  perform pg_temp.check_refused('nor is a deleted one',
+    format('select public.allocate_credit_note(%L, %L, 10)', v_cn, v_gone_inv),
+    'No such invoice.', 'P0002');
+  v_draft := pg_temp.doc(v_org, v_cust, 'invoice', 'INV-SP3', 100, date '2026-02-01', false);
+  perform pg_temp.check_refused('a draft invoice has nothing to reduce',
+    format('select public.allocate_credit_note(%L, %L, 10)', v_cn, v_draft),
+    'INV-SP3 has not been posted.', '22023');
+  v_void_inv := pg_temp.doc(v_org, v_cust, 'invoice', 'INV-SP4', 100, date '2026-02-01');
+  perform public.void_sales_document(v_void_inv, 'salah');
+  perform pg_temp.check_refused('nor does a void one',
+    format('select public.allocate_credit_note(%L, %L, 10)', v_cn, v_void_inv),
+    'INV-SP4 has not been posted.', '22023');
+
+  -- A debit note takes one.
+  v_dn := pg_temp.doc(v_org, v_cust, 'debit_note', 'DN-SP1', 200, date '2026-02-15');
+  perform public.allocate_credit_note(v_cn, v_dn, 50);
+  perform pg_temp.check_eq('a credit note is set against a debit note',
+    (select balance_amount from public.sales_documents where id = v_dn), 150.00::numeric);
+end $$;
+
 rollback;
