@@ -748,4 +748,80 @@ begin
     'That contact is not in this organization', '42501');
 end $$;
 
+-- ---------------------------------------------------------------------
+-- `record_received_einvoice`, rule by rule
+--
+-- A mutation sweep (`mutants/record_received_einvoice.py`) left eight
+-- rules here with nothing to tell them from their absence -- among them
+-- that the duplicate check is per COMPANY: another company importing the
+-- same file must get its own record, not be handed somebody else's.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_owner uuid := pg_temp.test_user();
+  v_a uuid; v_b uuid; v_doc jsonb; v_res jsonb; v_res_b jsonb; v_id uuid;
+  v_cust uuid; v_sup uuid;
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.allow_many_companies();
+  v_a := pg_temp.test_org('Rekod Satu Sdn Bhd');
+  v_b := pg_temp.test_org('Rekod Dua Sdn Bhd');
+  perform pg_temp.sign_in_as(v_owner);
+
+  -- The order is (company, parsed, raw).
+  perform pg_temp.check_refused('a file that is not a JSON object is refused',
+    format('select public.record_received_einvoice(%L, %L::jsonb, %L::jsonb)',
+           v_a, pg_temp.own_doc('INV-J001', 'C1111111110', 'REG-J001')::text, '[1, 2]'),
+    'The document must be a JSON object', '22023');
+  perform pg_temp.check_refused('and so is a parse that is not one',
+    format('select public.record_received_einvoice(%L, %L::jsonb, %L::jsonb)',
+           v_a, '"text"', pg_temp.own_doc('INV-J002', 'C1111111120', 'REG-J002')::text),
+    'The parsed document must be a JSON object', '22023');
+
+  -- The same file, two companies: each its own record.
+  v_doc := pg_temp.own_doc('INV-S001', 'C1111111130', 'REG-S001');
+  v_res := public.record_received_einvoice(v_a, v_doc, v_doc);
+  v_res_b := public.record_received_einvoice(v_b, v_doc, v_doc);
+  perform pg_temp.check_true('another company importing the same file gets its own record',
+    (v_res_b ->> 'id') <> (v_res ->> 'id')
+    and not (v_res_b ->> 'duplicate')::boolean
+    and (select org_id from public.received_einvoices
+          where id = (v_res_b ->> 'id')::uuid) = v_b);
+
+  -- What the producer mangled is kept honestly: a currency that is not
+  -- three letters is nothing, a rate of nothing is one, and what the
+  -- parser found wrong is kept with it.
+  v_doc := jsonb_set(jsonb_set(jsonb_set(
+             pg_temp.own_doc('INV-M001', 'C1111111140', 'REG-M001'),
+             '{currency}', '"RINGGIT"'::jsonb),
+             '{exchangeRate}', '0'::jsonb),
+             '{problems}', '["issue date unreadable"]'::jsonb);
+  v_id := (public.record_received_einvoice(v_a, v_doc, v_doc) ->> 'id')::uuid;
+  perform pg_temp.check_true('a currency that is not three letters is kept as nothing',
+    (select currency is null from public.received_einvoices where id = v_id));
+  perform pg_temp.check_eq('a rate of nothing is one',
+    (select exchange_rate from public.received_einvoices where id = v_id), 1::numeric);
+  perform pg_temp.check_eq('and the parser''s problems are kept',
+    (select problems::text from public.received_einvoices where id = v_id),
+    '["issue date unreadable"]');
+
+  -- A CUSTOMER with the TIN is not the supplier.
+  insert into public.contacts (org_id, code, name, contact_type, tin)
+  values (v_a, 'CUST-T', 'Pelanggan Sama TIN', 'customer', 'C1111111150')
+  returning id into v_cust;
+  v_doc := pg_temp.own_doc('INV-T001', 'C1111111150', 'REG-T001');
+  v_id := (public.record_received_einvoice(v_a, v_doc, v_doc) ->> 'id')::uuid;
+  perform pg_temp.check_true('a customer with the TIN is not linked as the supplier',
+    (select contact_id is null from public.received_einvoices where id = v_id));
+
+  -- A supplier found by registration number when the TIN is not on file.
+  insert into public.contacts (org_id, code, name, contact_type, registration_no)
+  values (v_a, 'SUP-R', 'Pembekal Berdaftar', 'supplier', 'REG-R777')
+  returning id into v_sup;
+  v_doc := pg_temp.own_doc('INV-G001', 'C1111111160', 'REG-R777');
+  v_id := (public.record_received_einvoice(v_a, v_doc, v_doc) ->> 'id')::uuid;
+  perform pg_temp.check_eq('a supplier is found by registration number',
+    (select contact_id from public.received_einvoices where id = v_id), v_sup);
+end $$;
+
 rollback;
