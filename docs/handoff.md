@@ -999,7 +999,13 @@ page and renumbering would quietly break the reference.
     state the rule exists to prevent; whether a late receipt should be
     refused, or should reopen the file, is a question for the user --
     raised and answered the same day: item 43.
-    **Still to read back.**
+    **Applied, and read back** (9 October, read-only, after run
+    37916489155 on `3c402a4`, green): recorded; the live
+    `app.matter_closes_only_when_empty` hashes to e4fb41fb..., the same
+    as the local build; SECURITY DEFINER, executable by nobody but its
+    owner; the trigger `matters_close_only_when_empty` fires BEFORE
+    UPDATE OF status, closed_date, opened_date; the comment names
+    `0775`; production still holds no closed or archived matter.
 43. ~~Client money can arrive on a closed matter.~~ **Raised and
     answered 9 October: refuse; reopen first. Built in `0776`.** The
     other half of item 42. `receive_client_money` and
