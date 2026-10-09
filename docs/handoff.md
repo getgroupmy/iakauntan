@@ -1175,7 +1175,12 @@ page and renumbering would quietly break the reference.
     identical). Swept 13 / 19, six equivalent by arithmetic. Periods
     are still named for the month they START in, as before, so the
     period holding 29 March of that year is called "Feb 2026".
-    **Still to read back.**
+    **Applied, and read back** (9 October, read-only, after run
+    37942984231 on `8ed6a4a`): recorded; the live `create_fiscal_year`
+    hashes to 12f3669f... and `create_previous_fiscal_year` to
+    5b0aaa7e..., both the same as the local build; SECURITY DEFINER,
+    executable by `authenticated` and `service_role` as before; both
+    comments name `0782`.
 50. ~~Billable time can be logged onto a closed project.~~ **Raised
     and answered 9 October: refuse; reopen first. Built in `0783`.** The
     other half of item 45, as item 43 is of 42. `time_entries_write`
