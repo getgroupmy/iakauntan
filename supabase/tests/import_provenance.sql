@@ -391,4 +391,92 @@ begin
     public.start_import_batch(v_org, 'autocount') is not null);
 end $$;
 
+-- =====================================================================
+-- A rollback, rule by rule  (`rollback_import_batch`, 0610)
+--
+-- The rollback above is of one batch holding a customer and an item,
+-- in a company with no other batch, by its owner -- so a rollback that
+-- deleted EVERY import's rows, deleted parents before their children,
+-- let anybody do it, or answered a batch that does not exist with
+-- something else, passed. And the refusal for a row somebody has since
+-- built on was never reached.
+--
+-- Not asserted: whether a table whose rows were all KEPT is reported.
+-- Nothing in the schema skips a delete silently -- a guard raises -- so
+-- after the delete no row of the batch is ever left, and "removed or
+-- kept" is the same test as "removed".
+-- =====================================================================
+do $$
+declare
+  v_org   uuid;
+  v_old   uuid;
+  v_batch uuid;
+  v_clerk uuid;
+  v_cust  uuid;
+  v_keep  uuid;
+  v_doc   uuid;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Gulung Balik Sdn Bhd');
+
+  perform pg_temp.check_refused('rolling back a batch that does not exist is said so',
+    format($q$ select * from public.rollback_import_batch(%L) $q$, gen_random_uuid()),
+    'No such import batch', 'P0002');
+
+  -- An earlier run that failed, and left a customer behind.
+  v_old := public.start_import_batch(v_org, 'autocount', 'First try');
+  insert into public.contacts
+    (org_id, code, name, contact_type, import_source, import_ref,
+     import_batch_id, imported_at)
+  values (v_org, 'D-1', 'Dari Cubaan Pertama', 'customer', 'autocount',
+          'DEBTOR-1', v_old, now())
+  returning id into v_keep;
+  perform public.finish_import_batch(v_old, 'failed', 'Stopped half way');
+
+  -- This run: a customer, and an invoice to them, both imported.
+  v_batch := public.start_import_batch(v_org, 'autocount', 'Second try');
+  insert into public.contacts
+    (org_id, code, name, contact_type, import_source, import_ref,
+     import_batch_id, imported_at)
+  values (v_org, 'D-2', 'Dari Cubaan Kedua', 'customer', 'autocount',
+          'DEBTOR-2', v_batch, now())
+  returning id into v_cust;
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
+     status, import_source, import_ref, import_batch_id, imported_at)
+  values (v_org, 'invoice', 'AC-INV-2', date '2026-01-15', v_cust, 'MYR', 1,
+          'draft', 'autocount', 'INV-2', v_batch, now());
+
+  v_clerk := pg_temp.another_user('kerani@gulungbalik.test');
+  insert into public.org_members (org_id, user_id, role, status)
+  values (v_org, v_clerk, 'sales', 'active');
+  perform pg_temp.sign_in_as(v_clerk);
+  perform pg_temp.check_refused('only an administrator rolls an import back',
+    format($q$ select * from public.rollback_import_batch(%L) $q$, v_batch),
+    'An import rewrites the books and needs an administrator', '42501');
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+
+  -- The invoice points at the customer, so the invoice has to go first.
+  perform public.rollback_import_batch(v_batch);
+  perform pg_temp.check_eq('the invoice and the customer it was for both go',
+    (select count(*) from public.contacts where id = v_cust)
+    + (select count(*) from public.sales_documents
+        where org_id = v_org and import_ref = 'INV-2'), 0);
+  perform pg_temp.check_eq('and the earlier run''s customer stays, being another batch''s',
+    (select count(*) from public.contacts where id = v_keep), 1);
+
+  -- Built on since: an invoice raised by hand to the customer the
+  -- failed run left. Rolling that run back would pull the customer out
+  -- from under it, and is refused in words a person can act on.
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate, status)
+  values (v_org, 'invoice', 'INV-HAND-1', date '2026-01-20', v_keep, 'MYR', 1, 'draft')
+  returning id into v_doc;
+  perform pg_temp.check_refused('a row something newer points at is refused in words',
+    format($q$ select * from public.rollback_import_batch(%L) $q$, v_old),
+    'Part of this import cannot be removed: something raised since the import points at it%',
+    '23503');
+end $$;
+
 rollback;
