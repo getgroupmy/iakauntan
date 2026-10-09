@@ -419,6 +419,35 @@ begin
        ((now() at time zone 'Asia/Kuala_Lumpur')::date - 1),
        ((now() at time zone 'Asia/Kuala_Lumpur')::date - 1))), 0);
 
+  -- `void_pos_sale`, rule by rule. A mutation sweep
+  -- (`mutants/void_pos_sale.py`) left four rules with nothing in any of
+  -- the seven files that call it to tell them from their absence: the
+  -- bill that does not exist, somebody who may not sell at all, the
+  -- reason carried onto each lost line -- every cooked bill above was
+  -- written off as 'other', which is what a mutant writing 'other' would
+  -- have put too -- and a ticket already served, which is not the
+  -- kitchen's to stop.
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_refused('a bill that does not exist is said so',
+    format('select public.void_pos_sale(%L, %L)', gen_random_uuid(), 'wrong_item'),
+    'No such bill.', 'P0002');
+  v_bill := public.open_pos_sale(v_reg);
+  perform public.add_pos_sale_line(v_bill, v_item, 1, 8.00);
+  perform public.send_order_to_kitchen(v_bill);
+  update public.pos_kitchen_tickets set status = 'served' where sale_id = v_bill;
+  perform pg_temp.sign_in_as(pg_temp.another_user('luar-batal-bil@example.test'));
+  perform pg_temp.check_refused('somebody outside the company writes off nothing',
+    format('select public.void_pos_sale(%L, %L)', v_bill, 'wrong_item'),
+    'not permitted to sell for this organization', '42501');
+  perform pg_temp.sign_in_as(v_owner);
+  perform public.void_pos_sale(v_bill, 'wrong_item');
+  perform pg_temp.check_eq('each lost line carries the reason given',
+    (select string_agg(distinct v.reason::text, ',') from public.pos_sale_line_voids v
+      where v.sale_id = v_bill), 'wrong_item');
+  perform pg_temp.check_eq('and a ticket already served stays served',
+    (select string_agg(distinct k.status::text, ',') from public.pos_kitchen_tickets k
+      where k.sale_id = v_bill), 'served');
+
   raise notice 'point of sale voiding: all assertions passed';
 end;
 $$;
