@@ -440,6 +440,7 @@ declare
   v_run    uuid; v_entry uuid; v_bare uuid; v_entry_run uuid;
   v_when   date := pg_temp.today() - 30;
   v_msg    text;
+  v_beside uuid;
 begin
   perform pg_temp.sign_in_as(v_owner);
   perform pg_temp.allow_many_companies();
@@ -714,8 +715,15 @@ begin
       v_msg like '%stock adjustment%');
   end;
 
+  -- A second draft beside it, so "this run" and "every draft run the
+  -- company has" are not the same rows (`mutants/cancel_landed_cost_run.py`
+  -- found them indistinguishable with one).
+  insert into public.landed_cost_runs (org_id, run_no, run_date, status)
+  values (v_org, 'LC-BESIDE', pg_temp.today(), 'draft') returning id into v_beside;
   perform pg_temp.check_true('a draft run is cancelled',
     public.cancel_landed_cost_run(v_run) = true);
+  perform pg_temp.check_true('and the draft beside it is not',
+    (select r.status = 'draft' from public.landed_cost_runs r where r.id = v_beside));
   perform pg_temp.check_true('and the run says cancelled, not draft',
     (select r.status = 'cancelled' from public.landed_cost_runs r
       where r.id = v_run));
