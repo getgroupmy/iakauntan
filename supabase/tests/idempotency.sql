@@ -1631,6 +1631,8 @@ begin
           'ticketing', 'crm', 'fixed_assets', 'accounting']);
   perform public.create_fiscal_year(v_org,
     date_trunc('year', pg_temp.today())::date);
+  -- Things below are dated yesterday, which on 1 January is last year.
+  perform pg_temp.open_years(v_org, pg_temp.today() - 30);
   perform pg_temp.test_bank_account(v_org, 'Current', 'current', 'MYR',
     9000, 9000, '7700002');
   select id into v_bank from public.bank_accounts where org_id = v_org limit 1;

@@ -956,7 +956,7 @@ What failed, and what was done (test files only, except `0771`):
 | --- | --- | --- |
 | Opens `date '2026-01-01'`, then voids or reverses TODAY -- from 1 January into a year nobody opened | aged_balances, credit_note_allocation, fx_revaluation, lot_allocation_shapes, manufacturing, matter_transfer, property, reversal, statement_of_account, void_an_invoice, pos_serial_sale, pos_tracked_item_sale, settlement_discount, withholding | `pg_temp.open_years(org, from[, to])` in `_helpers.sql`, after the fixture's own `create_fiscal_year`: opens each missing calendar year from `from` to today. A no-op on any day that did not fail |
 | Opens this year, back-dates paper 5-200 days | deposits, multicurrency, cash_forecast, statutory_charges | the same, from `today - N` |
-| Settles "yesterday" into this year only -- red on 1 January alone (measured after the first pass, which did not try that day; 1 January is now one of `run_at_dates.sh`'s defaults) | pos_food_court | `open_years(org, today - 30)` |
+| Dates paper one to three days back into this year only -- red on 1 January (and the 2nd and 3rd) alone. Measured after the first pass, which did not try that day; the whole suite at 1 January 2027 found these four, and 1 January is now one of `run_at_dates.sh`'s defaults | pos_food_court, posting_a_bill, item_bundles, idempotency (one block) | `open_years(org, today - 30)` |
 | Posts FORWARD into next year in late December | post_dated_cheques (clears at today + 46) | `open_years(org, today - 90, today + 90)` |
 | Reads a balance as at `2026-12-31` after a void dated today | reversal | as at today |
 | "A year that has not been opened" was `2027` | reversal | three years past today's |
