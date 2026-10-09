@@ -1432,6 +1432,7 @@ function:
 | `detach_company_from_firm` | `0450` | 8 / 8 | -- | `firm_portfolio.sql` (three before its block: every detach by somebody who owned the company AND ran the firm, so "anybody ends it" survived; no second client; the count unread) |
 | `invite_firm_member` | `0483` | 13 / 13 | -- | `firm_invitations.sql` (seven before its block: every address lower case and unspaced; the sender, the fortnight and a suspended member's return unread) |
 | `join_company_group` | `0132` | 5 / 5 | -- | `branches_and_groups.sql` (two before: the stranger tried a company they did not administer, so the group's own guard was never reached; noted: an empty group's maker is not consulted) |
+| `connect_bank_feed`, `disconnect_bank_feed`, `set_bank_feed_paused` | `0567` | 18 / 18 | -- | `bank_feed.sql` (six before its block: one well-formed feed; found: a disconnected feed cannot be reconnected, and resuming it says connected with no key -- dormant, no connector exists) |
 | `app.document_state_is_the_databases` | `0781` | 10 / 10 | -- | `posted_document_is_frozen.sql` (new in `0781`; the depth mutants killed by a real payment, which replaced a control that wrote the figures itself) |
 | `app.project_closes_only_when_billed` | `0778` | 11 / 11 | -- | `project_budget.sql` (new in `0778`; SECURITY DEFINER flipped by hand, equivalent while every member reads every time entry) |
 | `close_lead`, `reopen_lead` | `0373` | 12 / 12 | -- | `win_loss.sql` (four before its block: one clean lead, its owner) |

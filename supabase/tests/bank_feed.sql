@@ -317,4 +317,90 @@ begin
     (v_seen -> 'last_run') is not null);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The three writers, rule by rule
+--
+-- The blocks above connect one well-formed feed and ask the two
+-- properties the file is for. A sweep of the writers found most of
+-- their rules unasked: a missing account or feed, an unnamed bank, a
+-- key with spaces round it, the secret and reference left alone by an
+-- empty box, a save without a key on a failed feed, the error it
+-- leaves, the cursor a disconnect drops, and who may pause.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid := pg_temp.test_org('Suapan Satu Satu Sdn Bhd');
+  v_acct  uuid;
+  v_other uuid;
+  v_out   uuid := pg_temp.another_user('orang-luar@suapan.test');
+  v_feed  public.bank_feeds;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_acct  := pg_temp.test_bank_account(v_org, 'Operating', 'current', 'MYR',
+                                       0, 0, '512300000001');
+  v_other := pg_temp.test_bank_account(v_org, 'Reserve', 'current', 'MYR',
+                                       0, 0, '512300000002');
+
+  perform pg_temp.check_refused('an account that does not exist is said so',
+    format('select public.connect_bank_feed(%L, %L, %L)',
+           gen_random_uuid(), 'maybank', 'k'),
+    'Bank account % not found', 'P0002');
+  perform pg_temp.check_refused('a feed names its bank',
+    format('select public.connect_bank_feed(%L, %L, %L)', v_acct, '  ', 'k'),
+    'Name the bank this feed reads', '22023');
+  perform pg_temp.check_refused('and there is no feed to disconnect until one is made',
+    format('select public.disconnect_bank_feed(%L)', v_other),
+    'There is no feed on that account', 'P0002');
+
+  perform public.connect_bank_feed(v_acct, ' maybank ', '  key-1  ', ' secret-1 ',
+                                   ' ACC-1 ');
+  select * into v_feed from public.bank_feeds where bank_account_id = v_acct;
+  perform pg_temp.check_eq('what is typed is kept without its spaces',
+    v_feed.provider || '|' || v_feed.api_key || '|' || v_feed.api_secret
+      || '|' || v_feed.account_ref,
+    'maybank|key-1|secret-1|ACC-1');
+
+  -- A save with only the bank: every box empty leaves what is stored.
+  perform public.connect_bank_feed(v_acct, 'maybank', null, '', '  ');
+  select * into v_feed from public.bank_feeds where bank_account_id = v_acct;
+  perform pg_temp.check_eq('empty boxes leave the secret and the reference alone',
+    v_feed.api_secret || '|' || v_feed.account_ref, 'secret-1|ACC-1');
+
+  -- Failed, then saved WITHOUT a new key: not mended, and still saying
+  -- why. Then with one: mended, and the error gone.
+  update public.bank_feeds set status = 'failed', last_error = 'Token expired',
+         cursor = 'page-9'
+   where bank_account_id = v_acct;
+  perform public.connect_bank_feed(v_acct, 'maybank', null, null, 'ACC-2');
+  select * into v_feed from public.bank_feeds where bank_account_id = v_acct;
+  perform pg_temp.check_eq('a save without a key does not call a failed feed mended',
+    v_feed.status || '|' || v_feed.last_error, 'failed|Token expired');
+  perform public.connect_bank_feed(v_acct, 'maybank', 'key-2');
+  select * into v_feed from public.bank_feeds where bank_account_id = v_acct;
+  perform pg_temp.check_true('a new key mends it and the error goes with it',
+    v_feed.status = 'connected' and v_feed.last_error is null);
+
+  -- Paused and resumed: resuming clears an error left from before.
+  perform public.set_bank_feed_paused(v_acct, true);
+  update public.bank_feeds set last_error = 'Rate limited'
+   where bank_account_id = v_acct;
+  perform public.set_bank_feed_paused(v_acct, false);
+  select * into v_feed from public.bank_feeds where bank_account_id = v_acct;
+  perform pg_temp.check_true('resuming starts it clean',
+    v_feed.status = 'connected' and v_feed.last_error is null);
+
+  perform pg_temp.sign_in_as(v_out);
+  perform pg_temp.check_refused('a stranger does not pause a feed',
+    format('select public.set_bank_feed_paused(%L, true)', v_acct),
+    'Only an owner or administrator can change a bank feed', '42501');
+
+  -- Disconnecting takes where it had got to, as well as the key.
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  perform public.disconnect_bank_feed(v_acct);
+  perform pg_temp.check_true('a disconnect forgets where the feed had got to',
+    (select cursor from public.bank_feeds where bank_account_id = v_acct) is null);
+
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;
