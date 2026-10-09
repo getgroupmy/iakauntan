@@ -647,6 +647,18 @@ begin
   perform pg_temp.check_eq('and closing without a note keeps the note already there',
     (select notes from public.pos_shifts where id = v_shift),
     'Opened with a borrowed float');
+  -- And the two a mutation sweep (`mutants/close_pos_shift.py`) found
+  -- nothing standing on in any of the four POS files: who closed it, and
+  -- a note given AT the close replacing the one from the morning rather
+  -- than losing to it.
+  perform pg_temp.check_true('the shift says who closed it',
+    (select closed_by = pg_temp.test_user() from public.pos_shifts where id = v_shift));
+  v_shift := public.open_pos_shift(v_t1, 40.00);
+  update public.pos_shifts set notes = 'Opened with a borrowed float'
+   where id = v_shift;
+  select * into v_r from public.close_pos_shift(v_shift, 40.00, 'Float paid back');
+  perform pg_temp.check_eq('and a note given at the close is the one kept',
+    (select notes from public.pos_shifts where id = v_shift), 'Float paid back');
 end $$;
 
 -- ---------------------------------------------------------------------
