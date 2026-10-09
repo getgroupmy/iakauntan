@@ -1519,6 +1519,7 @@ function:
 | `ingest_exchange_rates` | `0104` | 16 / 16 | -- | `exchange_rate_feed.sql` (ten before its block; noted: a non-numeric rate or date fails the whole batch, and a slashed date reads by DateStyle -- unreachable through `fetch-rates`) |
 | `import_items` | `0103` | 25 / 25 | -- | `csv_import.sql` (ten before its block: one import and one preview of three kinds of bad row; the service check's comment claims untracked stock "posts to inventory" -- measured, it is expensed like non_stock) |
 | `revoke_document_share` | `0094` | 5 / 5 | -- | `document_share.sql` (two before its block: "anybody revokes" survived; one document only) |
+| `complete_kiosk_order` | `0220` | 10 / 13 | 3 | `pos_kiosk.sql` (six before its assertions; equivalent: `complete_pos_sale` asks the guard and the tender in the same words) |
 | `add_line_free_modifier` | `0251` | 16 / 16 | -- | `pos_fnb.sql` (seven before its assertions; noted: a typed answer is not checked against the item's own questions -- upward-only, so not money) |
 | `claim_pos_sale` | `0226` | 10 / 11 | 1 | `pos_fnb.sql` (four before its assertions; equivalent: a bill already on this till moved again -- a parked bill's shift is always open) |
 | `pos_scan_serial` | `0546` | 11 / 13 | 2 | `pos_serial_sale.sql` (eight before its assertions: a missing line, a stranger, an outlet with no shelf, another company's basket; equivalent: `items` forbids serial tracking on an item not kept, and `v_lot_balances` keeps no zero row) |

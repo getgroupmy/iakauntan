@@ -41,6 +41,12 @@ declare
   v_no1    integer;
   v_no2    integer;
   v_tk     uuid;
+  v_s3     uuid;
+  v_else   uuid;
+  v_their  uuid;
+  v_old    uuid;
+  v_inv_no text;
+  v_total  numeric;
 begin
   v_org := pg_temp.test_org('Ayam Segera Sdn Bhd');
   perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
@@ -139,6 +145,62 @@ begin
     (select count(*) from public.kiosk_order_board(v_outlet) b where b.order_no = v_no1), 0);
   perform pg_temp.check_eq('while the other is still waiting',
     (select count(*) from public.kiosk_order_board(v_outlet)), 1);
+
+  -- ------------------------------------------------------------------
+  -- `complete_kiosk_order`, rule by rule
+  -- ------------------------------------------------------------------
+  -- A mutation sweep (`mutants/complete_kiosk_order.py`) left these
+  -- with nothing to tell them from their absence. After the board, so
+  -- a third order does not change what it counts.
+  v_s3 := public.start_kiosk_order(v_kiosk);
+  perform public.add_pos_sale_line(v_s3, v_item, 1, 12.00);
+
+  perform pg_temp.check_refused('an order that does not exist is said so',
+    format('select * from public.complete_kiosk_order(%L, %L)',
+           gen_random_uuid(), v_card),
+    'No such order.', 'P0002');
+
+  perform pg_temp.sign_in_as(pg_temp.another_user('kiosk-luar@example.test'));
+  perform pg_temp.check_refused('a stranger cannot pay for an order',
+    format('select * from public.complete_kiosk_order(%L, %L)', v_s3, v_card),
+    'not permitted to sell for this organization', '42501');
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+
+  -- Another company's card terminal is not one this shop accepts, and
+  -- neither is a tender the shop has stopped taking.
+  v_else := pg_temp.test_org('Ayam Sebelah Sdn Bhd');
+  perform pg_temp.a_till(v_else);
+  insert into public.pos_tender_types
+    (org_id, code, name, kind, payment_mode_code, counts_in_drawer, gives_change)
+  values (v_else, 'CARD', 'Card', 'card', '04', false, false)
+  returning id into v_their;
+  perform pg_temp.check_refused('another company''s tender is not accepted',
+    format('select * from public.complete_kiosk_order(%L, %L)', v_s3, v_their),
+    'That is not a tender this company accepts.', 'P0002');
+  insert into public.pos_tender_types
+    (org_id, code, name, kind, payment_mode_code, counts_in_drawer,
+     gives_change, is_active)
+  values (v_org, 'OLDCARD', 'Old terminal', 'card', '04', false, false, false)
+  returning id into v_old;
+  perform pg_temp.check_refused('nor is a tender no longer in use',
+    format('select * from public.complete_kiosk_order(%L, %L)', v_s3, v_old),
+    'That is not a tender this company accepts.', 'P0002');
+
+  -- A kitchen switched off is no kitchen: the order is paid and nothing
+  -- is sent anywhere.
+  update public.pos_kitchen_stations set is_active = false where id = v_grill;
+  select r.invoice_no, r.total into v_inv_no, v_total
+    from public.complete_kiosk_order(v_s3, v_card) r;
+  perform pg_temp.check_eq('a kitchen switched off is not sent the order',
+    (select count(*)::integer from public.pos_kitchen_tickets k
+      where k.sale_id = v_s3), 0);
+  update public.pos_kitchen_stations set is_active = true where id = v_grill;
+  -- And the machine is told what to print.
+  perform pg_temp.check_eq('it says which invoice the order became',
+    v_inv_no,
+    (select d.doc_no from public.sales_documents d
+       join public.pos_sales s on s.invoice_id = d.id where s.id = v_s3));
+  perform pg_temp.check_eq('and what it came to', v_total, 12.00);
 
   raise notice 'point of sale kiosk: all assertions passed';
 end;
