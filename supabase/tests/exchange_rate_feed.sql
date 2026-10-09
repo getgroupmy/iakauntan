@@ -409,4 +409,51 @@ begin
         and policyname = 'exchange_rates_insert'));
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Row by row
+--
+-- The batch refusal above was caught by its SQLSTATE, which reading an
+-- object as an array raises too; and no row was ever missing a field,
+-- in lower case, at a rate of nothing, or for a currency switched off.
+-- ---------------------------------------------------------------------
+do $$
+declare v_said text; v_got text;
+begin
+  begin
+    perform public.ingest_exchange_rates('{"currency_code":"USD"}'::jsonb);
+  exception when sqlstate '22023' then
+    get stacked diagnostics v_said = message_text;
+  end;
+  perform pg_temp.check_eq('a single object is refused as not a list, in words',
+    v_said, 'Rates must arrive as a JSON array, not a object');
+
+  update public.ref_currencies set is_active = false where code = 'CHF';
+
+  select string_agg(coalesce(currency, '-') || ':' || status || ':'
+                    || coalesce(message, ''), ' | ' order by ord)
+    into v_got
+    from public.ingest_exchange_rates(jsonb_build_array(
+           jsonb_build_object('currency_code', ' usd ', 'unit', 1,
+                              'rate', 4.25, 'rate_date', '2026-05-04'),
+           jsonb_build_object('currency_code', 'SGD', 'unit', 1,
+                              'rate', 3.3),
+           jsonb_build_object('currency_code', 'EUR', 'unit', 1,
+                              'rate_date', '2026-05-04'),
+           jsonb_build_object('currency_code', 'GBP', 'unit', 1,
+                              'rate', 0, 'rate_date', '2026-05-04'),
+           jsonb_build_object('currency_code', 'CHF', 'unit', 1,
+                              'rate', 5.1, 'rate_date', '2026-05-04')))
+         with ordinality as t(currency, quoted_on, applied_rate, status, message, ord);
+  perform pg_temp.check_eq('each row is answered for itself',
+    v_got,
+    'USD:stored: | SGD:error:currency_code, rate and rate_date are all required'
+    || ' | EUR:error:currency_code, rate and rate_date are all required'
+    || ' | GBP:error:a rate of 0 cannot be used'
+    || ' | CHF:skipped:not a currency this system holds');
+  perform pg_temp.check_eq('and a code sent in lower case is stored in upper',
+    (select count(*)::integer from public.exchange_rates
+      where org_id is null and from_currency = 'USD'
+        and rate_date = date '2026-05-04'), 1);
+end $$;
+
 rollback;

@@ -1453,6 +1453,7 @@ function:
 | `join_company_group` | `0132` | 5 / 5 | -- | `branches_and_groups.sql` (two before: the stranger tried a company they did not administer, so the group's own guard was never reached; noted: an empty group's maker is not consulted) |
 | `connect_bank_feed`, `set_bank_feed_paused` | `0786` | 15 / 15 | -- | `bank_feed.sql` (with disconnect, six of 18 before its block: one well-formed feed; raised: a disconnected feed could not be reconnected, and resuming one said connected with no key -- `0786`) |
 | `disconnect_bank_feed` | `0567` | 6 / 6 | -- | `bank_feed.sql` (split from the two above when `0786` restated them) |
+| `ingest_exchange_rates` | `0104` | 16 / 16 | -- | `exchange_rate_feed.sql` (ten before its block; noted: a non-numeric rate or date fails the whole batch, and a slashed date reads by DateStyle -- unreachable through `fetch-rates`) |
 | `app.document_state_is_the_databases` | `0781` | 10 / 10 | -- | `posted_document_is_frozen.sql` (new in `0781`; the depth mutants killed by a real payment, which replaced a control that wrote the figures itself) |
 | `app.project_closes_only_when_billed` | `0778` | 11 / 11 | -- | `project_budget.sql` (new in `0778`; SECURITY DEFINER flipped by hand, equivalent while every member reads every time entry) |
 | `close_lead`, `reopen_lead` | `0373` | 12 / 12 | -- | `win_loss.sql` (four before its block: one clean lead, its owner) |
