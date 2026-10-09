@@ -180,6 +180,17 @@ begin
   perform pg_temp.check_refused('and one that is on another shelf',
     format($q$select public.pos_scan_serial(%L, 'SN-B9')$q$, v_line),
     'Serial SN-B9 is not on the shelf at Kedai Jalan Besar%', '23514');
+  -- `pos_scan_serial`, rule by rule. A mutation sweep
+  -- (`mutants/pos_scan_serial.py`) left these with nothing to tell
+  -- them from their absence.
+  perform pg_temp.check_refused('a line that does not exist is said so',
+    format($q$select public.pos_scan_serial(%L, 'SN-A1')$q$, gen_random_uuid()),
+    'No such line.', 'P0002');
+  perform pg_temp.sign_in_as(pg_temp.another_user('imbas-luar@example.test'));
+  perform pg_temp.check_refused('a stranger cannot scan onto the bill',
+    format($q$select public.pos_scan_serial(%L, 'SN-A1')$q$, v_line),
+    'not permitted to sell for this organization', '42501');
+  perform pg_temp.sign_in_as(pg_temp.test_user());
 
   -- ==================================================================
   -- 2. Two machines, scanned
@@ -273,6 +284,15 @@ begin
     format($q$select public.pos_scan_serial(%L, 'SN-A3')$q$, v_line),
     'That bill is completed%', '22023');
 
+  -- A machine already sold is not on the shelf, whatever the shop still
+  -- has on file for it. (Whether the shelf check says `> 0` or `>= 0`
+  -- cannot matter: `v_lot_balances` keeps no row whose balance is 0.)
+  v_sale := public.open_pos_sale(v_reg);
+  perform pg_temp.check_refused('a machine already sold cannot be scanned again',
+    format($q$select public.pos_scan_serial(%L, 'SN-A1')$q$,
+           public.add_pos_sale_line(v_sale, v_phone, 1, 1200.00)),
+    'Serial SN-A1 is not on the shelf at Kedai Jalan Besar%', '23514');
+
   -- ==================================================================
   -- 5. The quantity and the scans have to agree
   -- ==================================================================
@@ -303,6 +323,89 @@ begin
     format($q$select public.pos_scan_serial(%L, 'SN-A3')$q$,
            public.add_pos_sale_line(v_sale, v_case, 1, 30.00)),
     'Sarung telefon is not tracked by serial number%', '23514');
+  -- Not asked, and unreachable: an item tracked by serial that is not
+  -- kept in stock. `items` refuses the pair (tracking is 'none' or the
+  -- item is kept), so the half of the scan's own check that asks it is
+  -- never the half that decides.
+
+  -- ==================================================================
+  -- 7. An outlet with no shelf of its own, and another company's basket
+  -- ==================================================================
+  perform pg_temp.sn_receive(v_org, v_phone, v_shop, array['SN-A4', 'SN-A5']);
+  declare
+    v_bare   uuid;
+    v_reg2   uuid;
+    v_sale2  uuid;
+    v_line2  uuid;
+    v_else   uuid;
+    v_wh_b   uuid;
+    v_walk_b uuid;
+    v_item_b uuid;
+    v_out_b  uuid;
+    v_reg_b  uuid;
+    v_sale_b uuid;
+  begin
+    -- A line takes its outlet's warehouse, and an outlet need not have
+    -- one: the line then has none, and the scan looks on the company's
+    -- default shelf.
+    insert into public.pos_outlets
+      (org_id, code, name, business_type, warehouse_id, walk_in_contact_id,
+       prices_include_tax)
+    values (v_org, 'KIOSK', 'Kiosk tanpa gudang', 'retail', null, v_walkin,
+            false)
+    returning id into v_bare;
+    insert into public.pos_registers (org_id, outlet_id, code, name)
+    values (v_org, v_bare, 'K1', 'Kiosk') returning id into v_reg2;
+    perform public.open_pos_shift(v_reg2, 0);
+    v_sale2 := public.open_pos_sale(v_reg2);
+    v_line2 := public.add_pos_sale_line(v_sale2, v_phone, 1, 1200.00);
+    perform pg_temp.check_true('a line at an outlet with no shelf has no warehouse',
+      (select warehouse_id is null from public.pos_sale_lines
+        where id = v_line2));
+    perform pg_temp.check_eq('and its scan finds the machine on the default shelf',
+      array_to_string(public.pos_scan_serial(v_line2, 'SN-A4'), ','), 'SN-A4');
+
+    -- Another company's open basket holding a label that reads the
+    -- same is another company's business. Labels are only unique
+    -- within one shop's stock.
+    v_else := pg_temp.test_org('Kedai Seberang Sdn Bhd');
+    insert into public.org_modules (org_id, module_code, is_enabled)
+    select v_else, m, true from unnest(array['pos','inventory']) m
+    on conflict (org_id, module_code) do update set is_enabled = true;
+    insert into public.warehouses (org_id, code, name, is_default)
+    values (v_else, 'KEDAI', 'Lantai', true) returning id into v_wh_b;
+    insert into public.contacts (org_id, code, name, contact_type)
+    values (v_else, 'WALK-IN', 'Kaunter', 'customer') returning id into v_walk_b;
+    insert into public.items
+      (org_id, code, name, item_type, track_inventory, uom_code,
+       unit_price, cost_price)
+    values (v_else, 'X', 'Barang', 'stock', true, 'C62', 10.00, 5.00)
+    returning id into v_item_b;
+    insert into public.pos_outlets
+      (org_id, code, name, business_type, warehouse_id, walk_in_contact_id,
+       prices_include_tax)
+    values (v_else, 'SEB', 'Seberang', 'retail', v_wh_b, v_walk_b, false)
+    returning id into v_out_b;
+    insert into public.pos_registers (org_id, outlet_id, code, name)
+    values (v_else, v_out_b, 'S1', 'Kaunter') returning id into v_reg_b;
+    perform pg_temp.a_till(v_else);
+    perform public.open_pos_shift(v_reg_b, 0);
+    v_sale_b := public.open_pos_sale(v_reg_b);
+    -- Assigned first: called in the WHERE, the function runs once per
+    -- row the update scans and no row is the one it just added.
+    v_line2 := public.add_pos_sale_line(v_sale_b, v_item_b, 1, 10.00);
+    update public.pos_sale_lines set serial_refs = array['SN-A5']
+     where id = v_line2;
+    perform pg_temp.check_true('the other company''s open basket holds a label SN-A5',
+      exists (select 1 from public.pos_sale_lines l
+                join public.pos_sales s on s.id = l.sale_id
+               where l.org_id = v_else and s.status = 'parked'
+                 and 'SN-A5' = any (l.serial_refs)));
+    perform pg_temp.check_eq('another company''s basket does not hold this shop''s machine',
+      array_to_string(public.pos_scan_serial(
+        public.add_pos_sale_line(v_sale2, v_phone, 1, 1200.00), 'SN-A5'), ','),
+      'SN-A5');
+  end;
 end $$;
 
 rollback;
