@@ -1724,6 +1724,66 @@ begin
   perform public.resume_pos_item(v_outlet, v_item);
   update public.pos_menu_schedules set is_active = false where org_id = v_org;
 
+  -- ------------------------------------------------------------------
+  -- Sending to the kitchen, rule by rule
+  -- ------------------------------------------------------------------
+  -- Every send above is of a parked table bill by the owner, at the
+  -- outlet whose items all route somewhere, with no note on any line
+  -- and nothing read off the docket but its lines -- so a docket that
+  -- dropped the table, the covers or the note, a paid order refused, a
+  -- voided one sent, a line with nowhere to go, a missing sale and a
+  -- stranger all passed.
+  select k.id into v_tk from public.pos_kitchen_tickets k
+   join public.pos_sales s on s.id = k.sale_id
+   where s.table_id = v_bar and k.station_id = v_hotst
+   order by k.sent_at limit 1;
+  perform pg_temp.check_eq('a docket says which table it is for',
+    (select k.table_code from public.pos_kitchen_tickets k where k.id = v_tk), 'BAR1');
+  perform pg_temp.check_eq('and how many are sitting at it',
+    (select k.covers from public.pos_kitchen_tickets k where k.id = v_tk), 2);
+
+  -- Tea has picked up a required size by now; the choice is not what
+  -- this asks about, so it goes.
+  perform public.set_item_modifier_groups(v_teh, array[]::uuid[]);
+
+  -- Paid first, cooked after: the kiosk's order of things.
+  v_ma := public.open_pos_sale(v_reg);
+  perform public.add_pos_sale_line(v_ma, v_teh, 1, 3.00, 0, 'Kurang manis');
+  perform public.complete_pos_sale(v_ma,
+    jsonb_build_array(jsonb_build_object('type', v_cash, 'amount', 3.00)));
+  perform pg_temp.check_eq('a paid order is still sent',
+    (select count(*) from public.send_order_to_kitchen(v_ma)), 1);
+  perform pg_temp.check_eq('with the note the customer gave',
+    (select kl.note from public.pos_kitchen_ticket_lines kl
+       join public.pos_kitchen_tickets k on k.id = kl.ticket_id
+      where k.sale_id = v_ma), 'Kurang manis');
+
+  v_mb := public.open_pos_sale(v_reg);
+  perform public.add_pos_sale_line(v_mb, v_teh, 1, 3.00);
+  perform public.void_pos_sale(v_mb, 'customer_cancelled', 'Walked out');
+  perform pg_temp.check_refused('a voided order sends nothing',
+    format('select count(*) from public.send_order_to_kitchen(%L)', v_mb),
+    'That order was voided, so there is nothing to send.', '23514');
+  perform pg_temp.check_refused('a sale that is not there is said so',
+    format('select count(*) from public.send_order_to_kitchen(%L)', gen_random_uuid()),
+    'No such sale.', 'P0002');
+
+  -- The branch has no kitchen station at all.
+  v_mo := public.open_pos_sale(v_reg2);
+  perform public.add_pos_sale_line(v_mo, v_teh, 1, 3.00);
+  perform pg_temp.check_refused('a line with nowhere to be made is refused, by name',
+    format('select count(*) from public.send_order_to_kitchen(%L)', v_mo),
+    'Nothing tells the kitchen where "%" is made, and this outlet has no default station.',
+    '23514');
+
+  v_mb := public.open_pos_sale(v_reg);
+  perform public.add_pos_sale_line(v_mb, v_teh, 1, 3.00);
+  perform pg_temp.sign_in_as(pg_temp.another_user('orang.luar@dapur.test'));
+  perform pg_temp.check_refused('a stranger sends nothing to this kitchen',
+    format('select count(*) from public.send_order_to_kitchen(%L)', v_mb),
+    'not permitted to sell for this organization', '42501');
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+
   raise notice 'point of sale dining room: all assertions passed';
 end;
 $$;
