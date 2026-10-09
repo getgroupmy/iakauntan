@@ -455,6 +455,64 @@ begin
   perform pg_temp.check_eq(
     'and nothing was voided on the way to refusing', v_count, 0);
 
+  -- `void_rent_run`, rule by rule. A mutation sweep
+  -- (`mutants/void_rent_run.py`) found nothing above standing on the run
+  -- that does not exist, who may undo one, an invoice LHDN accepted
+  -- holding the run as a paid one does, the hold being THIS run's
+  -- invoices and not another's, the invoices voided being this run's
+  -- and nobody else's, what each voided invoice says about why, and who
+  -- undid the run and why.
+  declare
+    v_mar uuid; v_mar_no text; v_held uuid;
+  begin
+    perform pg_temp.check_refused('a rent run that does not exist is said so',
+      format('select public.void_rent_run(%L, %L)', gen_random_uuid(), 'gone'),
+      'No such rent run.', 'P0002');
+
+    perform pg_temp.sign_in_as(pg_temp.another_user('luar-sewa@example.test'));
+    perform pg_temp.check_refused('somebody outside the company cannot undo its rent run',
+      format('select public.void_rent_run(%L, %L)', v_run, 'not mine'),
+      'Insufficient privileges to void a rent run', '42501');
+    perform pg_temp.sign_in_as(pg_temp.test_user());
+
+    -- Accepted by LHDN and unpaid holds the run exactly as paid does.
+    select l.invoice_id into v_held from public.rent_run_lines l
+     where l.run_id = v_run and exists (
+       select 1 from public.sales_documents d
+        where d.id = l.invoice_id and d.paid_amount > 0);
+    update public.sales_documents
+       set paid_amount = 0, einvoice_status = 'valid' where id = v_held;
+    perform pg_temp.check_refused('an invoice LHDN accepted holds the run as a paid one does',
+      format('select public.void_rent_run(%L, %L)', v_run, 'too late'),
+      'This run cannot be undone: 1 of its invoices have been paid or accepted by LHDN.%',
+      '23514');
+
+    -- And it holds THIS run. March, raised beside it, comes apart while
+    -- February stands -- and only March's two invoices go.
+    v_mar := public.raise_rent_invoices(
+      v_site, date '2026-03-01', date '2026-03-31', date '2026-03-07');
+    select run_no into v_mar_no from public.rent_runs where id = v_mar;
+    perform pg_temp.check_eq('another run''s accepted invoice does not hold this one',
+      public.void_rent_run(v_mar, '  billed in the wrong month  '), 2);
+    select count(*) into v_count
+      from public.rent_run_lines l
+      join public.sales_documents d on d.id = l.invoice_id
+     where l.run_id <> v_mar and d.status = 'void'
+       and d.org_id = v_org and l.run_id in (
+         select id from public.rent_runs where site_id = v_site and voided_at is null);
+    perform pg_temp.check_eq('and no other standing run lost an invoice', v_count, 0);
+    perform pg_temp.check_eq('each voided invoice says which run and why',
+      (select count(*)::integer from public.rent_run_lines l
+         join public.sales_documents d on d.id = l.invoice_id
+        where l.run_id = v_mar
+          and d.internal_notes like '%Voided: Rent run ' || v_mar_no
+                || ' voided: billed in the wrong month%'), 2);
+    perform pg_temp.check_true('the run says who undid it, when, and why, without the spaces',
+      (select voided_by = pg_temp.test_user() and voided_at = now()
+              and void_reason = 'billed in the wrong month'
+         from public.rent_runs where id = v_mar));
+  end;
+
   -- ------------------------------------------------------------------
   -- One unit, one tenant, over any given day
   -- ------------------------------------------------------------------
