@@ -483,16 +483,13 @@ begin
     raise notice 'ok   and unpicking one needs both sides of it';
   end;
 
-  -- The sales half of that condition is NOT asserted, and cannot be.
-  -- `sales` is a CORE module and `purchases` is an add-on, so
-  -- `can_write_module(org, 'sales')` is true for every member of every
-  -- company whatever they have bought — the clause can only be false
-  -- for somebody who is not a member at all, and for them the purchases
-  -- clause is false too. Tried both routes before writing this down:
-  -- switching `sales` off in `org_modules` changes nothing, because a
-  -- core module is not entitlement-gated. The clause stays because it
-  -- says what the function means, and if `sales` ever stops being core
-  -- it starts doing work.
+  -- The sales half of that condition is not asserted HERE, and this
+  -- said it could not be: `sales` is a CORE module, so switching it off
+  -- in `org_modules` changes nothing. That much is true. What it missed
+  -- is the other way a member loses write on a module -- an ACCESS
+  -- TYPE that gives them `sales` to read. That is a person, not a
+  -- company, and it is asserted in "`void_contra`, rule by rule" at the
+  -- end of this file.
 
   -- With both back, it comes apart as it should.
   update public.org_modules set is_enabled = true
@@ -1192,5 +1189,125 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+
+-- ---------------------------------------------------------------------
+-- `void_contra`, rule by rule
+--
+-- A mutation sweep (`mutants/void_contra.py`) left six of its fifteen
+-- with nothing above to tell them from their absence: the contra that
+-- does not exist, the SALES half of the permission (see "Who may unpick
+-- a contra" -- an access type is the way to lose it, not the module),
+-- the reason kept with its spaces, the day the reversal is dated, and
+-- who undid it and when.
+--
+-- The day needs a contra dated BEFORE today. Every contra above is
+-- dated today, so "reversed today" and "reversed on the contra's own
+-- day" were the same row and no assertion could say which the function
+-- read. Leaving the date to `reverse_gl_entry`'s default is equivalent:
+-- that default is `app.today()` too.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_owner uuid := pg_temp.test_user();
+  v_clerk uuid := pg_temp.another_user('contra-buyer-only@iakauntan.test');
+  v_seller uuid := pg_temp.another_user('contra-seller-only@iakauntan.test');
+  v_then date := pg_temp.today() - 10;
+  v_org uuid; v_party uuid; v_item uuid; v_inv uuid; v_bill uuid;
+  v_ctr uuid; v_type uuid; v_type2 uuid; v_rev uuid;
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Contra Satu Persatu Sdn Bhd');
+  perform pg_temp.allow_many_companies();
+  perform public.create_fiscal_year(v_org, date_trunc('year', v_then)::date);
+  if extract(year from v_then) <> extract(year from pg_temp.today()) then
+    perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  end if;
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_org, m, true from unnest(array['sales','purchases','accounting']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'DUA', 'Dua Hala Bhd', 'both') returning id into v_party;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, unit_price)
+  values (v_org, 'KHIDMAT', 'Service', 'service', false, 100)
+  returning id into v_item;
+
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'invoice', 'INV-S1', v_then, v_then, v_party, 'MYR', 1, 'draft')
+  returning id into v_inv;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price)
+  values (v_org, v_inv, 1, 'item', v_item, 'Service', 10, 100);
+  perform public.post_sales_document(v_inv);
+
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'bill', 'BILL-S1', v_then, v_party, 'MYR', 1, 'draft')
+  returning id into v_bill;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price)
+  values (v_org, v_bill, 1, 'item', v_item, 'Hire', 10, 100);
+  perform public.post_purchase_document(v_bill);
+
+  v_ctr := public.create_contra(
+    v_org, v_then,
+    jsonb_build_array(jsonb_build_object('document', v_inv, 'amount', 500)),
+    jsonb_build_array(jsonb_build_object('document', v_bill, 'amount', 500)),
+    'Set off ten days ago');
+
+  perform pg_temp.check_refused('a contra that does not exist is said so',
+    format('select public.void_contra(%L, %L)', gen_random_uuid(), 'gone'),
+    'No such contra.', 'P0002');
+
+  -- Write on purchases and only read on sales: refused. And the mirror
+  -- of it, so that neither half is the only one doing the work.
+  insert into public.access_types (org_id, name)
+  values (v_org, 'Purchasing clerk') returning id into v_type;
+  insert into public.access_type_modules (access_type_id, module_code, access)
+  values (v_type, 'purchases', 'write'), (v_type, 'sales', 'read');
+  insert into public.org_members (org_id, user_id, role, access_type_id)
+  values (v_org, v_clerk, 'purchaser', v_type);
+  insert into public.access_types (org_id, name)
+  values (v_org, 'Sales clerk') returning id into v_type2;
+  insert into public.access_type_modules (access_type_id, module_code, access)
+  values (v_type2, 'sales', 'write'), (v_type2, 'purchases', 'read');
+  insert into public.org_members (org_id, user_id, role, access_type_id)
+  values (v_org, v_seller, 'purchaser', v_type2);
+
+  perform pg_temp.sign_in_as(v_clerk);
+  perform pg_temp.check_refused('write on purchases alone does not unpick a contra',
+    format('select public.void_contra(%L, %L)', v_ctr, 'buyer only'),
+    'not permitted to write for this organization', '42501');
+  perform pg_temp.sign_in_as(v_seller);
+  perform pg_temp.check_refused('nor write on sales alone',
+    format('select public.void_contra(%L, %L)', v_ctr, 'seller only'),
+    'not permitted to write for this organization', '42501');
+  perform pg_temp.sign_in_as(v_owner);
+
+  v_rev := public.void_contra(v_ctr, '  Settled in cash instead  ');
+  perform pg_temp.check_eq('the reason is kept without the spaces round it',
+    (select void_reason from public.contra_notes where id = v_ctr),
+    'Settled in cash instead');
+  perform pg_temp.check_eq('the reversal is dated the day it was undone, not the contra''s day',
+    (select entry_date::text from public.gl_entries where id = v_rev),
+    pg_temp.today()::text);
+  perform pg_temp.check_eq('and the contra''s own entry keeps its day',
+    (select e.entry_date::text from public.gl_entries e
+       join public.contra_notes n on n.gl_entry_id = e.id where n.id = v_ctr),
+    v_then::text);
+  perform pg_temp.check_true('who undid it is on the note',
+    (select voided_by = v_owner from public.contra_notes where id = v_ctr));
+  perform pg_temp.check_true('and when',
+    (select voided_at = now() from public.contra_notes where id = v_ctr));
+
+  perform pg_temp.sign_out();
+end $$;
 
 rollback;
