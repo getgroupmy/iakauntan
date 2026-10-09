@@ -1569,6 +1569,77 @@ begin
     (select count(*) from public.pos_modifier_groups_admin(v_org) g
       where g.allows_free_text), 2);
 
+  -- `add_line_free_modifier`, rule by rule. A mutation sweep
+  -- (`mutants/add_line_free_modifier.py`) left these with nothing to
+  -- tell them from their absence.
+  declare
+    v_note     uuid;
+    v_note_off uuid;
+    v_else     uuid;
+    v_q_else   uuid;
+    v_typed    uuid;
+  begin
+    insert into public.pos_modifier_groups
+      (org_id, code, name, min_select, max_select, allows_free_text)
+    values (v_org, 'NOTA', 'Nota', 0, 5, true) returning id into v_note;
+    insert into public.pos_modifier_groups
+      (org_id, code, name, min_select, max_select, allows_free_text, is_active)
+    values (v_org, 'LAMA', 'Soalan lama', 0, 5, true, false)
+    returning id into v_note_off;
+
+    perform pg_temp.check_refused('a line that does not exist is said so',
+      format('select public.add_line_free_modifier(%L, %L, %L, 0)',
+             gen_random_uuid(), v_note, 'Nota'),
+      'No such line.', 'P0002');
+    perform pg_temp.check_refused('a question that does not exist is not this company''s',
+      format('select public.add_line_free_modifier(%L, %L, %L, 0)',
+             v_line, gen_random_uuid(), 'Nota'),
+      'That is not one of this company''s questions.', 'P0002');
+    v_else := pg_temp.test_org('Gerai Sebelah Sdn Bhd');
+    insert into public.pos_modifier_groups
+      (org_id, code, name, min_select, max_select, allows_free_text)
+    values (v_else, 'NOTA', 'Nota sebelah', 0, 5, true) returning id into v_q_else;
+    perform pg_temp.check_refused('nor is another company''s question',
+      format('select public.add_line_free_modifier(%L, %L, %L, 0)',
+             v_line, v_q_else, 'Nota'),
+      'That is not one of this company''s questions.', 'P0002');
+    perform pg_temp.check_refused('a question no longer asked takes no answer',
+      format('select public.add_line_free_modifier(%L, %L, %L, 0)',
+             v_line, v_note_off, 'Nota'),
+      'Soalan lama is not being asked.', '23514');
+    perform pg_temp.check_refused('an answer needs a quantity',
+      format('select public.add_line_free_modifier(%L, %L, %L, 0, 0)',
+             v_line, v_note, 'Nota'),
+      'A modifier needs a quantity.', '23514');
+    perform pg_temp.check_refused('a settled plate takes no answer',
+      format('select public.add_line_free_modifier(%L, %L, %L, 0)',
+             (select l.id from public.pos_sale_lines l
+                join public.pos_sales s on s.id = l.sale_id
+               where s.org_id = v_org and s.status = 'completed'
+               order by s.opened_at limit 1), v_note, 'Nota'),
+      'That bill is completed and cannot be changed.', '23514');
+    perform pg_temp.sign_in_as(pg_temp.another_user('taip-luar@example.test'));
+    perform pg_temp.check_refused('a stranger cannot type onto the plate',
+      format('select public.add_line_free_modifier(%L, %L, %L, 0)',
+             v_line, v_note, 'Nota'),
+      'not permitted to sell for this organization', '42501');
+    perform pg_temp.sign_in_as(pg_temp.test_user());
+
+    -- Sixty characters is the docket's width, and fits it.
+    v_typed := public.add_line_free_modifier(v_line, v_note, repeat('y', 60), 0);
+    perform pg_temp.check_eq('sixty characters fit on the docket',
+      (select length(m.name) from public.pos_sale_line_modifiers m
+        where m.id = v_typed), 60);
+    -- Two of something typed is two, and is charged as two.
+    v_typed := public.add_line_free_modifier(v_line, v_note, 'Nasi tambah', 1.00, 2);
+    perform pg_temp.check_eq('a typed answer keeps its quantity',
+      (select m.quantity from public.pos_sale_line_modifiers m
+        where m.id = v_typed), 2);
+    perform pg_temp.check_eq('and the plate is charged for both',
+      (select l.unit_price from public.pos_sale_lines l where l.id = v_line),
+      18.0000);
+  end;
+
   -- ------------------------------------------------------------------
   -- A number and a wait
   -- ------------------------------------------------------------------
