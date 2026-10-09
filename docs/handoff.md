@@ -1091,6 +1091,7 @@ function:
 | `void_pos_sale` | `0247` | 16 / 16 | -- | `pos_void_permission.sql` (four only after they were asserted) |
 | `void_pos_sale_line` | `0244` | 12 / 12 | -- | `pos_fnb.sql` + `pos_void_permission.sql` (five only after its rule-by-rule assertions) |
 | `discount_pos_sale` | `0255` | 17 / 17 | -- | `pos.sql` -- ALL only after its rule-by-rule block; before it, none of four files killed one |
+| `discount_pos_sale_line` | `0255` | 17 / 17 | -- | `pos.sql` (fourteen only after its rule-by-rule block; a refusal caught as any `check_violation` let its own guard go) |
 
 Every equivalent is written into its mutants file with the reason.
 

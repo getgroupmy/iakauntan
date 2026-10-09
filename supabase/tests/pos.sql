@@ -1582,6 +1582,88 @@ begin
       'That bill is % and what it charged cannot be changed.%', '23514');
   end;
 
+  -- ==================================================================
+  -- `discount_pos_sale_line`, rule by rule
+  --
+  -- The same sweep for one line (`mutants/discount_pos_sale_line.py`)
+  -- left fourteen of seventeen alive. The two refusals above it caught
+  -- `check_violation` and nothing more, so "more than the line" passed
+  -- with its guard gone -- the negative line trips a different check on
+  -- the way out -- and the line was never taxed, so where the tax sits
+  -- in a discounted price could not be seen. Every refusal here is
+  -- asserted by its own sentence.
+  -- ==================================================================
+  declare v_st8c uuid; v_tx uuid; v_b2 uuid; v_l2 uuid; v_l3 uuid;
+  begin
+    perform pg_temp.sign_in_as(v_owner);
+    insert into public.tax_codes
+      (org_id, code, name, tax_type_code, rate, applies_to,
+       sales_tax_account_id, purchase_tax_account_id)
+    values (v_org, 'ST8C', 'Service Tax 8% (lines)', '02', 8, 'both',
+            (select id from public.accounts where org_id = v_org and code = '2130'),
+            (select id from public.accounts where org_id = v_org and code = '1410'))
+    returning id into v_st8c;
+    insert into public.items
+      (org_id, code, name, item_type, track_inventory, uom_code,
+       unit_price, cost_price, sales_tax_code_id)
+    values (v_org, 'SET3', 'Set makan baris', 'service', false, 'C62', 100.00, 0, v_st8c)
+    returning id into v_tx;
+    v_b2 := public.open_pos_sale(v_reg);
+    v_l2 := public.add_pos_sale_line(v_b2, v_tx, 1, 100.00);
+    -- The same plate where the menu price has the tax inside it.
+    update public.pos_outlets set prices_include_tax = true where id = v_outlet;
+    v_l3 := public.add_pos_sale_line(v_b2, v_tx, 1, 108.00);
+    update public.pos_outlets set prices_include_tax = false where id = v_outlet;
+
+    perform pg_temp.check_refused('a line that does not exist is said so',
+      format('select public.discount_pos_sale_line(%L, 10, null, %L)', gen_random_uuid(), 'x'),
+      'No such line.', 'P0002');
+    perform pg_temp.check_refused('a percentage or an amount, not both',
+      format('select public.discount_pos_sale_line(%L, 10, 5, %L)', v_l2, 'x'),
+      'A discount is either a percentage or an amount, not both.', '23514');
+    perform pg_temp.check_refused('a percentage from nought to a hundred',
+      format('select public.discount_pos_sale_line(%L, 101, null, %L)', v_l2, 'x'),
+      'A discount runs from nought to a hundred per cent.', '23514');
+    perform pg_temp.check_refused('an amount does not add money',
+      format('select public.discount_pos_sale_line(%L, null, -1, %L)', v_l2, 'x'),
+      'A discount cannot add money to a line.', '23514');
+    perform pg_temp.check_refused('nor take off more than the line',
+      format('select public.discount_pos_sale_line(%L, null, 100.01, %L)', v_l2, 'x'),
+      'That is more than the line comes to (100.00). Take the line off instead.', '23514');
+    perform pg_temp.sign_in_as(pg_temp.another_user('luar-diskaun-baris@example.test'));
+    perform pg_temp.check_refused('somebody without the discount grant takes nothing off a line',
+      format('select public.discount_pos_sale_line(%L, 10, null, %L)', v_l2, 'x'),
+      'Taking money off a bill needs the discount permission.%', '42501');
+    perform pg_temp.sign_in_as(v_owner);
+
+    -- Exactly the line is the most that comes off.
+    perform public.discount_pos_sale_line(v_l2, null, 100.00, 'On the house');
+    perform pg_temp.check_eq('the whole line can come off',
+      (select l.line_total from public.pos_sale_lines l where l.id = v_l2), 0.00::numeric);
+
+    -- Tax on top: a tenth off 100.00 leaves 90.00, and the tax is on that.
+    perform public.discount_pos_sale_line(v_l2, 10, null, '  regular  ');
+    perform pg_temp.check_true('tax on top is charged on what is left: 90.00 and 7.20',
+      (select l.line_subtotal = 90.00 and l.tax_amount = 7.20 and l.line_total = 97.20
+         from public.pos_sale_lines l where l.id = v_l2));
+    -- Tax inside: a tenth off 108.00 is 97.20, of which 7.20 is tax.
+    perform public.discount_pos_sale_line(v_l3, 10, null, 'regular');
+    perform pg_temp.check_true('tax inside the price is carved out of what is left',
+      (select l.line_subtotal = 90.00 and l.tax_amount = 7.20 and l.line_total = 97.20
+         from public.pos_sale_lines l where l.id = v_l3));
+    perform pg_temp.check_true('with the reason, trimmed, and who gave it',
+      (select l.discount_reason = 'regular' and l.discounted_by = v_owner
+         from public.pos_sale_lines l where l.id = v_l2));
+    perform pg_temp.check_eq('and the bill comes to the two lines at once',
+      (select s.total_amount from public.pos_sales s where s.id = v_b2), 194.40::numeric);
+
+    perform public.complete_pos_sale(v_b2,
+      jsonb_build_array(jsonb_build_object('type', v_cash, 'amount', 194.40)));
+    perform pg_temp.check_refused('a line on a paid bill is not discounted',
+      format('select public.discount_pos_sale_line(%L, 10, null, %L)', v_l2, 'late'),
+      'That bill is % and what it charged cannot be changed.%', '23514');
+  end;
+
   perform pg_temp.sign_in_as(v_owner);
   raise notice 'ok   the counter: the twenty-one a second sweep found';
 end $$;
