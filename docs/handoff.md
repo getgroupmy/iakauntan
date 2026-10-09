@@ -911,7 +911,13 @@ page and renumbering would quietly break the reference.
     definitions hash to production's (ff801512..., 67be1a64...). So a
     whole-text md5 of an early function will not match production and
     does not mean the code differs: strip `--` lines and compare again.
-    Swept 17 / 17 and 4 / 4. **Awaiting deploy.**
+    Swept 17 / 17 and 4 / 4.
+    **Applied, and read back** (9 October, read-only, after run
+    37896858689 on `0fe7756`): recorded; the refusal in the live
+    `match_bank_transaction` (4c3dbace...) and the account filter in
+    the live `suggest_bank_matches` (d181fd33...), both the same as the
+    local build -- whole-text, comments and all, since this one went in
+    through CI; execute granted to `authenticated` and not to `anon`.
     NOT CHANGED, by the answer: the demo is year-to-date, so in January
     it is thin, and three demo files' "richness" assertions now follow
     the month (below). NOT RAISED, found on the way: in January to
