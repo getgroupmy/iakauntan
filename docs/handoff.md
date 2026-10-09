@@ -948,6 +948,7 @@ function:
 | `create_supplier_from_received_einvoice`, `link_received_einvoice_contact` | `0650` | 14 / 14 | -- | `received_einvoice.sql` (eight only after its block; its first draft was linked by the shared registration number in the fixture) |
 | `set_received_einvoice_status` | `0650` | 4 / 4 | -- | `received_einvoice.sql` (one only after an assertion added) |
 | `record_received_einvoice` | `0650` | 13 / 13 | -- | `received_einvoice.sql` (eight only after its block, including the per-company duplicate check) |
+| `file_sst_return` | `0455` | 7 / 8 | 1 date-dependent (`>=` vs `>` differs only on a period's last day; `app.today()` cannot be pinned) | `sst_taxable_period.sql` (two only after refiling assertions) |
 
 Every equivalent is written into its mutants file with the reason.
 

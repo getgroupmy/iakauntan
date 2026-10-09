@@ -315,6 +315,16 @@ begin
   select * into r from public.sst_taxable_periods(v_org)
    where period_end = v_end;
   perform pg_temp.check_eq('the reference is kept', r.reference, 'SST-02/0001');
+
+  -- Filed again, corrected: the return says what was filed LAST, figure
+  -- and reference both. Swept: keeping the first of either passed.
+  perform public.file_sst_return(v_org, v_end, 1300.00, 'SST-02/0001A');
+  perform pg_temp.check_eq('a refiling replaces what was declared',
+    (select tax_declared from public.sst_returns
+      where org_id = v_org and period_end = v_end), 1300.00);
+  perform pg_temp.check_eq('and the reference with it',
+    (select reference from public.sst_returns
+      where org_id = v_org and period_end = v_end), 'SST-02/0001A');
 end $$;
 
 -- ---------------------------------------------------------------------
