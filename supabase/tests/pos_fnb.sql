@@ -965,6 +965,54 @@ begin
   perform pg_temp.check_true('claiming again changes nothing',
     (select s.register_id = v_reg3 and s.opened_on_register_id = v_reg
        from public.pos_sales s where s.id = v_split));
+  -- Not asked, and equivalent: whether a bill already on this till is
+  -- left alone or moved onto it again. Moved again, it would take the
+  -- till's current shift -- but a parked bill's shift is always open,
+  -- because `close_pos_shift` refuses while any bill on it is parked.
+
+  -- `claim_pos_sale`, rule by rule. A mutation sweep
+  -- (`mutants/claim_pos_sale.py`) left these with nothing to tell them
+  -- from their absence.
+  --
+  -- Taken back to the till it was rung up on, it still says it started
+  -- there -- the first till, not the last one it stopped at.
+  perform public.claim_pos_sale(v_split, v_reg);
+  perform pg_temp.check_true('taken back, it still says where it started',
+    (select s.register_id = v_reg and s.opened_on_register_id = v_reg
+       from public.pos_sales s where s.id = v_split));
+  perform public.claim_pos_sale(v_split, v_reg3);
+  perform pg_temp.check_refused('a bill that does not exist is said so',
+    format('select public.claim_pos_sale(%L, %L)', gen_random_uuid(), v_reg3),
+    'No such sale.', 'P0002');
+  perform pg_temp.check_refused('and a till that does not exist',
+    format('select public.claim_pos_sale(%L, %L)', v_split, gen_random_uuid()),
+    'No such register.', 'P0002');
+  perform pg_temp.check_refused('a settled bill is nobody''s to take',
+    format('select public.claim_pos_sale(%L, %L)',
+           (select s.id from public.pos_sales s
+             where s.outlet_id = v_outlet and s.status = 'completed'
+             order by s.opened_at limit 1), v_reg3),
+    'That sale is already completed.', '23514');
+  perform pg_temp.sign_in_as(pg_temp.another_user('ambil-luar@example.test'));
+  perform pg_temp.check_refused('a stranger cannot take a bill onto a till',
+    format('select public.claim_pos_sale(%L, %L)', v_split, v_reg3),
+    'not permitted to sell for this organization', '42501');
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  -- Another company's till is not one this bill has heard of -- said as
+  -- that, before the outlet is ever compared.
+  declare
+    v_else  uuid := pg_temp.test_org('Kedai Jiran Sdn Bhd');
+    v_out_b uuid;
+    v_reg_b uuid;
+  begin
+    insert into public.pos_outlets (org_id, code, name)
+    values (v_else, 'JIRAN', 'Jiran') returning id into v_out_b;
+    insert into public.pos_registers (org_id, outlet_id, code, name)
+    values (v_else, v_out_b, 'J1', 'Kaunter jiran') returning id into v_reg_b;
+    perform pg_temp.check_refused('another company''s till is no such register',
+      format('select public.claim_pos_sale(%L, %L)', v_split, v_reg_b),
+      'No such register.', 'P0002');
+  end;
 
   -- A bill cannot walk to another shop: the stock it will move comes
   -- out of this outlet's warehouse and the receipt carries this
