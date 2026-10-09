@@ -81,6 +81,12 @@ declare
   v_g2     uuid;
   v_m2     uuid;
   v_free   uuid;
+  v_cust   uuid;
+  v_s3     uuid;
+  v_n3     uuid;
+  v_la     uuid;
+  v_lb     uuid;
+  v_lc     uuid;
 begin
   v_org := pg_temp.test_org('Warung Sedap Sdn Bhd');
   perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
@@ -584,6 +590,91 @@ begin
     (select count(*) from public.pos_sales s where s.id = v_split), 0);
   perform pg_temp.check_eq('and no docket was lost along the way',
     (select count(*) from public.pos_kitchen_tickets k where k.sale_id = v_sale), 3);
+
+  -- By item again, one rule at a time. The split above is of a walk-in
+  -- bill with no covers, no note and no discount, and its one moved
+  -- line was line 1 -- so a second bill that dropped the customer, the
+  -- covers, the note or the rate, or kept its lines' old numbers, came
+  -- out identical to one that did everything right.
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'LIM', 'Encik Lim', 'customer') returning id into v_cust;
+  v_s3 := public.open_pos_sale(v_reg, v_cust);
+  update public.pos_sales s set covers = 4, note = 'Birthday' where s.id = v_s3;
+  v_la := public.add_pos_sale_line(v_s3, v_item, 1, 12.00);
+  perform public.add_line_modifier(v_la, v_mild);
+  v_lb := public.add_pos_sale_line(v_s3, v_teh, 1, 3.00);
+  v_lc := public.add_pos_sale_line(v_s3, v_teh, 2, 3.00);
+  perform public.discount_pos_sale(v_s3, 10, null, 'birthday');
+
+  -- Lines 2 and 3 go, and are named out of order: the new bill numbers
+  -- them by where they stood, not by how they were listed.
+  v_n3 := public.split_pos_sale(v_s3, array[v_lc, v_lb]);
+  perform pg_temp.check_true('the second bill is for the same customer',
+    (select s.contact_id from public.pos_sales s where s.id = v_n3) = v_cust);
+  perform pg_temp.check_eq('it seats the same party',
+    (select s.covers from public.pos_sales s where s.id = v_n3), 4);
+  perform pg_temp.check_true('and carries the same note',
+    (select s.note from public.pos_sales s where s.id = v_n3) = 'Birthday');
+  perform pg_temp.check_eq('a rate follows the food',
+    (select s.bill_discount_percent from public.pos_sales s where s.id = v_n3), 10);
+  perform pg_temp.check_true('with the reason it was given',
+    (select s.bill_discount_reason from public.pos_sales s where s.id = v_n3) = 'birthday');
+  perform pg_temp.check_true('and who gave it',
+    (select s.bill_discounted_by from public.pos_sales s where s.id = v_n3)
+      = (select s.bill_discounted_by from public.pos_sales s where s.id = v_s3)
+    and (select s.bill_discounted_by from public.pos_sales s where s.id = v_n3) is not null);
+  perform pg_temp.check_eq('so the second bill is nine ringgit less ten per cent',
+    (select s.total_amount from public.pos_sales s where s.id = v_n3), 8.10);
+  perform pg_temp.check_eq('and the first, twelve less ten per cent',
+    (select s.total_amount from public.pos_sales s where s.id = v_s3), 10.80);
+  perform pg_temp.check_eq('the moved lines are numbered from one, in the order they stood',
+    (select string_agg(l.line_no::text, ',' order by l.line_no)
+       from public.pos_sale_lines l where l.id = v_lb), '1');
+  perform pg_temp.check_eq('so the one that was line 3 is now line 2',
+    (select l.line_no from public.pos_sale_lines l where l.id = v_lc), 2);
+  perform pg_temp.check_eq('and the line left behind keeps its number',
+    (select l.line_no from public.pos_sale_lines l where l.id = v_la), 1);
+
+  -- A flat amount stays where it was given. Neither the money nor the
+  -- reason for it goes to the other bill.
+  v_s3 := public.open_pos_sale(v_reg, v_cust);
+  v_la := public.add_pos_sale_line(v_s3, v_item, 1, 12.00);
+  perform public.add_line_modifier(v_la, v_mild);
+  v_lb := public.add_pos_sale_line(v_s3, v_teh, 1, 3.00);
+  perform public.discount_pos_sale(v_s3, null, 2.00, 'regular');
+  v_n3 := public.split_pos_sale(v_s3, array[v_lb]);
+  perform pg_temp.check_eq('a flat amount does not follow the food',
+    (select s.bill_discount from public.pos_sales s where s.id = v_n3), 0);
+  perform pg_temp.check_true('nor does the reason for it',
+    (select s.bill_discount_reason from public.pos_sales s where s.id = v_n3) is null);
+  perform pg_temp.check_true('nor who gave it',
+    (select s.bill_discounted_by from public.pos_sales s where s.id = v_n3) is null);
+  perform pg_temp.check_eq('it stays on the bill it was given on',
+    (select s.total_amount from public.pos_sales s where s.id = v_s3), 10.00);
+
+  -- Refusals, each by what it says.
+  perform pg_temp.check_refused('a bill that does not exist is said so',
+    format('select public.split_pos_sale(%L, array[%L]::uuid[])',
+           gen_random_uuid(), v_la),
+    'No such sale.', 'P0002');
+  perform pg_temp.check_refused('a split that names nothing is refused',
+    format('select public.split_pos_sale(%L, array[]::uuid[])', v_s3),
+    'Say which items go on the second bill.', '23514');
+  perform pg_temp.check_refused('as is one that names no array at all',
+    format('select public.split_pos_sale(%L, null)', v_s3),
+    'Say which items go on the second bill.', '23514');
+  perform pg_temp.check_refused('lines from another bill are not on this one',
+    format('select public.split_pos_sale(%L, array[%L]::uuid[])', v_s3, v_lc),
+    'None of those items are on this bill.', 'P0002');
+  perform public.void_pos_sale(v_n3, 'customer_cancelled', 'changed their mind');
+  perform pg_temp.check_refused('a bill that is no longer open is not split',
+    format('select public.split_pos_sale(%L, array[%L]::uuid[])', v_n3, v_lb),
+    'That bill is voided and cannot be split.', '23514');
+  perform pg_temp.sign_in_as(pg_temp.another_user('passer-by@iakauntan.test'));
+  perform pg_temp.check_refused('a stranger does not split this company''s bills',
+    format('select public.split_pos_sale(%L, array[%L]::uuid[])', v_s3, v_lb),
+    'not permitted to sell for this organization', '42501');
+  perform pg_temp.sign_in_as(pg_temp.test_user());
 
   -- ------------------------------------------------------------------
   -- Taking something off, before and after the kitchen was told
