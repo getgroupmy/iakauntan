@@ -41,6 +41,7 @@ declare
   v_shift  uuid;
   v_sale   uuid;
   v_cash_sale uuid;
+  v_parked uuid; v_elsewhere uuid; v_their_buyer uuid; v_clerk uuid;
   v_card_sale uuid;
   v_named  uuid;
   v_n      integer;
@@ -358,9 +359,44 @@ begin
   perform pg_temp.check_true('due seven days after month end',
     v_due = (date_trunc('month', v_kl_today) + interval '1 month - 1 day')::date + 7);
 
+  -- `request_einvoice_for_sale`, rule by rule. A mutation sweep
+  -- (`mutants/request_einvoice_for_sale.py`) left these with nothing to
+  -- tell them from their absence.
+  perform pg_temp.check_refused('a sale that does not exist is said so',
+    format('select public.request_einvoice_for_sale(%L, %L)',
+           gen_random_uuid(), v_named),
+    'No such sale.', 'P0002');
+  v_parked := public.open_pos_sale(v_reg);
+  perform public.add_pos_sale_line(v_parked, v_item, 1, 10.00);
+  perform pg_temp.check_refused('a sale still open has no invoice to name',
+    format('select public.request_einvoice_for_sale(%L, %L)', v_parked, v_named),
+    'That sale has not been completed, so there is no invoice to name.', '23514');
+  perform public.void_pos_sale(v_parked, 'customer_cancelled', 'probe');
+  perform pg_temp.allow_many_companies();
+  v_elsewhere := pg_temp.test_org('Syarikat Lain POS Sdn Bhd');
+  insert into public.contacts (org_id, code, name, contact_type, tin)
+  values (v_elsewhere, 'LAIN', 'Pembeli Syarikat Lain', 'customer', 'C11112222333')
+  returning id into v_their_buyer;
+  perform pg_temp.check_refused('another company''s customer is not this sale''s buyer',
+    format('select public.request_einvoice_for_sale(%L, %L)', v_card_sale, v_their_buyer),
+    'That customer has no TIN on file.%', '23514');
+  -- Somebody outside the company. NOT a viewer: `0501` keeps naming the
+  -- buyer on the module bar on purpose ("a cashier is not an
+  -- accountant"), and `module_access` gives a member with no access
+  -- type 'write' whatever their role -- so a viewer passes this guard
+  -- by design and is stopped later, by `prepare_einvoice`'s `can_write`.
+  v_clerk := pg_temp.another_user('pos-stranger-0402@iakauntan.test');
+  perform pg_temp.sign_in_as(v_clerk);
+  perform pg_temp.check_refused('somebody outside the company does not name the buyer',
+    format('select public.request_einvoice_for_sale(%L, %L)', v_card_sale, v_named),
+    'not permitted to sell for this organization', '42501');
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+
   -- "Boss, I need it under the company name" -- which arrives after the
   -- money, not before it.
   perform public.request_einvoice_for_sale(v_card_sale, v_named);
+  perform pg_temp.check_eq('the sale itself now names the buyer',
+    (select contact_id from public.pos_sales where id = v_card_sale), v_named);
   perform pg_temp.check_true('a claimed sale is no longer anonymous',
     not app.pos_invoice_is_anonymous(
       (select s.invoice_id from public.pos_sales s where s.id = v_card_sale)));
