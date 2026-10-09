@@ -1926,4 +1926,140 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Letting go of a match, rule by rule  (`unmatch_bank_transaction`, 0717)
+--
+-- The file unmatched two lines: one closed into a reconciliation, which
+-- is refused, and one that had posted its own journal, which is
+-- reversed. It never let go of a RECEIPT -- so an unmatch that reversed
+-- whatever entry the line pointed at, the receipt's own posting
+-- included, passed -- and never asked on what date the reversal fell,
+-- or what happens to a journal somebody had already reversed by hand.
+--
+-- Two mutants are equivalent and say so in their file: an entry a
+-- line made can be held by no other line while it stands (the match
+-- refuses a document already matched), and nothing in the schema moves
+-- a posted entry to draft or void.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.br_org('Unmatch Rules Sdn Bhd');
+  v_bank uuid; v_rcp uuid; v_sales uuid;
+  v_l1 uuid; v_l2 uuid; v_l3 uuid;
+  v_rentry uuid; v_e2 uuid; v_e3 uuid;
+begin
+  select bank_id, receipt_id into v_bank, v_rcp
+    from pg_temp.bank_with_receipt(v_org, 1000);
+  select id into v_sales from public.accounts where org_id = v_org and code = '4100';
+  perform public.import_bank_transactions(v_bank, jsonb_build_array(
+    jsonb_build_object('transaction_date','2026-03-06','description','Transfer in',
+                       'reference','RCP-1','amount',1000),
+    jsonb_build_object('transaction_date','2026-04-02','description','Cash sale',
+                       'amount',250),
+    jsonb_build_object('transaction_date','2026-04-05','description','Counter sale',
+                       'amount',70)));
+  select id into v_l1 from public.bank_transactions where bank_account_id = v_bank and amount = 1000;
+  select id into v_l2 from public.bank_transactions where bank_account_id = v_bank and amount = 250;
+  select id into v_l3 from public.bank_transactions where bank_account_id = v_bank and amount = 70;
+
+  perform pg_temp.check_refused('unmatching a line that does not exist is said so',
+    format('select public.unmatch_bank_transaction(%L)', gen_random_uuid()),
+    'Statement line % not found', 'P0002');
+  perform public.match_bank_transaction(v_l1, 'receipts', v_rcp);
+  perform pg_temp.sign_in_as(pg_temp.another_user('unmatcher@bankrec.test'));
+  perform pg_temp.check_refused('a stranger does not undo this company''s matches',
+    format('select public.unmatch_bank_transaction(%L)', v_l1),
+    'Insufficient privileges', '42501');
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+
+  -- A receipt's posting is the receipt's. Letting go of the match lets
+  -- go of the match; the money still came in.
+  select gl_entry_id into v_rentry from public.bank_transactions where id = v_l1;
+  perform public.unmatch_bank_transaction(v_l1);
+  perform pg_temp.check_true('a matched receipt has a posting of its own',
+    v_rentry is not null);
+  perform pg_temp.check_eq('unmatching it does not reverse the receipt''s posting',
+    (select count(*) from public.gl_entries where reversed_entry_id = v_rentry), 0);
+  perform pg_temp.check_true('the line forgets which receipt it was',
+    (select matched_id is null from public.bank_transactions where id = v_l1));
+  perform pg_temp.check_true('and when it was ticked',
+    (select reconciled_at is null from public.bank_transactions where id = v_l1));
+
+  -- A line's own journal comes out on the line's own date: the bank
+  -- moved the money then, and a reversal dated the day somebody clicked
+  -- would leave the account wrong for every day in between.
+  v_e2 := public.post_bank_transaction(v_l2, v_sales);
+  perform public.unmatch_bank_transaction(v_l2);
+  perform pg_temp.check_true('the journal a line made is reversed on the line''s date',
+    (select entry_date from public.gl_entries
+      where reversed_entry_id = v_e2 and status = 'posted') = date '2026-04-02');
+
+  -- Already put right by hand: the unmatch detaches and leaves it,
+  -- rather than refusing over something nobody needs to do again.
+  v_e3 := public.post_bank_transaction(v_l3, v_sales);
+  perform public.reverse_gl_entry(v_e3, date '2026-04-05');
+  perform public.unmatch_bank_transaction(v_l3);
+  perform pg_temp.check_eq('a journal reversed by hand is not reversed twice',
+    (select count(*) from public.gl_entries where reversed_entry_id = v_e3), 1);
+  perform pg_temp.check_true('and the line is let go all the same',
+    (select matched_table is null and gl_entry_id is null
+       from public.bank_transactions where id = v_l3));
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Reopening, rule by rule  (`reopen_bank_reconciliation`, 0157)
+--
+-- The file reopened the latest reconciliation of a company's only bank
+-- account and refused an earlier one under a later. With one account,
+-- "a later one on this account" and "a later one anywhere" were the
+-- same row; and it never reopened a later one with an earlier one
+-- standing. The guard that a later one must be COMPLETED is equivalent:
+-- only `complete_bank_reconciliation` writes the table, always
+-- completed, and production holds no reconciliation of any status.
+-- Releasing the lines is equivalent too: the foreign key sets
+-- `reconciliation_id` null when the reconciliation is deleted.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.br_org('Reopen Rules Sdn Bhd');
+  v_bank uuid; v_rcp uuid; v_line uuid; v_cimb uuid;
+  v_mar uuid; v_apr uuid;
+begin
+  select bank_id, receipt_id into v_bank, v_rcp
+    from pg_temp.bank_with_receipt(v_org, 1000);
+  perform public.import_bank_transactions(v_bank, jsonb_build_array(
+    jsonb_build_object('transaction_date','2026-03-06','description','Transfer in',
+                       'reference','RCP-1','amount',1000)));
+  select id into v_line from public.bank_transactions where bank_account_id = v_bank;
+  perform public.match_bank_transaction(v_line, 'receipts', v_rcp);
+  v_mar := public.complete_bank_reconciliation(v_bank, date '2026-03-31', 1000);
+
+  perform pg_temp.check_refused('reopening a reconciliation that does not exist is said so',
+    format('select public.reopen_bank_reconciliation(%L)', gen_random_uuid()),
+    'Reconciliation % not found', 'P0002');
+  perform pg_temp.sign_in_as(pg_temp.another_user('reopener@bankrec.test'));
+  perform pg_temp.check_refused('a stranger does not reopen this company''s reconciliation',
+    format('select public.reopen_bank_reconciliation(%L)', v_mar),
+    'Insufficient privileges', '42501');
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+
+  -- Another account reconciled further does not hold this one back.
+  v_cimb := pg_temp.test_bank_account(
+    v_org, 'CIMB current', 'current', 'MYR', 0, 0, '5678');
+  perform public.complete_bank_reconciliation(v_cimb, date '2026-04-30', 0);
+  perform public.reopen_bank_reconciliation(v_mar);
+  perform pg_temp.check_eq('another account''s later reconciliation does not block a reopen',
+    (select count(*) from public.bank_reconciliations where id = v_mar), 0);
+
+  -- And an earlier one never blocks a later: reopening the latest is
+  -- the ordinary way back.
+  v_mar := public.complete_bank_reconciliation(v_bank, date '2026-03-31', 1000);
+  v_apr := public.complete_bank_reconciliation(v_bank, date '2026-04-30', 1000);
+  perform public.reopen_bank_reconciliation(v_apr);
+  perform pg_temp.check_eq('the latest is reopened with an earlier one standing',
+    (select count(*) from public.bank_reconciliations where id = v_apr), 0);
+  perform pg_temp.check_eq('and the earlier one stays',
+    (select count(*) from public.bank_reconciliations where id = v_mar), 1);
+end $$;
+
 rollback;

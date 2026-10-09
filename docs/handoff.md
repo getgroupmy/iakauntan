@@ -1094,6 +1094,8 @@ function:
 | `discount_pos_sale_line` | `0255` | 17 / 17 | -- | `pos.sql` (fourteen only after its rule-by-rule block; a refusal caught as any `check_violation` let its own guard go) |
 | `split_pos_sale` | `0255` | 18 / 18 | -- | `pos_fnb.sql` (four of fourteen before its rule-by-rule block: the file's one split was of a walk-in bill with nothing on it to carry, and its moved line was already line 1) |
 | `merge_pos_sales` | `0259` | 25 / 25 | -- | `pos_fnb.sql`, `pos_loyalty.sql`, `pos_delivery.sql` (four before the blocks; none of the six refusals or the carry-over rules was asked; a rate is told from its amount only on a bill rated while empty) |
+| `unmatch_bank_transaction` | `0717` | 12 / 14 | 2 | `bank_reconciliation.sql` (five before its block: no receipt was ever let go of, so reversing the receipt's own posting passed; equivalents: an entry no other line can hold, a status nothing sets) |
+| `reopen_bank_reconciliation` | `0157` | 6 / 8 | 2 | `bank_reconciliation.sql` (two before its block: one bank account made "this account" and "any account" the same row; equivalents: no `in_progress` row exists, and the FK releases the lines) |
 
 Every equivalent is written into its mutants file with the reason.
 
