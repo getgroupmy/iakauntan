@@ -1497,6 +1497,91 @@ begin
       v_r.total, 108.00::numeric);
   end;
 
+  -- ==================================================================
+  -- `discount_pos_sale`, rule by rule
+  --
+  -- A mutation sweep (`mutants/discount_pos_sale.py`) put seventeen
+  -- changes through it and none of the four files that call it caught
+  -- one: they discount a bill and then add a line, and adding a line
+  -- re-adds the bill whatever the discount function did; none tries a
+  -- refusal; and none has tax on the bill, so "a percentage of what the
+  -- customer pays" and "of the subtotal" were one figure.
+  -- ==================================================================
+  declare v_st8b uuid; v_taxed2 uuid; v_bill uuid; v_paid uuid;
+  begin
+    perform pg_temp.sign_in_as(v_owner);
+    insert into public.tax_codes
+      (org_id, code, name, tax_type_code, rate, applies_to,
+       sales_tax_account_id, purchase_tax_account_id)
+    values (v_org, 'ST8B', 'Service Tax 8% (on top)', '02', 8, 'both',
+            (select id from public.accounts where org_id = v_org and code = '2130'),
+            (select id from public.accounts where org_id = v_org and code = '1410'))
+    returning id into v_st8b;
+    insert into public.items
+      (org_id, code, name, item_type, track_inventory, uom_code,
+       unit_price, cost_price, sales_tax_code_id)
+    values (v_org, 'SET2', 'Set makan bercukai', 'service', false, 'C62', 100.00, 0, v_st8b)
+    returning id into v_taxed2;
+    v_bill := public.open_pos_sale(v_reg);
+    perform public.add_pos_sale_line(v_bill, v_taxed2, 1, 100.00);
+
+    perform pg_temp.check_refused('a sale that does not exist is said so',
+      format('select public.discount_pos_sale(%L, 10, null, %L)', gen_random_uuid(), 'x'),
+      'No such sale.', 'P0002');
+    perform pg_temp.check_refused('a percentage or an amount, not both',
+      format('select public.discount_pos_sale(%L, 10, 5, %L)', v_bill, 'x'),
+      'A discount is either a percentage or an amount, not both.', '23514');
+    perform pg_temp.check_refused('not below nought per cent',
+      format('select public.discount_pos_sale(%L, -1, null, %L)', v_bill, 'x'),
+      'A discount runs from nought to a hundred per cent.', '23514');
+    perform pg_temp.check_refused('nor above a hundred',
+      format('select public.discount_pos_sale(%L, 101, null, %L)', v_bill, 'x'),
+      'A discount runs from nought to a hundred per cent.', '23514');
+    perform pg_temp.check_refused('an amount does not add money',
+      format('select public.discount_pos_sale(%L, null, -1, %L)', v_bill, 'x'),
+      'A discount cannot add money to a bill.', '23514');
+    perform pg_temp.check_refused('nor take off more than the bill, tax and all',
+      format('select public.discount_pos_sale(%L, null, 108.01, %L)', v_bill, 'x'),
+      'That is more than the bill comes to (108.00).', '23514');
+    perform pg_temp.check_refused('money does not come off without a reason',
+      format('select public.discount_pos_sale(%L, null, 5, null)', v_bill),
+      'Say why the bill is coming down.', '23514');
+    perform pg_temp.check_refused('and spaces are not one',
+      format('select public.discount_pos_sale(%L, null, 5, %L)', v_bill, '   '),
+      'Say why the bill is coming down.', '23514');
+
+    perform pg_temp.sign_in_as(pg_temp.another_user('luar-diskaun@example.test'));
+    perform pg_temp.check_refused('somebody without the discount grant takes nothing off',
+      format('select public.discount_pos_sale(%L, 10, null, %L)', v_bill, 'x'),
+      'Taking money off a bill needs the discount permission.%', '42501');
+    perform pg_temp.sign_in_as(v_owner);
+
+    -- Exactly the bill is the most that comes off, and it is answered.
+    perform pg_temp.check_eq('the whole bill can come off, and the answer says so',
+      public.discount_pos_sale(v_bill, null, 108.00, 'On the house'), 108.00::numeric);
+    -- A tenth of what the customer pays, tax included, and said as such
+    -- without another line being added to make the bill re-add itself.
+    perform pg_temp.check_eq('a tenth off is a tenth of the bill with its tax',
+      public.discount_pos_sale(v_bill, 10, null, '  regular  '), 10.80::numeric);
+    perform pg_temp.check_eq('and the bill comes down by it at once',
+      (select s.total_amount from public.pos_sales s where s.id = v_bill), 97.20::numeric);
+    perform pg_temp.check_true('with the reason, trimmed, and who gave it',
+      (select s.bill_discount_reason = 'regular' and s.bill_discounted_by = v_owner
+         from public.pos_sales s where s.id = v_bill));
+    -- Taking it back off clears who gave it.
+    perform public.discount_pos_sale(v_bill, 0, null, null);
+    perform pg_temp.check_true('clearing a discount clears who and why',
+      (select s.bill_discounted_by is null and s.bill_discount_reason is null
+         from public.pos_sales s where s.id = v_bill));
+
+    -- And a bill already paid is not changed.
+    perform public.complete_pos_sale(v_bill,
+      jsonb_build_array(jsonb_build_object('type', v_cash, 'amount', 108.00)));
+    perform pg_temp.check_refused('a paid bill is refunded, not discounted',
+      format('select public.discount_pos_sale(%L, 10, null, %L)', v_bill, 'late'),
+      'That bill is % and what it charged cannot be changed.%', '23514');
+  end;
+
   perform pg_temp.sign_in_as(v_owner);
   raise notice 'ok   the counter: the twenty-one a second sweep found';
 end $$;
