@@ -340,4 +340,56 @@ begin
       'public.report_win_loss(uuid, date, date)', 'execute'));
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Leads, rule by rule
+--
+-- The lead above is the owner's, live, never converted, closed with a
+-- clean reason and reopened from lost -- so closing a deleted or
+-- missing lead, a stranger closing or reopening one, losing a lead
+-- that became a customer, keeping a padded reason, and reopening one
+-- that was never lost, all passed.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org  uuid;
+  v_lead uuid;
+  v_won  uuid;
+  v_gone uuid;
+  v_cust uuid;
+begin
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Peluang Satu Satu Sdn Bhd');
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-WON', 'Pak Din Sdn Bhd', 'customer') returning id into v_cust;
+  insert into public.leads (org_id, lead_no, company_name, status)
+  values (v_org, 'LD-A', 'Kedai A', 'contacted') returning id into v_lead;
+  insert into public.leads (org_id, lead_no, company_name, status, converted_contact_id)
+  values (v_org, 'LD-B', 'Kedai B', 'contacted', v_cust) returning id into v_won;
+  insert into public.leads (org_id, lead_no, company_name, status, deleted_at)
+  values (v_org, 'LD-C', 'Kedai C', 'contacted', now()) returning id into v_gone;
+
+  perform pg_temp.check_refused('a lead that became a customer is not also lost',
+    format('select public.close_lead(%L, %L)', v_won, 'Too dear'),
+    'That lead became a customer. It cannot also be a lost one.', '23514');
+  perform pg_temp.check_refused('a deleted lead is not there to close',
+    format('select public.close_lead(%L, %L)', v_gone, 'Too dear'), 'No such lead.', 'P0002');
+  perform pg_temp.check_refused('nor one that never was',
+    format('select public.close_lead(%L, %L)', gen_random_uuid(), 'Too dear'), 'No such lead.', 'P0002');
+  perform pg_temp.check_refused('nor reopened',
+    format('select public.reopen_lead(%L)', gen_random_uuid()), 'No such lead.', 'P0002');
+  perform pg_temp.check_refused('a lead that is not lost is not reopened',
+    format('select public.reopen_lead(%L)', v_lead), 'That lead is not lost.', '23514');
+
+  perform public.close_lead(v_lead, '  Went with a reseller  ');
+  perform pg_temp.check_eq('the reason is kept without its spaces',
+    (select lost_reason from public.leads where id = v_lead), 'Went with a reseller');
+
+  perform pg_temp.sign_in_as(pg_temp.another_user('orang.luar@peluang.test'));
+  perform pg_temp.check_refused('a stranger does not reopen this company''s leads',
+    format('select public.reopen_lead(%L)', v_lead), 'not permitted to reopen a lead', '42501');
+  perform pg_temp.check_refused('nor close them',
+    format('select public.close_lead(%L, %L)', v_won, 'x'), 'not permitted to close a lead', '42501');
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+end $$;
+
 rollback;

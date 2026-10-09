@@ -1214,6 +1214,7 @@ function:
 | `reissue_terminal_secret` | `0612` | 5 / 5 | -- | `terminal_punches.sql` (one before its block: one terminal, its owner, the secret never measured) |
 | `set_einvoice_version`, `set_einvoice_signing_certificate`, `clear_einvoice_signing_certificate` | `0615` | 19 / 20 | 1 | `einvoice_signing_certificate.sql` (ten before its block; equivalent: the environment column is NOT NULL; noted: clearing the certificate of a 1.1 company is not refused) |
 | `close_project`, `reopen_project` | `0389` | 14 / 14 | -- | `project_budget.sql` (twelve before: one company with one job carrying hours; noted: `projects_update` closes a job over unbilled hours directly) |
+| `close_lead`, `reopen_lead` | `0373` | 12 / 12 | -- | `win_loss.sql` (four before its block: one clean lead, its owner) |
 
 Every equivalent is written into its mutants file with the reason.
 
