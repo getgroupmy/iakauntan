@@ -344,4 +344,120 @@ begin
   raise notice 'ok   a company is made for somebody, and can be edited';
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Rule by rule
+--
+-- The blocks above use one administrator, one company and the rule's
+-- happy side. A sweep of the two functions found most of their rules
+-- unasked: the reason refusal was caught by its SQLSTATE, which the
+-- table's own check raises too; nothing deleted, nothing defaulted,
+-- no second administrator or company, no stranger, nothing ended twice.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_owner uuid := pg_temp.test_user();
+  v_admin uuid := pg_temp.support_admin();
+  v_other uuid := pg_temp.another_user('support2@iakauntan.test');
+  v_out   uuid := pg_temp.another_user('orang.luar@sokongan.test');
+  v_org   uuid;
+  v_org2  uuid;
+  v_gone  uuid;
+  v_id    uuid;
+  v_id2   uuid;
+  v_theirs uuid;
+  v_again uuid;
+begin
+  perform pg_temp.make_platform_admin(v_other);
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.allow_many_companies();
+  v_org  := pg_temp.test_org('Satu Per Satu Sdn Bhd');
+  v_org2 := pg_temp.test_org('Dua Per Dua Sdn Bhd');
+  v_gone := pg_temp.test_org('Sudah Tutup Sdn Bhd');
+  update public.organizations set deleted_at = now() where id = v_gone;
+
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.check_refused('a grant with no reason is refused in its own words',
+    format('select public.grant_support_access(%L, %L)', v_org, '   '),
+    'Say why. Reading somebody''s books with no reason recorded is not '
+    'distinguishable from a back door.', '23514');
+  perform pg_temp.check_refused('a company that has been deleted is not opened',
+    format('select public.grant_support_access(%L, %L)', v_gone, 'a reason'),
+    'No such company.', 'P0002');
+
+  -- An hour unless asked, and never under five minutes.
+  v_id := public.grant_support_access(v_org, '  Checking the trial balance  ');
+  perform pg_temp.check_eq('an hour unless asked',
+    (select extract(epoch from expires_at - granted_at)::integer / 60
+       from public.support_access where id = v_id), 60);
+  perform pg_temp.check_eq('the reason is kept trimmed',
+    (select reason from public.support_access where id = v_id),
+    'Checking the trial balance');
+  v_id2 := public.grant_support_access(v_org2, 'A quick look', 1);
+  perform pg_temp.check_eq('and never under five minutes',
+    (select extract(epoch from expires_at - granted_at)::integer / 60
+       from public.support_access where id = v_id2), 5);
+  perform pg_temp.check_eq('which is what the customer''s trail says it was',
+    (select new_data ->> 'minutes' from public.audit_logs
+      where record_id = v_id2 and new_data ->> 'event' = 'support_granted'),
+    '5');
+
+  -- One open grant per administrator per company: a second
+  -- administrator's grant here, and this administrator's grant in the
+  -- other company, are neither of them this one.
+  perform pg_temp.sign_in_as(v_other);
+  v_theirs := public.grant_support_access(v_org, 'A second pair of eyes');
+  perform pg_temp.sign_in_as(v_admin);
+  v_again := public.grant_support_access(v_org, 'Asked again');
+  perform pg_temp.check_eq('asking again ends only this administrator''s grant here',
+    (select string_agg(reason || ':' || (ended_at is null)::text, ', '
+                       order by reason)
+       from public.support_access where id in (v_id, v_id2, v_theirs, v_again)),
+    'A quick look:true, A second pair of eyes:true, Asked again:true, '
+    'Checking the trial balance:false');
+
+  -- Who may show them out.
+  perform pg_temp.sign_in_as(v_out);
+  perform pg_temp.check_refused('a stranger does not end a support session',
+    format('select public.end_support_access(%L)', v_theirs),
+    'That is not yours to end', '42501');
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.check_refused('nor one that does not exist',
+    format('select public.end_support_access(%L)', gen_random_uuid()),
+    'No such support session.', 'P0002');
+  perform public.end_support_access(v_theirs);
+  perform pg_temp.check_eq('another platform administrator may end it, and is named',
+    (select ended_by from public.support_access where id = v_theirs), v_admin);
+  perform pg_temp.check_eq('and the trail does not say the customer did',
+    (select new_data ->> 'by_the_customer' from public.audit_logs
+      where record_id = v_theirs and new_data ->> 'event' = 'support_ended'),
+    'false');
+
+  -- The customer shows the other one out; doing it twice changes
+  -- nothing and writes nothing.
+  perform pg_temp.sign_in_as(v_owner);
+  perform public.end_support_access(v_again);
+  perform public.end_support_access(v_again);
+  perform public.end_support_access(v_theirs);
+  perform pg_temp.check_eq('the customer ends it, on the record as the customer',
+    (select new_data ->> 'by_the_customer' from public.audit_logs
+      where record_id = v_again and new_data ->> 'event' = 'support_ended'),
+    'true');
+  perform pg_temp.check_eq('once each, however often it is asked',
+    (select count(*)::integer from public.audit_logs
+      where record_id in (v_again, v_theirs)
+        and new_data ->> 'event' = 'support_ended'), 2);
+  perform pg_temp.check_eq('and an ended session keeps who ended it',
+    (select ended_by from public.support_access where id = v_theirs), v_admin);
+
+  -- A form that leaves the length empty sends null, not nothing, and
+  -- the parameter's own default never sees it.
+  perform pg_temp.sign_in_as(v_admin);
+  v_id := public.grant_support_access(v_org2, 'Length left empty', null);
+  perform pg_temp.check_eq('a length sent as null is an hour too',
+    (select extract(epoch from expires_at - granted_at)::integer / 60
+       from public.support_access where id = v_id), 60);
+
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;
