@@ -1096,6 +1096,7 @@ function:
 | `merge_pos_sales` | `0259` | 25 / 25 | -- | `pos_fnb.sql`, `pos_loyalty.sql`, `pos_delivery.sql` (four before the blocks; none of the six refusals or the carry-over rules was asked; a rate is told from its amount only on a bill rated while empty) |
 | `unmatch_bank_transaction` | `0717` | 12 / 14 | 2 | `bank_reconciliation.sql` (five before its block: no receipt was ever let go of, so reversing the receipt's own posting passed; equivalents: an entry no other line can hold, a status nothing sets) |
 | `reopen_bank_reconciliation` | `0157` | 6 / 8 | 2 | `bank_reconciliation.sql` (two before its block: one bank account made "this account" and "any account" the same row; equivalents: no `in_progress` row exists, and the FK releases the lines) |
+| `void_bank_transfer` | `0504` | 14 / 14 | -- | `bank_transfers.sql` (an earlier unrecorded sweep left the "Undo Baki" block; the survivor was a note written over rather than under) |
 
 Every equivalent is written into its mutants file with the reason.
 

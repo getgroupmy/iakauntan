@@ -371,7 +371,8 @@ begin
   v_id := public.create_bank_transfer(
     p_from_account_id => v_a, p_to_account_id => v_b,
     p_amount_sent => 10010, p_transfer_date => date '2026-03-01',
-    p_amount_received => 10000, p_bank_charges => 10);
+    p_amount_received => 10000, p_bank_charges => 10,
+    p_notes => 'Float for the March payroll');
   perform public.post_bank_transfer(v_id);
 
   perform pg_temp.check_eq('the running balance is down by sent plus fee',
@@ -431,6 +432,12 @@ begin
     (select current_balance from public.bank_accounts where id = v_a), 0);
   perform pg_temp.check_eq('and the receiving account is not still holding it',
     (select current_balance from public.bank_accounts where id = v_b), 0);
+  -- The reason goes UNDER whatever the note said, not in place of it:
+  -- what the transfer was for is the first thing anybody reading a
+  -- void will want to know.
+  perform pg_temp.check_eq('the void is written under the note, not over it',
+    (select notes from public.bank_transfers where id = v_id),
+    'Float for the March payroll' || E'\n' || 'Voided: Keyed against the wrong account');
 
   begin
     perform public.void_bank_transfer(v_id, 'Again');
