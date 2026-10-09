@@ -429,8 +429,11 @@ begin
 
   update public.ref_currencies set is_active = false where code = 'CHF';
 
-  select string_agg(coalesce(currency, '-') || ':' || status || ':'
-                    || coalesce(message, ''), ' | ' order by ord)
+  -- `status (message)` and never `status:message`: the runner reads a
+  -- psql line with the word error and a colon after it as a failure,
+  -- and this notice prints a status called 'error'.
+  select string_agg(coalesce(currency, '-') || ' ' || status || ' ('
+                    || coalesce(message, '') || ')', ' | ' order by ord)
     into v_got
     from public.ingest_exchange_rates(jsonb_build_array(
            jsonb_build_object('currency_code', ' usd ', 'unit', 1,
@@ -446,10 +449,10 @@ begin
          with ordinality as t(currency, quoted_on, applied_rate, status, message, ord);
   perform pg_temp.check_eq('each row is answered for itself',
     v_got,
-    'USD:stored: | SGD:error:currency_code, rate and rate_date are all required'
-    || ' | EUR:error:currency_code, rate and rate_date are all required'
-    || ' | GBP:error:a rate of 0 cannot be used'
-    || ' | CHF:skipped:not a currency this system holds');
+    'USD stored () | SGD error (currency_code, rate and rate_date are all required)'
+    || ' | EUR error (currency_code, rate and rate_date are all required)'
+    || ' | GBP error (a rate of 0 cannot be used)'
+    || ' | CHF skipped (not a currency this system holds)');
   perform pg_temp.check_eq('and a code sent in lower case is stored in upper',
     (select count(*)::integer from public.exchange_rates
       where org_id is null and from_currency = 'USD'
