@@ -283,6 +283,7 @@ declare
   v_org   uuid := pg_temp.test_org('Chart Closure');
   v_acct  uuid;
   v_out   text;
+  v_used  uuid;
 begin
   insert into public.accounts
     (org_id, code, name, account_type, account_subtype)
@@ -311,6 +312,37 @@ begin
     v_out := 'refused';
   end;
   perform pg_temp.check_eq('closing it twice is refused', v_out, 'refused');
+
+  -- `retire_account`, rule by rule. A mutation sweep
+  -- (`mutants/retire_account.py`) found the account that does not exist
+  -- asserted nowhere, and two things the closure records -- whether the
+  -- account was switched on, and how much had been posted to it -- read
+  -- off an account that had always been on and never posted to, so
+  -- "true" and "nought" were the right answer and the hard-coded one.
+  perform pg_temp.check_refused('an account that does not exist is said so',
+    format('select public.retire_account(%L)', gen_random_uuid()),
+    'No such account.', '22023');
+
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  insert into public.accounts
+    (org_id, code, name, account_type, account_subtype)
+  values (v_org, '6912', 'Used Once', 'expense', 'other_expense')
+  returning id into v_used;
+  perform public.post_manual_journal(v_org, pg_temp.today(),
+    jsonb_build_array(
+      jsonb_build_object('account_id', v_used, 'debit', 100, 'credit', 0),
+      jsonb_build_object('account_id', (select id from public.accounts
+                                         where org_id = v_org and code = '3100'),
+                         'debit', 0, 'credit', 100)),
+    'Once');
+  update public.accounts set is_active = false where id = v_used;
+  perform public.retire_account(v_used);
+  perform pg_temp.check_eq('the closure keeps how many lines were posted to it',
+    (select (c.detail ->> 'posted_lines')::integer from public.account_closures c
+      where c.subject_kind = 'ledger_account' and c.subject_id = v_used), 1);
+  perform pg_temp.check_eq('and that it was already switched off',
+    (select c.detail ->> 'was_active' from public.account_closures c
+      where c.subject_kind = 'ledger_account' and c.subject_id = v_used), 'false');
 end $$;
 
 -- ---------------------------------------------------------------------
