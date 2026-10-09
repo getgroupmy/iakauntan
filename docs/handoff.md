@@ -1187,6 +1187,19 @@ page and renumbering would quietly break the reference.
     disables this trigger by name around that one update, as
     `aged_balances.sql` does for its own legacy state.
     **Still to read back.**
+51. ~~A cancelled vacancy can be hired into.~~ **Raised and answered 9
+    October: refuse; reopen first. Built in `0784`.** `hire_applicant`
+    refused a rejected or withdrawn applicant and a full requisition, but
+    not a cancelled one: measured, a hire into a cancelled vacancy made
+    an employee and left the requisition 'cancelled' with a hire against
+    it. Now refused -- but in different words from the question's: it
+    suggested "reopen it", and nothing can (`open_requisition` refuses a
+    cancelled requisition, the editor never writes status), so the
+    sentence names the road that exists: "REQ-9 was cancelled. Raise a
+    new requisition for the place, or hire against another one." Found
+    sweeping `hire_applicant`. Restated from `0381` (production hash
+    10e604a1..., identical). Swept 24 / 25.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -1387,6 +1400,7 @@ function:
 | `invite_member`, `accept_invitation` | `0353` | 19 / 20 | 1 | `invitations.sql` (three before its block: no address already in another company, no caller signed out or without an address; equivalent: a used token is nulled, so the status filter finds nothing more) |
 | `create_fiscal_year`, `create_previous_fiscal_year` | `0782` | 13 / 19 | 6 | `previous_fiscal_year.sql` (6 of 13 before: no guard asked, no period name; raised: a year from the 31st lost days between periods -- `0782`; six equivalent by arithmetic, reasons in the file) |
 | `app.closed_project_takes_no_billable_time` | `0783` | 11 / 11 | -- | `project_budget.sql` (new in `0783`; one killed only once an invoiced hour on a closed job was edited) |
+| `hire_applicant` | `0784` | 24 / 25 | 1 | `hiring.sql` (19 of 24 before its block: no rejected applicant, no start on notice's last day, no spaced number, history's author unread; raised: a cancelled requisition hired into -- `0784`; equivalent since: the fill paragraph's cancelled guard) |
 | `app.document_state_is_the_databases` | `0781` | 10 / 10 | -- | `posted_document_is_frozen.sql` (new in `0781`; the depth mutants killed by a real payment, which replaced a control that wrote the figures itself) |
 | `app.project_closes_only_when_billed` | `0778` | 11 / 11 | -- | `project_budget.sql` (new in `0778`; SECURITY DEFINER flipped by hand, equivalent while every member reads every time entry) |
 | `close_lead`, `reopen_lead` | `0373` | 12 / 12 | -- | `win_loss.sql` (four before its block: one clean lead, its owner) |

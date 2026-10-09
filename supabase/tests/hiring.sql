@@ -407,6 +407,62 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- The rest, rule by rule
+--
+-- The blocks above refuse a withdrawn applicant but never a rejected
+-- one, start nobody on the last day of their notice, give no number
+-- with spaces round it, and never read who the history says moved the
+-- applicant.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.test_org('Satu Satu Ambil Sdn Bhd');
+  v_req uuid;
+  v_app uuid;
+  v_emp uuid;
+begin
+  v_req := pg_temp.hi_req(v_org, 'REQ-9', 3);
+
+  v_app := pg_temp.hi_applicant(v_org, 'Ahmad Rejected', v_req);
+  update public.applicants set status = 'rejected' where id = v_app;
+  perform pg_temp.check_refused('a rejected applicant is not hired either',
+    format('select public.hire_applicant(%L, %L, %L, 4000)',
+           v_app, 'E-201', pg_temp.today() + 60),
+    'Ahmad Rejected is marked rejected. Put them back in the pipeline '
+    'before hiring them, so the history says what happened.', '23514');
+
+  -- Thirty days' notice: the thirtieth day from today is the earliest
+  -- they can start, and it is a day they CAN start.
+  v_app := pg_temp.hi_applicant(v_org, 'Siti Notis', v_req, 30);
+  v_emp := public.hire_applicant(v_app, '  E-202  ', pg_temp.today() + 30, 4000);
+  perform pg_temp.check_eq('the first day after notice is a day they can start',
+    (select hire_date from public.employees where id = v_emp)::text,
+    (pg_temp.today() + 30)::text);
+  perform pg_temp.check_eq('and the number is kept without its spaces',
+    (select employee_no from public.employees where id = v_emp), 'E-202');
+  perform pg_temp.check_eq('and the history says who hired them',
+    (select changed_by from public.applicant_stage_history
+      where applicant_id = v_app and to_status = 'hired'),
+    pg_temp.test_user());
+
+  -- `0784`. A cancelled vacancy was decided against, and nothing
+  -- reopens one; a hire into it is refused and the vacancy stays as it
+  -- was decided.
+  update public.job_requisitions set status = 'cancelled' where id = v_req;
+  v_app := pg_temp.hi_applicant(v_org, 'Lim Batal', v_req);
+  perform pg_temp.check_refused('a cancelled requisition is not hired into',
+    format('select public.hire_applicant(%L, %L, %L, 4000)',
+           v_app, 'E-203', pg_temp.today() + 60),
+    'REQ-9 was cancelled. Raise a new requisition for the place, or hire '
+    'against another one.', '23514');
+  perform pg_temp.check_eq('and nobody joined from it',
+    (select count(*)::integer from public.employees
+      where org_id = v_org and employee_no = 'E-203'), 0);
+
+  perform pg_temp.sign_out();
+end $$;
+
+-- ---------------------------------------------------------------------
 -- Reachability
 -- ---------------------------------------------------------------------
 do $$
