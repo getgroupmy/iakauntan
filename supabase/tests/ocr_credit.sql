@@ -305,6 +305,46 @@ begin
   exception when sqlstate '23514' then
     raise notice 'ok   an adjustment cannot push a balance negative';
   end;
+
+  -- `platform_topup_credit`, rule by rule. A mutation sweep
+  -- (`mutants/platform_topup_credit.py`) found seven of its rules with
+  -- nothing in either file that calls it to tell them from their
+  -- absence: a top-up of nothing or of no amount, a company that does
+  -- not exist, the note, the total it answers with, the KH prefix when
+  -- the issuer names none -- the seeded issuer always names KH, so the
+  -- default was never reached -- and a new year starting its own count,
+  -- which nothing could see without an invoice from last year.
+  perform pg_temp.check_eq('the answer''s total carries the tax',
+    (v_top ->> 'total')::numeric, 270.00::numeric);
+  perform pg_temp.check_eq('and the note is on the invoice',
+    inv.notes, 'Second purchase');
+  perform pg_temp.check_refused('a top-up of nothing is not sold',
+    format('select public.platform_topup_credit(%L, 0)', v_org),
+    'A top-up has to be more than nothing', '23514');
+  perform pg_temp.check_refused('nor one of no amount at all',
+    format('select public.platform_topup_credit(%L, null)', v_org),
+    'A top-up has to be more than nothing', '23514');
+  perform pg_temp.check_refused('nor to a company that does not exist',
+    format('select public.platform_topup_credit(%L, 10)', gen_random_uuid()),
+    'No such organization', '42704');
+
+  -- Last year ran to a high number; this year's count is its own.
+  insert into public.platform_invoices
+    (invoice_no, org_id, issue_date, issuer_name, bill_to_name, description,
+     subtotal, total_amount)
+  values ('KH-' || to_char(pg_temp.today() - 366, 'YYYY') || '-9000', v_org,
+          pg_temp.today() - 366, 'Kabeer Holdings Sdn Bhd', 'Pembeli Kredit Sdn Bhd',
+          'Last year', 1, 1);
+  v_top := public.platform_topup_credit(v_org, 5, 'After last year');
+  perform pg_temp.check_eq('a new year starts its own count',
+    substring(v_top ->> 'invoice_no' from '[0-9]+$')::integer, v_first + 2);
+
+  -- And an issuer that names no prefix gets KH.
+  update public.platform_settings set value = value - 'invoice_prefix'
+   where key = 'platform_issuer';
+  v_top := public.platform_topup_credit(v_org, 5, 'No prefix set');
+  perform pg_temp.check_true('with no prefix set, the invoice is KH',
+    (v_top ->> 'invoice_no') like 'KH-' || to_char(pg_temp.today(), 'YYYY') || '-%');
 end $$;
 
 -- ---------------------------------------------------------------------
