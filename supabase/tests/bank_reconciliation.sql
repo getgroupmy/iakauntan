@@ -1766,4 +1766,164 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- =====================================================================
+-- A statement line is matched to what went through its own account (`0772`)
+--
+-- Measured before `0772`: a company with a Maybank and a CIMB account
+-- banked a receipt into Maybank, imported a CIMB line for the same sum,
+-- and `match_bank_transaction` took the match -- CIMB then read nothing
+-- unmatched and a difference it could not explain, and Maybank's own
+-- line could no longer have the receipt ("already matched to another
+-- line"). `suggest_bank_matches` offered exactly that pairing: it chose
+-- by company, amount and date, never by account. Every block above has
+-- ONE bank account, so the right account and any account were the same
+-- row and nothing here could tell them apart.
+--
+-- Also the rules a mutation sweep of `match_bank_transaction`
+-- (`mutants/match_bank_transaction.py`) found nothing standing on: a
+-- line that does not exist, and another company's payment, expense or
+-- journal -- each refused by the company filter with its own sentence,
+-- and by a foreign key underneath it with somebody else's, which is why
+-- the whole message is asserted.
+-- =====================================================================
+do $$
+declare
+  v_org uuid; v_them uuid; v_may uuid; v_cimb uuid; v_their_bank uuid;
+  v_cust uuid; v_sup uuid; v_their_sup uuid; v_exp_acct uuid; v_their_acct uuid;
+  v_rcp uuid; v_pay uuid; v_exp uuid; v_jv_may uuid; v_jv_none uuid; v_jv_cimb uuid;
+  v_their_pay uuid; v_their_exp uuid; v_their_jv uuid;
+  v_cimb_in uuid; v_may_in uuid; v_cimb_out uuid; v_may_out uuid;
+  v_cimb_out2 uuid; v_may_out2 uuid; v_cimb_jv uuid;
+begin
+  v_them := pg_temp.sug_org('Syarikat Lain Bank Sdn Bhd');
+  v_their_bank := pg_temp.test_bank_account(
+    v_them, 'Their Maybank', 'current', 'MYR', 0, 0, '9999');
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_them, 'S-T', 'Their supplier', 'supplier') returning id into v_their_sup;
+  select id into v_their_acct from public.accounts
+   where org_id = v_them and account_type = 'expense' and not is_group and is_active
+   order by code limit 1;
+  v_their_pay := pg_temp.sug_payment(v_them, v_their_bank, v_their_sup, 'PAY-T', 400,
+    date '2026-03-05', 0);
+  v_their_exp := pg_temp.sug_expense(v_them, v_their_bank, v_their_sup, v_their_acct,
+    'EXP-T', 250, date '2026-03-05');
+  v_their_jv := public.post_manual_journal(v_them, date '2026-03-06',
+    jsonb_build_array(
+      jsonb_build_object('account_id', pg_temp.bank_gl(v_their_bank), 'debit', 300, 'credit', 0),
+      jsonb_build_object('account_id', (select id from public.accounts
+                                         where org_id = v_them and code = '3100'),
+                         'debit', 0, 'credit', 300)),
+    'Their transfer');
+
+  v_org := pg_temp.sug_org('Dua Bank Sdn Bhd');
+  v_may := pg_temp.test_bank_account(v_org, 'Maybank current', 'current', 'MYR', 0, 0, '1111');
+  v_cimb := pg_temp.test_bank_account(v_org, 'CIMB current', 'current', 'MYR', 0, 0, '2222');
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-1', 'Pembeli', 'customer') returning id into v_cust;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'S-1', 'Pembekal', 'supplier') returning id into v_sup;
+  select id into v_exp_acct from public.accounts
+   where org_id = v_org and account_type = 'expense' and not is_group and is_active
+   order by code limit 1;
+
+  -- Everything through Maybank, and the same figures on both banks'
+  -- statements, so amount, date and company cannot choose between them.
+  v_rcp := pg_temp.sug_receipt(v_org, v_may, v_cust, 'RCP-M', 1000, date '2026-03-05', 0, true);
+  v_pay := pg_temp.sug_payment(v_org, v_may, v_sup, 'PAY-M', 400, date '2026-03-05', 0);
+  v_exp := pg_temp.sug_expense(v_org, v_may, v_sup, v_exp_acct, 'EXP-M', 250, date '2026-03-05');
+  v_cimb_in   := pg_temp.sug_line(v_cimb, date '2026-03-06', 1000, 'CIMB in');
+  v_may_in    := pg_temp.sug_line(v_may,  date '2026-03-06', 1000, 'MAY in');
+  v_cimb_out  := pg_temp.sug_line(v_cimb, date '2026-03-06', -400, 'CIMB out');
+  v_may_out   := pg_temp.sug_line(v_may,  date '2026-03-06', -400, 'MAY out');
+  v_cimb_out2 := pg_temp.sug_line(v_cimb, date '2026-03-06', -250, 'CIMB out 2');
+  v_may_out2  := pg_temp.sug_line(v_may,  date '2026-03-06', -250, 'MAY out 2');
+  v_cimb_jv   := pg_temp.sug_line(v_cimb, date '2026-03-06', 300, 'CIMB journal');
+
+  -- Offered on its own account and not on the other.
+  perform pg_temp.check_eq('a Maybank receipt is not offered for a CIMB line',
+    (select count(*)::integer from public.suggest_bank_matches(v_cimb_in) where source_id = v_rcp), 0);
+  perform pg_temp.check_eq('and is for a Maybank one',
+    (select count(*)::integer from public.suggest_bank_matches(v_may_in) where source_id = v_rcp), 1);
+  perform pg_temp.check_eq('a Maybank supplier payment is not offered for a CIMB line',
+    (select count(*)::integer from public.suggest_bank_matches(v_cimb_out) where source_id = v_pay), 0);
+  perform pg_temp.check_eq('and is for a Maybank one',
+    (select count(*)::integer from public.suggest_bank_matches(v_may_out) where source_id = v_pay), 1);
+  perform pg_temp.check_eq('a Maybank expense is not offered for a CIMB line',
+    (select count(*)::integer from public.suggest_bank_matches(v_cimb_out2) where source_id = v_exp), 0);
+  perform pg_temp.check_eq('and is for a Maybank one',
+    (select count(*)::integer from public.suggest_bank_matches(v_may_out2) where source_id = v_exp), 1);
+
+  -- And refused when asked for by hand, saying where it went.
+  perform pg_temp.check_refused('a CIMB line is not matched to a receipt banked into Maybank',
+    format('select public.match_bank_transaction(%L, %L, %L)', v_cimb_in, 'receipts', v_rcp),
+    'RCP-M went through Maybank current, not CIMB current. A statement line is matched to what passed through its own account.',
+    '23514');
+  perform pg_temp.check_refused('nor to a supplier payment made from Maybank',
+    format('select public.match_bank_transaction(%L, %L, %L)', v_cimb_out, 'purchase_payments', v_pay),
+    'PAY-M went through Maybank current, not CIMB current.%', '23514');
+  perform pg_temp.check_refused('nor to an expense paid from Maybank',
+    format('select public.match_bank_transaction(%L, %L, %L)', v_cimb_out2, 'expenses', v_exp),
+    'EXP-M went through Maybank current, not CIMB current.%', '23514');
+
+  v_jv_may := public.post_manual_journal(v_org, date '2026-03-06',
+    jsonb_build_array(
+      jsonb_build_object('account_id', pg_temp.bank_gl(v_may), 'debit', 300, 'credit', 0),
+      jsonb_build_object('account_id', (select id from public.accounts
+                                         where org_id = v_org and code = '3100'),
+                         'debit', 0, 'credit', 300)),
+    'Into Maybank');
+  v_jv_none := public.post_manual_journal(v_org, date '2026-03-06',
+    jsonb_build_array(
+      jsonb_build_object('account_id', v_exp_acct, 'debit', 300, 'credit', 0),
+      jsonb_build_object('account_id', (select id from public.accounts
+                                         where org_id = v_org and code = '3100'),
+                         'debit', 0, 'credit', 300)),
+    'No bank in it');
+  perform pg_temp.check_refused('nor to a journal on Maybank',
+    format('select public.match_bank_transaction(%L, %L, %L)', v_cimb_jv, 'gl_entries', v_jv_may),
+    (select entry_no from public.gl_entries where id = v_jv_may)
+      || ' went through Maybank current, not CIMB current.%', '23514');
+  perform pg_temp.check_refused('nor to one that touched no bank at all',
+    format('select public.match_bank_transaction(%L, %L, %L)', v_cimb_jv, 'gl_entries', v_jv_none),
+    (select entry_no from public.gl_entries where id = v_jv_none)
+      || ' went through no bank account, not CIMB current.%', '23514');
+
+  -- The half that says the rule is about the ACCOUNT, not a refusal of
+  -- everything: Maybank's own line still takes the receipt the CIMB line
+  -- was refused, and a journal on CIMB is matched to a CIMB line.
+  perform public.match_bank_transaction(v_may_in, 'receipts', v_rcp);
+  perform pg_temp.check_true('Maybank''s own line takes the receipt',
+    (select is_reconciled and matched_id = v_rcp
+       from public.bank_transactions where id = v_may_in));
+  v_jv_cimb := public.post_manual_journal(v_org, date '2026-03-06',
+    jsonb_build_array(
+      jsonb_build_object('account_id', pg_temp.bank_gl(v_cimb), 'debit', 300, 'credit', 0),
+      jsonb_build_object('account_id', (select id from public.accounts
+                                         where org_id = v_org and code = '3100'),
+                         'debit', 0, 'credit', 300)),
+    'Into CIMB');
+  perform public.match_bank_transaction(v_cimb_jv, 'gl_entries', v_jv_cimb);
+  perform pg_temp.check_true('and a journal on CIMB is matched to a CIMB line',
+    (select is_reconciled and gl_entry_id = v_jv_cimb
+       from public.bank_transactions where id = v_cimb_jv));
+
+  -- The sweep's survivors.
+  perform pg_temp.check_refused('a statement line that does not exist is said so',
+    format('select public.match_bank_transaction(%L, %L, %L)', gen_random_uuid(), 'receipts', v_rcp),
+    'Statement line % not found', 'P0002');
+  perform pg_temp.check_refused('another company''s supplier payment is not found here',
+    format('select public.match_bank_transaction(%L, %L, %L)', v_cimb_out, 'purchase_payments', v_their_pay),
+    'Nothing posted found in purchase_payments with id ' || v_their_pay || ' for this organization.',
+    'P0002');
+  perform pg_temp.check_refused('nor its expense',
+    format('select public.match_bank_transaction(%L, %L, %L)', v_cimb_out2, 'expenses', v_their_exp),
+    'Nothing posted found in expenses with id ' || v_their_exp || ' for this organization.',
+    'P0002');
+  perform pg_temp.check_refused('nor its journal',
+    format('select public.match_bank_transaction(%L, %L, %L)', v_cimb_out, 'gl_entries', v_their_jv),
+    'Nothing posted found in gl_entries with id ' || v_their_jv || ' for this organization.',
+    'P0002');
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

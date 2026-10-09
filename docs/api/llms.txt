@@ -6,7 +6,7 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0771` (the highest applied migration).
+Schema version `0772` (the highest applied migration).
 843 functions and 367 readable tables, of which
 318 functions only read.
 
@@ -14,7 +14,7 @@ Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**702 of 843 functions carry a `comment on
+**703 of 843 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -994,7 +994,7 @@ Not gated on any module.
 - `submit_self_appraisal(p_appraisal uuid, p_rating numeric, p_comments text)` *(writes)* — Writes the employee's own half and moves the appraisal to the manager.
 - `submit_tax_details(p_token text, p_details jsonb)` *(writes)* — Records what a customer filled in on their own tax-details form, and fills the contact's BLANK fields from it.
 - `suggest_bank_coding(p_transaction_id uuid)` — The first rule that describes this bank line, and what it says to code it as.
-- `suggest_bank_matches(p_transaction_id uuid, p_within_days integer)`
+- `suggest_bank_matches(p_transaction_id uuid, p_within_days integer)` — Candidates for one statement line, best first: receipts for money in, supplier payments and expenses for money out, of the same amount within p_within_days, not already matched -- and, since `0772`, only those whose journal went through this line's bank account.
 - `suggest_lots(p_item_id uuid, p_warehouse_id uuid, p_quantity numeric)`
 - `suggested_charge(p_payment_method_id uuid, p_amount numeric)` — What a payment method's stated rate comes to on this amount.
 - `tax_computation(p_computation_id uuid)` — The Form C working for one basis period, every figure derived from the ledger, the Schedule 3 schedule and the rates.

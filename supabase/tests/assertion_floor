@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-15954
+15976
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1080,3 +1080,7 @@
 # rebuilding in January; and the suite made to pass on other days than
 # today (run_at_dates.sh: 28 December, 5 January, 15 February, 10 March,
 # 1 June). run_locally.sh at 0771: 386 files, 15954 assertions.
+#
+# 9 October: 15976. set_fiscal_period_status swept with a rule-by-rule
+# block, and 0772, a statement line matched only to what went through
+# its own account. run_locally.sh at 0772: 386 files, 15976 assertions.

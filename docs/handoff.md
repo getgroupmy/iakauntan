@@ -889,6 +889,29 @@ page and renumbering would quietly break the reference.
     2026-12-31 on 9 June 2027 and 2025-12-31 a day earlier. Still to
     check: that the next scheduled rebuild (11:00 UTC) succeeds and
     leaves every demo company with two fiscal years.
+39. ~~A statement line is matched to another account's document.~~
+    **Raised and answered 9 October: refuse + filter. Built in
+    `0772`.** Found sweeping `match_bank_transaction`, and measured: a
+    company with Maybank and CIMB banked a RM1,000 receipt into Maybank,
+    imported a CIMB line for RM1,000, and the match was accepted. CIMB
+    then read nothing unmatched and a RM1,000 difference; Maybank's own
+    line could no longer have the receipt ("already matched to another
+    line"). `suggest_bank_matches` offered exactly that pairing -- it
+    chose by company, amount and date, never by account. Now the match
+    is refused unless the document's journal has a line on the statement
+    line's bank ledger account, naming where it went ("RCP-M went
+    through Maybank current, not CIMB current."), and the suggestions
+    offer only that account's documents. One rule for receipts,
+    payments, expenses and journals, asked of the journal. Existing
+    matches are left as they are -- and production, read only on 9
+    October, had three matched lines and none of them across accounts,
+    with twelve companies holding two or more bank accounts. Restated from `0085`; production's
+    text is `0085`'s WITHOUT ITS COMMENT LINES (the early migrations
+    went in that way), the same code -- with them stripped, the local
+    definitions hash to production's (ff801512..., 67be1a64...). So a
+    whole-text md5 of an early function will not match production and
+    does not mean the code differs: strip `--` lines and compare again.
+    Swept 17 / 17 and 4 / 4. **Awaiting deploy.**
     NOT CHANGED, by the answer: the demo is year-to-date, so in January
     it is thin, and three demo files' "richness" assertions now follow
     the month (below). NOT RAISED, found on the way: in January to
@@ -1044,6 +1067,8 @@ function:
 | `void_strata_charge_run` | `0585` | 16 / 16 | -- | `property.sql` (fourteen only after its rule-by-rule assertions; one call stood behind it) |
 | `demo_company`, `demo_amanah_accounts`, `demo_last_lodged_year_end` | `0771` | 5 / 6 | -- (the sixth survives June to December only, when the old formula and the new agree; `run_at_dates.sh` kills it January to May) | `demo_rebuild.sql` |
 | `set_fiscal_period_status` | `0053` | 8 / 8 | -- | `ledger.sql` (7; three only after its rule-by-rule block) + `year_end_close.sql` (the accountant) |
+| `match_bank_transaction` | `0772` | 17 / 17 | -- | `bank_reconciliation.sql` (four only after its `0772` block: the line that does not exist and another company's payment, expense or journal) |
+| `suggest_bank_matches` (0772's account filter) | `0772` | 4 / 4 | -- | `bank_reconciliation.sql` |
 
 Every equivalent is written into its mutants file with the reason.
 
