@@ -629,6 +629,10 @@ begin
   perform pg_temp.check_eq('dated the day the supplier issued it, not today',
     (select doc_date::text from public.purchase_documents where id = v_bill),
     '2026-03-15');
+  -- And once on a bill, it cannot be set aside underneath it.
+  perform pg_temp.check_refused('a billed document is not set aside under its bill',
+    format('select public.set_received_einvoice_status(%L, %L)', v_id, 'ignored'),
+    'This document is already on a bill; delete the bill first', '22023');
 
   -- A line with its own discount.
   v_doc := jsonb_set(pg_temp.parsed('INV-D001', '01', 'C8888888888'),

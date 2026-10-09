@@ -942,6 +942,7 @@ function:
 | `request_einvoice_for_sale` | `0402` | 8 / 9 | 1 ("every line" -- posting stamps the contact on every line) | `pos.sql` (five only after lines added). NOT RAISED: `0501` keeps naming the buyer on the module bar for a cashier who is not a writer, but `prepare_einvoice` inside it asks `can_write`, so that cashier is refused anyway -- the stated intent is unreachable |
 | `draft_bill_from_received_einvoice` | `0650` | 15 / 15 | -- | `received_einvoice.sql` (four only after its rule-by-rule block) |
 | `create_supplier_from_received_einvoice`, `link_received_einvoice_contact` | `0650` | 14 / 14 | -- | `received_einvoice.sql` (eight only after its block; its first draft was linked by the shared registration number in the fixture) |
+| `set_received_einvoice_status` | `0650` | 4 / 4 | -- | `received_einvoice.sql` (one only after an assertion added) |
 
 Every equivalent is written into its mutants file with the reason.
 
