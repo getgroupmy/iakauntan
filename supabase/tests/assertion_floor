@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-16323
+16335
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1113,3 +1113,7 @@
 # certificate a signed e-Invoice needs is not cleared from a company
 # filing version 1.1. run_locally.sh at 0777: 386 files, 16323
 # assertions.
+#
+# 9 October: 16335. 0778: a project is closed by any road only when no
+# billable time on it is uninvoiced. run_locally.sh at 0778: 386 files,
+# 16335 assertions.

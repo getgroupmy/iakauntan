@@ -1047,6 +1047,25 @@ page and renumbering would quietly break the reference.
     certificate included, for any company -- but that removes the client
     id too, which stops a company filing in any version and is not
     mistaken for anything else. **Still to read back.**
+45. ~~A project closes by hand over unbilled time.~~ **Raised and
+    answered 9 October: guard the table. Built in `0778`.**
+    `close_project` refuses to close a job while billable time on it
+    is uninvoiced, unless told to write it off; the refusal lived in
+    the function alone, and `projects_update` (`can_write`) let a
+    member who may write but not post close a job holding RM3,000 of
+    unbilled time with one UPDATE -- measured locally. Now a trigger on
+    `projects` asks the same question of every change from open to
+    closed, in `close_project`'s words; `close_project` writing the
+    time off still closes, because it marks the time non-billable
+    first; reopening, and editing a job without closing it, are never
+    refused. The app's own editor never sends `is_active`. Production
+    held five projects, all open, all in demo companies whose rebuild
+    only inserts open ones. Swept 11 / 11; SECURITY DEFINER checked by
+    hand and equivalent today. NOT COVERED, and named so nobody assumes
+    it is: time can still be LOGGED onto a closed project -- the app
+    offers only open ones, but `time_entries_write` asks nothing about
+    the project's state -- the twin of item 43 for jobs. Not raised yet.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -1241,6 +1260,7 @@ function:
 | `set_einvoice_version`, `set_einvoice_signing_certificate` | `0615` | 16 / 17 | 1 | `einvoice_signing_certificate.sql` (ten before its block; equivalent: the environment column is NOT NULL) |
 | `clear_einvoice_signing_certificate` | `0777` | 6 / 6 | -- | `einvoice_signing_certificate.sql` (restated in `0777`: a 1.1 company's certificate is not cleared from under it) |
 | `close_project`, `reopen_project` | `0389` | 14 / 14 | -- | `project_budget.sql` (twelve before: one company with one job carrying hours; noted: `projects_update` closes a job over unbilled hours directly) |
+| `app.project_closes_only_when_billed` | `0778` | 11 / 11 | -- | `project_budget.sql` (new in `0778`; SECURITY DEFINER flipped by hand, equivalent while every member reads every time entry) |
 | `close_lead`, `reopen_lead` | `0373` | 12 / 12 | -- | `win_loss.sql` (four before its block: one clean lead, its owner) |
 | `close_opportunity`, `reopen_opportunity` | `0422`, `0373` | 20 / 20 | -- | `win_loss.sql` (twelve before its block: one won and one lost stage per pipeline, one pipeline, the owner) |
 | `close_requisition` | `0394` | 13 / 13 | -- | `vacancies.sql` (nine before its block: one open vacancy, the owner, twenty days old) |

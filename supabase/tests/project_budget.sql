@@ -15,9 +15,11 @@
 --   * cost read from the ledger, not from the documents, so a journal
 --     posted by hand counts the same as a bill line;
 --   * unbilled time counted separately and added to neither side;
---   * and `0176`'s refusal one table over — a job does not close over
+--   * `0176`'s refusal one table over — a job does not close over
 --     billable hours nobody invoiced, unless somebody says they are
---     being written off.
+--     being written off;
+--   * and, since `0778`, the same refusal by the table's own door, for
+--     a member who closes the job with an UPDATE instead.
 --
 -- Runs inside a transaction that is rolled back at the end.
 -- =====================================================================
@@ -409,6 +411,169 @@ begin
     format('select public.reopen_project(%L)', gen_random_uuid()),
     'No such project.', 'P0002');
 
+  perform pg_temp.sign_out();
+end $$;
+
+-- ---------------------------------------------------------------------
+-- And by the table's own door  (`0778`)
+--
+-- `close_project`'s refusal, asked of an UPDATE straight on `projects`
+-- by a member who may write but not post -- the road `projects_update`
+-- leaves open. Before `0778` this closed a job holding RM3,000 of
+-- unbilled time. What is not refused: a job whose only time is billed,
+-- or never billable, or that has none of its own; editing a closed job;
+-- editing an open one; reopening; and `close_project` writing the time
+-- off, which empties the question before it closes.
+-- ---------------------------------------------------------------------
+create temporary table t_pc
+  (held uuid, billed uuid, internal uuid, empty uuid, shut uuid);
+grant select on t_pc to authenticated;
+
+do $$
+declare
+  v_org      uuid := pg_temp.test_org('Pintu Projek Sdn Bhd');
+  v_clerk    uuid;
+  v_held     uuid;
+  v_billed   uuid;
+  v_internal uuid;
+  v_empty    uuid;
+  v_shut     uuid;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  insert into public.projects (org_id, code, name)
+  values (v_org, 'JOB-1', 'Fit-out') returning id into v_held;
+  insert into public.projects (org_id, code, name)
+  values (v_org, 'JOB-2', 'Invoiced already') returning id into v_billed;
+  insert into public.projects (org_id, code, name)
+  values (v_org, 'JOB-3', 'Internal only') returning id into v_internal;
+  insert into public.projects (org_id, code, name)
+  values (v_org, 'JOB-4', 'Nothing on it') returning id into v_empty;
+  insert into public.projects (org_id, code, name)
+  values (v_org, 'JOB-5', 'Written off') returning id into v_shut;
+
+  -- JOB-1: two entries to bill, one billed, one never billable.
+  insert into public.time_entries
+    (org_id, project_id, user_id, entry_date, description, minutes,
+     hourly_rate, amount, is_billable, is_billed)
+  values
+    (v_org, v_held, auth.uid(), pg_temp.today() - 5, 'Site work', 480,
+     250, 2000, true, false),
+    (v_org, v_held, auth.uid(), pg_temp.today() - 4, 'More site work', 240,
+     250, 1000, true, false),
+    (v_org, v_held, auth.uid(), pg_temp.today() - 3, 'Billed already', 60,
+     250, 250, true, true),
+    (v_org, v_held, auth.uid(), pg_temp.today() - 2, 'Internal', 60,
+     0, 0, false, false),
+  -- JOB-2: billed, all of it.
+    (v_org, v_billed, auth.uid(), pg_temp.today() - 5, 'Invoiced', 60,
+     250, 250, true, true),
+  -- JOB-3: none of it was ever to be charged.
+    (v_org, v_internal, auth.uid(), pg_temp.today() - 5, 'Training', 60,
+     0, 0, false, false),
+  -- JOB-5: one entry, written off below and then made billable again by
+  -- hand, so a CLOSED job holds unbilled time.
+    (v_org, v_shut, auth.uid(), pg_temp.today() - 5, 'Snagging', 120,
+     250, 500, true, false);
+
+  perform public.close_project(v_shut, true);
+  update public.time_entries set is_billable = true
+   where project_id = v_shut;
+
+  v_clerk := pg_temp.another_user('kerani@pintuprojek.test');
+  insert into public.org_members (org_id, user_id, role, status)
+  values (v_org, v_clerk, 'sales', 'active');
+  perform pg_temp.sign_in_as(v_clerk);
+  perform pg_temp.check_true('the clerk may write projects but not post',
+    app.can_write(v_org) and not app.can_post(v_org));
+
+  insert into t_pc values (v_held, v_billed, v_internal, v_empty, v_shut);
+end $$;
+
+set local role authenticated;
+
+do $$
+declare
+  c     record;
+  v_msg text;
+begin
+  select * into c from t_pc;
+
+  begin
+    update public.projects set is_active = false where id = c.held;
+    v_msg := null;
+  exception when check_violation then
+    get stacked diagnostics v_msg = message_text;
+  end;
+  perform pg_temp.check_eq('a job with time to bill is not closed by hand either',
+    v_msg,
+    'This project still has 3,000.00 of billable time nobody has '
+    'invoiced, across 2 entries. Bill it, or close the project writing '
+    'the time off, which says the decision was taken. Hours left on a '
+    'closed job are hours nobody is looking at.');
+
+  -- Each of these is not refused, and the checks after `reset role`
+  -- say they took.
+  update public.projects set is_active = false where id = c.billed;
+  update public.projects set is_active = false where id = c.internal;
+  update public.projects set is_active = false where id = c.empty;
+  update public.projects set name = 'Fit-out, level 2', is_active = true
+   where id = c.held;
+  update public.projects set name = 'Written off, then not',
+         is_active = false
+   where id = c.shut;
+  update public.projects set is_active = true where id = c.shut;
+
+  -- Open again, with its one entry still to bill: one is enough.
+  begin
+    update public.projects set is_active = false where id = c.shut;
+    v_msg := null;
+  exception when check_violation then
+    get stacked diagnostics v_msg = message_text;
+  end;
+  perform pg_temp.check_eq('one entry to bill is enough to refuse',
+    v_msg,
+    'This project still has 500.00 of billable time nobody has '
+    'invoiced, across 1 entries. Bill it, or close the project writing '
+    'the time off, which says the decision was taken. Hours left on a '
+    'closed job are hours nobody is looking at.');
+end $$;
+
+reset role;
+
+do $$
+declare c record;
+begin
+  select * into c from t_pc;
+  perform pg_temp.check_true('the job with time to bill is still open',
+    (select is_active from public.projects where id = c.held));
+  perform pg_temp.check_eq('and its other edit took',
+    (select name from public.projects where id = c.held), 'Fit-out, level 2');
+  perform pg_temp.check_true('a job whose time is all billed closes by hand',
+    not (select is_active from public.projects where id = c.billed));
+  perform pg_temp.check_true('so does one whose time was never billable',
+    not (select is_active from public.projects where id = c.internal));
+  perform pg_temp.check_true(
+    'and one with no time of its own, beside a job that has some',
+    not (select is_active from public.projects where id = c.empty));
+  perform pg_temp.check_eq(
+    'a closed job holding time is edited, reopened, and not closed again',
+    (select name || ' / ' || is_active::text from public.projects
+      where id = c.shut),
+    'Written off, then not / true');
+
+  -- `close_project` writing the time off still closes: it marks the
+  -- time non-billable before it asks the table.
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  perform public.close_project(c.held, true);
+  perform pg_temp.check_true('and close_project writing it off still closes it',
+    not (select is_active from public.projects where id = c.held));
+  perform pg_temp.check_eq(
+    'the two to bill written off, beside the one never billable',
+    (select count(*)::integer from public.time_entries
+      where project_id = c.held and not is_billable and not is_billed), 3);
+  perform pg_temp.check_eq('and none of the four deleted',
+    (select count(*)::integer from public.time_entries
+      where project_id = c.held), 4);
   perform pg_temp.sign_out();
 end $$;
 
