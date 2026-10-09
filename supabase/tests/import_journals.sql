@@ -332,6 +332,7 @@ declare
   v_gone uuid;
   v_out  jsonb;
   v_e1   uuid;
+  v_other uuid;
 begin
   -- An account and a contact whose codes have letters in them, so
   -- their case can be wrong in the file.
@@ -345,6 +346,9 @@ begin
   values (v_org, 'CUST-A', 'Syarikat Lama', 'customer') returning id into v_cust;
   insert into public.contacts (org_id, code, name, contact_type, deleted_at)
   values (v_org, 'GONE-1', 'Dahulu Sdn Bhd', 'customer', now()) returning id into v_gone;
+  perform pg_temp.allow_many_companies();
+  v_other := pg_temp.j_org('Syarikat Lain Sdn Bhd');
+  perform pg_temp.sign_in_as(pg_temp.test_user());
 
   v_out := public.import_journals(v_org, jsonb_build_array(
     jsonb_build_object('entry_no', 'JV-A1', 'entry_date', '2026-03-01',
@@ -393,19 +397,59 @@ begin
        join public.gl_entries e on e.id = l.entry_id
       where e.org_id = v_org and e.import_ref = 'JV-A2'), 20.00);
 
-  -- A deleted contact is never put on a line. Whether the file is
-  -- refused for naming one or the line posts without it, the one thing
-  -- that may not happen is the ledger pointing at somebody deleted.
-  begin
-    perform public.import_journals(v_org, jsonb_build_array(
-      jsonb_build_object('entry_no', 'JV-A3', 'entry_date', '2026-03-03',
-        'account_code', '6900', 'debit', '5.00', 'contact_code', 'gone-1'),
-      jsonb_build_object('entry_no', 'JV-A3', 'entry_date', '2026-03-03',
-        'account_code', '1110', 'credit', '5.00')), true);
-  exception when others then
-    null;
-  end;
-  perform pg_temp.check_eq('a deleted contact is never named on a line',
+  -- `0774`. A contact code that is given has to be somebody: a typo, a
+  -- contact since deleted, or another company's code is reported on
+  -- the preview and refuses the commit, as the sales, purchase and
+  -- opening-balance importers do. Before it, the code was dropped and
+  -- the line posted with no customer on it.
+  v_out := public.import_journals(v_org, jsonb_build_array(
+    jsonb_build_object('entry_no', 'JV-A3', 'entry_date', '2026-03-03',
+      'account_code', '6900', 'debit', '5.00', 'contact_code', 'CUST-Z'),
+    jsonb_build_object('entry_no', 'JV-A3', 'entry_date', '2026-03-03',
+      'account_code', '1110', 'credit', '5.00')), false);
+  perform pg_temp.check_eq('a contact code that matches nobody is reported on its row',
+    (select x ->> 'problem' from jsonb_array_elements(v_out -> 'rows') x
+      where (x ->> 'row')::integer = 1),
+    'There is no customer or supplier with the code CUST-Z. Import the '
+    'contacts first, or leave the column empty.');
+  perform pg_temp.check_refused('and the commit is refused',
+    format('select public.import_journals(%L, %L::jsonb, true)', v_org,
+      jsonb_build_array(
+        jsonb_build_object('entry_no', 'JV-A3', 'entry_date', '2026-03-03',
+          'account_code', '6900', 'debit', '5.00', 'contact_code', 'CUST-Z'),
+        jsonb_build_object('entry_no', 'JV-A3', 'entry_date', '2026-03-03',
+          'account_code', '1110', 'credit', '5.00'))::text),
+    'Nothing was imported: 2 of 2 rows have a problem.%', '22023');
+
+  v_out := public.import_journals(v_org, jsonb_build_array(
+    jsonb_build_object('entry_no', 'JV-A4', 'entry_date', '2026-03-04',
+      'account_code', '6900', 'debit', '5.00', 'contact_code', 'gone-1'),
+    jsonb_build_object('entry_no', 'JV-A4', 'entry_date', '2026-03-04',
+      'account_code', '1110', 'credit', '5.00')), false);
+  perform pg_temp.check_eq('so is a contact that has been deleted',
+    (select x ->> 'status' from jsonb_array_elements(v_out -> 'rows') x
+      where (x ->> 'row')::integer = 1), 'error');
+
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_other, 'THEIRS-1', 'Pelanggan Mereka', 'customer');
+  v_out := public.import_journals(v_org, jsonb_build_array(
+    jsonb_build_object('entry_no', 'JV-A5', 'entry_date', '2026-03-05',
+      'account_code', '6900', 'debit', '5.00', 'contact_code', 'THEIRS-1'),
+    jsonb_build_object('entry_no', 'JV-A5', 'entry_date', '2026-03-05',
+      'account_code', '1110', 'credit', '5.00')), false);
+  perform pg_temp.check_eq('and so is another company''s customer',
+    (select x ->> 'status' from jsonb_array_elements(v_out -> 'rows') x
+      where (x ->> 'row')::integer = 1), 'error');
+
+  -- An empty column is still a line on an account nobody owes.
+  v_out := public.import_journals(v_org, jsonb_build_array(
+    jsonb_build_object('entry_no', 'JV-A6', 'entry_date', '2026-03-06',
+      'account_code', '6900', 'debit', '5.00', 'contact_code', '   '),
+    jsonb_build_object('entry_no', 'JV-A6', 'entry_date', '2026-03-06',
+      'account_code', '1110', 'credit', '5.00')), false);
+  perform pg_temp.check_eq('while a blank contact column is no problem at all',
+    (v_out ->> 'errors')::integer, 0);
+  perform pg_temp.check_eq('and nothing deleted was ever put on a line',
     (select count(*) from public.gl_lines l where l.contact_id = v_gone), 0);
 end $$;
 

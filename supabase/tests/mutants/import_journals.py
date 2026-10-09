@@ -17,22 +17,23 @@
 #       supabase/tests/import_journals.sql \
 #       supabase/tests/mutants/import_journals.py
 #
-# RESULT: 16 mutants and a control. 14 killed by `import_journals.sql`,
+# RESULT: 16 mutants and a control. 13 killed by `import_journals.sql`,
 # eight before its rule-by-rule block: every file named accounts by
 # number (no case to get wrong), named no contact, gave each line its
 # entry's description, described every entry and stayed above the sen,
 # and nothing read the `committed` flag.
 #
-# Two are EQUIVALENT: "debits/credits are not rounded to the sen".
-# `app.create_gl_entry_internal` rounds every line to two places before
-# it balances the entry, so the importer's own `round` changes nothing
-# that reaches the ledger.
-#
-# Found and raised rather than fixed: `app.validate_journal_rows` never
-# looks at `contact_code`. A code that matches no live contact -- a typo,
-# or a contact since deleted -- is dropped without a word, and the line
-# posts without its customer or supplier. The block asserts only what
-# holds either way: a deleted contact is never put on a line.
+# Three are EQUIVALENT:
+#   * "debits/credits are not rounded to the sen":
+#     `app.create_gl_entry_internal` rounds every line to two places
+#     before it balances the entry, so the importer's own `round`
+#     changes nothing that reaches the ledger;
+#   * "a deleted contact is named on the line": since `0774` the
+#     validator refuses a file naming a deleted contact, so the commit
+#     never reaches this lookup with one. (Before `0774` it was killed:
+#     the sweep found the validator never read the contact column at
+#     all, and the answer was to refuse it there --
+#     `mutants/validate_journal_rows_contact.py`.)
 
 m("somebody who may not post imports journals",
   "import_journals",

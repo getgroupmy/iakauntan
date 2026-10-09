@@ -947,7 +947,29 @@ page and renumbering would quietly break the reference.
     (1d81a89c..., grants `authenticated` and `service_role`). Swept
     13 / 14, one equivalent. The settings card already shows one mode
     at a time and reloads after saving, so it shows the other mode
-    switched off without a change. **Still to read back.**
+    switched off without a change.
+    **Applied, and read back** (9 October, read-only, after run
+    37906774749 on `f5abac1`, all twelve jobs green): recorded; the live
+    `set_org_payment_gateway` hashes to 03a4ee72..., the same as the
+    local build; execute still granted to `authenticated` and
+    `service_role` and not to `anon`; the index
+    `org_payment_gateways_one_active_mode` is there, partial on
+    `is_active`; the comment names `0773`.
+41. ~~A journal file's contact code is dropped if it matches nobody.~~
+    **Raised and answered 9 October: refuse unknown codes. Built in
+    `0774`.** Found sweeping `import_journals`: the import screen maps
+    "customer code" / "supplier code" onto each journal line, but
+    `app.validate_journal_rows` never read the column, and
+    `import_journals` then looked the code up and, finding nobody, put
+    nothing. A typo or a deleted contact went into the ledger as a line
+    with no customer -- on trade debtors, the debtors account moved and
+    the customer's ledger did not -- and the preview called every row
+    fine. The sales, purchase and opening-balance importers already
+    refused it. Now a code that is given must be a live contact of this
+    company, in any case; an empty column is still allowed. Restated
+    from `0633`, whose text production runs exactly (96953790...);
+    production had imported no journals. Swept 5 / 5.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -1125,7 +1147,8 @@ function:
 | `begin_gateway_payment` | `0297` | 10 / 11 | 1 | `gateway_payments.sql` (one before its block: every start was lower-case, trimmed and untaxed; equivalent: every platform invoice is written in MYR) |
 | `begin_shared_payment` | `0413` | 10 / 10 | -- | `shared_invoice_payment.sql` (three before its block: all sandbox, clean references, whole ringgit, no checkout page; raised: one acquirer active in both modes) |
 | `set_org_payment_gateway` | `0773` | 13 / 14 | 1 | `tenant_gateway_credentials.sql` (the mode and acquirer refusals were asserted by SQLSTATE, which the table's own check and foreign key raise too; equivalent: switching the saved row off before the upsert writes it back) |
-| `import_journals` | `0633` | 14 / 16 | 2 | `import_journals.sql` (eight before its block: numeric account codes, no contacts, no undescribed entries, nothing below the sen; equivalent: `create_gl_entry_internal` rounds every line itself; raised: an unknown contact code is dropped silently) |
+| `import_journals` | `0633` | 13 / 16 | 3 | `import_journals.sql` (eight before its block: numeric account codes, no contacts, no undescribed entries, nothing below the sen; equivalent: `create_gl_entry_internal` rounds every line itself, and since `0774` the validator refuses a deleted contact first) |
+| `validate_journal_rows` (contact check) | `0774` | 5 / 5 | -- | `import_journals.sql` (new in `0774`) |
 | `rollback_import_batch` | `0610` | 9 / 10 | 1 | `import_provenance.sql` (four before its block: one batch, one company, its owner, no children; equivalent: no delete is ever skipped silently, so nothing is "kept") |
 
 Every equivalent is written into its mutants file with the reason.
