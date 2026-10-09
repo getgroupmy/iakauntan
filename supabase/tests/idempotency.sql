@@ -1263,6 +1263,19 @@ begin
     public.adjust_loyalty_points(v_acct, 25, 'Another', 'POINTS-1'), v_n);
   perform pg_temp.check_eq('so the balance is 125, not 150',
     app.loyalty_balance(v_acct), 125);
+  -- The same key is the same request only when everything that decides
+  -- the outcome is the same. A till that reused a key for a different
+  -- number of points, or a different reason, is a client bug -- and
+  -- honouring it as a replay would hand back a balance for an
+  -- adjustment that was never made.
+  perform pg_temp.check_refused('the same key for different points is a different request',
+    format('select public.adjust_loyalty_points(%L, 40, %L, %L)', v_acct, 'Another', 'POINTS-1'),
+    'Idempotency key POINTS-1 was already used for a different request', '22023');
+  perform pg_temp.check_refused('and for a different reason',
+    format('select public.adjust_loyalty_points(%L, 25, %L, %L)', v_acct, 'Something else', 'POINTS-1'),
+    'Idempotency key POINTS-1 was already used for a different request', '22023');
+  perform pg_temp.check_eq('and neither moved the balance',
+    app.loyalty_balance(v_acct), 125);
 
   -- And the two that were measured as safe, kept as assertions because a
   -- verdict the gate checks by TEXT is weaker than one it checks by

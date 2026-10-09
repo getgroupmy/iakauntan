@@ -1098,6 +1098,8 @@ function:
 | `reopen_bank_reconciliation` | `0157` | 6 / 8 | 2 | `bank_reconciliation.sql` (two before its block: one bank account made "this account" and "any account" the same row; equivalents: no `in_progress` row exists, and the FK releases the lines) |
 | `void_bank_transfer` | `0504` | 14 / 14 | -- | `bank_transfers.sql` (an earlier unrecorded sweep left the "Undo Baki" block; the survivor was a note written over rather than under) |
 | `void_deposit` | `0421` | 20 / 20 | -- | `deposits.sql` (thirteen before its block: every deposit voided was taken today, so the reversal's date could not be read; who, when and why were never read back) |
+| `adjust_loyalty_points` (3 args) | `0231` | 11 / 11 | -- | `pos_loyalty.sql` (four before its block: every adjustment was the owner's, so the owner-or-admin rule `0580` is built around was unasked) |
+| `adjust_loyalty_points` (keyed) | `0736` | 6 / 6 | -- | `idempotency.sql` (four before: no key was reused for a different request, so points and note could drop out of it) |
 
 Every equivalent is written into its mutants file with the reason.
 

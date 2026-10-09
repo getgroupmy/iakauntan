@@ -49,6 +49,7 @@ declare
   v_jn     uuid;
   v_m2     uuid;
   v_acct2  uuid;
+  v_cashier uuid;
 begin
   v_org := pg_temp.test_org('Pasaraya Mesra Sdn Bhd');
   perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
@@ -643,6 +644,40 @@ begin
     (select s.loyalty_account_id from public.pos_sales s where s.id = v_jn) = v_acct2);
   perform pg_temp.check_eq('so the joined bill takes one ringgit off, not five',
     (select s.total_amount from public.pos_sales s where s.id = v_jn), 109.00);
+
+  -- ------------------------------------------------------------------
+  -- Points adjusted by hand, rule by rule
+  -- ------------------------------------------------------------------
+  -- Handing out points is handing out money, which is why `0580` says
+  -- this one refuses on WHO -- and every adjustment above is made by
+  -- the owner, so a till that let any member do it passed. Nor did
+  -- anything take an account to exactly nothing (allowed), adjust by
+  -- nothing (refused), or read back what was written.
+  perform pg_temp.check_refused('adjusting an account that does not exist is said so',
+    format('select public.adjust_loyalty_points(%L, 10, %L)', gen_random_uuid(), 'Goodwill'),
+    'No such loyalty account.', 'P0002');
+  perform pg_temp.check_refused('an adjustment of nothing is refused',
+    format('select public.adjust_loyalty_points(%L, 0, %L)', v_acct2, 'Nothing'),
+    'An adjustment of nothing is not an adjustment.', '23514');
+
+  v_cashier := pg_temp.another_user('juruwang@mesra.test');
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_org, v_cashier, 'accounts_clerk', 'active', now());
+  perform pg_temp.sign_in_as(v_cashier);
+  perform pg_temp.check_refused('a member who is not an owner or admin hands out no points',
+    format('select public.adjust_loyalty_points(%L, 100, %L)', v_acct2, 'Goodwill'),
+    'Only an owner or admin can adjust points.', '42501');
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+
+  perform pg_temp.check_eq('an account can be taken to exactly nothing',
+    public.adjust_loyalty_points(v_acct2, -app.loyalty_balance(v_acct2), 'Card closed'), 0);
+  perform pg_temp.check_eq('and what comes back is the balance, not the change',
+    public.adjust_loyalty_points(v_acct2, 250, '  Birthday bonus  '), 250);
+  perform pg_temp.check_true('written as an adjustment, its reason trimmed, saying who',
+    exists (select 1 from public.loyalty_entries e
+             where e.account_id = v_acct2 and e.points = 250
+               and e.kind = 'adjust' and e.note = 'Birthday bonus'
+               and e.created_by = pg_temp.test_user()));
 
   raise notice 'point of sale loyalty: all assertions passed';
 end;
