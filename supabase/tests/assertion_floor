@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-16343
+16364
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1121,3 +1121,8 @@
 # 9 October: 16343. 0779: a mode's gateway keys are not removed while a
 # payment through them, started in the last day, is still pending.
 # run_locally.sh at 0779: 386 files, 16343 assertions.
+#
+# 9 October: 16364. capitalise_bill_line and
+# report_uncapitalised_purchases swept, and 0780: a bill paid in part or
+# in full is still posted, so it stays on the list and can be
+# capitalised. run_locally.sh at 0780: 386 files, 16364 assertions.

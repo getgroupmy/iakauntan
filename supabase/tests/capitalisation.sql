@@ -342,6 +342,218 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- What the asset takes from the bill, and what from the caller
+--
+-- The fixtures above collapse most of it: every bill dated today, in
+-- ringgit, one line, capitalised without a name, a residual or a
+-- method. Here each figure is one only its own source could produce.
+-- ---------------------------------------------------------------------
+create or replace function pg_temp.cap_dated_bill(
+  p_org uuid, p_no text, p_supplier uuid, p_on date, p_currency char(3),
+  p_rate numeric, out doc_id uuid)
+language plpgsql as $$
+begin
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, status)
+  values (p_org, 'bill', p_no, p_on, p_supplier, p_currency, p_rate, 'draft')
+  returning id into doc_id;
+end $$;
+
+do $$
+declare
+  v_org   uuid := pg_temp.test_org('Aset Dari Mana Sdn Bhd');
+  v_sup   uuid;
+  v_plant uuid;
+  v_doc   uuid;
+  v_line  uuid;
+  v_free  uuid;
+  v_drill uuid;
+  v_asset uuid;
+  v_row   public.fixed_assets;
+begin
+  perform pg_temp.open_years(v_org, pg_temp.today() - 40);
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'S-1', 'Jentera Sdn Bhd', 'supplier') returning id into v_sup;
+  select id into v_plant from public.accounts
+   where org_id = v_org and account_subtype = 'fixed_asset'
+     and not is_group order by code limit 1;
+
+  -- Bought forty days ago; capitalised today, by name, under a
+  -- category, on the reducing balance, with a residual.
+  v_doc := pg_temp.cap_dated_bill(v_org, 'BILL-OLD', v_sup,
+    pg_temp.today() - 40, 'MYR', 1);
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, description, quantity,
+     unit_price, account_id)
+  values (v_org, v_doc, 1, 'item', 'Forklift', 1, 9000, v_plant)
+  returning id into v_line;
+  perform public.post_purchase_document(v_doc);
+
+  v_asset := public.capitalise_bill_line(v_line, '  FA-9  ',
+    'Forklift, 2.5 tonne', 'Vehicles', 'reducing_balance', null, 20, 900);
+  select * into v_row from public.fixed_assets where id = v_asset;
+  perform pg_temp.check_eq('acquired on the bill''s date, not the day it '
+    'was capitalised', v_row.acquisition_date::text,
+    (pg_temp.today() - 40)::text);
+  perform pg_temp.check_eq('the asset number is trimmed', v_row.asset_no, 'FA-9');
+  perform pg_temp.check_eq('a name given is the name',
+    v_row.name, 'Forklift, 2.5 tonne');
+  perform pg_temp.check_eq('so is a category', v_row.category, 'Vehicles');
+  perform pg_temp.check_eq('and the method', v_row.method, 'reducing_balance');
+  perform pg_temp.check_eq('at its rate', v_row.rate_percent, 20);
+  perform pg_temp.check_eq('the residual given is kept', v_row.residual_value, 900);
+  perform pg_temp.check_eq('and who made it is recorded',
+    v_row.created_by, pg_temp.test_user());
+
+  -- Bought in dollars: the register is in the company's own money, at
+  -- the bill's rate, which is what the posting put in the account.
+  v_doc := pg_temp.cap_dated_bill(v_org, 'BILL-USD', v_sup,
+    pg_temp.today(), 'USD', 4.5);
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, description, quantity,
+     unit_price, account_id)
+  values (v_org, v_doc, 1, 'item', 'CNC router', 1, 1000, v_plant)
+  returning id into v_line;
+  perform public.post_purchase_document(v_doc);
+  perform pg_temp.check_eq('the list shows it in ringgit too',
+    (select amount from public.report_uncapitalised_purchases(v_org)
+      where doc_no = 'BILL-USD'), 4500);
+  v_asset := public.capitalise_bill_line(v_line, 'FA-10', null, null,
+    'straight_line', 60);
+  perform pg_temp.check_eq('a dollar bill is capitalised in ringgit, at '
+    'its own rate', (select cost from public.fixed_assets where id = v_asset),
+    4500);
+  perform pg_temp.check_eq('which is what the ledger was debited',
+    (select sum(l.debit - l.credit) from public.gl_lines l
+      join public.gl_entries e on e.id = l.entry_id
+     where l.account_id = v_plant
+       and e.id = (select gl_entry_id from public.purchase_documents
+                    where id = v_doc)), 4500);
+
+  -- A free cable on the same bill as the drill: it is coded to plant,
+  -- and it is not an asset.
+  v_doc := pg_temp.cap_dated_bill(v_org, 'BILL-FREE', v_sup,
+    pg_temp.today(), 'MYR', 1);
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, description, quantity,
+     unit_price, account_id)
+  values (v_org, v_doc, 1, 'item', 'Cable, free', 1, 0, v_plant)
+  returning id into v_free;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, description, quantity,
+     unit_price, account_id)
+  values (v_org, v_doc, 2, 'item', 'Drill', 1, 500, v_plant)
+  returning id into v_drill;
+  perform public.post_purchase_document(v_doc);
+  perform pg_temp.check_refused('a line worth nothing is not an asset',
+    format('select public.capitalise_bill_line(%L, %L, null, null, %L, 60)',
+           v_free, 'FA-11', 'straight_line'),
+    'A line worth nothing is not an asset.', '23514');
+
+  -- A residual of all of it is not more than the cost: an asset that
+  -- is not depreciated, which is a judgement and not an error.
+  v_asset := public.capitalise_bill_line(v_drill, 'FA-12', null, null,
+    'straight_line', 60, null, 500);
+  perform pg_temp.check_eq('a residual equal to the cost is taken',
+    (select residual_value from public.fixed_assets where id = v_asset), 500);
+
+  perform pg_temp.sign_out();
+end $$;
+
+-- ---------------------------------------------------------------------
+-- A paid bill is still a posted one  (`0780`)
+--
+-- Paying a bill moves its status to 'partial', then 'completed'. The
+-- cost stays in the asset account, so the line stays on the list and
+-- can be capitalised. A bill with no journal, or one that is void, is
+-- neither.
+-- ---------------------------------------------------------------------
+create or replace function pg_temp.cap_pay(
+  p_org uuid, p_supplier uuid, p_no text, p_bill uuid, p_amount numeric)
+returns void language plpgsql as $$
+declare v_id uuid;
+begin
+  insert into public.purchase_payments
+    (org_id, payment_no, payment_date, contact_id, amount, unapplied_amount,
+     currency, exchange_rate, bank_account_id)
+  values (p_org, p_no, pg_temp.today(), p_supplier, p_amount, p_amount,
+          'MYR', 1, pg_temp.a_bank_account(p_org))
+  returning id into v_id;
+  insert into public.payment_allocations (org_id, payment_id, bill_id, amount)
+  values (p_org, v_id, p_bill, p_amount);
+  perform public.post_purchase_payment(v_id);
+end $$;
+
+do $$
+declare
+  v_org   uuid := pg_temp.test_org('Bil Berbayar Sdn Bhd');
+  v_sup   uuid;
+  v_plant uuid;
+  v_paid  record;
+  v_part  record;
+  v_void  record;
+  v_wait  record;
+  v_asset uuid;
+begin
+  perform public.create_fiscal_year(v_org,
+    date_trunc('year', pg_temp.today())::date);
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'S-1', 'Jentera Sdn Bhd', 'supplier') returning id into v_sup;
+  select id into v_plant from public.accounts
+   where org_id = v_org and account_subtype = 'fixed_asset'
+     and not is_group order by code limit 1;
+
+  v_paid := pg_temp.cap_bill(v_org, 'BILL-1', v_sup, v_plant, 12500, 'Lathe');
+  v_part := pg_temp.cap_bill(v_org, 'BILL-2', v_sup, v_plant, 8000, 'Press');
+  v_void := pg_temp.cap_bill(v_org, 'BILL-3', v_sup, v_plant, 4000, 'Saw');
+  v_wait := pg_temp.cap_bill(v_org, 'BILL-4', v_sup, v_plant, 3000, 'Grinder',
+    false);
+
+  perform pg_temp.cap_pay(v_org, v_sup, 'PV-1', v_paid.doc_id, 12500);
+  perform pg_temp.cap_pay(v_org, v_sup, 'PV-2', v_part.doc_id, 3000);
+  -- No function voids a bill; the row stands for one that was. And one
+  -- waiting for approval, which has no journal yet.
+  update public.purchase_documents set status = 'void' where id = v_void.doc_id;
+  update public.purchase_documents set status = 'pending' where id = v_wait.doc_id;
+
+  perform pg_temp.check_eq('paying in full makes it completed',
+    (select status::text from public.purchase_documents
+      where id = v_paid.doc_id), 'completed');
+  perform pg_temp.check_eq('and in part, partial',
+    (select status::text from public.purchase_documents
+      where id = v_part.doc_id), 'partial');
+  perform pg_temp.check_eq('the paid and the part-paid are still on the list',
+    (select string_agg(doc_no, ',' order by doc_no)
+       from public.report_uncapitalised_purchases(v_org)), 'BILL-1,BILL-2');
+
+  v_asset := public.capitalise_bill_line(v_paid.line_id, 'FA-1', null, null,
+    'straight_line', 60);
+  perform pg_temp.check_eq('a paid bill is capitalised, at its cost',
+    (select cost from public.fixed_assets where id = v_asset), 12500);
+  v_asset := public.capitalise_bill_line(v_part.line_id, 'FA-2', null, null,
+    'straight_line', 60);
+  perform pg_temp.check_eq('and a part-paid one',
+    (select cost from public.fixed_assets where id = v_asset), 8000);
+
+  perform pg_temp.check_refused('a void bill is not',
+    format('select public.capitalise_bill_line(%L, %L, null, null, %L, 60)',
+           v_void.line_id, 'FA-3', 'straight_line'),
+    'BILL-3 has not been posted. An asset whose cost is not in the ledger '
+    'is one the register can never be reconciled to it.', '23514');
+  perform pg_temp.check_refused('nor one waiting for approval',
+    format('select public.capitalise_bill_line(%L, %L, null, null, %L, 60)',
+           v_wait.line_id, 'FA-4', 'straight_line'),
+    'BILL-4 has not been posted. An asset whose cost is not in the ledger '
+    'is one the register can never be reconciled to it.', '23514');
+  perform pg_temp.check_eq('and the list is empty, with those two not on it',
+    (select count(*)::integer
+       from public.report_uncapitalised_purchases(v_org)), 0);
+
+  perform pg_temp.sign_out();
+end $$;
+
+-- ---------------------------------------------------------------------
 -- Reachability
 -- ---------------------------------------------------------------------
 do $$

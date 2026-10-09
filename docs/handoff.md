@@ -1100,6 +1100,20 @@ page and renumbering would quietly break the reference.
     from `0412` (production hash 41b08b29..., identical); production
     held no gateway configuration and no gateway payment. Swept 15 / 15.
     **Still to read back.**
+47. ~~A paid bill cannot be capitalised.~~ **Raised and answered 9
+    October: accept paid bills. Built in `0780`.** `capitalise_bill_line`
+    and `report_uncapitalised_purchases` (`0382`) asked for status
+    'posted', and paying a bill moves it to 'partial' or 'completed'
+    (`app.apply_allocation`). So a bill paid even in part left the list
+    of what has been bought and not put in the register, and
+    capitalising it was refused as "not posted" -- measured: a RM12,500
+    lathe, paid, still RM12,500 in the account, off the list, refused.
+    Both now take posted, partial and completed; draft, void and
+    pending stay refused in the same words. Found sweeping
+    `capitalise_bill_line`. Restated from `0382` (production hashes
+    3b6438d2... and c6deb7dc..., identical); production held no bill
+    line on a fixed asset account. Swept 26 / 26 and 12 / 12.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -1294,6 +1308,8 @@ function:
 | `set_einvoice_version`, `set_einvoice_signing_certificate` | `0615` | 16 / 17 | 1 | `einvoice_signing_certificate.sql` (ten before its block; equivalent: the environment column is NOT NULL) |
 | `clear_einvoice_signing_certificate` | `0777` | 6 / 6 | -- | `einvoice_signing_certificate.sql` (restated in `0777`: a 1.1 company's certificate is not cleared from under it) |
 | `close_project`, `reopen_project` | `0389` | 14 / 14 | -- | `project_budget.sql` (twelve before: one company with one job carrying hours; noted: `projects_update` closes a job over unbilled hours directly) |
+| `capitalise_bill_line` | `0780` | 26 / 26 | -- | `capitalisation.sql` (9 of 20 before its block: every bill dated today, in ringgit, one line, nothing named; raised: a paid bill was "not posted" -- `0780`) |
+| `report_uncapitalised_purchases` | `0780` | 12 / 12 | -- | `capitalisation.sql` (three by `0780`'s blocks: the paid, the part-paid, and a dollar bill's amount) |
 | `app.project_closes_only_when_billed` | `0778` | 11 / 11 | -- | `project_budget.sql` (new in `0778`; SECURITY DEFINER flipped by hand, equivalent while every member reads every time entry) |
 | `close_lead`, `reopen_lead` | `0373` | 12 / 12 | -- | `win_loss.sql` (four before its block: one clean lead, its owner) |
 | `close_opportunity`, `reopen_opportunity` | `0422`, `0373` | 20 / 20 | -- | `win_loss.sql` (twelve before its block: one won and one lost stage per pipeline, one pipeline, the owner) |

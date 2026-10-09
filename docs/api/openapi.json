@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0779",
+    "version": "0780",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -23913,7 +23913,7 @@
       "post": {
         "operationId": "capitalise_bill_line",
         "summary": "Makes a fixed asset out of a posted bill line, taking the cost, the date, the supplier and the account from\u2026",
-        "description": "Makes a fixed asset out of a posted bill line, taking the cost, the date, the supplier and the account from the line rather than asking for them again. `purchase_document_id` was a column nothing wrote, so the register and the fixed asset accounts had no way to be compared.\n\n`public.capitalise_bill_line(p_line uuid, p_asset_no text, p_name text, p_category text, p_method text, p_useful_life_months integer, p_rate_percent numeric, p_residual_value numeric)` Writes. Requires a signed-in user.",
+        "description": "Makes a fixed asset out of a posted bill line, taking the cost, the date, the supplier and the account from the line rather than asking for them again. `purchase_document_id` was a column nothing wrote, so the register and the fixed asset accounts had no way to be compared. A bill paid in part or in full is still posted (`0780`).\n\n`public.capitalise_bill_line(p_line uuid, p_asset_no text, p_name text, p_category text, p_method text, p_useful_life_months integer, p_rate_percent numeric, p_residual_value numeric)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -63542,7 +63542,7 @@
       "post": {
         "operationId": "report_uncapitalised_purchases",
         "summary": "Posted bill lines coded to a fixed asset account with no asset in the register against them \u2014 the\u2026",
-        "description": "Posted bill lines coded to a fixed asset account with no asset in the register against them \u2014 the reconciliation an auditor opens with, which the data could not answer.\n\n`public.report_uncapitalised_purchases(p_org uuid, p_as_at date)` Reads only. Requires a signed-in user. Refused unless the company has the `fixed_assets` module and the caller may use it.",
+        "description": "Posted bill lines coded to a fixed asset account with no asset in the register against them \u2014 the reconciliation an auditor opens with, which the data could not answer. Paid bills included: paying the supplier does not take the cost out of the account (`0780`).\n\n`public.report_uncapitalised_purchases(p_org uuid, p_as_at date)` Reads only. Requires a signed-in user. Refused unless the company has the `fixed_assets` module and the caller may use it.",
         "tags": [
           "fixed_assets"
         ],
