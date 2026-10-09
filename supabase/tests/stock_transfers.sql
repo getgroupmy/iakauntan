@@ -821,6 +821,7 @@ declare
   v_b     uuid;
   v_item  uuid;
   v_t     uuid;
+  v_t2    uuid;
   v_owner uuid := pg_temp.test_user();
 begin
   perform pg_temp.sign_in_as(v_owner);
@@ -876,8 +877,19 @@ begin
   -- ------------------------------------------------------------------
   -- Called off before it left
   -- ------------------------------------------------------------------
+  -- A second draft beside it, so "this transfer" and "every draft the
+  -- company has" are not the same rows (`mutants/cancel_stock_transfer.py`
+  -- found them indistinguishable with one).
+  v_t2 := public.upsert_stock_transfer(
+    null, v_org, v_a, v_b, pg_temp.today(),
+    jsonb_build_array(jsonb_build_object(
+      'item', v_item, 'quantity', 2, 'uom', 'C62')),
+    'Two bags, still going');
   perform pg_temp.check_true('a transfer still in the yard is called off',
     public.cancel_stock_transfer(v_t) = true);
+  perform pg_temp.check_true('and the one beside it is still going',
+    (select t.status::text = 'draft' from public.stock_transfers t
+      where t.id = v_t2));
   perform pg_temp.check_true('and the transfer says it was cancelled',
     (select t.status::text = 'cancelled' from public.stock_transfers t
       where t.id = v_t));

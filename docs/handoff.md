@@ -1072,6 +1072,7 @@ function:
 | `resync_bank_balance` | `0175` | 7 / 8 | 1 (the `posted` filter: nothing writes a journal that is not posted, as the test file's header already said) | `bank_balance_resync.sql` (the not-found message only after it was asserted) |
 | `retire_account` | `0619` | 11 / 11 | -- | `account_closure.sql` (7; three only after its rule-by-rule assertions) + `chart_of_accounts.sql` (4) |
 | `close_pos_shift` | `0206` | 20 / 20 | -- | `pos_drawer_shapes.sql` (two only after they were asserted: who closed it, a closing note replacing the morning's) |
+| `cancel_stock_transfer` | `0265` | 6 / 6 | -- | `stock_transfers.sql` (one only after a second draft stood beside it) |
 
 Every equivalent is written into its mutants file with the reason.
 
