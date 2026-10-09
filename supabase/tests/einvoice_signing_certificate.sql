@@ -333,4 +333,75 @@ begin
     '%administrator%', '42501');
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Signing, rule by rule
+--
+-- Every company above had one environment's credentials, loaded clean
+-- certificates with clean details, and only ever asked for version 1.1
+-- with a whole certificate or none -- so a version given with spaces,
+-- 1.1 allowed on a certificate with no key behind it, a third
+-- environment, a key without its certificate, a padded certificate, a
+-- blank serial number, a lost expiry, and a certificate set or cleared
+-- on BOTH environments when one was named, all passed.
+--
+-- Not asserted: a company with no environment set. The column is NOT
+-- NULL and defaults to 'sandbox', so `coalesce(..., 'sandbox')` never
+-- reaches its second argument.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org  uuid;
+  v_half uuid;
+  r      record;
+begin
+  perform pg_temp.allow_many_companies();
+  v_half := pg_temp.test_org('Sijil Separuh Sdn Bhd');
+  -- `set_einvoice_credentials` will store a certificate with no key.
+  perform public.set_einvoice_credentials(v_half, 'sandbox', 'cid', 'secret',
+    '-----BEGIN CERTIFICATE-----', null);
+  perform pg_temp.check_refused('a certificate with no key behind it signs nothing at 1.1',
+    format('select public.set_einvoice_version(%L, %L)', v_half, '1.1'),
+    'Load a signing certificate first%', '23514');
+
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Tandatangan Satu Satu Sdn Bhd');
+  perform public.set_einvoice_credentials(v_org, 'sandbox', 'cid-s', 'secret-s');
+  perform public.set_einvoice_credentials(v_org, 'production', 'cid-p', 'secret-p');
+
+  perform pg_temp.check_refused('a third environment is refused by name',
+    format('select public.set_einvoice_signing_certificate(%L, %L, %L, %L)',
+           v_org, 'staging', 'CERT', 'KEY'),
+    'Environment must be sandbox or production, not staging', '23514');
+  perform pg_temp.check_refused('and a key without its certificate',
+    format('select public.set_einvoice_signing_certificate(%L, %L, %L, %L)',
+           v_org, 'sandbox', '  ', 'KEY'),
+    'A signing certificate needs both the certificate and its private key', '23514');
+
+  perform public.set_einvoice_signing_certificate(v_org, 'sandbox',
+    '  -----BEGIN CERTIFICATE-----  ', '  -----BEGIN PRIVATE KEY-----  ',
+    '   ', null, timestamptz '2027-06-30 00:00:00+08');
+  select * into r from public.einvoice_credentials
+   where org_id = v_org and environment = 'sandbox';
+  perform pg_temp.check_eq('the certificate is stored trimmed',
+    r.cert_pem, '-----BEGIN CERTIFICATE-----');
+  perform pg_temp.check_true('a blank serial number is no serial number',
+    r.cert_serial_number is null);
+  perform pg_temp.check_true('and the expiry is kept',
+    r.cert_expires_at = timestamptz '2027-06-30 00:00:00+08');
+  perform pg_temp.check_true('and the other environment is left without one',
+    (select cert_pem is null from public.einvoice_credentials
+      where org_id = v_org and environment = 'production'));
+
+  perform pg_temp.check_eq('a version given with spaces is the version',
+    public.set_einvoice_version(v_org, '  1.1  '), '1.1');
+
+  perform public.set_einvoice_signing_certificate(v_org, 'production',
+    '-----BEGIN CERTIFICATE-----', '-----BEGIN PRIVATE KEY-----');
+  perform public.clear_einvoice_signing_certificate(v_org, 'production');
+  perform pg_temp.check_true('clearing one environment leaves the other''s',
+    (select cert_pem is not null and cert_private_key_pem is not null
+       from public.einvoice_credentials
+      where org_id = v_org and environment = 'sandbox'));
+end $$;
+
 rollback;
