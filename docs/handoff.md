@@ -1182,6 +1182,7 @@ function:
 | `close_matter` | `0372` | 20 / 22 | 2 | `matter_closing.sql` (nine before its block; the money rule could be walked round by a table UPDATE -- `0775`; equivalent since then: its money and date checks, which the trigger repeats word for word) |
 | `reopen_matter` | `0372` | 8 / 8 | -- | `matter_closing.sql` (three before its block: no archived matter was ever reopened) |
 | `app.matter_closes_only_when_empty` | `0775` | 7 / 7 | -- | `matter_closing.sql` (new in `0775`; a late receipt on a closed file is what tells "on the way in" from "every time") |
+| `delete_contact` | `0654` | 9 / 9 | -- | `contact_delete.sql` (six before its block; the module guard is reached only by a read-only access type, since `contacts` is core -- and its sentence then blames the module) |
 
 Every equivalent is written into its mutants file with the reason.
 

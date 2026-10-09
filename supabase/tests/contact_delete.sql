@@ -376,4 +376,75 @@ begin
     '%1 sales document%', '23503');
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The refusal, rule by rule
+--
+-- Every refusal above names a contact that has a name, lists one kind
+-- of thing pointing at it, and comes from a company with the contacts
+-- module on -- so a refusal that listed the smallest count first, said
+-- nothing for a contact with no name, or let a company without the
+-- module delete, passed.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid;
+  v_id  uuid;
+  v_nn  uuid;
+  v_sp  uuid;
+  v_reader uuid;
+  v_type uuid;
+begin
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Satu Persatu Sdn Bhd');
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-ORD', 'Kedai Tertib', 'customer') returning id into v_id;
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, subtotal, total_amount, balance_amount, status)
+  values (v_org, 'invoice', 'INV-O1', app.today(), v_id, 'MYR', 1, 10, 10, 10, 'draft'),
+         (v_org, 'invoice', 'INV-O2', app.today(), v_id, 'MYR', 1, 10, 10, 10, 'draft');
+  insert into public.projects (org_id, code, name, contact_id)
+  values (v_org, 'P-O1', 'Renovation', v_id);
+  perform pg_temp.check_refused('what points at it is listed most first',
+    format('select public.delete_contact(%L)', v_id),
+    'Kedai Tertib cannot be deleted while it still has 2 sales documents, 1 project',
+    '23503');
+
+  -- A name of nothing but spaces is a name the table accepts.
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-NN', '   ', 'customer') returning id into v_nn;
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, subtotal, total_amount, balance_amount, status)
+  values (v_org, 'invoice', 'INV-NN', app.today(), v_nn, 'MYR', 1, 10, 10, 10, 'draft');
+  perform pg_temp.check_refused('a contact with no name is still named in the refusal',
+    format('select public.delete_contact(%L)', v_nn),
+    'That contact cannot be deleted while it still has 1 sales document',
+    '23503');
+
+  -- `contacts` is a core module and cannot be switched off, so the
+  -- module guard is reached through a PERSON: a member whose access
+  -- type lets them see contacts but not change them. Their role can
+  -- write -- `can_write` passes -- which is exactly why the second
+  -- guard is there.
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-SP', 'Nothing points here', 'customer') returning id into v_sp;
+  v_reader := pg_temp.another_user('pembaca@satupersatu.test');
+  insert into public.access_types (org_id, name)
+  values (v_org, 'Contacts to look at') returning id into v_type;
+  insert into public.access_type_modules (access_type_id, module_code, access)
+  values (v_type, 'contacts', 'read');
+  insert into public.org_members (org_id, user_id, role, status, access_type_id)
+  values (v_org, v_reader, 'accountant', 'active', v_type);
+  perform pg_temp.sign_in_as(v_reader);
+  perform pg_temp.check_refused('somebody who may only read contacts does not delete one',
+    format('select public.delete_contact(%L)', v_sp),
+    'The contacts module is not switched on for this company', '42501');
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  perform pg_temp.check_eq('and the contact is still there',
+    pg_temp.cd_alive(v_sp), 'there');
+end $$;
+
 rollback;
