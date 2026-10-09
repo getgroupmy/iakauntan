@@ -87,6 +87,8 @@ declare
   v_line   uuid;
   v_promo  uuid;
   v_drink  uuid;
+  v_voucher uuid;
+  v_else   uuid;
 begin
   -- ------------------------------------------------------------------
   -- The rounding rule, on its own
@@ -729,9 +731,61 @@ begin
 
   perform public.add_pos_sale_line(v_sale, v_item, 5, 10.00);
   -- Typed the way a cashier types it, off a printed slip.
-  perform public.apply_pos_coupon(v_sale, '  RaYa5 ');
+  v_voucher := public.apply_pos_coupon(v_sale, '  RaYa5 ');
   perform pg_temp.check_eq('a voucher takes its amount off',
     (select s.promo_discount from public.pos_sales s where s.id = v_sale), 5.00);
+  -- `apply_pos_coupon`, rule by rule. A mutation sweep
+  -- (`mutants/apply_pos_coupon.py`) left these with nothing to tell
+  -- them from their absence.
+  perform pg_temp.check_eq('it returns the row it put on the bill',
+    (select sp.id::text from public.pos_sale_promotions sp
+      where sp.sale_id = v_sale), v_voucher::text);
+  perform pg_temp.check_true('and the row says who typed it',
+    (select sp.applied_by is not null and sp.applied_by = auth.uid()
+       from public.pos_sale_promotions sp where sp.id = v_voucher));
+  perform pg_temp.check_refused('a bill that does not exist is said so',
+    format('select public.apply_pos_coupon(%L, %L)', gen_random_uuid(), 'RAYA5'),
+    'No such sale.', 'P0002');
+  perform pg_temp.check_refused('a code nobody issued is said so',
+    format('select public.apply_pos_coupon(%L, %L)', v_sale, 'RAYA50'),
+    'No voucher with that code.', 'P0002');
+  -- Another company's voucher, under a code this one never issued: it
+  -- is not this shop's to honour, and not found here.
+  v_else := pg_temp.test_org('Kedai Sebelah Sdn Bhd');
+  insert into public.pos_promotions (org_id, code, name, kind, amount)
+  values (v_else, 'JIRAN3', 'Next door three', 'amount_off', 3.00);
+  perform pg_temp.check_refused('another company''s voucher is not found here',
+    format('select public.apply_pos_coupon(%L, %L)', v_sale, 'JIRAN3'),
+    'No voucher with that code.', 'P0002');
+  perform pg_temp.sign_in_as(pg_temp.another_user('baucar-luar@example.test'));
+  perform pg_temp.check_refused('a stranger cannot put a voucher on the bill',
+    format('select public.apply_pos_coupon(%L, %L)', v_sale, 'RAYA5'),
+    'not permitted to sell for this organization', '42501');
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+
+  -- `0788`. Typed again, and again in another case. The bill's line is
+  -- null for a whole-bill voucher, and before the key counted a null as
+  -- a value each entry added a row that was taken off again: three
+  -- entries, RM15 off a RM5 voucher. Asked after EACH entry: a third
+  -- entry puts back a row the second lost, so asking only at the end
+  -- cannot tell "refreshed" from "dropped and re-added".
+  perform public.apply_pos_coupon(v_sale, 'RAYA5');
+  perform pg_temp.check_true('entered again, it is still the one typed row',
+    (select count(*) = 1 and bool_and(sp.by_code)
+       from public.pos_sale_promotions sp where sp.sale_id = v_sale));
+  perform pg_temp.check_eq('and is still taken off once',
+    (select s.promo_discount from public.pos_sales s where s.id = v_sale), 5.00);
+  perform public.apply_pos_coupon(v_sale, 'raya5');
+  -- Not asked, and equivalent: whether a second entry refreshes the
+  -- row's amount and clears its old reason. `refresh_pos_promotions`
+  -- sets both for every typed voucher straight after the write.
+  perform pg_temp.check_eq('a voucher entered three times is on the bill once',
+    (select count(*)::integer from public.pos_sale_promotions sp
+      where sp.sale_id = v_sale), 1);
+  perform pg_temp.check_eq('and is taken off once',
+    (select s.promo_discount from public.pos_sales s where s.id = v_sale), 5.00);
+  perform pg_temp.check_eq('so the bill is 60.00 less 5.00',
+    (select s.total_amount from public.pos_sales s where s.id = v_sale), 55.00);
 
   -- The basket shrinks under the minimum. The voucher stays on the
   -- bill saying why it is worth nothing, rather than vanishing and
@@ -780,6 +834,9 @@ begin
     (select d.total_amount from public.sales_documents d
       join public.pos_sales s on s.invoice_id = d.id where s.id = v_sale),
     55.00);
+  perform pg_temp.check_refused('a settled bill takes no voucher',
+    format('select public.apply_pos_coupon(%L, %L)', v_sale, 'RAYA5'),
+    'That bill is completed and cannot take a voucher.', '23514');
   -- One use, used up. Counted from completed sales rather than a
   -- counter, so a parked bill never burns it and a written-off bill
   -- gives it back.
@@ -791,6 +848,22 @@ begin
   exception when check_violation then
     raise notice 'ok   a one-use voucher is used up once a bill settles';
   end;
+
+  -- A voucher for one dish, on a bill without it. It goes on, worth
+  -- nothing, and says why: the refresh after it writes the reason, so a
+  -- cashier is not left holding a voucher that silently does nothing.
+  insert into public.pos_promotions (org_id, code, name, kind, amount)
+  values (v_org, 'TEH2', 'Two off the teh', 'amount_off', 2.00)
+  returning id into v_promo;
+  insert into public.pos_promotion_items (org_id, promotion_id, item_id)
+  values (v_org, v_promo, v_drink);
+  v_sale := public.open_pos_sale(v_reg);
+  perform public.add_pos_sale_line(v_sale, v_item, 1, 10.00);
+  perform public.apply_pos_coupon(v_sale, 'TEH2');
+  perform pg_temp.check_eq('a voucher for a dish not on the bill says so',
+    (select sp.amount || ' ' || coalesce(sp.blocked_reason, '-')
+       from public.pos_sale_promotions sp where sp.sale_id = v_sale),
+    '0.00 Nothing on this bill qualifies.');
 
   raise notice 'point of sale: all assertions passed';
 end;

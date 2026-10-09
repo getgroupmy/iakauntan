@@ -1276,6 +1276,21 @@ page and renumbering would quietly break the reference.
     c4e332ff... and b12bab0e..., identical). Production held one
     programme and no redemption. Swept 8 / 11, three equivalent.
     **Still to read back.**
+55. ~~A voucher typed twice is taken off twice.~~ **Raised and answered
+    9 October: one row per voucher. Built in `0788`.**
+    `apply_pos_coupon` writes `on conflict (sale_id, promotion_id,
+    line_id) do update`, meaning a second entry to land on the row it
+    had -- but a whole-bill voucher's `line_id` is null and two nulls
+    never conflict, so each entry added a row and `recalc_pos_sale`
+    summed them: a one-use RM5 voucher entered three times on a RM60
+    bill took RM15 off, and the invoice settled at RM45 -- measured.
+    The key is now `unique nulls not distinct` (production runs Postgres
+    17), so the conflict both writers name happens; nothing else
+    changes. Production held no voucher and no promotion on any bill.
+    Found sweeping `apply_pos_coupon`, 14 / 16, two equivalent; the key
+    itself checked by hand (put back as nulls-distinct, `pos.sql` fails
+    "expected 1, got 3"; a no-op control passes).
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -1486,6 +1501,7 @@ function:
 | `ingest_exchange_rates` | `0104` | 16 / 16 | -- | `exchange_rate_feed.sql` (ten before its block; noted: a non-numeric rate or date fails the whole batch, and a slashed date reads by DateStyle -- unreachable through `fetch-rates`) |
 | `import_items` | `0103` | 25 / 25 | -- | `csv_import.sql` (ten before its block: one import and one preview of three kinds of bad row; the service check's comment claims untracked stock "posts to inventory" -- measured, it is expensed like non_stock) |
 | `revoke_document_share` | `0094` | 5 / 5 | -- | `document_share.sql` (two before its block: "anybody revokes" survived; one document only) |
+| `apply_pos_coupon` | `0256` | 14 / 16 | 2 | `pos.sql` (five before its assertions; found `0788`, a voucher typed twice taken twice; equivalent: the refresh rewrites a typed voucher's amount and reason) |
 | `app.recalc_pos_sale` (trim), `redeem_loyalty_points` | `0787` | 8 / 11 | 3 | `pos_loyalty.sql` (new in `0787`; equivalent: the recalculation's trim corrects whatever the redemption priced; the loyalty guard had never been asked with the till on and the scheme off) |
 | `app.document_state_is_the_databases` | `0781` | 10 / 10 | -- | `posted_document_is_frozen.sql` (new in `0781`; the depth mutants killed by a real payment, which replaced a control that wrote the figures itself) |
 | `app.project_closes_only_when_billed` | `0778` | 11 / 11 | -- | `project_budget.sql` (new in `0778`; SECURITY DEFINER flipped by hand, equivalent while every member reads every time entry) |

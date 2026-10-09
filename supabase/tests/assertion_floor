@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-16491
+16504
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1159,3 +1159,10 @@
 # and exchange_rate_feed.sql's row-by-row block printing a status called
 # error in a form the runner does not read as a failure. Measured:
 # `all SQL assertions passed (387 files, 16491 assertions executed)`.
+#
+# 16491 -> 16504, 9 October: 0788, a voucher typed twice is taken off
+# once, and apply_pos_coupon rule by rule (pos.sql: a missing bill, an
+# unknown code, another company's code, a stranger, a settled bill, who
+# typed it, the row returned, a voucher nothing qualifies for, and the
+# row after each re-entry). Measured:
+# `all SQL assertions passed (387 files, 16504 assertions executed)`.
