@@ -420,6 +420,18 @@ begin
   end;
   perform pg_temp.check_true('and cannot be confirmed twice', v_refused);
 
+  -- And the two refusals a mutation sweep
+  -- (`mutants/confirm_manufacturing_order.py`) found nothing standing
+  -- on: an order that does not exist, and one with no bill of materials
+  -- to confirm against.
+  perform pg_temp.check_refused('an order that does not exist is said so',
+    format('select public.confirm_manufacturing_order(%L)', gen_random_uuid()),
+    'No such manufacturing order', 'P0002');
+  perform pg_temp.check_refused('nor is one with no bill of materials confirmed',
+    format('select public.confirm_manufacturing_order(%L)',
+           pg_temp.order_for(v_org, null, v_chair, 1)),
+    'This order has no bill of materials', '22023');
+
   -- The positive control: confirmed, it posts.
   perform pg_temp.check_true('a confirmed order posts',
     public.post_manufacturing_order(v_mo) is not null);
