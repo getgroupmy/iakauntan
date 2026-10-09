@@ -881,8 +881,14 @@ page and renumbering would quietly break the reference.
     its boundaries. Restated from `0731` and `0426`, md5-verified
     against production by replay (ae8c7aa7..., e4d4b59c...). Swept 5 /
     6 (`demo_in_january.py`); the sixth survives only from June to
-    December, when old and new agree, and is recorded so. **Awaiting
-    deploy.**
+    December, when old and new agree, and is recorded so.
+    **Applied, and read back** (9 October, read-only, after run
+    37891399569 on `752f96a`): recorded; the three functions hash to the
+    local build (0b362574..., 8bbff096..., f46f0604...); none executable
+    by `anon` or `authenticated`; `demo_last_lodged_year_end` answers
+    2026-12-31 on 9 June 2027 and 2025-12-31 a day earlier. Still to
+    check: that the next scheduled rebuild (11:00 UTC) succeeds and
+    leaves every demo company with two fiscal years.
     NOT CHANGED, by the answer: the demo is year-to-date, so in January
     it is thin, and three demo files' "richness" assertions now follow
     the month (below). NOT RAISED, found on the way: in January to
