@@ -1046,7 +1046,13 @@ page and renumbering would quietly break the reference.
     it is: `clear_einvoice_credentials` deletes the whole login,
     certificate included, for any company -- but that removes the client
     id too, which stops a company filing in any version and is not
-    mistaken for anything else. **Still to read back.**
+    mistaken for anything else.
+    **Applied, and read back** (9 October, read-only, after run
+    37925673495 on `dd80e94`, green): recorded; the live
+    `clear_einvoice_signing_certificate` hashes to 84114bea..., the
+    same as the local build; SECURITY DEFINER, executable by
+    `authenticated` and `service_role` as before; the comment names
+    `0777`.
 45. ~~A project closes by hand over unbilled time.~~ **Raised and
     answered 9 October: guard the table. Built in `0778`.**
     `close_project` refuses to close a job while billable time on it
