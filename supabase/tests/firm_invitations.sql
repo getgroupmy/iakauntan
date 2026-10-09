@@ -109,4 +109,51 @@ begin
   raise notice 'firm invitations: all assertions passed';
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The rest, rule by rule
+--
+-- Every address above is typed in lower case with no spaces, nothing
+-- read who sent an invitation or how long it lasts, and nobody
+-- suspended was invited back.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_firm   uuid;
+  v_joiner uuid;
+  v_gone   uuid;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_firm := public.create_firm('Kira Peraturan');
+  v_joiner := pg_temp.another_user('huruf-0483@iakauntan.test');
+
+  perform pg_temp.check_eq('an address typed loudly, with spaces, still finds its account',
+    pg_temp.invite(v_firm, '  Huruf-0483@IAKAUNTAN.test ', 'staff'),
+    'staff active (joined)');
+  perform pg_temp.check_eq('and is kept as the account knows it',
+    (select invited_email from public.firm_members
+      where firm_id = v_firm and user_id = v_joiner),
+    'huruf-0483@iakauntan.test');
+
+  perform pg_temp.invite(v_firm, 'belum-0483@iakauntan.test');
+  perform pg_temp.check_eq('an invitation says who sent it',
+    (select invited_by from public.firm_members
+      where firm_id = v_firm and invited_email = 'belum-0483@iakauntan.test'),
+    pg_temp.test_user());
+  perform pg_temp.check_true('and lasts a fortnight',
+    (select invite_expires_at between now() + interval '13 days 23 hours'
+                                  and now() + interval '14 days 1 hour'
+       from public.firm_members
+      where firm_id = v_firm and invited_email = 'belum-0483@iakauntan.test'));
+
+  -- Somebody suspended from the office, invited back.
+  v_gone := pg_temp.another_user('gantung-0483@iakauntan.test');
+  insert into public.firm_members (firm_id, user_id, role, status, joined_at)
+  values (v_firm, v_gone, 'staff', 'suspended', now() - interval '1 year');
+  perform pg_temp.check_eq('inviting somebody suspended takes them back',
+    pg_temp.invite(v_firm, 'gantung-0483@iakauntan.test', 'staff'),
+    'staff active (joined)');
+
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;
