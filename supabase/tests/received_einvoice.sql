@@ -641,4 +641,107 @@ begin
       where document_id = v_bill and line_no = 1), 5.00::numeric);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The supplier on a received e-Invoice, rule by rule
+--
+-- A mutation sweep (`mutants/received_einvoice_contacts.py`) left eight
+-- rules with nothing here to tell them from their absence. Each case
+-- below is one of them. Every document gets its OWN registration number:
+-- `record_received_einvoice` links a supplier by TIN or by that number
+-- before anything here runs, and `pg_temp.parsed` gives every document
+-- the same one -- so a first draft of this block was linking each
+-- document to the previous one's supplier and asserting nothing. The TIN
+-- cases use a CUSTOMER on file, because the recording only links
+-- suppliers and `create_supplier_from_received_einvoice` matches any.
+-- ---------------------------------------------------------------------
+create or replace function pg_temp.own_doc(p_no text, p_tin text, p_reg text)
+returns jsonb language sql immutable as $$
+  select jsonb_set(pg_temp.parsed(p_no, '01', p_tin),
+                   '{supplier,idValue}', to_jsonb(p_reg));
+$$;
+
+do $$
+declare
+  v_owner uuid := pg_temp.test_user();
+  v_viewer uuid := pg_temp.another_user('recv-viewer@iakauntan.test');
+  v_org uuid; v_other uuid; v_doc jsonb; v_id uuid; v_c uuid; v_c2 uuid;
+  v_retired uuid; v_known uuid; v_theirs uuid;
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Pembekal Satu Persatu Sdn Bhd');
+  insert into public.org_members (org_id, user_id, role, status)
+  values (v_org, v_viewer, 'viewer', 'active');
+
+  -- A viewer creates and links nothing.
+  v_doc := pg_temp.own_doc('INV-V001', 'C1010101010', 'REG-V001');
+  v_id := (public.record_received_einvoice(v_org, v_doc, v_doc) ->> 'id')::uuid;
+  perform pg_temp.sign_in_as(v_viewer);
+  perform pg_temp.check_refused('a viewer creates no supplier',
+    format('select public.create_supplier_from_received_einvoice(%L)', v_id),
+    'Not allowed to create contacts in this organization', '42501');
+  perform pg_temp.check_refused('and links none',
+    format('select public.link_received_einvoice_contact(%L, null)', v_id),
+    'Not allowed to change this received e-Invoice', '42501');
+  perform pg_temp.sign_in_as(v_owner);
+
+  -- No TIN to find them by: the link is what stops a second row.
+  v_doc := jsonb_set(pg_temp.own_doc('INV-N001', 'C2020202020', 'REG-N001'),
+                     '{supplier,tin}', 'null'::jsonb);
+  v_id := (public.record_received_einvoice(v_org, v_doc, v_doc) ->> 'id')::uuid;
+  perform pg_temp.check_true('the fixture starts unlinked',
+    (select contact_id is null from public.received_einvoices where id = v_id));
+  v_c := public.create_supplier_from_received_einvoice(v_id);
+  v_c2 := public.create_supplier_from_received_einvoice(v_id);
+  perform pg_temp.check_true('with no TIN, creating twice still creates once',
+    v_c = v_c2 and (select count(*) from public.contacts
+                     where org_id = v_org and registration_no = 'REG-N001') = 1);
+
+  -- A document that names nobody.
+  v_doc := jsonb_set(pg_temp.own_doc('INV-X001', 'C3030303030', 'REG-X001'),
+                     '{supplier,name}', 'null'::jsonb);
+  v_id := (public.record_received_einvoice(v_org, v_doc, v_doc) ->> 'id')::uuid;
+  perform pg_temp.check_refused('a document naming no supplier makes none',
+    format('select public.create_supplier_from_received_einvoice(%L)', v_id),
+    'The document does not name the supplier, so there is nothing to create', '22023');
+
+  -- A retired contact with the TIN is not brought back by a document.
+  insert into public.contacts (org_id, code, name, contact_type, tin, deleted_at)
+  values (v_org, 'OLD', 'Pembekal Lama', 'customer', 'C4040404040', now())
+  returning id into v_retired;
+  v_doc := pg_temp.own_doc('INV-R001', 'C4040404040', 'REG-R001');
+  v_id := (public.record_received_einvoice(v_org, v_doc, v_doc) ->> 'id')::uuid;
+  perform pg_temp.check_true('a retired contact with the TIN is not linked',
+    public.create_supplier_from_received_einvoice(v_id) <> v_retired);
+
+  -- The TIN as somebody typed it, in another case and with a space, on a
+  -- contact kept as a customer.
+  insert into public.contacts (org_id, code, name, contact_type, tin)
+  values (v_org, 'KNOWN', 'Pembekal Dikenali', 'customer', 'c5050505050 ')
+  returning id into v_known;
+  v_doc := pg_temp.own_doc('INV-K001', 'C5050505050', 'REG-K001');
+  v_id := (public.record_received_einvoice(v_org, v_doc, v_doc) ->> 'id')::uuid;
+  perform pg_temp.check_eq('a TIN typed in another case is the same contact',
+    public.create_supplier_from_received_einvoice(v_id), v_known);
+
+  -- A country nobody knows is Malaysia.
+  v_doc := jsonb_set(pg_temp.own_doc('INV-C001', 'C6060606060', 'REG-C001'),
+                     '{supplier,address,country}', '"XXX"'::jsonb);
+  v_id := (public.record_received_einvoice(v_org, v_doc, v_doc) ->> 'id')::uuid;
+  v_c := public.create_supplier_from_received_einvoice(v_id);
+  perform pg_temp.check_eq('an unknown country becomes Malaysia',
+    (select country_code::text from public.contacts where id = v_c), 'MYS');
+
+  -- Another company's contact, said plainly rather than by the key.
+  v_other := pg_temp.test_org('Syarikat Lain Terima Sdn Bhd');
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_other, 'THEM', 'Bukan Kami', 'supplier') returning id into v_theirs;
+  perform pg_temp.sign_in_as(v_owner);
+  v_doc := pg_temp.own_doc('INV-L001', 'C7070707070', 'REG-L001');
+  v_id := (public.record_received_einvoice(v_org, v_doc, v_doc) ->> 'id')::uuid;
+  perform pg_temp.check_refused('another company''s contact is not linked',
+    format('select public.link_received_einvoice_contact(%L, %L)', v_id, v_theirs),
+    'That contact is not in this organization', '42501');
+end $$;
+
 rollback;
