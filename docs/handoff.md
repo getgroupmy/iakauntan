@@ -1117,7 +1117,12 @@ page and renumbering would quietly break the reference.
     `capitalise_bill_line`. Restated from `0382` (production hashes
     3b6438d2... and c6deb7dc..., identical); production held no bill
     line on a fixed asset account. Swept 26 / 26 and 12 / 12.
-    **Still to read back.**
+    **Applied, and read back** (9 October, read-only, after run
+    37934514226 on `11f144b`, green): recorded; the live
+    `capitalise_bill_line` hashes to 7198017b... and
+    `report_uncapitalised_purchases` to 1f2bd3ef..., both the same as
+    the local build; SECURITY DEFINER, executable by `authenticated` and
+    `service_role` as before; both comments name `0780`.
 48. ~~A client can void, post or settle a document by writing its
     status.~~ **Raised and answered 9 October: guard the columns. Built
     in `0781`.** `refuse_posted_document_change` freezes the figures a
