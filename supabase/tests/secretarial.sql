@@ -486,7 +486,13 @@ begin
     raise notice 'ok   an expired link cannot sign';
   end;
 
+  -- `0785`. The address recorded as evidence of the signature is the
+  -- one the edge saw, not the one the signer wrote first.
+  perform set_config('request.headers',
+    '{"x-forwarded-for": "6.6.6.6, 203.0.113.21", "cf-connecting-ip": "203.0.113.21"}',
+    true);
   perform public.corp_sign_with_link(v_live, 'Director One');
+  perform set_config('request.headers', '{}', true);
 
   begin
     perform public.corp_sign_with_link(v_live, 'Director One');
@@ -499,6 +505,11 @@ begin
   perform pg_temp.check_true('and reopening it says used', v_state = 'used');
 
   execute 'reset role';
+  -- Read as the owner: a signer through a link is anonymous and may not
+  -- read the signatures table.
+  perform pg_temp.check_eq('a link signature records the address the edge saw',
+    (select host(ip_address) from public.corp_signatures where id = v_sig_a),
+    '203.0.113.21');
   perform pg_temp.sign_in_as(v_owner);
 
   perform pg_temp.check_true('the signature stands as an ordinary signature',
@@ -508,7 +519,6 @@ begin
   perform pg_temp.check_true(
     'but signed_by stays null: nobody was signed in',
     (select signed_by is null and signed_name = 'Director One'
-       and ip_address is not distinct from null
        from public.corp_signatures where id = v_sig_a));
 
   -- Now move the text underneath a link that is already out.

@@ -1207,6 +1207,26 @@ page and renumbering would quietly break the reference.
     sweeping `hire_applicant`. Restated from `0381` (production hash
     10e604a1..., identical). Swept 24 / 25.
     **Still to read back.**
+52. ~~The address on an audit row or a signature is the caller's to
+    choose, and a proxy saying "unknown" stops every audited save.~~
+    **Raised and answered 9 October: cf-connecting-ip, never fail. Built
+    in `0785`.** Fifteen functions -- the audit trail, payslip reads,
+    document signatures, signing and share links among them -- recorded
+    the FIRST hop of X-Forwarded-For, which is whatever the client sent
+    (Cloudflare appends the address it saw after it), and cast it to an
+    address, so a hop that was not one ('unknown', from some corporate
+    proxies) made the write fail -- measured: an ordinary contact save
+    refused "invalid input syntax for type inet". Every request in
+    production's gateway log carried `cf-connecting-ip`. Fixed once, in
+    `app.request_header`: asked for x-forwarded-for it answers with the
+    caller's address -- cf-connecting-ip, else the first hop that is an
+    address, else null, never an error -- so the fifteen callers are
+    unchanged. `0165`'s event trigger strips PUBLIC from the replaced
+    function; every caller is a definer owned by the same role and no
+    policy or view reads it, and `client_address.sql` asserts it stays
+    so. Restated from `0047` (production hash 8e1d0d3c..., identical).
+    Rows already written keep the address they recorded. Swept 10 / 10.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -1408,6 +1428,7 @@ function:
 | `create_fiscal_year`, `create_previous_fiscal_year` | `0782` | 13 / 19 | 6 | `previous_fiscal_year.sql` (6 of 13 before: no guard asked, no period name; raised: a year from the 31st lost days between periods -- `0782`; six equivalent by arithmetic, reasons in the file) |
 | `app.closed_project_takes_no_billable_time` | `0783` | 11 / 11 | -- | `project_budget.sql` (new in `0783`; one killed only once an invoiced hour on a closed job was edited) |
 | `hire_applicant` | `0784` | 24 / 25 | 1 | `hiring.sql` (19 of 24 before its block: no rejected applicant, no start on notice's last day, no spaced number, history's author unread; raised: a cancelled requisition hired into -- `0784`; equivalent since: the fill paragraph's cancelled guard) |
+| `app.request_header` | `0785` | 10 / 10 | -- | `client_address.sql` (new in `0785`: no test had ever set a request header; `secretarial.sql` asserted a link signature recorded no address) |
 | `app.document_state_is_the_databases` | `0781` | 10 / 10 | -- | `posted_document_is_frozen.sql` (new in `0781`; the depth mutants killed by a real payment, which replaced a control that wrote the figures itself) |
 | `app.project_closes_only_when_billed` | `0778` | 11 / 11 | -- | `project_budget.sql` (new in `0778`; SECURITY DEFINER flipped by hand, equivalent while every member reads every time entry) |
 | `close_lead`, `reopen_lead` | `0373` | 12 / 12 | -- | `win_loss.sql` (four before its block: one clean lead, its owner) |
