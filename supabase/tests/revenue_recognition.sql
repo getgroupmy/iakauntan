@@ -746,4 +746,75 @@ begin
     'a stranger cannot see what a company owes its own P&L', v_refused);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- `recognise_revenue`, rule by rule
+--
+-- A mutation sweep (`mutants/recognise_revenue.py`) left five rules with
+-- nothing to tell them from their absence. Every release above was of
+-- ONE invoice, so a period end never carried two schedules -- and so:
+--
+--   * "release the first line of that day and not the rest" read the
+--     same as releasing them all;
+--   * a period a credit note took back in full could never sit beside a
+--     live one, where `total = 0, skip it` no longer saves it from being
+--     swept in and marked released;
+--
+-- and nothing asked which day each journal is dated, which day each
+-- period says it was recognised, or who may run it.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_a uuid; v_b uuid; v_c uuid; v_cn uuid;
+  v_start date := date_trunc('year', pg_temp.today())::date;
+  v_end date;
+  v_third date; v_n integer;
+begin
+  v_org := pg_temp.rev_org('Tiga Jadual Sdn Bhd');
+  v_end := (v_start + interval '1 year' - interval '1 day')::date;
+  v_a := pg_temp.service_invoice(v_org, 'INV-A', 1200, v_start, v_end);
+  v_b := pg_temp.service_invoice(v_org, 'INV-B', 600, v_start, v_end);
+  v_c := pg_temp.service_invoice(v_org, 'INV-C', 300, v_start, v_end);
+  perform public.post_sales_document(v_a);
+  perform public.post_sales_document(v_b);
+  perform public.post_sales_document(v_c);
+  -- C taken back whole before anything was released.
+  v_cn := pg_temp.credit_note(v_org, 'CN-C', 300, v_c, v_start, v_start, v_end);
+  perform public.post_sales_document(v_cn);
+
+  v_third := (v_start + interval '3 months' - interval '1 day')::date;
+
+  perform pg_temp.sign_in_as(pg_temp.another_user('luar-hasil@example.test'));
+  perform pg_temp.check_refused('somebody outside the company releases nothing',
+    format('select public.recognise_revenue(%L, %L)', v_org, v_third),
+    'Insufficient privileges to recognise revenue', '42501');
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+
+  v_n := public.recognise_revenue(v_org, v_third);
+  perform pg_temp.check_eq('one journal per month end, carrying both schedules',
+    v_n, 3);
+  perform pg_temp.check_eq('both live schedules released for every month, not the first only',
+    (select count(*)::integer from public.revenue_schedule_periods
+      where document_id in (v_a, v_b) and period_end <= v_third
+        and gl_entry_id is not null), 6);
+  perform pg_temp.check_eq('the one taken back in full is left alone beside them',
+    (select count(*)::integer from public.revenue_schedule_periods
+      where document_id = v_c and gl_entry_id is not null), 0);
+  -- Asked of each journal against the periods it released. "Dated a
+  -- month end" was the first try and let every journal be dated 31
+  -- March, which is one.
+  perform pg_temp.check_eq('each journal is dated the month end it released',
+    (select count(*)::integer from public.revenue_schedule_periods p
+       join public.gl_entries e on e.id = p.gl_entry_id
+      where p.org_id = v_org and e.entry_date <> p.period_end), 0);
+  perform pg_temp.check_eq('so three months make three days',
+    (select count(distinct e.entry_date)::integer from public.revenue_schedule_periods p
+       join public.gl_entries e on e.id = p.gl_entry_id
+      where p.org_id = v_org), 3);
+  perform pg_temp.check_eq('and each period says it was recognised on its own end',
+    (select count(*)::integer from public.revenue_schedule_periods
+      where document_id in (v_a, v_b) and period_end <= v_third
+        and recognised_on is distinct from period_end), 0);
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;
