@@ -1216,7 +1216,11 @@ page and renumbering would quietly break the reference.
     new requisition for the place, or hire against another one." Found
     sweeping `hire_applicant`. Restated from `0381` (production hash
     10e604a1..., identical). Swept 24 / 25.
-    **Still to read back.**
+    **Applied, and read back** (9 October, read-only, after run
+    37949412013 on `db12cb5`): recorded; the live `hire_applicant`
+    hashes to f25e9e55..., the same as the local build; SECURITY
+    DEFINER, executable by `authenticated` and `service_role` as
+    before; the comment names `0784`.
 52. ~~The address on an audit row or a signature is the caller's to
     choose, and a proxy saying "unknown" stops every audited save.~~
     **Raised and answered 9 October: cf-connecting-ip, never fail. Built
