@@ -78,7 +78,10 @@ if [ $# -gt 0 ]; then
   days=("$@")
 else
   y=$(date +%Y)
-  days=("$y-12-28" "$((y + 1))-01-05" "$((y + 1))-02-15"
+  # 1 January because "yesterday" is last year on it and on no other
+  # day: pos_food_court.sql settled yesterday into a year it had not
+  # opened, and failed on that one day alone (measured, 9 October).
+  days=("$y-12-28" "$((y + 1))-01-01" "$((y + 1))-01-05" "$((y + 1))-02-15"
         "$((y + 1))-03-10" "$((y + 1))-06-01")
 fi
 

@@ -49,9 +49,15 @@ declare
   v_bill   text;
   v_n      numeric;
   v_yday   date := (now() at time zone 'Asia/Kuala_Lumpur')::date - 1;
+  v_sale2  uuid;
+  v_set    record;
+  v_clerk  uuid;
+  v_type   uuid;
 begin
   v_org := pg_temp.test_org('Medan Selera Sdn Bhd');
   perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  -- Settled up to yesterday, which on 1 January is last year.
+  perform pg_temp.open_years(v_org, pg_temp.today() - 30);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['pos','inventory','purchases']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
@@ -327,6 +333,70 @@ begin
     perform pg_temp.check_true('an empty week settles nothing',
       v_msg like '%did not sell%' or v_msg like '%No stall sold%');
   end;
+
+  -- ------------------------------------------------------------------
+  -- 7. `settle_pos_stalls`, rule by rule
+  -- ------------------------------------------------------------------
+  -- A mutation sweep (`mutants/settle_pos_stalls.py`) left nine of its
+  -- twenty with nothing above to tell them from their absence: the
+  -- outlet that does not exist, who may settle, a period that ends before
+  -- it starts, the day the bill is dated and falls due, three things the
+  -- settlement records, and the net it answers with. The dates could
+  -- not be seen at all: every settlement above is ONE day, so "the last
+  -- day" and "the first day" were the same date.
+  perform pg_temp.check_refused('an outlet that does not exist is said so',
+    format('select * from public.settle_pos_stalls(%L, %L, %L)',
+           gen_random_uuid(), v_yday, v_yday),
+    'No such outlet.', 'P0002');
+  perform pg_temp.check_refused('nor a period that ends before it starts',
+    format('select * from public.settle_pos_stalls(%L, %L, %L)',
+           v_outlet, v_yday, v_yday - 1),
+    'That period ends before it starts.', '23514');
+
+  -- Somebody who may ring up sales but only read purchases: settling
+  -- raises a bill, and that is purchasing's to do.
+  v_clerk := pg_temp.another_user('juruwang-gerai@example.test');
+  insert into public.access_types (org_id, name)
+  values (v_org, 'Counter only') returning id into v_type;
+  insert into public.access_type_modules (access_type_id, module_code, access)
+  values (v_type, 'pos', 'write'), (v_type, 'purchases', 'read');
+  insert into public.org_members (org_id, user_id, role, access_type_id)
+  values (v_org, v_clerk, 'purchaser', v_type);
+  perform pg_temp.sign_in_as(v_clerk);
+  perform pg_temp.check_refused('a cashier who may not buy does not settle the stalls',
+    format('select * from public.settle_pos_stalls(%L, %L, %L)',
+           v_outlet, v_yday - 5, v_yday - 2),
+    'Settling a stall raises a bill, which needs the purchases module.', '42501');
+  perform pg_temp.sign_in_as(v_owner);
+
+  -- Four days, one sale in the middle of them.
+  v_sale2 := public.open_pos_sale(v_reg);
+  perform public.add_pos_sale_line(v_sale2, v_nasi, 1, 10.00);
+  perform public.complete_pos_sale(
+    v_sale2, jsonb_build_array(jsonb_build_object('type', v_cash, 'amount', 10.00)));
+  update public.pos_sales s
+     set completed_at = (v_yday - 3 + time '12:00') at time zone 'Asia/Kuala_Lumpur'
+   where s.id = v_sale2;
+  select * into v_set from public.settle_pos_stalls(v_outlet, v_yday - 5, v_yday - 2) t
+   where t.stall_id = v_s1;
+  perform pg_temp.check_eq('the answer is what the stall is owed, not what it took',
+    v_set.net, 8.50::numeric);
+  perform pg_temp.check_eq('the bill is dated the last day of the period',
+    (select doc_date::text from public.purchase_documents where doc_no = v_set.bill_no),
+    (v_yday - 2)::text);
+  perform pg_temp.check_eq('and falls due on it',
+    (select due_date::text from public.purchase_documents where doc_no = v_set.bill_no),
+    (v_yday - 2)::text);
+  perform pg_temp.check_eq('the settlement keeps the net',
+    (select net from public.pos_stall_settlements
+      where stall_id = v_s1 and period_to = v_yday - 2), 8.50::numeric);
+  perform pg_temp.check_true('points at its bill',
+    (select ps.bill_id = d.id from public.pos_stall_settlements ps
+       join public.purchase_documents d on d.doc_no = v_set.bill_no
+      where ps.stall_id = v_s1 and ps.period_to = v_yday - 2));
+  perform pg_temp.check_true('and says who settled it',
+    (select settled_by = v_owner from public.pos_stall_settlements
+      where stall_id = v_s1 and period_to = v_yday - 2));
 
   raise notice 'ok   pos_food_court';
 end $$;
