@@ -234,4 +234,39 @@ begin
   end;
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Clearing one environment, and only that
+--
+-- "Clearing removes just that environment" above is asserted on a
+-- company that had only the one, so clearing both -- or every company's
+-- sandbox -- read the same. And nobody but the owner ever tried.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org  uuid;
+  v_them uuid;
+begin
+  perform pg_temp.allow_many_companies();
+  v_them := pg_temp.test_org('Jiran Invois Sdn Bhd');
+  perform public.set_einvoice_credentials(v_them, 'sandbox', 'their-id', 'their-secret');
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Dua Persekitaran Sdn Bhd');
+  perform public.set_einvoice_credentials(v_org, 'sandbox', 'id-s', 'secret-s');
+  perform public.set_einvoice_credentials(v_org, 'production', 'id-p', 'secret-p');
+
+  perform pg_temp.sign_in_as(pg_temp.another_user('orang.luar@invois.test'));
+  perform pg_temp.check_refused('a stranger does not remove this company''s MyInvois login',
+    format('select public.clear_einvoice_credentials(%L, %L)', v_org, 'sandbox'),
+    'Only an administrator can remove e-Invoice credentials', '42501');
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+
+  perform public.clear_einvoice_credentials(v_org, 'sandbox');
+  perform pg_temp.check_eq('clearing the sandbox leaves the live login',
+    (select string_agg(environment, ',') from public.einvoice_credentials
+      where org_id = v_org), 'production');
+  perform pg_temp.check_eq('and another company''s sandbox',
+    (select count(*) from public.einvoice_credentials
+      where org_id = v_them and environment = 'sandbox'), 1);
+end $$;
+
 rollback;
