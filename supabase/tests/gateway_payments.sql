@@ -362,4 +362,66 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Starting a payment, rule by rule  (`begin_gateway_payment`, 0297)
+--
+-- Every payment above was begun with the gateway already lower-case,
+-- the reference already trimmed, on an invoice with no tax -- so a
+-- start that kept them as typed, or put the subtotal in front of the
+-- customer, built the same row. Nothing read the URL, who started it,
+-- what came back, or what a second start of the same bill does.
+--
+-- The currency is not asserted: both writers of `platform_invoices`
+-- write 'MYR' and `authenticated` may only read it, so an invoice in
+-- any other currency cannot exist.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.test_org('Mula Bayar Sdn Bhd');
+  v_inv uuid; v_pay uuid;
+begin
+  -- Eight per cent SST on a hundred, the way `bill_org_modules` writes
+  -- it when the issuer is registered.
+  insert into public.platform_invoices
+    (invoice_no, org_id, issuer_name, bill_to_name, description,
+     subtotal, tax_rate, tax_amount, total_amount)
+  values ('PLT-0051', v_org, 'iAkauntan Sdn Bhd', 'Mula Bayar Sdn Bhd',
+          'Modules for September', 100.00, 8, 8.00, 108.00)
+  returning id into v_inv;
+
+  perform pg_temp.check_refused('starting payment of an invoice that does not exist is said so',
+    format('select public.begin_gateway_payment(%L, %L, %L, %L)',
+           gen_random_uuid(), 'billplz', 'W_none', 'https://www.billplz.com/bills/W_none'),
+    'No such invoice', 'P0002');
+  perform pg_temp.check_refused('a blank reference is not a reference',
+    format('select public.begin_gateway_payment(%L, %L, %L, %L)',
+           v_inv, 'billplz', '   ', 'https://www.billplz.com/bills/x'),
+    'A payment needs the provider''s own reference', '23514');
+
+  v_pay := public.begin_gateway_payment(
+    v_inv, '  BillPlz ', '  W_rules  ', 'https://www.billplz.com/bills/W_rules',
+    pg_temp.test_user());
+  perform pg_temp.check_true('the row comes back, filed as the callback will look for it',
+    v_pay is not null
+    and v_pay = (select p.id from public.platform_payments p
+                  where p.gateway_code = 'billplz' and p.provider_ref = 'W_rules'));
+  perform pg_temp.check_eq('for the total, tax and all',
+    (select p.amount from public.platform_payments p where p.id = v_pay), 108.00);
+  perform pg_temp.check_eq('with the page the customer pays on',
+    (select p.checkout_url from public.platform_payments p where p.id = v_pay),
+    'https://www.billplz.com/bills/W_rules');
+  perform pg_temp.check_true('and who started it',
+    (select p.created_by from public.platform_payments p where p.id = v_pay)
+      = pg_temp.test_user());
+
+  -- The same bill started again -- a page reloaded, a link re-sent --
+  -- is the same payment, pointed at the newest page.
+  perform pg_temp.check_true('starting the same bill again is the same payment',
+    public.begin_gateway_payment(
+      v_inv, 'billplz', 'W_rules', 'https://www.billplz.com/bills/W_rules_2') = v_pay);
+  perform pg_temp.check_eq('pointed at the newest page',
+    (select p.checkout_url from public.platform_payments p where p.id = v_pay),
+    'https://www.billplz.com/bills/W_rules_2');
+end $$;
+
 rollback;

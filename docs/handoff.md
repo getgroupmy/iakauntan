@@ -1100,6 +1100,7 @@ function:
 | `void_deposit` | `0421` | 20 / 20 | -- | `deposits.sql` (thirteen before its block: every deposit voided was taken today, so the reversal's date could not be read; who, when and why were never read back) |
 | `adjust_loyalty_points` (3 args) | `0231` | 11 / 11 | -- | `pos_loyalty.sql` (four before its block: every adjustment was the owner's, so the owner-or-admin rule `0580` is built around was unasked) |
 | `adjust_loyalty_points` (keyed) | `0736` | 6 / 6 | -- | `idempotency.sql` (four before: no key was reused for a different request, so points and note could drop out of it) |
+| `begin_gateway_payment` | `0297` | 10 / 11 | 1 | `gateway_payments.sql` (one before its block: every start was lower-case, trimmed and untaxed; equivalent: every platform invoice is written in MYR) |
 
 Every equivalent is written into its mutants file with the reason.
 
