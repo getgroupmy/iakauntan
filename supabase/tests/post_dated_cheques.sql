@@ -1331,4 +1331,68 @@ begin
 end $$;
 
 
+-- ---------------------------------------------------------------------
+-- `deposit_pdc`, rule by rule
+--
+-- A mutation sweep (`mutants/deposit_pdc.py`) left six of its seven
+-- rules with nothing here to tell them from their absence: the cheque
+-- that does not exist, the permission and which side of the books asks
+-- it, a cheque paid in twice, and the day it was paid in both ways.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_owner uuid := pg_temp.test_user();
+  v_clerk uuid := pg_temp.another_user('pdc-buyer-only@iakauntan.test');
+  v_org uuid; v_cust uuid; v_bank uuid; v_type uuid;
+  v_in uuid; v_in2 uuid;
+begin
+  v_org := pg_temp.test_org('Cek Satu Persatu Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_org, m, true from unnest(array['sales','purchases','accounting']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+  perform pg_temp.sign_in_as(v_owner);
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'CUST', 'Pelanggan Cek', 'customer') returning id into v_cust;
+  v_bank := pg_temp.test_bank_account(
+    v_org, 'Current account', 'current', 'MYR', 0, 0, '512345678902');
+
+  v_in := public.record_pdc(v_org, 'incoming', v_cust, '700001',
+    pg_temp.today() + 10, 100, '[]'::jsonb, v_bank, 'CIMB');
+  v_in2 := public.record_pdc(v_org, 'incoming', v_cust, '700002',
+    pg_temp.today() + 10, 100, '[]'::jsonb, v_bank, 'CIMB');
+
+  perform pg_temp.check_refused('a cheque that does not exist is said so',
+    format('select public.deposit_pdc(%L)', gen_random_uuid()),
+    'No such cheque.', 'P0002');
+
+  -- Somebody let into purchasing to write, and into sales only to read,
+  -- does not pay in a cheque the company RECEIVED.
+  insert into public.access_types (org_id, name)
+  values (v_org, 'Purchasing clerk') returning id into v_type;
+  insert into public.access_type_modules (access_type_id, module_code, access)
+  values (v_type, 'purchases', 'write'), (v_type, 'sales', 'read');
+  insert into public.org_members (org_id, user_id, role, access_type_id)
+  values (v_org, v_clerk, 'purchaser', v_type);
+  perform pg_temp.sign_in_as(v_clerk);
+  perform pg_temp.check_refused('a received cheque is paid in on the selling side''s permission',
+    format('select public.deposit_pdc(%L)', v_in),
+    'not permitted to write for this organization', '42501');
+  perform pg_temp.sign_in_as(v_owner);
+
+  -- With no day given, today; with one, that day.
+  perform public.deposit_pdc(v_in);
+  perform pg_temp.check_eq('with no day given, it was paid in today',
+    (select deposited_on::text from public.post_dated_cheques where id = v_in),
+    pg_temp.today()::text);
+  perform public.deposit_pdc(v_in2, pg_temp.today() + 3);
+  perform pg_temp.check_eq('and with one, on that day',
+    (select deposited_on::text from public.post_dated_cheques where id = v_in2),
+    (pg_temp.today() + 3)::text);
+
+  perform pg_temp.check_refused('a cheque already paid in is not paid in again',
+    format('select public.deposit_pdc(%L)', v_in),
+    'That cheque is deposited.', '23514');
+end $$;
+
 rollback;

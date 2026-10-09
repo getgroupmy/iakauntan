@@ -950,6 +950,7 @@ function:
 | `record_received_einvoice` | `0650` | 13 / 13 | -- | `received_einvoice.sql` (eight only after its block, including the per-company duplicate check) |
 | `file_sst_return` | `0455` | 7 / 8 | 1 date-dependent (`>=` vs `>` differs only on a period's last day; `app.today()` cannot be pinned) | `sst_taxable_period.sql` (two only after refiling assertions) |
 | `allocate_credit_note` | `0629` | 13 / 13 | -- | `credit_note_allocation.sql` (eight only after its rule-by-rule block) |
+| `deposit_pdc` | `0421` | 7 / 7 | -- | `post_dated_cheques.sql` (six only after its rule-by-rule block) |
 
 Every equivalent is written into its mutants file with the reason.
 
