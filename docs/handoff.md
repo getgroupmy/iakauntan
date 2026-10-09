@@ -1200,6 +1200,7 @@ function:
 | `app.matter_closes_only_when_empty` | `0775` | 6 / 7 | 1 | `matter_closing.sql` (new in `0775`; equivalent since `0776`: "asked every time" needs a closed file holding money, which `0776` makes impossible) |
 | `app.closed_matter_takes_no_money` | `0776` | 6 / 6 | -- | `matter_closing.sql` (new in `0776`; a file paid in and out before closing, its payment still a draft) |
 | `delete_contact` | `0654` | 9 / 9 | -- | `contact_delete.sql` (six before its block; the module guard is reached only by a read-only access type, since `contacts` is core -- and its sentence then blames the module) |
+| `clear_tax_instalment` | `0673` | 4 / 4 | -- | `tax_estimate_payments.sql` (one before its block: one payment, cleared against the root it was recorded on) |
 
 Every equivalent is written into its mutants file with the reason.
 

@@ -384,6 +384,27 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- Clearing through a revision
+--
+-- Payments hang off the root estimate, so clearing through the REVISED
+-- row has to clear what was recorded against the original. On a period
+-- ending this month, so the revision can be made on any day this runs.
+-- ---------------------------------------------------------------------
+do $$
+declare v_org uuid; v_est uuid; v_rev uuid;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_org := pg_temp.co_ending_now('Kedai Batal Semakan Sdn Bhd');
+  v_est := public.open_tax_estimate(v_org, pg_temp.year_ending_now(v_org), 120000);
+  perform public.record_tax_instalment(v_est, 6, pg_temp.due_of(v_est, 6), 10000);
+  v_rev := public.revise_tax_estimate(v_est, 150000);
+  perform public.clear_tax_instalment(v_rev, 6);
+  perform pg_temp.check_true('a payment cleared through the revision is gone from the original',
+    (select paid_on from public.tax_estimate_schedule(v_est)
+      where instalment_no = 6) is null);
+end $$;
+
+-- ---------------------------------------------------------------------
 -- Clearing one, and what cannot be recorded
 -- ---------------------------------------------------------------------
 do $$
@@ -400,6 +421,18 @@ begin
   perform pg_temp.check_true('clearing it puts it back to unpaid',
     s.paid_on is null);
   perform pg_temp.check_eq('and outstanding again', s.outstanding, 10000);
+
+  -- Only the instalment named goes, and an estimate that is not there
+  -- is said so -- not answered as a permission refusal.
+  perform public.record_tax_instalment(v_est, 5, date '2026-06-15', 10000);
+  perform public.record_tax_instalment(v_est, 6, date '2026-07-15', 10000);
+  perform public.clear_tax_instalment(v_est, 5);
+  perform pg_temp.check_true('clearing one leaves the next one paid',
+    (select paid_on from public.tax_estimate_schedule(v_est)
+      where instalment_no = 6) is not null);
+  perform pg_temp.check_refused('clearing against an estimate that is not there is said so',
+    format('select public.clear_tax_instalment(%L, 1)', gen_random_uuid()),
+    'No such estimate', 'P0002');
 
   -- A thirteenth instalment against a twelve-instalment estimate is
   -- money somebody will look for and not find.
