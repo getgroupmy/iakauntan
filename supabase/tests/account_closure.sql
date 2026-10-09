@@ -407,6 +407,65 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- The console's close, rule by rule
+--
+-- The block above closes an account the ledger revives at the next
+-- posting, and reads it only after that -- so a close that left the
+-- account switched on, or did not mark it deleted, passed; as did one
+-- that recorded every account as having been active, closed one twice,
+-- answered an account that is not there with something else, let the
+-- operator close their own login here, or ignored a kind it does not
+-- know.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_admin uuid := pg_temp.another_user('operator9@closure.test');
+  v_org   uuid := pg_temp.test_org('Satu Persatu Tutup');
+  v_acct  uuid;
+  v_idle  uuid;
+begin
+  perform pg_temp.a_platform_admin(v_admin);
+  insert into public.accounts
+    (org_id, code, name, account_type, account_subtype, is_group, parent_id, sort_order)
+  select a.org_id, '6991', 'Sundry, closing', a.account_type, a.account_subtype,
+         false, a.parent_id, a.sort_order + 1
+    from public.accounts a where a.org_id = v_org and a.code = '6900'
+  returning id into v_acct;
+  insert into public.accounts
+    (org_id, code, name, account_type, account_subtype, is_group, parent_id, sort_order, is_active)
+  select a.org_id, '6992', 'Sundry, already idle', a.account_type, a.account_subtype,
+         false, a.parent_id, a.sort_order + 2, false
+    from public.accounts a where a.org_id = v_org and a.code = '6900'
+  returning id into v_idle;
+
+  perform pg_temp.sign_in_as(v_admin);
+  perform public.platform_close_account('ledger_account', v_acct, 'Not used');
+  perform pg_temp.check_true('a closed ledger account is switched off',
+    (select not is_active and deleted_at is not null
+       from public.accounts where id = v_acct));
+  perform pg_temp.check_eq('and the drawer remembers it was active',
+    (select detail ->> 'was_active' from public.account_closures
+      where subject_id = v_acct and restored_at is null), 'true');
+  perform public.platform_close_account('ledger_account', v_idle, 'Not used');
+  perform pg_temp.check_eq('or that it was not',
+    (select detail ->> 'was_active' from public.account_closures
+      where subject_id = v_idle and restored_at is null), 'false');
+
+  perform pg_temp.check_refused('a ledger account is not closed twice',
+    format('select public.platform_close_account(%L, %L)', 'ledger_account', v_acct),
+    'Account 6991 is already closed.', '23505');
+  perform pg_temp.check_refused('one that is not there is said so',
+    format('select public.platform_close_account(%L, %L)', 'ledger_account', gen_random_uuid()),
+    'No such account.', '22023');
+  perform pg_temp.check_refused('a kind of account the console does not know is refused',
+    format('select public.platform_close_account(%L, %L)', 'banana', v_acct),
+    'Unknown kind of account: banana', '22023');
+  perform pg_temp.check_refused('and the operator does not close their own login from here',
+    format('select public.platform_close_account(%L, %L)', 'user', v_admin),
+    'Close your own account from Settings rather than from the console%', '23514');
+end $$;
+
+-- ---------------------------------------------------------------------
 -- The drawer is shut
 --
 -- Row level security with no policy at all is how this schema says
