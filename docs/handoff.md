@@ -1210,6 +1210,7 @@ function:
 | `platform_close_account` | `0619` | 8 / 8 | -- | `account_closure.sql` (one before its block: the ledger close was read only after a posting revived the account) |
 | `save_payment_method` | `0635` | 10 / 10 | -- | `payment_methods.sql` (three before its block: no edit was ever made, and no second company) |
 | `archive_payment_method` | `0635` | 5 / 5 | -- | `payment_methods.sql` (two before its block) |
+| `prepare_self_billed_einvoice` | `0636` | 25 / 25 | -- | `self_billed_einvoice.sql`, `tariff_code.sql` (ten before the block: every document a bill, one TIN, no shipping, one item line, prepared once) |
 
 Every equivalent is written into its mutants file with the reason.
 

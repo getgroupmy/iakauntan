@@ -449,4 +449,133 @@ begin
     '%already valid%', '55000');
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Preparing one, rule by rule
+--
+-- Every self-billed document above is a BILL, from a company whose
+-- e-Invoice TIN is its plain TIN, with no shipping, one item line, an
+-- item with no classification of its own, prepared once -- so filing a
+-- credit note as a debit note, a purchase order as a bill, the plain
+-- TIN or the supplier's in the buyer block, a bill without its
+-- shipping, a heading as a line, an item's own classification ignored,
+-- or a retry that kept the old totals and errors, all passed. So did
+-- the four refusals before the type check.
+-- ---------------------------------------------------------------------
+create or replace function pg_temp.sb_doc(
+  p_org uuid, p_supplier uuid, p_item uuid, p_no text, p_type text,
+  p_shipping numeric default 0)
+returns uuid language plpgsql as $$
+declare v_id uuid;
+begin
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, status, subtotal, tax_amount, total_amount,
+     base_total_amount, balance_amount, shipping_amount)
+  values (p_org, p_type::app.purchase_doc_type, p_no, app.today(), p_supplier,
+          'MYR', 1, 'draft', 1000, 0, 1000 + p_shipping, 1000 + p_shipping,
+          1000 + p_shipping, p_shipping)
+  returning id into v_id;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, uom_code, unit_price, tax_rate)
+  values (p_org, v_id, 1, 'item', p_item, 'Lesen perisian', 1, 'C62', 1000, 0);
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, description)
+  values (p_org, v_id, 2, 'description', 'Licences for the year');
+  update public.purchase_documents
+     set requires_self_billed = true, status = 'posted' where id = v_id;
+  return v_id;
+end $$;
+
+do $$
+declare
+  v     record;
+  v_cn  uuid;
+  v_dn  uuid;
+  v_po  uuid;
+  v_sh  uuid;
+  v_ei  uuid;
+  v_cls uuid;
+  v_b2  uuid;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  select * into v from pg_temp.sb_company('Satu Satu Kendiri Sdn Bhd');
+  -- Its e-Invoice TIN is not its plain one, so which one the buyer
+  -- block carries can be read.
+  update public.organizations set einvoice_tin = 'C22222222222' where id = v.org;
+
+  perform pg_temp.check_refused('a document that is not there is said so',
+    format('select public.prepare_self_billed_einvoice(%L)', gen_random_uuid()),
+    'Purchase document % not found', 'P0002');
+
+  v_cn := pg_temp.sb_doc(v.org, v.foreign_supplier, v.item, 'PCN-1', 'purchase_credit_note');
+  v_dn := pg_temp.sb_doc(v.org, v.foreign_supplier, v.item, 'PDN-1', 'purchase_debit_note');
+  v_po := pg_temp.sb_doc(v.org, v.foreign_supplier, v.item, 'PO-1', 'purchase_order');
+  v_sh := pg_temp.sb_doc(v.org, v.foreign_supplier, v.item, 'BILL-SH', 'bill', 50);
+
+  v_ei := public.prepare_self_billed_einvoice(v_cn);
+  perform pg_temp.check_eq('a purchase credit note is filed as 12',
+    (select einvoice_type_code from public.einvoice_documents where id = v_ei), '12');
+  v_ei := public.prepare_self_billed_einvoice(v_dn);
+  perform pg_temp.check_eq('and a purchase debit note as 13',
+    (select einvoice_type_code from public.einvoice_documents where id = v_ei), '13');
+  perform pg_temp.check_refused('a purchase order is not a self-billed e-Invoice',
+    format('select public.prepare_self_billed_einvoice(%L)', v_po),
+    'A purchase_order is not a self-billed e-Invoice document', '22023');
+
+  v_ei := public.prepare_self_billed_einvoice(v_sh);
+  perform pg_temp.check_eq('the buyer block carries our e-Invoice TIN',
+    (select buyer_tin from public.einvoice_documents where id = v_ei), 'C22222222222');
+  perform pg_temp.check_eq('a bill''s shipping is in its charges',
+    (select total_charges from public.einvoice_documents where id = v_ei), 50.00);
+  perform pg_temp.check_eq('and its description line is not filed as an item',
+    (select count(*) from public.einvoice_lines where einvoice_id = v_ei), 1);
+  perform pg_temp.check_eq('an item with no classification is filed as 022',
+    (select classification_code from public.einvoice_lines where einvoice_id = v_ei), '022');
+
+  -- A retry after MyInvois said no: the totals are the bill's again,
+  -- and the old complaints are gone.
+  update public.einvoice_documents
+     set status = 'invalid', payable_amount = 1,
+         validation_errors = '[{"code": "CF321"}]'::jsonb
+   where id = v_ei;
+  perform public.prepare_self_billed_einvoice(v_sh);
+  perform pg_temp.check_eq('a retry files the bill''s total again',
+    (select payable_amount from public.einvoice_documents where id = v_ei), 1050.00);
+  perform pg_temp.check_eq('with the old complaints cleared',
+    (select validation_errors::text from public.einvoice_documents where id = v_ei), '[]');
+
+  -- An item that carries its own classification.
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, unit_price, classification_code)
+  values (v.org, 'SW2', 'Lesen pelayan', 'service', false, 'C62', 1000.00, '008')
+  returning id into v_cls;
+  v_b2 := pg_temp.sb_doc(v.org, v.foreign_supplier, v_cls, 'BILL-CL', 'bill');
+  v_ei := public.prepare_self_billed_einvoice(v_b2);
+  perform pg_temp.check_eq('an item''s own classification is used',
+    (select classification_code from public.einvoice_lines where einvoice_id = v_ei), '008');
+  -- A line typed in with no item behind it: the item's own default
+  -- cannot supply one, so the fallback is the only thing that does.
+  v_b2 := pg_temp.sb_doc(v.org, v.foreign_supplier, null, 'BILL-FREE', 'bill');
+  v_ei := public.prepare_self_billed_einvoice(v_b2);
+  perform pg_temp.check_eq('a line with no item is classified 022',
+    (select classification_code from public.einvoice_lines where einvoice_id = v_ei), '022');
+  v_b2 := (select id from public.purchase_documents where org_id = v.org and doc_no = 'BILL-CL');
+
+  -- The refusals before the type: the company, then the person.
+  update public.organizations set einvoice_tin = null, tin = null where id = v.org;
+  perform pg_temp.check_refused('a company with no TIN files nothing',
+    format('select public.prepare_self_billed_einvoice(%L)', v_b2),
+    'Set the company TIN before submitting e-Invoices', null);
+  update public.organizations set einvoice_enabled = false, tin = 'C12345678901' where id = v.org;
+  perform pg_temp.check_refused('nor one with e-Invoice switched off',
+    format('select public.prepare_self_billed_einvoice(%L)', v_b2),
+    'e-Invoice is not enabled for this company', null);
+  perform pg_temp.sign_in_as(pg_temp.another_user('orang.luar@kendiri.test'));
+  perform pg_temp.check_refused('nor somebody outside the company',
+    format('select public.prepare_self_billed_einvoice(%L)', v_b2),
+    'Insufficient privileges', '42501');
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+end $$;
+
 rollback;
