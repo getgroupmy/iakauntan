@@ -1211,6 +1211,7 @@ function:
 | `save_payment_method` | `0635` | 10 / 10 | -- | `payment_methods.sql` (three before its block: no edit was ever made, and no second company) |
 | `archive_payment_method` | `0635` | 5 / 5 | -- | `payment_methods.sql` (two before its block) |
 | `prepare_self_billed_einvoice` | `0636` | 25 / 25 | -- | `self_billed_einvoice.sql`, `tariff_code.sql` (ten before the block: every document a bill, one TIN, no shipping, one item line, prepared once) |
+| `reissue_terminal_secret` | `0612` | 5 / 5 | -- | `terminal_punches.sql` (one before its block: one terminal, its owner, the secret never measured) |
 
 Every equivalent is written into its mutants file with the reason.
 

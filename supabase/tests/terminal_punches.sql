@@ -486,4 +486,48 @@ begin
     ((v_fri + time '07:30') at time zone 'Asia/Kuala_Lumpur')::text);
 end $$;
 
+-- =====================================================================
+-- Reissuing, rule by rule
+--
+-- The reissue above is by the owner, of the company's only terminal --
+-- so a reissue that let anybody do it, reset every terminal in the
+-- company, made a one-byte secret, or answered a terminal that is not
+-- there with something else, passed.
+-- =====================================================================
+do $$
+declare
+  v       record;
+  v_side  uuid;
+  v_sidesecret text;
+  v_new   text;
+  v_clerk uuid;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  perform pg_temp.allow_many_companies();
+  select * into v from pg_temp.tp_company('Jam Baharu Sdn Bhd');
+  select r.terminal_id, r.secret into v_side, v_sidesecret
+    from public.register_time_terminal(v.org, 'Side gate') r;
+
+  v_new := public.reissue_terminal_secret(v.term);
+  perform pg_temp.check_eq('a new secret is thirty-two bytes, written out',
+    length(v_new), 64);
+  perform pg_temp.check_true('and reissuing one terminal leaves the other''s secret working',
+    public.terminal_secret_matches(v_side, v_sidesecret));
+
+  perform pg_temp.check_refused('a terminal that is not there is said so',
+    format('select public.reissue_terminal_secret(%L)', gen_random_uuid()),
+    'No such terminal', 'P0002');
+
+  v_clerk := pg_temp.another_user('kerani@jambaharu.test');
+  insert into public.org_members (org_id, user_id, role, status)
+  values (v.org, v_clerk, 'accounts_clerk', 'active');
+  perform pg_temp.sign_in_as(v_clerk);
+  perform pg_temp.check_refused('somebody who is not HR does not reissue a secret',
+    format('select public.reissue_terminal_secret(%L)', v.term),
+    'Attendance decides what people are paid, and a terminal is HR''s to change', '42501');
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  perform pg_temp.check_true('and the secret they tried to replace still works',
+    public.terminal_secret_matches(v.term, v_new));
+end $$;
+
 rollback;
