@@ -707,7 +707,10 @@ page and renumbering would quietly break the reference.
     there until the next daily rebuild (11:00 UTC) replaces it -- **check
     after that rebuild that it is 0 and that the rebuild did not fail**:
     a seeder still posting to a heading would now stop it, which the
-    local `demo_rebuild.sql` says none does.
+    local `demo_rebuild.sql` says none does. **Checked 9 October, read
+    only:** the 05:00 UTC rebuild (the first after the trigger went
+    live) succeeded, and production has 0 lines on a heading in any
+    company, demo or real; Guaman Aziz & Rakan's fees are on 4840.
 33. **`upsert_account` reshapes the chart behind the person's back.
     Raised and answered 9 October: guard the function and fix the app;
     leave production's rows as they are. Built in `0766`.** Found
@@ -858,6 +861,36 @@ page and renumbering would quietly break the reference.
     the same as the local build; execute granted to `authenticated` and
     not to `anon`; still no e-Invoices in production, so none on a void
     sale.
+38. ~~The demo stops rebuilding on 1 January.~~ **Raised and answered 9
+    October: the two-function fix. Built in `0771`.** Found by running
+    the suite under a shifted clock (libfaketime on copies of the local
+    database -- see "The suite on other days" below), not by reading.
+    `app.rebuild_demo_on_schedule` failed on 5 January, 10 March and 1
+    May 2027 and passed on 28 December, for two reasons: a demo company
+    had only the fiscal year today is in while the builders date paper
+    up to 75 days back ("No fiscal period covers 2026-12-16", until
+    mid-March), and `demo_amanah_accounts` dated Kilang's approval,
+    circulation and lodgement 130-160 days after the last complete
+    year, which `fs_filing_dates_guard` refuses until early JUNE (the
+    question put to the user said "about 10 May"; the lodgement date is
+    the later one). Production would have kept the 31 December demo,
+    logging a failure four times a day; CI's demo files would have gone
+    red on 1 January and stopped every deploy. Now `app.demo_company`
+    also opens the previous year and Kilang's year end comes from
+    `app.demo_last_lodged_year_end(p_on)`, a pure function asserted at
+    its boundaries. Restated from `0731` and `0426`, md5-verified
+    against production by replay (ae8c7aa7..., e4d4b59c...). Swept 5 /
+    6 (`demo_in_january.py`); the sixth survives only from June to
+    December, when old and new agree, and is recorded so. **Awaiting
+    deploy.**
+    NOT CHANGED, by the answer: the demo is year-to-date, so in January
+    it is thin, and three demo files' "richness" assertions now follow
+    the month (below). NOT RAISED, found on the way: in January to
+    April some demo asset purchases (`demo_assets_harta`,
+    `demo_sinar_assets`: 1 January + 31 / 60 / 110 days) are dated in
+    the FUTURE -- a journal for a van bought on a day that has not
+    happened. Nothing fails on it; it is a demo blemish of the same
+    family, worth raising with the other small ones.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -872,6 +905,47 @@ its own section: whether a given platform advertises the rotation
 extension at all. The engine now says which case a real call is in.
 
 **Do not start task #11, the MIA headless scraper.**
+
+## The suite on other days, 9 October
+
+Every SQL assertion runs on one day -- the day CI runs it. On 9 October
+the suite was run on five others, by copying the local database and
+starting the copies under libfaketime with their clocks at 10:00 KL on
+28 December 2026 and 5 January, 15 February, 10 March and 1 June 2027.
+`supabase/tests/run_at_dates.sh` does exactly that and is how to repeat
+it; it needs `apt-get install -y libfaketime` and a cluster
+`run_locally.sh` has built.
+
+**Replacing `app.today()` in a transaction is NOT the same and was tried
+first**: half the schema reads `now()` directly, and the result was 56
+"failures", many of them a clock disagreeing with itself. Shift the
+server's clock or measure nothing.
+
+What failed, and what was done (test files only, except `0771`):
+
+| Shape | Files | Fix |
+| --- | --- | --- |
+| Opens `date '2026-01-01'`, then voids or reverses TODAY -- from 1 January into a year nobody opened | aged_balances, credit_note_allocation, fx_revaluation, lot_allocation_shapes, manufacturing, matter_transfer, property, reversal, statement_of_account, void_an_invoice, pos_serial_sale, pos_tracked_item_sale, settlement_discount, withholding | `pg_temp.open_years(org, from[, to])` in `_helpers.sql`, after the fixture's own `create_fiscal_year`: opens each missing calendar year from `from` to today. A no-op on any day that did not fail |
+| Opens this year, back-dates paper 5-200 days | deposits, multicurrency, cash_forecast, statutory_charges | the same, from `today - N` |
+| Posts FORWARD into next year in late December | post_dated_cheques (clears at today + 46) | `open_years(org, today - 90, today + 90)` |
+| Reads a balance as at `2026-12-31` after a void dated today | reversal | as at today |
+| "A year that has not been opened" was `2027` | reversal | three years past today's |
+| "Not yet due" was `2026-12-01` -- red from 2 December | customer_portal | today + 60 |
+| Leave dated today + 10..30 straddles two leave years in December | idempotency | one base day inside one leave year |
+| Closed "the first period", which in January is today's | ledger_is_written_only_by_functions | the first period today is not in |
+| Carried leave lapses from 1 February; the test said always | scheduled_work | expects the rule for the day: kept in January, lapsed after |
+| A tripwire set to go red on 1 March 2027 | corp_particulars | the merge field asserted on a rename dated 30 days ago |
+| Revises a 2026 estimate today -- month 13 from 1 January, which the table refuses | tax_estimates, tax_estimate_cp500, tax_estimate_first_period, tax_estimate_payments, tax_estimate_revision_spread, tax_filing_calendar | the blocks that revise use a year that contains today: this calendar year, a period ENDING this month (all instalments but one past) or one STARTING this month (its CP204 due at most 30 days ago), chosen by what each block asserts |
+| The calendar's year-either-side window drops the 2026 CP204 on 3 December | tax_estimate_first_period | the year containing today + 30 |
+| The demo rebuild itself | demo_rebuild, demo_modules, demo_practice, demo_shop_and_factory, reports_refuse_strangers | `0771` (item 38) |
+| The demo is year-to-date, so January is thin | demo_practice ("> 20" invoices, receipts), demo_rebuild (settled some, payroll runs, depreciating, payroll probe), reports_refuse_strangers (floor) | each asks the BUILDER's rule for the day -- one invoice a month so far, payroll once per closed month, paid at 60 days -- instead of October's count; the report floor is 51 in January and 59 after, both measured on the first of every month |
+| `p_asset_id` was `limit 1` -- on 1 April an asset with no depreciation yet | reports_refuse_strangers | the asset with the most depreciation behind it |
+
+One apparent failure was the harness: `statutory.sql`'s "a table made
+after this one is shut too" failed on two clusters because the runner
+had picked `_local_stack.sql` out of `ci.yml` and re-applied its
+default privileges. `run_at_dates.sh` reads the list the way
+`run_locally.sh` does and cannot do that.
 
 ## `0752`, and the claim chain swept, 6 October
 
@@ -962,6 +1036,7 @@ function:
 | `cancel_pdc` | `0421` | 12 / 13 | 1 (the reversal left to `reverse_gl_entry`'s default date, which is today) | `post_dated_cheques.sql` (ten only after its rule-by-rule block) |
 | `void_rent_run` | `0585` | 16 / 16 | -- | `property.sql` (nine only after its rule-by-rule assertions) |
 | `void_strata_charge_run` | `0585` | 16 / 16 | -- | `property.sql` (fourteen only after its rule-by-rule assertions; one call stood behind it) |
+| `demo_company`, `demo_amanah_accounts`, `demo_last_lodged_year_end` | `0771` | 5 / 6 | -- (the sixth survives June to December only, when the old formula and the new agree; `run_at_dates.sh` kills it January to May) | `demo_rebuild.sql` |
 
 Every equivalent is written into its mutants file with the reason.
 

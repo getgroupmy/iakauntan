@@ -41,6 +41,7 @@ declare
 begin
   v_org := pg_temp.test_org('Dapur Impian Sdn Bhd');
   perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  perform pg_temp.open_years(v_org, pg_temp.today() - 30);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['sales','purchases','accounting']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
@@ -386,6 +387,7 @@ begin
   v_org := pg_temp.test_org('Deposit Batal Sdn Bhd');
   perform pg_temp.allow_many_companies();
   perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  perform pg_temp.open_years(v_org, pg_temp.today() - 30);
 
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'C-001', 'Puan Siti', 'customer') returning id into v_cust;
@@ -525,6 +527,7 @@ begin
   perform public.create_fiscal_year(v_org,
     (date_trunc('year', pg_temp.today()) - interval '1 year')::date);
   perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  perform pg_temp.open_years(v_org, pg_temp.today() - 30);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['sales','purchases','accounting']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
@@ -665,6 +668,7 @@ begin
   v_org2 := pg_temp.test_org('Syarikat Jiran Sdn Bhd');
   perform pg_temp.sign_in_as(v_owner);
   perform public.create_fiscal_year(v_org2, date_trunc('year', pg_temp.today())::date);
+  perform pg_temp.open_years(v_org2, pg_temp.today() - 30);
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org2, 'CUST', 'Their customer', 'customer') returning id into v_cust2;
   insert into public.items
@@ -813,6 +817,7 @@ begin
   perform public.create_fiscal_year(v_org,
     (date_trunc('year', pg_temp.today()) - interval '1 year')::date);
   perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  perform pg_temp.open_years(v_org, pg_temp.today() - 30);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['sales','purchases','accounting']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
@@ -1159,6 +1164,9 @@ begin
   v_org := pg_temp.test_org('Luput Sdn Bhd');
   perform public.create_fiscal_year(v_org,
                                     date_trunc('year', pg_temp.today())::date);
+  -- Dated five days back, which in the first days of January is last
+  -- year (measured under a shifted clock).
+  perform pg_temp.open_years(v_org, pg_temp.today() - 5);
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'S-1', 'Kilang Rahsia', 'supplier') returning id into v_sup;
   insert into public.contacts (org_id, code, name, contact_type)
@@ -1261,6 +1269,7 @@ begin
   v_org := pg_temp.test_org('Wang Muka Celah Sdn Bhd');
   perform pg_temp.allow_many_companies();
   perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  perform pg_temp.open_years(v_org, pg_temp.today() - 30);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['sales','purchases','accounting']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
@@ -1389,6 +1398,7 @@ begin
   v_sgd := pg_temp.test_org('Syarikat Singa Pte Ltd');
   perform pg_temp.allow_many_companies();
   perform public.create_fiscal_year(v_sgd, date_trunc('year', pg_temp.today())::date);
+  perform pg_temp.open_years(v_sgd, pg_temp.today() - 30);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_sgd, m, true from unnest(array['sales','purchases','accounting']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
@@ -1445,6 +1455,7 @@ begin
   perform pg_temp.allow_many_companies();
   v_org := pg_temp.test_org('Deposit Rules Sdn Bhd');
   perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  perform pg_temp.open_years(v_org, pg_temp.today() - 30);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['sales','purchases','accounting']) m
   on conflict (org_id, module_code) do update set is_enabled = true;

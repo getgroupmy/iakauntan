@@ -41,22 +41,26 @@ begin;
 
 \i supabase/tests/_helpers.sql
 
+-- The calendar year TODAY is in, not 2026. The month is pinned, but
+-- the revision itself is still made today, and `revise_tax_estimate`
+-- refuses one outside the basis period: a 2026 estimate revised from 1
+-- January 2027 is month 13, which the table rejects before the pin can
+-- be applied (measured under a shifted clock). Nothing here asserts a
+-- date, only how the money spreads, so the year is free to move.
 create or replace function pg_temp.co(p_name text)
 returns uuid language plpgsql as $$
 declare v_org uuid;
 begin
   perform pg_temp.allow_many_companies();
   v_org := pg_temp.test_org(p_name);
-  perform public.create_fiscal_year(v_org, date '2026-01-01');
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   return v_org;
 end; $$;
 
 create or replace function pg_temp.year_of(p_org uuid)
 returns uuid language sql stable as $$
   select id from public.fiscal_years
-   where org_id = p_org
-     and end_date between date '2026-01-01' and date '2026-12-31'
-   order by end_date limit 1;
+   where org_id = p_org and pg_temp.today() between start_date and end_date;
 $$;
 
 -- Revise, and pin the month it was made in. See the header.
@@ -235,7 +239,7 @@ begin
   v_org := pg_temp.test_org('Kedai Runcit Pak Ali');
   update public.organizations set entity_type = 'sole_proprietor'
    where id = v_org;
-  perform public.create_fiscal_year(v_org, date '2026-01-01');
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
   v_est := public.open_tax_estimate(v_org, pg_temp.year_of(v_org), 60000);
 
   -- CP500: six instalments two months apart, first in month 3. A

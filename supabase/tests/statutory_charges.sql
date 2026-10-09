@@ -37,6 +37,7 @@ begin
   on conflict (org_id, module_code) do update set is_enabled = true;
   perform public.create_fiscal_year(v_org,
     date_trunc('year', pg_temp.today())::date);
+  perform pg_temp.open_years(v_org, pg_temp.today() - 30);
   return v_org;
 end $$;
 

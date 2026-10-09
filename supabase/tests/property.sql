@@ -64,6 +64,7 @@ begin
 
   -- A fiscal year, or nothing can post.
   perform public.create_fiscal_year(v_org, date '2026-01-01');
+  perform pg_temp.open_years(v_org, date '2026-01-01');
 
   insert into public.property_sites (org_id, code, name, tenure)
   values (v_org, 'PR1', 'Probe Residency', 'strata') returning id into v_site;
@@ -293,6 +294,7 @@ begin
   on conflict (org_id, module_code) do update set is_enabled = true;
 
   perform public.create_fiscal_year(v_org, date '2026-01-01');
+  perform pg_temp.open_years(v_org, date '2026-01-01');
 
   insert into public.property_sites (org_id, code, name, tenure)
   values (v_org, 'ROW1', 'Jalan Probe shoplots', 'non_strata')
@@ -668,6 +670,7 @@ begin
   values (v_org, 'property_strata', true, now())
   on conflict (org_id, module_code) do update set is_enabled = true;
   perform public.create_fiscal_year(v_org, date '2026-01-01');
+  perform pg_temp.open_years(v_org, date '2026-01-01');
 
   insert into public.property_sites (org_id, code, name, tenure)
   values (v_org, 'TP1', 'Tunggakan Residency', 'strata') returning id into v_site;
@@ -793,6 +796,7 @@ begin
   values (v_org, 'property_nonstrata', true, now())
   on conflict (org_id, module_code) do update set is_enabled = true;
   perform public.create_fiscal_year(v_org, date '2026-01-01');
+  perform pg_temp.open_years(v_org, date '2026-01-01');
   insert into public.org_members (org_id, user_id, role, status, joined_at)
   values (v_org, v_viewer, 'viewer', 'active', now());
 
@@ -916,6 +920,7 @@ begin
   values (v_org, 'property_strata', true, now())
   on conflict (org_id, module_code) do update set is_enabled = true;
   perform public.create_fiscal_year(v_org, date '2026-01-01');
+  perform pg_temp.open_years(v_org, date '2026-01-01');
   insert into public.org_members (org_id, user_id, role, status, joined_at)
   values (v_org, v_viewer, 'viewer', 'active', now());
 

@@ -94,6 +94,15 @@ is no Docker here" is not a reason to push SQL unrun — check for
 (`/opt/flutter-3.47.4/bin`) or `check_xlsx.py` fails for want of it, in a
 `subprocess` traceback that names nothing about Flutter.
 
+**And on other days.** `supabase/tests/run_at_dates.sh` runs the same list
+against copies of that cluster whose clocks libfaketime has moved -- by
+default to late December and the first months of next year. Every
+assertion otherwise runs on the one day CI runs it; on 9 October 2026
+this found some thirty files and the demo rebuild that would have gone
+red on or after 1 January. Run it after touching anything dated
+`today`, or a fixture that names a year. Replacing `app.today()` in a
+transaction is not a substitute: half the schema reads `now()`.
+
 The edge functions have the same arrangement.
 `supabase/functions/_local_check/check_locally.sh` type-checks all of them here,
 stubbing `jsr:@supabase/supabase-js` so the check does not need jsr.io — which

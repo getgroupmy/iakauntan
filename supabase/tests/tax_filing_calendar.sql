@@ -422,15 +422,24 @@ begin
   perform pg_temp.check_eq('with no days left, and none lost', r.days_left, 0);
 
   -- Revised: the estimate beside the obligation is the one in force.
+  --
+  -- A basis period opening on the first of THIS month. It was 2026,
+  -- which failed twice under a shifted clock: its CP204 (due 2 December
+  -- 2025) leaves the calendar's year-either-side window on 3 December
+  -- 2026, and from 1 January 2027 the revision is month 13 of the
+  -- period, which the table refuses. This month's period is revised in
+  -- its first month, and its CP204 fell due at most thirty days ago.
   v_org := pg_temp.test_org('Kedai Semak Semula Sdn Bhd');
-  perform public.create_fiscal_year(v_org, date '2026-01-01');
+  perform public.create_fiscal_year(v_org, date_trunc('month', pg_temp.today())::date);
   v_est := public.open_tax_estimate(v_org,
     (select id from public.fiscal_years where org_id = v_org order by end_date limit 1),
     50000, 60000);
   v_new := public.revise_tax_estimate(v_est, 80000);
   perform pg_temp.check_true('a revised estimate is shown by its revision, not the original',
     (select estimate_id from public.tax_upcoming_filings(v_org, 3650)
-      where filing_type = 'cp204' and period_to = date '2026-12-31') = v_new);
+      where filing_type = 'cp204'
+        and period_to = (select end_date from public.fiscal_years
+                          where org_id = v_org)) = v_new);
 end $$;
 
 -- ---------------------------------------------------------------------

@@ -38,6 +38,7 @@ declare v_org uuid;
 begin
   v_org := pg_temp.test_org(p_name);
   perform public.create_fiscal_year(v_org, date '2026-01-01');
+  perform pg_temp.open_years(v_org, date '2026-01-01');
   perform app.default_warehouse(v_org);
   return v_org;
 end; $$;

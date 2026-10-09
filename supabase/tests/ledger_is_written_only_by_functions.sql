@@ -56,8 +56,14 @@ begin
   perform pg_temp.sign_in_as(v_owner);
   perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
 
+  -- The earliest period TODAY IS NOT IN. It was simply the earliest,
+  -- which in January is today's own -- and the open period below, the
+  -- one the front door is shown still working in, then does not exist
+  -- (measured under a shifted clock: "Fiscal period for 2027-01-05 is
+  -- closed").
   select id, start_date into v_period, v_closed
     from public.fiscal_periods where org_id = v_org
+     and not (start_date <= pg_temp.today() and end_date >= pg_temp.today())
    order by start_date limit 1;
   update public.fiscal_periods set status = 'closed' where id = v_period;
 

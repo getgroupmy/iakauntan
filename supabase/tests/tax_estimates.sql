@@ -51,6 +51,28 @@ returns uuid language sql stable as $$
    order by end_date limit 1;
 $$;
 
+-- The same, for a financial year TODAY is in. A revision is dated today
+-- -- `revise_tax_estimate` counts its month of the basis period from
+-- `app.today()` -- so revising a 2026 estimate from 1 January 2027 is
+-- month 13, which the table refuses (measured under a shifted clock).
+-- The blocks that revise use these; the rest keep 2026, whose figures
+-- they assert.
+create or replace function pg_temp.est_org_now(p_name text)
+returns uuid language plpgsql as $$
+declare v_org uuid;
+begin
+  v_org := pg_temp.test_org(p_name);
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  return v_org;
+end; $$;
+
+create or replace function pg_temp.est_year_now(p_org uuid)
+returns uuid language sql stable as $$
+  select id from public.fiscal_years
+   where org_id = p_org
+     and pg_temp.today() between start_date and end_date;
+$$;
+
 -- ---------------------------------------------------------------------
 -- The rules are the published ones
 -- ---------------------------------------------------------------------
@@ -335,9 +357,9 @@ declare
   v_prior numeric; v_revises uuid; v_rows integer;
 begin
   perform pg_temp.sign_in_as(pg_temp.test_user());
-  v_org := pg_temp.est_org('Kedai Ubah Sdn Bhd');
+  v_org := pg_temp.est_org_now('Kedai Ubah Sdn Bhd');
   v_est := public.open_tax_estimate(
-    v_org, pg_temp.est_year(v_org), 50000, 60000);
+    v_org, pg_temp.est_year_now(v_org), 50000, 60000);
 
   v_new := public.revise_tax_estimate(v_est, 80000);
   perform pg_temp.check_true('a revision is a new row', v_new <> v_est);
@@ -350,7 +372,7 @@ begin
   -- measured against the REVISED figure and this year's against the
   -- one before it -- an overwrite would lose whichever was needed.
   select count(*) into v_rows from public.tax_estimates
-   where fiscal_year_id = pg_temp.est_year(v_org);
+   where fiscal_year_id = pg_temp.est_year_now(v_org);
   perform pg_temp.check_eq('both are kept', v_rows, 2);
 
   select revises_id into v_revises from public.tax_estimates
@@ -369,7 +391,7 @@ begin
 
   -- Opening again hands back the live one rather than making a third.
   perform pg_temp.check_eq('opening it again returns the live one',
-    (public.open_tax_estimate(v_org, pg_temp.est_year(v_org)))::text,
+    (public.open_tax_estimate(v_org, pg_temp.est_year_now(v_org)))::text,
     v_new::text);
 
   perform pg_temp.check_refused(

@@ -344,6 +344,51 @@ begin
 end;
 $$;
 
+-- The years a fixture's dates fall in, opened.
+--
+-- MEASURED, not foreseen: on 9 October 2026 the whole suite was run
+-- against copies of the local database whose clock libfaketime had set
+-- to 28 December, 5 January, 15 February, 10 March and 1 June. Some
+-- thirty files failed, and most of them for one of two reasons:
+--
+--   * a fixture opens `date '2026-01-01'` and then does something
+--     DATED TODAY -- a void, a reversal, a receipt -- which from 1
+--     January lands in a year nobody opened;
+--   * a fixture opens the year today is in and dates something `today
+--     - 20`, which in the first weeks of a year is last year.
+--
+-- Neither is wrong in October, which is why neither was ever seen. This
+-- opens every CALENDAR year from p_from's to p_to's (today's unless
+-- given) that no fiscal year overlaps yet, and does nothing at all when
+-- the fixture's own year already covers them -- so a file that calls
+-- it behaves exactly as before on any day that did not fail.
+--
+-- Calendar years only, because that is what the fixtures open. A
+-- company on another year end gets its years from `create_fiscal_year`
+-- in the fixture, not from here. Needs `can_post`, as that does.
+create or replace function pg_temp.open_years(
+  p_org uuid, p_from date, p_to date default null)
+returns integer language plpgsql as $$
+declare
+  v_to   date := coalesce(p_to, pg_temp.today());
+  v_year integer;
+  v_n    integer := 0;
+begin
+  for v_year in extract(year from least(p_from, v_to))::integer
+             .. extract(year from greatest(p_from, v_to))::integer loop
+    if not exists (
+      select 1 from public.fiscal_years f
+       where f.org_id = p_org
+         and f.start_date <= make_date(v_year, 12, 31)
+         and f.end_date >= make_date(v_year, 1, 1)) then
+      perform public.create_fiscal_year(p_org, make_date(v_year, 1, 1));
+      v_n := v_n + 1;
+    end if;
+  end loop;
+  return v_n;
+end;
+$$;
+
 -- A bank account for a fixture, on an account of its OWN.
 --
 -- Not a convenience. Every fixture in this directory that needed a bank

@@ -57,6 +57,34 @@ returns uuid language sql stable as $$
    order by end_date limit 1;
 $$;
 
+-- The same company, in a calendar year chosen from TODAY rather than
+-- 2026, for the two blocks below whose answers depend on the day they
+-- run (both measured failing under a shifted clock):
+--
+--   * a REVISION is dated today, and `revise_tax_estimate` counts its
+--     month of the basis period from it -- a 2026 estimate revised
+--     from 1 January 2027 is month 13, which the table refuses; so
+--     that block uses the year today is in;
+--   * `tax_upcoming_filings` lists what falls due within a year either
+--     side of today, and the 2026 CP204 (due 2 December 2025) leaves
+--     it on 3 December 2026; so that block uses the year thirty days
+--     from now, whose CP204 is never more than eleven months past.
+create or replace function pg_temp.new_co_in(p_name text, p_year integer)
+returns uuid language plpgsql as $$
+declare v_org uuid;
+begin
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org(p_name);
+  perform public.create_fiscal_year(v_org, make_date(p_year, 1, 1));
+  return v_org;
+end; $$;
+
+create or replace function pg_temp.year_in(p_org uuid, p_year integer)
+returns uuid language sql stable as $$
+  select id from public.fiscal_years
+   where org_id = p_org and end_date = make_date(p_year, 12, 31);
+$$;
+
 -- ---------------------------------------------------------------------
 -- The rules carry the first-period figures
 -- ---------------------------------------------------------------------
@@ -314,13 +342,14 @@ end $$;
 -- ---------------------------------------------------------------------
 do $$
 declare v_org uuid; v_est uuid; v_new uuid; fp record; v_rows integer;
+  v_y integer := extract(year from pg_temp.today())::integer;
 begin
   perform pg_temp.sign_in_as(pg_temp.test_user());
-  v_org := pg_temp.new_co('Syarikat Ubah Baharu Sdn Bhd');
-  v_est := public.open_tax_estimate(v_org, pg_temp.year_of(v_org), 24000);
+  v_org := pg_temp.new_co_in('Syarikat Ubah Baharu Sdn Bhd', v_y);
+  v_est := public.open_tax_estimate(v_org, pg_temp.year_in(v_org, v_y), 24000);
   update public.tax_estimates
      set first_period = true,
-         commenced_on = date '2026-09-15',
+         commenced_on = make_date(v_y, 9, 15),
          paid_up_capital = 500000,
          gross_business_income = 1200000
    where id = v_est;
@@ -336,9 +365,9 @@ begin
   perform pg_temp.check_true('a revised first period is still one',
     fp.is_first_period);
   perform pg_temp.check_eq('with the same commencement date',
-    fp.commenced_on::text, '2026-09-15');
+    fp.commenced_on::text, make_date(v_y, 9, 15)::text);
   perform pg_temp.check_eq('and the same deadline',
-    fp.filing_due::text, '2026-12-14');
+    fp.filing_due::text, make_date(v_y, 12, 14)::text);
   perform pg_temp.check_true('and the same exemption',
     fp.exempt_instalments);
 
@@ -351,9 +380,10 @@ end $$;
 -- ---------------------------------------------------------------------
 do $$
 declare v_org uuid; v_est uuid; v_due date;
+  v_y integer := extract(year from pg_temp.today() + 30)::integer;
 begin
   perform pg_temp.sign_in_as(pg_temp.test_user());
-  v_org := pg_temp.new_co('Syarikat Kalendar Sdn Bhd');
+  v_org := pg_temp.new_co_in('Syarikat Kalendar Sdn Bhd', v_y);
 
   -- Before an estimate exists there is nothing to follow, and the
   -- calendar shows the ordinary date. Honest rather than convenient:
@@ -362,30 +392,30 @@ begin
   -- in this product.
   select due_date into v_due
     from public.tax_upcoming_filings(v_org, 3650)
-   where filing_type = 'cp204' and year_of_assessment = 2026;
+   where filing_type = 'cp204' and year_of_assessment = v_y;
   perform pg_temp.check_eq('with no estimate the calendar says the usual',
-    v_due::text, '2025-12-02');
+    v_due::text, make_date(v_y - 1, 12, 2)::text);
 
-  v_est := public.open_tax_estimate(v_org, pg_temp.year_of(v_org), 24000);
+  v_est := public.open_tax_estimate(v_org, pg_temp.year_in(v_org, v_y), 24000);
   update public.tax_estimates
-     set first_period = true, commenced_on = date '2026-09-15'
+     set first_period = true, commenced_on = make_date(v_y, 9, 15)
    where id = v_est;
 
   -- And once it does, the two screens agree. Two deadlines for one
   -- obligation is worse than either of them being wrong alone.
   select due_date into v_due
     from public.tax_upcoming_filings(v_org, 3650)
-   where filing_type = 'cp204' and year_of_assessment = 2026;
+   where filing_type = 'cp204' and year_of_assessment = v_y;
   perform pg_temp.check_eq('and then it follows the estimate',
-    v_due::text, '2026-12-14');
+    v_due::text, make_date(v_y, 12, 14)::text);
 
   -- The Form C is untouched: seven months after the period closes,
   -- whether the company is new or not.
   select due_date into v_due
     from public.tax_upcoming_filings(v_org, 3650)
-   where filing_type = 'form_c' and year_of_assessment = 2026;
+   where filing_type = 'form_c' and year_of_assessment = v_y;
   perform pg_temp.check_eq('while the Form C keeps its own rule',
-    v_due::text, '2027-07-31');
+    v_due::text, make_date(v_y + 1, 7, 31)::text);
 end $$;
 
 -- ---------------------------------------------------------------------

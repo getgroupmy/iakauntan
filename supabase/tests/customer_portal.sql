@@ -81,8 +81,11 @@ begin
   -- One owed in full, one part paid, one settled, one never issued.
   v_i1    := pg_temp.an_invoice(v_org, v_them, 'INV-1', 1000,
                                 date '2026-02-01');
+  -- Due sixty days from TODAY: it was `2026-12-01`, which stopped
+  -- being "not yet due" on 2 December 2026 (measured under a shifted
+  -- clock), and the assertion below says it is not overdue.
   v_i2    := pg_temp.an_invoice(v_org, v_them, 'INV-2', 250,
-                                date '2026-12-01');
+                                pg_temp.today() + 60);
   -- Part paid on purpose: with every balance equal to its total, a
   -- portal that summed `total_amount` instead of `balance_amount`
   -- would show the right number, and the assertion below would be

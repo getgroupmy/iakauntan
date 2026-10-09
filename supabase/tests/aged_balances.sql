@@ -32,6 +32,7 @@ returns uuid language plpgsql as $$
 declare v_org uuid := pg_temp.test_org(p_name);
 begin
   perform public.create_fiscal_year(v_org, date '2026-01-01');
+  perform pg_temp.open_years(v_org, date '2026-01-01');
   return v_org;
 end;
 $$;

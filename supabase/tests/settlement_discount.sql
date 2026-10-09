@@ -72,6 +72,7 @@ declare
 begin
   perform public.create_fiscal_year(v_org,
     date_trunc('year', pg_temp.today())::date);
+  perform pg_temp.open_years(v_org, date '2026-01-01');
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'C-1', 'Pembeli Sdn Bhd', 'customer') returning id into v_cust;
 
@@ -137,6 +138,7 @@ declare
 begin
   perform public.create_fiscal_year(v_org,
     date_trunc('year', pg_temp.today())::date);
+  perform pg_temp.open_years(v_org, date '2026-01-01');
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'C-1', 'Pembeli Sdn Bhd', 'customer') returning id into v_cust;
 
@@ -208,6 +210,7 @@ declare
 begin
   perform public.create_fiscal_year(v_org,
     date_trunc('year', pg_temp.today())::date);
+  perform pg_temp.open_years(v_org, date '2026-01-01');
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'C-1', 'Pembeli Sdn Bhd', 'customer') returning id into v_cust;
   insert into public.bank_accounts
@@ -291,6 +294,7 @@ declare
 begin
   perform public.create_fiscal_year(v_org,
     date_trunc('year', pg_temp.today())::date);
+  perform pg_temp.open_years(v_org, date '2026-01-01');
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'C-1', 'Pembeli Sdn Bhd', 'customer') returning id into v_cust;
   insert into public.bank_accounts
@@ -431,6 +435,7 @@ declare
 begin
   perform public.create_fiscal_year(v_org,
     date_trunc('year', pg_temp.today())::date);
+  perform pg_temp.open_years(v_org, date '2026-01-01');
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'S-1', 'Pembekal Sdn Bhd', 'supplier') returning id into v_sup;
   insert into public.bank_accounts
@@ -593,6 +598,7 @@ declare
 begin
   perform public.create_fiscal_year(v_org,
     date_trunc('year', pg_temp.today())::date);
+  perform pg_temp.open_years(v_org, date '2026-01-01');
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'C-1', 'Pembeli Sdn Bhd', 'customer') returning id into v_cust;
   insert into public.bank_accounts
@@ -669,6 +675,7 @@ declare
   v_cust uuid; v_pre uuid; v_zero uuid; v_inv uuid; r record;
 begin
   perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  perform pg_temp.open_years(v_org, date '2026-01-01');
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'C1', 'Pelanggan', 'customer') returning id into v_cust;
 
@@ -704,6 +711,7 @@ declare
   v_today date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
 begin
   perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  perform pg_temp.open_years(v_org, date '2026-01-01');
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'C-1', 'Buyer Inc', 'customer') returning id into v_cust;
   insert into public.contacts (org_id, code, name, contact_type)
@@ -800,7 +808,9 @@ begin
   v_org := pg_temp.test_org('Milik Siapa Sdn Bhd');
   v_other := pg_temp.test_org('Syarikat Sebelah Sdn Bhd');
   perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  perform pg_temp.open_years(v_org, date '2026-01-01');
   perform public.create_fiscal_year(v_other, date_trunc('year', pg_temp.today())::date);
+  perform pg_temp.open_years(v_other, date '2026-01-01');
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'C-1', 'Pembeli', 'customer') returning id into v_cust;
   insert into public.contacts (org_id, code, name, contact_type)
@@ -887,6 +897,7 @@ declare
 begin
   v_org := pg_temp.test_org('Resit Beku Sdn Bhd');
   perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  perform pg_temp.open_years(v_org, date '2026-01-01');
   perform pg_temp.sign_in_as(v_owner);
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'C-1', 'Pelanggan', 'customer') returning id into v_cust;

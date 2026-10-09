@@ -51,6 +51,39 @@ returns uuid language sql stable as $$
    order by end_date limit 1;
 $$;
 
+-- A company whose basis period ENDS this month: it began eleven months
+-- before the first of this one. Every instalment but the last is then
+-- in the past on whatever day this runs, and a revision -- dated today,
+-- the twelfth month of the period -- can still be made. The blocks that
+-- revise used 2026, which gave the first and stopped giving the second
+-- on 1 January 2027: `revise_tax_estimate` counts the revision month
+-- from today, and month 13 is refused (measured under a shifted clock).
+create or replace function pg_temp.co_ending_now(p_name text)
+returns uuid language plpgsql as $$
+declare v_org uuid;
+begin
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org(p_name);
+  perform public.create_fiscal_year(v_org,
+    (date_trunc('month', pg_temp.today()) - interval '11 months')::date);
+  return v_org;
+end; $$;
+
+create or replace function pg_temp.year_ending_now(p_org uuid)
+returns uuid language sql stable as $$
+  select id from public.fiscal_years
+   where org_id = p_org and pg_temp.today() between start_date and end_date;
+$$;
+
+-- The day an instalment falls due, read from the schedule rather than
+-- written in, so a payment "on the due date" stays on it whatever year
+-- the period is.
+create or replace function pg_temp.due_of(p_estimate uuid, p_no integer)
+returns date language sql stable as $$
+  select due_on from public.tax_estimate_schedule(p_estimate)
+   where instalment_no = p_no;
+$$;
+
 create or replace function pg_temp.revise_in(
   p_estimate uuid, p_amount numeric, p_month integer)
 returns uuid language plpgsql as $$
@@ -122,13 +155,13 @@ declare
   v_org uuid; v_est uuid; v_new uuid; s record; sum_r record;
 begin
   perform pg_temp.sign_in_as(pg_temp.test_user());
-  v_org := pg_temp.co('Kedai Ubah Bayar Sdn Bhd');
-  v_est := public.open_tax_estimate(v_org, pg_temp.year_of(v_org), 120000);
+  v_org := pg_temp.co_ending_now('Kedai Ubah Bayar Sdn Bhd');
+  v_est := public.open_tax_estimate(v_org, pg_temp.year_ending_now(v_org), 120000);
 
-  -- Three instalments paid at the original figure.
-  perform public.record_tax_instalment(v_est, 1, date '2026-02-15', 10000);
-  perform public.record_tax_instalment(v_est, 2, date '2026-03-15', 10000);
-  perform public.record_tax_instalment(v_est, 3, date '2026-04-15', 10000);
+  -- Three instalments paid at the original figure, each on its day.
+  perform public.record_tax_instalment(v_est, 1, pg_temp.due_of(v_est, 1), 10000);
+  perform public.record_tax_instalment(v_est, 2, pg_temp.due_of(v_est, 2), 10000);
+  perform public.record_tax_instalment(v_est, 3, pg_temp.due_of(v_est, 3), 10000);
 
   -- Then a revision, which is a NEW estimate row. Keyed to the row
   -- they were made against, those three payments would vanish here.
@@ -173,7 +206,7 @@ begin
   -- every lookup that started anywhere else -- and every assertion
   -- above would still pass, because those payments were made against
   -- the root itself.
-  perform public.record_tax_instalment(v_new, 8, date '2026-09-15', 34000);
+  perform public.record_tax_instalment(v_new, 8, pg_temp.due_of(v_new, 8), 34000);
 
   select * into sum_r from public.tax_estimate_payment_summary(v_est);
   perform pg_temp.check_eq(
@@ -234,10 +267,12 @@ do $$
 declare v_org uuid; v_est uuid; v_new uuid; sum_r record; v_nil numeric;
 begin
   perform pg_temp.sign_in_as(pg_temp.test_user());
-  v_org := pg_temp.co('Kedai Turun Bayar Sdn Bhd');
-  v_est := public.open_tax_estimate(v_org, pg_temp.year_of(v_org), 120000);
+  v_org := pg_temp.co_ending_now('Kedai Turun Bayar Sdn Bhd');
+  v_est := public.open_tax_estimate(v_org, pg_temp.year_ending_now(v_org), 120000);
   -- Revised down to less than has already been billed: the remaining
-  -- instalments go to nil.
+  -- instalments go to nil. In a period ending this month, the seven
+  -- left standing are past due and so are the first nil ones -- which
+  -- is what lets "a nil one is not overdue" be seen at all.
   v_new := pg_temp.revise_in(v_est, 50000, 9);
 
   select amount into v_nil from public.tax_estimate_schedule(v_new)

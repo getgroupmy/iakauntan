@@ -309,9 +309,22 @@ begin
     'the nightly run marks yesterday''s forgotten punch-out',
     (select r.status::text from public.attendance_records r
       where r.employee_id = v_emp and r.work_date = v_yday), 'incomplete');
-  perform pg_temp.check_eq('and lapses the carried leave that was due to',
+  -- Due to from 1 February: the carry expires one month into the leave
+  -- year (`app.expire_carried_leave`, "on or after the anniversary of
+  -- the year's start"). In January it is not yet due and the run must
+  -- leave it alone -- which this said the opposite of until a shifted
+  -- clock ran it on 5 January. Both answers are the rule; which one is
+  -- asked depends on the day.
+  perform pg_temp.check_eq(
+    case when pg_temp.today() >= date_trunc('year', pg_temp.today())::date
+                                 + interval '1 month'
+         then 'and lapses the carried leave that was due to'
+         else 'and keeps the carried leave, not due to lapse until February' end,
     (select b.carried_forward from public.leave_balances b
-      where b.employee_id = v_emp and b.leave_type_id = v_type), 0.00);
+      where b.employee_id = v_emp and b.leave_type_id = v_type),
+    case when pg_temp.today() >= date_trunc('year', pg_temp.today())::date
+                                 + interval '1 month'
+         then 0.00 else 5.00 end);
 
   perform pg_temp.sign_out();
 end $$;

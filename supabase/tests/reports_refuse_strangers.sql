@@ -144,8 +144,16 @@ begin
           when v_type = 'uuid' and v_name = 'p_item_id' then format(
             '(select item_id from public.stock_movements where org_id = %L '
             'group by item_id order by count(*) desc limit 1)', o.id)
+          -- The asset with the most depreciation behind it, as the item
+          -- above is the one with the most movements. It was `limit 1`,
+          -- whichever row the heap gave back -- on 1 April 2027 under a
+          -- shifted clock, one bought too recently to have been
+          -- depreciated, so `report_depreciation_history` had nothing
+          -- for its owner and dropped out of this test unremarked.
           when v_type = 'uuid' and v_name = 'p_asset_id' then format(
-            '(select id from public.fixed_assets where org_id = %L limit 1)', o.id)
+            '(select coalesce((select e.asset_id from public.depreciation_entries e '
+            'where e.org_id = %L group by e.asset_id order by count(*) desc limit 1), '
+            '(select id from public.fixed_assets where org_id = %L limit 1)))', o.id, o.id)
           when v_type in ('text', 'uuid') then format('null::%s', v_type)
           else format('(select enum_first(null::%s))', v_type)
         end;
@@ -207,10 +215,18 @@ begin
   -- The floor. Measured on 6 October 2026 and set at what was measured;
   -- a fall means a report stopped returning rows for its owner here,
   -- and the check above silently stopped testing it.
+  --
+  -- Except in January. The demo is year-to-date and every report here
+  -- is asked from 1 January, so in January nothing has closed -- no
+  -- payroll run, no depreciation -- and fewer reports have rows. Measured
+  -- under a shifted clock on the first of every month of 2027 and of
+  -- November and December 2026: 51 on 1 January, 53 on the 15th, and 59
+  -- on every first of the month from February on.
   perform pg_temp.check_true(
     format('and that was asked of enough reports to mean something (%s)',
            coalesce(array_length(v_counted, 1), 0)),
-    coalesce(array_length(v_counted, 1), 0) >= 59);
+    coalesce(array_length(v_counted, 1), 0)
+      >= case when extract(month from app.today()) = 1 then 51 else 59 end);
 end $$;
 
 rollback;

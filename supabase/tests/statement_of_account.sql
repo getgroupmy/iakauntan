@@ -32,6 +32,7 @@ returns uuid language plpgsql as $$
 declare v_org uuid := pg_temp.test_org(p_name);
 begin
   perform public.create_fiscal_year(v_org, date '2026-01-01');
+  perform pg_temp.open_years(v_org, date '2026-01-01');
   return v_org;
 end;
 $$;
@@ -358,6 +359,7 @@ begin
   perform pg_temp.sign_in_as(v_owner);
   v_org := pg_temp.test_org('Probe Open Items');
   perform public.create_fiscal_year(v_org, date '2026-01-01');
+  perform pg_temp.open_years(v_org, date '2026-01-01');
   select id into v_ac from public.accounts
    where org_id = v_org and account_type = 'revenue' and not is_group
    limit 1;

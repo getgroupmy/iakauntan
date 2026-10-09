@@ -34,6 +34,7 @@ declare
   v_said text;
   r      record;
   v_e2   uuid;
+  v_e3   uuid;
 begin
   v_org := pg_temp.test_org('Setiausaha Nama Sdn Bhd', array['secretarial']);
 
@@ -117,17 +118,22 @@ begin
   -- So this asserts the merge field rather than the function: not "does
   -- corp_display_name still work" but "does the document reach it".
   --
-  -- `2026-03-01` is inside the twelve months at the time this runs.
-  -- Should that stop being true -- somebody reads this in 2028 -- the
-  -- control below goes red first and says the fixture date is what needs
-  -- moving, not the code.
-  perform pg_temp.check_true(
-    'the rename is still inside the twelve months this asserts',
-    (now() at time zone 'Asia/Kuala_Lumpur')::date < date '2027-03-01');
+  -- On a company renamed THIRTY DAYS AGO, so that it is inside the
+  -- twelve months on whatever day this runs. It was asked of the
+  -- `2026-03-01` rename above, with a tripwire that went red once that
+  -- was a year old -- on 1 March 2027, measured under a shifted clock.
+  -- A fixture that has to be moved by hand every year is a failure on a
+  -- timer; one dated from today is not.
+  insert into public.corp_entities
+    (org_id, name, entity_type, incorporated_on, registered_office)
+  values (v_org, 'Dahulu Sdn Bhd', 'sdn_bhd', date '2018-08-08',
+          'No 3, Jalan Dahulu, 50000 Kuala Lumpur')
+  returning id into v_e3;
+  perform public.change_company_name(v_e3, 'Kini Sdn Bhd', pg_temp.today() - 30);
   perform pg_temp.check_eq(
     'a generated document carries both names, as s.28(4) requires',
-    app.corp_merge_context(v_e) ->> 'company_name',
-    'Baru Sdn Bhd (formerly Lama Sdn Bhd)');
+    app.corp_merge_context(v_e3) ->> 'company_name',
+    'Kini Sdn Bhd (formerly Dahulu Sdn Bhd)');
 
   -- The control. Without it the assertion above could be satisfied by a
   -- merge context that appends "(formerly ...)" to everything.

@@ -158,10 +158,21 @@ begin
       where o.firm_id = v_firm and e.name = 'Accountant & Co.'
         and x.role in ('secretary', 'director')), 0);
 
-  perform pg_temp.check_true('the client books have posted invoices',
-    (select count(*) from public.sales_documents d
-       join public.organizations o on o.id = d.org_id
-      where o.firm_id = v_firm and d.status <> 'draft') > 20);
+  -- One a month, from January to this one: that is what
+  -- `demo_practice_books` raises, so that is what is asked. It was
+  -- "more than twenty", which is October's answer; on 5 January the
+  -- demo has one each and a shifted clock found this red until May.
+  -- The demo is year-to-date by design (`0771`'s header), so the
+  -- assertion follows the month rather than a number.
+  perform pg_temp.check_eq(
+    'each client''s books have a posted invoice for every month so far this year',
+    (select count(*)::integer from public.organizations o
+      where o.firm_id = v_firm and o.name <> 'Accountant & Co.'
+        and (select count(*) from public.sales_documents d
+              where d.org_id = o.id and d.doc_type = 'invoice'
+                and d.status <> 'draft'
+                and d.doc_date >= date_trunc('year', pg_temp.today())::date)
+            >= extract(month from pg_temp.today())), 3);
 
   -- Every company in the portfolio has something still owed -- the
   -- three clients and the practice's own retainers -- so "who owes
@@ -173,10 +184,26 @@ begin
        join public.organizations o on o.id = d.org_id
       where o.firm_id = v_firm and coalesce(d.balance_amount, 0) > 0), 4);
 
-  perform pg_temp.check_true('with receipts against the older ones',
+  -- The builder's rule, stated as one: anything more than sixty days
+  -- old has been paid. Asked that way it holds on every day; "there are
+  -- receipts" alone is false until March, when the first invoice of the
+  -- year turns sixty days old, so it is asked only once one has.
+  perform pg_temp.check_eq('every client invoice more than sixty days old is paid',
+    (select count(*)::integer from public.sales_documents d
+       join public.organizations o on o.id = d.org_id
+      where o.firm_id = v_firm and o.name <> 'Accountant & Co.'
+        and d.doc_type = 'invoice' and d.status <> 'draft'
+        and d.doc_date < pg_temp.today() - 60
+        and coalesce(d.balance_amount, 0) > 0), 0);
+  perform pg_temp.check_true('with receipts against the older ones, once any are that old',
     (select count(*) from public.receipts r
        join public.organizations o on o.id = r.org_id
-      where o.firm_id = v_firm and r.status = 'posted') > 0);
+      where o.firm_id = v_firm and r.status = 'posted') > 0
+    or not exists (
+      select 1 from public.sales_documents d
+        join public.organizations o on o.id = d.org_id
+       where o.firm_id = v_firm and d.doc_type = 'invoice'
+         and d.status <> 'draft' and d.doc_date < pg_temp.today() - 60));
   -- Against them, not merely near them. A receipt nobody applied is
   -- money on account: the invoice stays open, the customer looks as if
   -- they owe it, and the aging and the statement disagree with the

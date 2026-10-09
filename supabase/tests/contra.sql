@@ -1220,9 +1220,7 @@ begin
   v_org := pg_temp.test_org('Contra Satu Persatu Sdn Bhd');
   perform pg_temp.allow_many_companies();
   perform public.create_fiscal_year(v_org, date_trunc('year', v_then)::date);
-  if extract(year from v_then) <> extract(year from pg_temp.today()) then
-    perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
-  end if;
+  perform pg_temp.open_years(v_org, v_then);
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['sales','purchases','accounting']) m
   on conflict (org_id, module_code) do update set is_enabled = true;

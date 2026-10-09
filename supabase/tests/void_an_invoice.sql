@@ -72,6 +72,7 @@ declare
 begin
   v_org := pg_temp.test_org('Batal Sdn Bhd');
   perform public.create_fiscal_year(v_org, date '2026-01-01');
+  perform pg_temp.open_years(v_org, date '2026-01-01');
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'C-001', 'Pelanggan Bhd', 'customer') returning id into v_cust;
 

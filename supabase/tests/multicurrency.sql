@@ -60,6 +60,7 @@ declare
   v_base numeric; v_fc numeric; v_msg text;
 begin
   perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  perform pg_temp.open_years(v_org, pg_temp.today() - 30);
   select id into v_ar    from public.accounts where org_id=v_org and code='1210';
   select id into v_sales from public.accounts where org_id=v_org and code='4100';
 
@@ -138,6 +139,7 @@ declare
 begin
   update public.organizations set base_currency = 'SGD' where id = v_org;
   perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  perform pg_temp.open_years(v_org, pg_temp.today() - 30);
   select id into v_ar    from public.accounts where org_id=v_org and code='1210';
   select id into v_sales from public.accounts where org_id=v_org and code='4100';
 
@@ -180,6 +182,7 @@ declare
   v_bal numeric; v_diff numeric;
 begin
   perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  perform pg_temp.open_years(v_org, pg_temp.today() - 30);
   select id into v_ar from public.accounts where org_id=v_org and code='1210';
 
   insert into public.contacts (org_id, code, name, contact_type)
@@ -255,6 +258,7 @@ declare
   v_cust uuid; v_bank uuid; v_ar uuid; v_inv uuid; v_rcp uuid; v_bal numeric;
 begin
   perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  perform pg_temp.open_years(v_org, pg_temp.today() - 30);
   select id into v_ar from public.accounts where org_id=v_org and code='1210';
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org,'FXC-2','Overseas Buyer Inc','customer') returning id into v_cust;
@@ -319,6 +323,7 @@ declare
   v_bal numeric; v_diff numeric;
 begin
   perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  perform pg_temp.open_years(v_org, pg_temp.today() - 30);
   select id into v_ap from public.accounts where org_id=v_org and code='2110';
 
   insert into public.contacts (org_id, code, name, contact_type)
@@ -516,6 +521,7 @@ declare
   v_cust uuid; v_bank uuid; v_inv uuid; v_rcp uuid;
 begin
   perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  perform pg_temp.open_years(v_org, pg_temp.today() - 30);
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org,'FXC-3','Overseas Buyer Inc','customer') returning id into v_cust;
   v_bank := pg_temp.test_bank_account(v_org, 'Current account');

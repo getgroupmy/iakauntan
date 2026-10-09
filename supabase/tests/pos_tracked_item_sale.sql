@@ -118,6 +118,7 @@ declare
   v_inv    uuid;
 begin
   perform public.create_fiscal_year(v_org, date '2026-01-01');
+  perform pg_temp.open_years(v_org, date '2026-01-01');
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, m, true from unnest(array['pos','inventory','purchases']) m
   on conflict (org_id, module_code) do update set is_enabled = true;

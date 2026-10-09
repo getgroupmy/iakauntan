@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-15892
+15954
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1074,3 +1074,9 @@
 # draft_bill_from_received_einvoice, the received e-Invoice supplier
 # functions and record_received_einvoice. run_locally.sh at 0770: 386
 # files, 15892 assertions.
+#
+# 9 October: 15954. Rule-by-rule blocks for deposit_pdc, void_contra,
+# cancel_pdc, void_rent_run and void_strata_charge_run; 0771, the demo
+# rebuilding in January; and the suite made to pass on other days than
+# today (run_at_dates.sh: 28 December, 5 January, 15 February, 10 March,
+# 1 June). run_locally.sh at 0771: 386 files, 15954 assertions.

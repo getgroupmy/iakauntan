@@ -57,6 +57,28 @@ returns uuid language sql stable as $$
    order by end_date limit 1;
 $$;
 
+-- A person whose basis year is the one TODAY is in, for the block that
+-- revises: `revise_tax_estimate` counts the revision month from today,
+-- and a 2026 estimate revised from 1 January 2027 is month 13, which
+-- the table refuses (measured under a shifted clock).
+create or replace function pg_temp.person_org_now(p_name text)
+returns uuid language plpgsql as $$
+declare v_org uuid;
+begin
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org(p_name);
+  update public.organizations set entity_type = 'sole_proprietor'
+   where id = v_org;
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  return v_org;
+end; $$;
+
+create or replace function pg_temp.year_now(p_org uuid)
+returns uuid language sql stable as $$
+  select id from public.fiscal_years
+   where org_id = p_org and pg_temp.today() between start_date and end_date;
+$$;
+
 -- ---------------------------------------------------------------------
 -- The rules are the published ones, and there are now two sets
 -- ---------------------------------------------------------------------
@@ -300,8 +322,8 @@ do $$
 declare v_org uuid; v_est uuid; v_new uuid; v_rows integer;
 begin
   perform pg_temp.sign_in_as(pg_temp.test_user());
-  v_org := pg_temp.person_org('Kedai Ubah Pak Mail');
-  v_est := public.open_tax_estimate(v_org, pg_temp.year_of(v_org), 60000);
+  v_org := pg_temp.person_org_now('Kedai Ubah Pak Mail');
+  v_est := public.open_tax_estimate(v_org, pg_temp.year_now(v_org), 60000);
   v_new := public.revise_tax_estimate(v_est, 90000);
 
   -- Without this the revised row takes the column default -- CP204 --

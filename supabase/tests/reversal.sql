@@ -25,6 +25,7 @@ returns uuid language plpgsql as $$
 declare v_org uuid := pg_temp.test_org(p_name);
 begin
   perform public.create_fiscal_year(v_org, date '2026-01-01');
+  perform pg_temp.open_years(v_org, date '2026-01-01');
   return v_org;
 end;
 $$;
@@ -120,11 +121,14 @@ begin
 
   perform public.void_sales_document(v_doc, 'raised in error');
 
-  -- Not -1000 and not +1000. Nothing.
+  -- Not -1000 and not +1000. Nothing. As at TODAY, because the void is
+  -- dated today: read at 31 December 2026 these held only while today
+  -- was in 2026, and from 1 January the reversal is after the date the
+  -- trial balance is taken at (measured under a shifted clock).
   perform pg_temp.check_eq('voiding it leaves no revenue',
-    pg_temp.balance(v_org, '4100'), 0);
+    pg_temp.balance(v_org, '4100', pg_temp.today()), 0);
   perform pg_temp.check_eq('and leaves the customer owing nothing',
-    pg_temp.balance(v_org, '1210'), 0);
+    pg_temp.balance(v_org, '1210', pg_temp.today()), 0);
   perform pg_temp.check_true('with the document marked void',
     (select status = 'void' from public.sales_documents where id = v_doc));
 
@@ -293,8 +297,12 @@ begin
   -- 2026 and nothing else, so 2027 is outside every fiscal year. Without
   -- the refusal the entry is written with a null `fiscal_period_id` and
   -- appears in no period's report at all.
+  -- Three years past today's, not `2027`: from 1 January 2027 the
+  -- fixture opens that year (`pg_temp.open_years`), and a year named
+  -- as "never opened" has to stay so on whatever day this runs.
   perform pg_temp.check_refused('nor into a year that has not been opened',
-    format($q$ select public.reverse_gl_entry(%L, date '2027-01-05') $q$, v_e),
+    format($q$ select public.reverse_gl_entry(%L, %L) $q$, v_e,
+           (date_trunc('year', pg_temp.today()) + interval '3 years')::date + 4),
     '%No fiscal period covers%', '23514');
 
   -- --- the date, which is what 0421 is for --------------------------

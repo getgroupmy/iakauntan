@@ -515,12 +515,23 @@ begin
       where p.org_id = v_sinar and p.reference like 'Settlement of %'
         and d.doc_date > app.today() - 60), 0::bigint);
   -- The positive control: it did settle some, so the zeros above are
-  -- about which, not about whether.
-  perform pg_temp.check_true('-- and it did settle some of each',
-    exists (select 1 from public.receipts
-             where org_id = v_sinar and reference like 'Settlement of %')
-    and exists (select 1 from public.purchase_payments
-                 where org_id = v_sinar and reference like 'Settlement of %'));
+  -- about which, not about whether -- once there is any paper that old.
+  -- Sinar's books run from 1 January, so until mid-February nothing is
+  -- 45 days old and until March nothing is 60, and a shifted clock
+  -- found the unconditional form red on 5 January and 15 February.
+  perform pg_temp.check_true('-- and it settled some of each, once any was old enough',
+    (exists (select 1 from public.receipts
+              where org_id = v_sinar and reference like 'Settlement of %')
+     or not exists (select 1 from public.sales_documents
+                     where org_id = v_sinar and doc_type = 'invoice'
+                       and status <> 'draft'
+                       and doc_date <= app.today() - 45))
+    and (exists (select 1 from public.purchase_payments
+                  where org_id = v_sinar and reference like 'Settlement of %')
+     or not exists (select 1 from public.purchase_documents
+                     where org_id = v_sinar and doc_type = 'bill'
+                       and status <> 'draft'
+                       and doc_date <= app.today() - 60)));
 
   -- Money dated in the future is the one thing a demo ledger cannot
   -- show: the bank feed, the aging and the cash forecast all read it as
@@ -674,10 +685,17 @@ begin
        join public.accounts a on a.id = l.account_id
       where e.org_id = v_sinar and e.status = 'posted' and a.code = '1590'));
 
+  -- One run for every month of this year that has closed -- what
+  -- `demo_sinar_payroll` does. It was "more than none", which January
+  -- answers with none: a shifted clock found it red on 5 January. Asked
+  -- as the builder's rule it holds every month, and from February it
+  -- still says what it said, that payroll can run at all.
   select count(*) into v_units from public.payroll_runs where org_id = v_sinar;
-  perform pg_temp.check_true(
-    format('payroll ran (%s runs), which it could not do at all until the '
-           'chart gained account 2145', v_units), v_units > 0);
+  perform pg_temp.check_eq(
+    format('payroll ran (%s runs), once for every closed month this year, '
+           'which it could not do at all until the chart gained account 2145',
+           v_units),
+    v_units, extract(month from app.today())::integer - 1);
 
   perform pg_temp.check_eq(
     'nothing is left in net salaries payable: everyone the demo shows as '
@@ -1212,6 +1230,11 @@ begin
 
   -- And one actually paid. A seed that posted two bills and no payment
   -- would satisfy both assertions above.
+  --
+  -- Sinar excepted while none of its bills is sixty days old: its books
+  -- run from 1 January and `demo_sinar_bank` pays a bill at sixty days,
+  -- so until March it has nothing paid yet (a shifted clock found this
+  -- red on 15 February, Sinar's oldest bill 43 days old).
   perform pg_temp.check_eq(
     'and one settled through a posted supplier payment',
     (select count(*) from public.organizations o
@@ -1221,7 +1244,13 @@ begin
             join public.payment_allocations a on a.bill_id = d.id
             join public.purchase_payments p on p.id = a.payment_id
            where d.org_id = o.id and p.gl_entry_id is not null
-             and d.paid_amount >= d.total_amount)), 0);
+             and d.paid_amount >= d.total_amount)
+        and not (o.name = 'Sinar Teknologi Sdn Bhd'
+                 and not exists (
+                   select 1 from public.purchase_documents d
+                    where d.org_id = o.id and d.doc_type = 'bill'
+                      and d.status <> 'draft'
+                      and d.doc_date <= app.today() - 60))), 0);
 
   -- Rule 7 of the Solicitors' Accounts Rules 1990. The firm's own
   -- printer is not paid out of money held for a client, and the seed
@@ -1534,9 +1563,17 @@ begin
     perform pg_temp.check_true('the managing agent owns something itself',
       (select count(*) from public.fixed_assets
         where org_id = v_hrt and deleted_at is null) >= 3);
-    perform pg_temp.check_true('and has been depreciating it',
+    -- Once a month has closed since the first of them was bought.
+    -- `demo_assets_harta` buys on fixed days after 1 January and
+    -- depreciates each CLOSED month, so on 15 February nothing has
+    -- been (a shifted clock found the unconditional form red then).
+    perform pg_temp.check_true('and has been depreciating it, once a month has closed on it',
       (select coalesce(sum(accumulated_depreciation), 0)
-         from public.fixed_assets where org_id = v_hrt) > 0);
+         from public.fixed_assets where org_id = v_hrt) > 0
+      or not exists (
+        select 1 from public.fixed_assets
+         where org_id = v_hrt and deleted_at is null
+           and acquisition_date < date_trunc('month', app.today())::date - 1));
 
     -- The register agrees with the ledger. Two running totals that can
     -- part company without anything failing, which is why the same
@@ -1621,7 +1658,13 @@ begin
         ('legal','matters'), ('manufacturing','manufacturing_orders'),
         ('mbrs','fs_filings'),
         ('memberships','pos_memberships'),
-        ('payroll','payroll_runs'), ('pos','pos_outlets'),
+        -- Payroll runs once a month has CLOSED (`demo_sinar_payroll`),
+        -- so in January there is none and the people waiting to be paid
+        -- are what the module has in it. A shifted clock found this red
+        -- on 5 January with `payroll_runs` asked every month.
+        ('payroll', case when extract(month from app.today()) = 1
+                         then 'employees' else 'payroll_runs' end),
+        ('pos','pos_outlets'),
         ('property_nonstrata','property_units'),
         ('property_strata','property_units'),
         ('purchases','purchase_documents'),
@@ -1846,6 +1889,86 @@ begin
                and s.status = 'completed'
                and m.movement_type = 'sales_delivery'
                and m.quantity < 0));
+end $$;
+
+-- ---------------------------------------------------------------------
+-- The demo in January (`0771`)
+-- ---------------------------------------------------------------------
+-- Measured under a shifted clock, not reasoned: the rebuild passed on
+-- 28 December and failed on 5 January, 10 March and 1 May, because a
+-- demo company had only this year while the builders date paper up to
+-- 75 days back, and because Kilang's lodged accounts were for the last
+-- complete year -- approved, circulated and lodged on days that, until
+-- early June, have not happened.
+--
+-- This file runs on one day, so what it can show of January is
+-- limited, and the limits are stated rather than hidden:
+--
+--   * "an open period 75 days back" is the property the builders need,
+--     but from mid-March to December 75 days back is THIS year, so it
+--     cannot see the previous year go missing then. "The year before
+--     this one" can, on any day: the mutation sweep
+--     (`mutants/demo_in_january.py`) found the first passing without
+--     the previous year in October and the second failing.
+--   * the year Kilang's accounts are for is asked of the pure function
+--     at the days that matter, which is how a January answer is
+--     asserted in October;
+--   * that `demo_amanah_accounts` USES that function cannot be told
+--     from the old formula between 9 June and 31 December, when the two
+--     agree. The equality below is a tie between the row and the
+--     function, not a January test.
+do $$
+declare
+  v_amanah uuid;
+begin
+  select id into v_amanah from public.organizations
+   where is_demo and name = 'Amanah Setiausaha Sdn Bhd';
+
+  perform pg_temp.check_true('there are demo companies to ask',
+    (select count(*) from public.organizations where is_demo) >= 10);
+  perform pg_temp.check_eq(
+    'every demo company has an open period 75 days back, which in '
+    'January is last year',
+    (select count(*)::integer from public.organizations o
+      where o.is_demo
+        and not exists (
+          select 1 from public.fiscal_periods p
+           where p.id = app.period_for_date(o.id, pg_temp.today() - 75)
+             and p.status = 'open')), 0);
+  perform pg_temp.check_eq(
+    'and that is the year before this one, not a gap or an overlap',
+    (select count(*)::integer from public.organizations o
+      where o.is_demo
+        and not exists (
+          select 1 from public.fiscal_years c, public.fiscal_years f
+           where c.org_id = o.id and f.org_id = o.id
+             and pg_temp.today() between c.start_date and c.end_date
+             and f.end_date = c.start_date - 1)), 0);
+
+  perform pg_temp.check_eq(
+    'accounts for 2026 are lodged by 9 June 2027, 160 days on',
+    app.demo_last_lodged_year_end(date '2027-06-09')::text, '2026-12-31');
+  perform pg_temp.check_eq('and not a day sooner',
+    app.demo_last_lodged_year_end(date '2027-06-08')::text, '2025-12-31');
+  perform pg_temp.check_eq(
+    'so in January the lodged year is the one before last',
+    app.demo_last_lodged_year_end(date '2027-01-05')::text, '2025-12-31');
+  perform pg_temp.check_eq('and on the last day of a year, still that one',
+    app.demo_last_lodged_year_end(date '2026-12-31')::text, '2025-12-31');
+
+  perform pg_temp.check_true(
+    'Kilang''s lodged accounts are for that year',
+    (select f.fy_end = app.demo_last_lodged_year_end(app.today())
+       from public.fs_filings f
+       join public.corp_entities e on e.id = f.corp_entity_id
+      where f.org_id = v_amanah and e.name like 'Kilang%'));
+  perform pg_temp.check_eq(
+    'and no demo filing is dated on a day that has not happened',
+    (select count(*)::integer from public.fs_filings f
+       join public.organizations o on o.id = f.org_id
+      where o.is_demo
+        and greatest(f.directors_approval_date, f.circulated_on, f.lodged_on)
+            > pg_temp.today()), 0);
 end $$;
 
 -- ---------------------------------------------------------------------

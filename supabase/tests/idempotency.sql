@@ -1494,6 +1494,16 @@ do $$
 declare
   v_org uuid; v_user uuid; v_emp uuid; v_type uuid; v_first uuid;
   v_again uuid; v_took boolean;
+  -- The day the leave below is counted from. Today, unless thirty days
+  -- on is next year -- then 1 January, so every request falls in ONE
+  -- leave year and the one balance below is the one they draw on. From
+  -- early December they used to straddle two, and the second year had
+  -- no entitlement (measured under a shifted clock: "Only -2.00 day(s)
+  -- of Annual remain").
+  v_base date := case
+    when extract(year from pg_temp.today() + 30)
+         = extract(year from pg_temp.today()) then pg_temp.today()
+    else date_trunc('year', pg_temp.today() + 30)::date end;
 begin
   v_user := pg_temp.test_user();
   perform pg_temp.sign_in_as(v_user);
@@ -1511,12 +1521,12 @@ begin
   insert into public.leave_balances
     (org_id, employee_id, leave_type_id, leave_year, entitled_days)
   values (v_org, v_emp, v_type,
-          extract(year from pg_temp.today())::integer, 20);
+          extract(year from v_base)::integer, 20);
 
-  perform public.submit_leave_request(v_org, v_type, pg_temp.today() + 10,
-    pg_temp.today() + 11, 2, 'Trip', false, null, v_emp, null);
-  perform public.submit_leave_request(v_org, v_type, pg_temp.today() + 10,
-    pg_temp.today() + 11, 2, 'Trip', false, null, v_emp, null);
+  perform public.submit_leave_request(v_org, v_type, v_base + 10,
+    v_base + 11, 2, 'Trip', false, null, v_emp, null);
+  perform public.submit_leave_request(v_org, v_type, v_base + 10,
+    v_base + 11, 2, 'Trip', false, null, v_emp, null);
   perform pg_temp.check_eq('without a key, one request is filed twice',
     (select count(*)::integer from public.leave_requests
       where employee_id = v_emp), 2);
@@ -1529,13 +1539,13 @@ begin
 
   v_first := public.submit_leave_request(
     p_org_id := v_org, p_leave_type_id := v_type,
-    p_start_date := pg_temp.today() + 20, p_end_date := pg_temp.today() + 21,
+    p_start_date := v_base + 20, p_end_date := v_base + 21,
     p_total_days := 2, p_reason := 'Again', p_is_half_day := false,
     p_half_day_period := null, p_employee_id := v_emp,
     p_contact_while_away := null, p_idempotency_key := 'LEAVE-1');
   v_again := public.submit_leave_request(
     p_org_id := v_org, p_leave_type_id := v_type,
-    p_start_date := pg_temp.today() + 20, p_end_date := pg_temp.today() + 21,
+    p_start_date := v_base + 20, p_end_date := v_base + 21,
     p_total_days := 2, p_reason := 'Again', p_is_half_day := false,
     p_half_day_period := null, p_employee_id := v_emp,
     p_contact_while_away := null, p_idempotency_key := 'LEAVE-1');
@@ -1551,7 +1561,7 @@ begin
   begin
     perform public.submit_leave_request(
       p_org_id := v_org, p_leave_type_id := v_type,
-      p_start_date := pg_temp.today() + 20, p_end_date := pg_temp.today() + 22,
+      p_start_date := v_base + 20, p_end_date := v_base + 22,
       p_total_days := 3, p_reason := 'Again', p_is_half_day := false,
       p_half_day_period := null, p_employee_id := v_emp,
       p_contact_while_away := null, p_idempotency_key := 'LEAVE-1');
@@ -1570,7 +1580,7 @@ begin
   begin
     perform public.submit_leave_request(
       p_org_id := v_org, p_leave_type_id := v_type,
-      p_start_date := pg_temp.today() + 20, p_end_date := pg_temp.today() + 21,
+      p_start_date := v_base + 20, p_end_date := v_base + 21,
       p_total_days := 1.5, p_reason := 'Again', p_is_half_day := false,
       p_half_day_period := null, p_employee_id := v_emp,
       p_contact_while_away := null, p_idempotency_key := 'LEAVE-1');
@@ -1590,7 +1600,7 @@ begin
   -- because every other call in this block sends a real boolean.
   v_first := public.submit_leave_request(
     p_org_id := v_org, p_leave_type_id := v_type,
-    p_start_date := pg_temp.today() + 30, p_end_date := pg_temp.today() + 30,
+    p_start_date := v_base + 30, p_end_date := v_base + 30,
     p_total_days := 1, p_reason := 'Whole day', p_is_half_day := null,
     p_half_day_period := null, p_employee_id := v_emp,
     p_contact_while_away := null, p_idempotency_key := 'LEAVE-WHOLE-DAY');

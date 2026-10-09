@@ -50,6 +50,7 @@ declare
 begin
   v_org := pg_temp.test_org('Guaman Pindah & Rakan', array['legal']);
   perform public.create_fiscal_year(v_org, date '2026-01-01');
+  perform pg_temp.open_years(v_org, date '2026-01-01');
   perform pg_temp.sign_in_as(v_owner);
   perform public.setup_legal_module(v_org);
 
@@ -293,6 +294,7 @@ begin
   -- ==================================================================
   v_org := pg_temp.test_org('Wang Klien Sdn Bhd', array['legal']);
   perform public.create_fiscal_year(v_org, date '2026-01-01');
+  perform pg_temp.open_years(v_org, date '2026-01-01');
   perform public.setup_legal_module(v_org);
 
   select b.id into v_ca1 from public.bank_accounts b
@@ -428,6 +430,7 @@ begin
   -- nothing to order -- which is what 0743 is about.
   v_firm_b := pg_temp.test_org('Peguam Dua Akaun', array['legal']);
   perform public.create_fiscal_year(v_firm_b, date '2026-01-01');
+  perform pg_temp.open_years(v_firm_b, date '2026-01-01');
   perform public.setup_legal_module(v_firm_b);
 
   v_office := pg_temp.test_bank_account(v_firm_b, 'Akaun pejabat',
