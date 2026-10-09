@@ -1217,6 +1217,7 @@ function:
 | `close_lead`, `reopen_lead` | `0373` | 12 / 12 | -- | `win_loss.sql` (four before its block: one clean lead, its owner) |
 | `close_opportunity`, `reopen_opportunity` | `0422`, `0373` | 20 / 20 | -- | `win_loss.sql` (twelve before its block: one won and one lost stage per pipeline, one pipeline, the owner) |
 | `close_requisition` | `0394` | 13 / 13 | -- | `vacancies.sql` (nine before its block: one open vacancy, the owner, twenty days old) |
+| `update_leave_contact` | `0395` | 10 / 10 | -- | `leave_requests.sql` (seven before: no draft, none ending today, none missing) |
 
 Every equivalent is written into its mutants file with the reason.
 

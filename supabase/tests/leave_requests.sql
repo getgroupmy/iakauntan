@@ -50,6 +50,7 @@ declare
   v_e_other  uuid;
   v_away     uuid;
   v_past     uuid;
+  v_today    uuid;
   v_far      uuid;
   v_half     uuid;
   v_whole    uuid;
@@ -561,6 +562,29 @@ begin
   perform pg_temp.check_eq('HR may correct it on the employee''s behalf',
     (select contact_while_away from public.leave_requests where id = v_away),
     '+60 19-555 0303');
+
+  -- Leave whose last day is TODAY: somebody is still away to reach. And
+  -- a draft is somebody's plan to be away, so it carries a number too.
+  -- (Both made by HR, and the end date moved by hand, because the dates
+  -- are what is being tested and not how the request got them.)
+  v_today := public.submit_leave_request(
+    v_org, v_unpaid, pg_temp.today() + 40, pg_temp.today() + 40, 1,
+    'Last day today', false, null, v_e_staff);
+  update public.leave_requests
+     set start_date = pg_temp.today(), end_date = pg_temp.today()
+   where id = v_today;
+  perform public.update_leave_contact(v_today, '+60 19-555 0606');
+  perform pg_temp.check_eq('on the last day of leave the number can still be changed',
+    (select contact_while_away from public.leave_requests where id = v_today),
+    '+60 19-555 0606');
+  update public.leave_requests set status = 'draft' where id = v_today;
+  perform public.update_leave_contact(v_today, '+60 19-555 0707');
+  perform pg_temp.check_eq('and on a draft',
+    (select contact_while_away from public.leave_requests where id = v_today),
+    '+60 19-555 0707');
+  perform pg_temp.check_refused('a request that is not there is said so',
+    format('select public.update_leave_contact(%L, %L)', gen_random_uuid(), '+60 1'),
+    'No such leave request.', 'P0002');
 
   -- Leave that has already ended has nobody away to reach, and a
   -- rejected request is not an absence at all. Both refusals name
