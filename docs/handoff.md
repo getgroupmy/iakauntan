@@ -1099,7 +1099,11 @@ page and renumbering would quietly break the reference.
     paying a bill older than a day after the keys are gone. Restated
     from `0412` (production hash 41b08b29..., identical); production
     held no gateway configuration and no gateway payment. Swept 15 / 15.
-    **Still to read back.**
+    **Applied, and read back** (9 October, read-only, after run
+    37931619728 on `4eeec03`, green): recorded; the live
+    `clear_org_payment_gateway` hashes to 92a50998..., the same as the
+    local build; SECURITY DEFINER, executable by `authenticated` and
+    `service_role` as before; the comment names `0779`.
 47. ~~A paid bill cannot be capitalised.~~ **Raised and answered 9
     October: accept paid bills. Built in `0780`.** `capitalise_bill_line`
     and `report_uncapitalised_purchases` (`0382`) asked for status
