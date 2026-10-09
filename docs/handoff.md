@@ -1149,7 +1149,14 @@ page and renumbering would quietly break the reference.
     NOT COVERED, named so nobody assumes it is: no function voids a
     BILL, so a wrong posted bill is undone only by a purchase credit
     note against it.
-    **Still to read back.**
+    **Applied, and read back** (9 October, read-only, after run
+    37939339959 on `2ab0374`, green): recorded; the live
+    `app.document_state_is_the_databases` hashes to 348a8825..., the
+    same as the local build; NOT a definer, as intended, executable by
+    nobody but its owner; the trigger `state_is_the_databases` fires
+    BEFORE INSERT OR UPDATE on both document tables; the comment names
+    `0781`. Production's Postgres log from the deploy to 14:10 UTC held
+    no refusal by it -- the one match was the migration's own text.
 49. ~~A year that starts late in a month has days in no period.~~
     **Raised and answered 9 October: tile the periods. Built in
     `0782`.** `create_fiscal_year` and `create_previous_fiscal_year`
