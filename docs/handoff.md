@@ -1232,6 +1232,20 @@ page and renumbering would quietly break the reference.
     so. Restated from `0047` (production hash 8e1d0d3c..., identical).
     Rows already written keep the address they recorded. Swept 10 / 10.
     **Still to read back.**
+53. ~~A disconnected bank feed cannot be reconnected, and resuming it
+    says connected with no key.~~ **Raised and answered 9 October: fix
+    now. Built in `0786`.** Dormant -- no connector exists and
+    production held no feed -- but the SQL is meant to be ready for the
+    first one. `connect_bank_feed` re-armed only a 'failed' feed, so a
+    new key on a disconnected ('revoked') one was stored and the feed
+    stayed off; `set_bank_feed_paused(false)` marked the same feed
+    'connected' with no key -- both measured. Now a new key brings a
+    disconnected feed back, error cleared, and pausing or resuming a
+    disconnected feed is refused: "That feed was disconnected. Connect
+    it again with its key." Restated from `0567` (production hashes
+    cabbefce... and 71af3874..., identical). Swept 15 / 15, and the
+    disconnect writer 6 / 6 in its own file.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -1437,7 +1451,8 @@ function:
 | `detach_company_from_firm` | `0450` | 8 / 8 | -- | `firm_portfolio.sql` (three before its block: every detach by somebody who owned the company AND ran the firm, so "anybody ends it" survived; no second client; the count unread) |
 | `invite_firm_member` | `0483` | 13 / 13 | -- | `firm_invitations.sql` (seven before its block: every address lower case and unspaced; the sender, the fortnight and a suspended member's return unread) |
 | `join_company_group` | `0132` | 5 / 5 | -- | `branches_and_groups.sql` (two before: the stranger tried a company they did not administer, so the group's own guard was never reached; noted: an empty group's maker is not consulted) |
-| `connect_bank_feed`, `disconnect_bank_feed`, `set_bank_feed_paused` | `0567` | 18 / 18 | -- | `bank_feed.sql` (six before its block: one well-formed feed; found: a disconnected feed cannot be reconnected, and resuming it says connected with no key -- dormant, no connector exists) |
+| `connect_bank_feed`, `set_bank_feed_paused` | `0786` | 15 / 15 | -- | `bank_feed.sql` (with disconnect, six of 18 before its block: one well-formed feed; raised: a disconnected feed could not be reconnected, and resuming one said connected with no key -- `0786`) |
+| `disconnect_bank_feed` | `0567` | 6 / 6 | -- | `bank_feed.sql` (split from the two above when `0786` restated them) |
 | `app.document_state_is_the_databases` | `0781` | 10 / 10 | -- | `posted_document_is_frozen.sql` (new in `0781`; the depth mutants killed by a real payment, which replaced a control that wrote the figures itself) |
 | `app.project_closes_only_when_billed` | `0778` | 11 / 11 | -- | `project_budget.sql` (new in `0778`; SECURITY DEFINER flipped by hand, equivalent while every member reads every time entry) |
 | `close_lead`, `reopen_lead` | `0373` | 12 / 12 | -- | `win_loss.sql` (four before its block: one clean lead, its owner) |

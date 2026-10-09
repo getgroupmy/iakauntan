@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-16438
+16470
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1148,3 +1148,8 @@
 # signature is the caller's, and an unreadable one never fails a write;
 # client_address.sql is new. run_locally.sh at 0785: 387 files, 16438
 # assertions.
+#
+# 9 October: 16470. detach_company_from_firm, invite_firm_member,
+# join_company_group and the three bank feed writers swept, and 0786: a
+# disconnected feed comes back by its key and is neither paused nor
+# resumed. run_locally.sh at 0786: 387 files, 16470 assertions.

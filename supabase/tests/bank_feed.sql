@@ -400,6 +400,26 @@ begin
   perform pg_temp.check_true('a disconnect forgets where the feed had got to',
     (select cursor from public.bank_feeds where bank_account_id = v_acct) is null);
 
+  -- `0786`. What comes after a disconnect: not resuming, which would
+  -- mark it running with no key, nor pausing, which was the same road
+  -- one step longer -- but its key.
+  perform pg_temp.check_refused('a disconnected feed is not resumed',
+    format('select public.set_bank_feed_paused(%L, false)', v_acct),
+    'That feed was disconnected. Connect it again with its key.', '22023');
+  perform pg_temp.check_refused('nor paused',
+    format('select public.set_bank_feed_paused(%L, true)', v_acct),
+    'That feed was disconnected. Connect it again with its key.', '22023');
+  perform public.connect_bank_feed(v_acct, 'maybank', null, null, 'ACC-3');
+  perform pg_temp.check_eq('a save without a key leaves it disconnected',
+    (select status from public.bank_feeds where bank_account_id = v_acct),
+    'revoked');
+  update public.bank_feeds set last_error = 'Left the bank'
+   where bank_account_id = v_acct;
+  perform public.connect_bank_feed(v_acct, 'maybank', 'key-3', 'secret-3');
+  perform pg_temp.check_eq('and its key brings it back, clean',
+    (select status || '|' || coalesce(last_error, 'none') from public.bank_feeds
+      where bank_account_id = v_acct), 'connected|none');
+
   perform pg_temp.sign_out();
 end $$;
 
