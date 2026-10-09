@@ -448,6 +448,37 @@ begin
     (select string_agg(distinct k.status::text, ',') from public.pos_kitchen_tickets k
       where k.sale_id = v_bill), 'served');
 
+  -- `void_pos_sale_line`, rule by rule (`mutants/void_pos_sale_line.py`):
+  -- five rules neither this file nor `pos_fnb.sql` asserted -- the line
+  -- that does not exist, somebody who may not sell, a line on a bill that
+  -- is no longer parked, "other" without a word, and the note trimmed.
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_refused('a line that does not exist is said so',
+    format('select public.void_pos_sale_line(%L, %L)', gen_random_uuid(), 'wrong_item'),
+    'No such line.', 'P0002');
+  -- The bill nobody cooked from, written off above: its line is still on
+  -- it, and a bill that is no longer parked is not edited.
+  perform pg_temp.check_refused('nor a line on a bill already written off',
+    format('select public.void_pos_sale_line(%L, %L)',
+           (select l.id from public.pos_sale_lines l where l.sale_id = v_free limit 1),
+           'wrong_item'),
+    'That bill is voided and cannot be edited.%', '23514');
+  v_bill := public.open_pos_sale(v_reg);
+  perform public.add_pos_sale_line(v_bill, v_item, 1, 8.00);
+  select l.id into v_line from public.pos_sale_lines l where l.sale_id = v_bill;
+  perform pg_temp.sign_in_as(pg_temp.another_user('luar-baris@example.test'));
+  perform pg_temp.check_refused('somebody outside the company voids no line',
+    format('select public.void_pos_sale_line(%L, %L)', v_line, 'wrong_item'),
+    'not permitted to sell for this organization', '42501');
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_refused('"other" needs a word',
+    format('select public.void_pos_sale_line(%L, %L, %L)', v_line, 'other', '   '),
+    'Say what happened.', '23514');
+  perform public.void_pos_sale_line(v_line, 'other', '  dropped the plate  ');
+  perform pg_temp.check_eq('and the word is kept without its spaces',
+    (select v.note from public.pos_sale_line_voids v where v.sale_id = v_bill),
+    'dropped the plate');
+
   raise notice 'point of sale voiding: all assertions passed';
 end;
 $$;

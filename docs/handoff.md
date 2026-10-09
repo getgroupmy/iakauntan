@@ -1089,6 +1089,7 @@ function:
 | `run_item_conversion` | `0422` | 16 / 16 | -- | `stock_transfers.sql` (eight only after its rule-by-rule block) |
 | `confirm_manufacturing_order` | `0133` | 11 / 11 | -- | `manufacturing.sql` (two only after they were asserted) |
 | `void_pos_sale` | `0247` | 16 / 16 | -- | `pos_void_permission.sql` (four only after they were asserted) |
+| `void_pos_sale_line` | `0244` | 12 / 12 | -- | `pos_fnb.sql` + `pos_void_permission.sql` (five only after its rule-by-rule assertions) |
 
 Every equivalent is written into its mutants file with the reason.
 
