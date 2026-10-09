@@ -873,6 +873,7 @@ function:
 | `raise_strata_charges` | `0585` | 19 / 19 | -- | `property.sql` (thirteen only after its rule-by-rule block; it had no assertion that a period is not raised twice) |
 | `transfer_document` | `0646` | 31 / 31 | -- | six files: 18 by `transfer.sql`, the other 13 each by one of `approvals`, `document_dates`, `prospect_quotation`, `transfer_carries_the_price_agreed`, `transfer_shapes` (listed in the mutants file) |
 | `record_statutory_remittance`, `report_statutory_remittances`, `report_statutory_due` | `0767` | 16 / 16 | -- | `statutory_remittances.sql` (the sweep found 34; one more assertion for the second recording's reference) |
+| `mark_payroll_paid` | `0051` | 5 / 5 | -- | `statutory.sql` (one only after asserting `paid_at`) |
 
 Every equivalent is written into its mutants file with the reason.
 

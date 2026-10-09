@@ -1354,6 +1354,12 @@ begin
   perform public.mark_payroll_paid(v_run);
   perform pg_temp.check_true('a posted run can be marked paid',
     (select status = 'paid' from public.payroll_runs where id = v_run));
+  -- And stamped with when. A run marked paid with no date says the
+  -- transfer left the bank and not on which day -- the day a late
+  -- remittance is measured from. Swept: without this, dropping
+  -- `paid_at` from `mark_payroll_paid` passed every assertion here.
+  perform pg_temp.check_true('and is stamped with when it was paid',
+    (select paid_at = now() from public.payroll_runs where id = v_run));
 
   -- Paying twice is how an employee gets paid twice.
   begin
