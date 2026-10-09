@@ -1039,6 +1039,83 @@ begin
   v_run := public.raise_strata_charges(v_scheme, date '2026-04-01', date '2026-06-30');
   perform pg_temp.check_true('a voided run does not hold its period', v_run is not null);
 
+  -- `void_strata_charge_run`, rule by rule. The one call above was all
+  -- that stood behind it: a mutation sweep
+  -- (`mutants/void_strata_charge_run.py`) found its refusals, its hold,
+  -- which invoices it voids and what it records on them and on the run
+  -- asserted nowhere -- the rent run's twin had them all in `property.sql`
+  -- and this had none.
+  declare
+    v_old uuid; v_q3 uuid; v_q3_no text; v_held uuid;
+  begin
+    select id into v_old from public.strata_charge_runs
+     where scheme_id = v_scheme and voided_at is not null;
+    perform pg_temp.check_eq('the run undone above voided both its invoices',
+      (select count(*)::integer from public.strata_charge_lines l
+         join public.sales_documents d on d.id = l.invoice_id
+        where l.run_id = v_old and d.status = 'void'), 2);
+    perform pg_temp.check_true('and says who undid it, when, and why',
+      (select voided_by = v_owner and voided_at = now()
+              and void_reason = 'wrong quarter'
+         from public.strata_charge_runs where id = v_old));
+
+    perform pg_temp.check_refused('a charge run that does not exist is said so',
+      format('select public.void_strata_charge_run(%L, %L)', gen_random_uuid(), 'gone'),
+      'No such charge run.', 'P0002');
+    perform pg_temp.sign_in_as(v_viewer);
+    perform pg_temp.check_refused('a viewer may not undo charges',
+      format('select public.void_strata_charge_run(%L, %L)', v_run, 'not mine'),
+      'Insufficient privileges to void a charge run', '42501');
+    perform pg_temp.sign_in_as(v_owner);
+    perform pg_temp.check_refused('not without saying why',
+      format('select public.void_strata_charge_run(%L, %L)', v_run, '   '),
+      'Say why.%', '23514');
+    perform pg_temp.check_refused('nor twice',
+      format('select public.void_strata_charge_run(%L, %L)', v_old, 'again'),
+      'That run was already voided on %', '23514');
+
+    -- Paid holds the run; so does accepted by LHDN; and nothing is
+    -- voided on the way to saying so.
+    select l.invoice_id into v_held from public.strata_charge_lines l
+     where l.run_id = v_run and l.unit_id = v_u1;
+    update public.sales_documents set paid_amount = 1.00 where id = v_held;
+    perform pg_temp.check_refused('a paid invoice holds the charge run',
+      format('select public.void_strata_charge_run(%L, %L)', v_run, 'too late'),
+      'This run cannot be undone: 1 of its invoices have been paid or accepted by LHDN.%',
+      '23514');
+    update public.sales_documents
+       set paid_amount = 0, einvoice_status = 'valid' where id = v_held;
+    perform pg_temp.check_refused('and so does one LHDN accepted',
+      format('select public.void_strata_charge_run(%L, %L)', v_run, 'too late'),
+      'This run cannot be undone: 1 of its invoices have been paid or accepted by LHDN.%',
+      '23514');
+    perform pg_temp.check_eq('and nothing was voided on the way to refusing',
+      (select count(*)::integer from public.strata_charge_lines l
+         join public.sales_documents d on d.id = l.invoice_id
+        where l.run_id = v_run and d.status = 'void'), 0);
+
+    -- It holds THIS run. The next quarter comes apart while this one
+    -- stands, and only its own two invoices go.
+    v_q3 := public.raise_strata_charges(v_scheme, date '2026-07-01', date '2026-09-30');
+    select run_no into v_q3_no from public.strata_charge_runs where id = v_q3;
+    perform pg_temp.check_eq('another run''s accepted invoice does not hold this one',
+      public.void_strata_charge_run(v_q3, '  charged at the wrong rate  '), 2);
+    perform pg_temp.check_eq('and no standing run lost an invoice',
+      (select count(*)::integer from public.strata_charge_lines l
+         join public.strata_charge_runs r on r.id = l.run_id
+         join public.sales_documents d on d.id = l.invoice_id
+        where r.scheme_id = v_scheme and r.voided_at is null and d.status = 'void'), 0);
+    perform pg_temp.check_eq('each voided invoice says which run and why',
+      (select count(*)::integer from public.strata_charge_lines l
+         join public.sales_documents d on d.id = l.invoice_id
+        where l.run_id = v_q3
+          and d.internal_notes like '%Voided: Charge run ' || v_q3_no
+                || ' voided: charged at the wrong rate%'), 2);
+    perform pg_temp.check_eq('and the run keeps why, without the spaces',
+      (select void_reason from public.strata_charge_runs where id = v_q3),
+      'charged at the wrong rate');
+  end;
+
   -- A chargeable parcel with nobody to invoice stops the whole run.
   insert into public.property_units
     (org_id, site_id, unit_no, unit_type, share_units)

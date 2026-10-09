@@ -961,6 +961,7 @@ function:
 | `void_contra` | `0421` | 14 / 15 | 1 (the reversal left to `reverse_gl_entry`'s default date, which is today) | `contra.sql` (six only after its rule-by-rule block; its comment that the sales half "cannot be" asserted was wrong -- an access type does it) |
 | `cancel_pdc` | `0421` | 12 / 13 | 1 (the reversal left to `reverse_gl_entry`'s default date, which is today) | `post_dated_cheques.sql` (ten only after its rule-by-rule block) |
 | `void_rent_run` | `0585` | 16 / 16 | -- | `property.sql` (nine only after its rule-by-rule assertions) |
+| `void_strata_charge_run` | `0585` | 16 / 16 | -- | `property.sql` (fourteen only after its rule-by-rule assertions; one call stood behind it) |
 
 Every equivalent is written into its mutants file with the reason.
 
