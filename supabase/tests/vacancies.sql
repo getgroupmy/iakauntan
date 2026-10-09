@@ -348,4 +348,54 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Closing a vacancy, rule by rule
+--
+-- The closes above are by the owner, of an open vacancy opened twenty
+-- days ago -- so a missing vacancy, somebody who is not HR, a FILLED
+-- vacancy, and a vacancy cancelled on the day it opened all went
+-- unasked.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid := pg_temp.vac_org('Tutup Kekosongan Sdn Bhd');
+  v_mgr   uuid;
+  v_r     uuid;
+  v_full  uuid;
+  v_clerk uuid;
+  v_today date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
+begin
+  v_mgr := pg_temp.vac_employee(v_org, 'E1', 'Puan Rohani');
+  insert into public.job_requisitions
+    (org_id, requisition_no, title, headcount, hiring_manager_id)
+  values (v_org, 'REQ-T1', 'Driver', 1, v_mgr) returning id into v_r;
+  perform public.open_requisition(v_r, v_today);
+  -- Cancelled the day it opened: a mistake caught at once is allowed.
+  perform public.close_requisition(v_r, 'cancelled', v_today);
+  perform pg_temp.check_eq('a vacancy can be cancelled on the day it opened',
+    (select status::text from public.job_requisitions where id = v_r), 'cancelled');
+
+  insert into public.job_requisitions
+    (org_id, requisition_no, title, headcount, hiring_manager_id)
+  values (v_org, 'REQ-T2', 'Clerk', 1, v_mgr) returning id into v_full;
+  perform public.open_requisition(v_full, v_today - 10);
+  update public.job_requisitions set status = 'filled' where id = v_full;
+  perform pg_temp.check_refused('a filled vacancy is not then cancelled',
+    format('select public.close_requisition(%L)', v_full),
+    'That requisition is already filled.', '22023');
+
+  perform pg_temp.check_refused('a vacancy that does not exist is said so',
+    format('select public.close_requisition(%L)', gen_random_uuid()),
+    'No such requisition.', 'P0002');
+
+  v_clerk := pg_temp.another_user('kerani@tutupkekosongan.test');
+  insert into public.org_members (org_id, user_id, role, status)
+  values (v_org, v_clerk, 'accounts_clerk', 'active');
+  perform pg_temp.sign_in_as(v_clerk);
+  perform pg_temp.check_refused('somebody who is not HR does not close a vacancy',
+    format('select public.close_requisition(%L, %L)', v_full, 'on_hold'),
+    'not permitted to close a vacancy', '42501');
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+end $$;
+
 rollback;
