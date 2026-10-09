@@ -313,4 +313,100 @@ begin
     '%not permitted to import journals%', '42501');
 end $$;
 
+-- ---------------------------------------------------------------------
+-- What a committed line carries, rule by rule
+--
+-- Every file above names accounts by number, which has no case, names
+-- no contact, gives every line its entry's description and every
+-- entry a description, and has nothing below a sen. So an importer
+-- that looked codes up case-sensitively, dropped a line's own
+-- description, left an undescribed entry blank or posted a fraction of
+-- a sen built the same ledger -- and nothing read the `committed`
+-- flag the screen shows.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org  uuid := pg_temp.j_org('Baris Demi Baris Sdn Bhd');
+  v_sus  uuid;
+  v_cust uuid;
+  v_gone uuid;
+  v_out  jsonb;
+  v_e1   uuid;
+begin
+  -- An account and a contact whose codes have letters in them, so
+  -- their case can be wrong in the file.
+  insert into public.accounts
+    (org_id, code, name, account_type, account_subtype, is_group, parent_id, sort_order)
+  select a.org_id, 'SUS-A', 'Suspense, migration', a.account_type,
+         a.account_subtype, false, a.parent_id, a.sort_order + 1
+    from public.accounts a where a.org_id = v_org and a.code = '6900'
+  returning id into v_sus;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'CUST-A', 'Syarikat Lama', 'customer') returning id into v_cust;
+  insert into public.contacts (org_id, code, name, contact_type, deleted_at)
+  values (v_org, 'GONE-1', 'Dahulu Sdn Bhd', 'customer', now()) returning id into v_gone;
+
+  v_out := public.import_journals(v_org, jsonb_build_array(
+    jsonb_build_object('entry_no', 'JV-A1', 'entry_date', '2026-03-01',
+      'account_code', 'sus-a', 'description', 'Alpha', 'debit', '100.004',
+      'contact_code', 'cust-a'),
+    jsonb_build_object('entry_no', 'JV-A1', 'entry_date', '2026-03-01',
+      'account_code', '1110', 'description', 'Beta', 'credit', '100.00'),
+    jsonb_build_object('entry_no', 'JV-A2', 'entry_date', '2026-03-02',
+      'account_code', '6900', 'debit', '20.00'),
+    jsonb_build_object('entry_no', 'JV-A2', 'entry_date', '2026-03-02',
+      'account_code', '1110', 'credit', '19.996')
+  ), false);
+  perform pg_temp.check_true('a preview says it committed nothing',
+    not (v_out ->> 'committed')::boolean);
+
+  v_out := public.import_journals(v_org, jsonb_build_array(
+    jsonb_build_object('entry_no', 'JV-A1', 'entry_date', '2026-03-01',
+      'account_code', 'sus-a', 'description', 'Alpha', 'debit', '100.004',
+      'contact_code', 'cust-a'),
+    jsonb_build_object('entry_no', 'JV-A1', 'entry_date', '2026-03-01',
+      'account_code', '1110', 'description', 'Beta', 'credit', '100.00'),
+    jsonb_build_object('entry_no', 'JV-A2', 'entry_date', '2026-03-02',
+      'account_code', '6900', 'debit', '20.00'),
+    jsonb_build_object('entry_no', 'JV-A2', 'entry_date', '2026-03-02',
+      'account_code', '1110', 'credit', '19.996')
+  ), true);
+  perform pg_temp.check_true('a commit says it committed',
+    (v_out ->> 'committed')::boolean);
+  select id into v_e1 from public.gl_entries
+   where org_id = v_org and import_ref = 'JV-A1';
+
+  perform pg_temp.check_eq('an account code in the wrong case finds the account',
+    (select l.debit from public.gl_lines l
+      where l.entry_id = v_e1 and l.account_id = v_sus), 100.00);
+  perform pg_temp.check_true('and a contact code in the wrong case finds the contact',
+    (select l.contact_id from public.gl_lines l
+      where l.entry_id = v_e1 and l.account_id = v_sus) = v_cust);
+  perform pg_temp.check_eq('each line keeps its own description',
+    (select l.description from public.gl_lines l
+      where l.entry_id = v_e1 and l.account_id <> v_sus), 'Beta');
+  perform pg_temp.check_eq('an entry with no description is named for its old number',
+    (select e.description from public.gl_entries e
+      where e.org_id = v_org and e.import_ref = 'JV-A2'), 'Imported journal JV-A2');
+  perform pg_temp.check_eq('and a credit below the sen is rounded to it',
+    (select sum(l.credit) from public.gl_lines l
+       join public.gl_entries e on e.id = l.entry_id
+      where e.org_id = v_org and e.import_ref = 'JV-A2'), 20.00);
+
+  -- A deleted contact is never put on a line. Whether the file is
+  -- refused for naming one or the line posts without it, the one thing
+  -- that may not happen is the ledger pointing at somebody deleted.
+  begin
+    perform public.import_journals(v_org, jsonb_build_array(
+      jsonb_build_object('entry_no', 'JV-A3', 'entry_date', '2026-03-03',
+        'account_code', '6900', 'debit', '5.00', 'contact_code', 'gone-1'),
+      jsonb_build_object('entry_no', 'JV-A3', 'entry_date', '2026-03-03',
+        'account_code', '1110', 'credit', '5.00')), true);
+  exception when others then
+    null;
+  end;
+  perform pg_temp.check_eq('a deleted contact is never named on a line',
+    (select count(*) from public.gl_lines l where l.contact_id = v_gone), 0);
+end $$;
+
 rollback;

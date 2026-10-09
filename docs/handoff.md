@@ -1125,6 +1125,7 @@ function:
 | `begin_gateway_payment` | `0297` | 10 / 11 | 1 | `gateway_payments.sql` (one before its block: every start was lower-case, trimmed and untaxed; equivalent: every platform invoice is written in MYR) |
 | `begin_shared_payment` | `0413` | 10 / 10 | -- | `shared_invoice_payment.sql` (three before its block: all sandbox, clean references, whole ringgit, no checkout page; raised: one acquirer active in both modes) |
 | `set_org_payment_gateway` | `0773` | 13 / 14 | 1 | `tenant_gateway_credentials.sql` (the mode and acquirer refusals were asserted by SQLSTATE, which the table's own check and foreign key raise too; equivalent: switching the saved row off before the upsert writes it back) |
+| `import_journals` | `0633` | 14 / 16 | 2 | `import_journals.sql` (eight before its block: numeric account codes, no contacts, no undescribed entries, nothing below the sen; equivalent: `create_gl_entry_internal` rounds every line itself; raised: an unknown contact code is dropped silently) |
 
 Every equivalent is written into its mutants file with the reason.
 
