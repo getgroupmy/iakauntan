@@ -325,4 +325,121 @@ begin
       where polrelid = 'public.einvoice_credentials'::regclass), 0);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- One acquirer, one mode at a time  (`0773`)
+--
+-- Both modes are HELD at once, as above; before `0773` both could also
+-- be SWITCHED ON at once, and then the pay link picked between them by
+-- row order. A sandbox bill could settle a real invoice, or a live
+-- payment fail its signature check and never settle. Switching a mode
+-- on now switches the same acquirer's other mode off -- and nothing
+-- else: not another acquirer, not another company, and switching a
+-- mode OFF leaves the other where it was.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid;
+  v_them  uuid;
+  v_owner uuid := pg_temp.test_user();
+  v_admin uuid := pg_temp.another_user('pentadbir@satumod.test');
+begin
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Satu Mod Sdn Bhd');
+  perform pg_temp.allow_many_companies();
+  v_them := pg_temp.test_org('Syarikat Jiran Sdn Bhd');
+  perform pg_temp.sign_in_as(v_owner);
+
+  perform public.set_org_payment_gateway(
+    v_org, 'billplz', 'sandbox', 'sk_test', 'col_t', 'xsig_t', true);
+  perform public.set_org_payment_gateway(
+    v_org, 'toyyibpay', 'sandbox', 'tp_test', 'cat_t', 'tsig_t', true);
+  perform public.set_org_payment_gateway(
+    v_them, 'billplz', 'sandbox', 'sk_theirs', 'col_x', 'xsig_x', true);
+
+  -- Saved with the live switch OFF: the sandbox stays on.
+  perform public.set_org_payment_gateway(
+    v_org, 'billplz', 'production', 'sk_live', 'col_l', 'xsig_l', false);
+  perform pg_temp.check_true('storing live keys switched off leaves the sandbox on',
+    (select is_active from public.org_payment_gateways
+      where org_id = v_org and gateway_code = 'billplz' and mode = 'sandbox'));
+
+  -- Going live, by somebody else, so who switched the sandbox off is
+  -- a person and not merely whoever set it up.
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_org, v_admin, 'admin', 'active', now());
+  perform pg_temp.sign_in_as(v_admin);
+  perform public.set_org_payment_gateway(
+    v_org, 'billplz', 'production', null, null, null, true);
+  perform pg_temp.sign_in_as(v_owner);
+
+  perform pg_temp.check_true('going live switches the live keys on',
+    (select is_active from public.org_payment_gateways
+      where org_id = v_org and gateway_code = 'billplz' and mode = 'production'));
+  perform pg_temp.check_true('and the sandbox off',
+    not (select is_active from public.org_payment_gateways
+          where org_id = v_org and gateway_code = 'billplz' and mode = 'sandbox'));
+  perform pg_temp.check_true('saying who did it',
+    (select updated_by from public.org_payment_gateways
+      where org_id = v_org and gateway_code = 'billplz' and mode = 'sandbox') = v_admin);
+  perform pg_temp.check_eq('keeping its keys, so going back is a switch and not a re-keying',
+    (select api_key from public.org_payment_gateways
+      where org_id = v_org and gateway_code = 'billplz' and mode = 'sandbox'), 'sk_test');
+  perform pg_temp.check_true('another acquirer''s sandbox is left on',
+    (select is_active from public.org_payment_gateways
+      where org_id = v_org and gateway_code = 'toyyibpay' and mode = 'sandbox'));
+  perform pg_temp.check_true('and so is another company''s',
+    (select is_active from public.org_payment_gateways
+      where org_id = v_them and gateway_code = 'billplz' and mode = 'sandbox'));
+
+  -- Off is off, and nothing else.
+  perform public.set_org_payment_gateway(
+    v_org, 'billplz', 'production', null, null, null, false);
+  perform pg_temp.check_eq('switching live off switches nothing on',
+    (select count(*) from public.org_payment_gateways
+      where org_id = v_org and gateway_code = 'billplz' and is_active), 0);
+
+  -- And back to the sandbox, which takes the live keys off with it.
+  perform public.set_org_payment_gateway(
+    v_org, 'billplz', 'production', null, null, null, true);
+  perform public.set_org_payment_gateway(
+    v_org, 'billplz', 'sandbox', null, null, null, true);
+  perform pg_temp.check_eq('back in the sandbox, only the sandbox is on',
+    (select string_agg(mode, ',') from public.org_payment_gateways
+      where org_id = v_org and gateway_code = 'billplz' and is_active), 'sandbox');
+
+  -- Saving keys without touching the switch leaves the switch where it
+  -- was. A screen correcting a collection id is not a decision to stop
+  -- taking payments.
+  perform public.set_org_payment_gateway(v_org, 'billplz', 'sandbox', null, 'col_t2');
+  perform pg_temp.check_true('saving keys alone leaves a mode switched on',
+    (select is_active from public.org_payment_gateways
+      where org_id = v_org and gateway_code = 'billplz' and mode = 'sandbox'));
+  perform public.set_org_payment_gateway(v_org, 'billplz', 'sandbox', 'sk_test2');
+  perform pg_temp.check_eq('and a new key alone keeps the collection it had',
+    (select collection_ref from public.org_payment_gateways
+      where org_id = v_org and gateway_code = 'billplz' and mode = 'sandbox'), 'col_t2');
+
+  -- The two refusals above are caught by SQLSTATE alone, and the
+  -- table's own check and foreign key raise the same two: with either
+  -- guard gone, they passed. By the sentence, which is the guard's.
+  perform pg_temp.check_refused('a third mode is refused by the function, in words',
+    format('select public.set_org_payment_gateway(%L, %L, %L, %L)',
+           v_org, 'billplz', 'live', 'sk_1'),
+    'Mode must be sandbox or production, not live', '23514');
+  perform pg_temp.check_refused('and an acquirer nobody knows, in words',
+    format('select public.set_org_payment_gateway(%L, %L, %L, %L)',
+           v_org, 'not_an_acquirer', 'sandbox', 'sk_1'),
+    'not_an_acquirer is not an acquirer this platform knows about.', '23503');
+
+  -- The same rule for anything that writes the table without the
+  -- function: the index refuses the second switch outright.
+  begin
+    update public.org_payment_gateways set is_active = true
+     where org_id = v_org and gateway_code = 'billplz' and mode = 'production';
+    raise exception 'FAIL: one acquirer was switched on in two modes';
+  exception when unique_violation then
+    raise notice 'ok   and nothing can switch one acquirer on twice';
+  end;
+end $$;
+
 rollback;

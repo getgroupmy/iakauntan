@@ -926,6 +926,28 @@ page and renumbering would quietly break the reference.
     the FUTURE -- a journal for a van bought on a day that has not
     happened. Nothing fails on it; it is a demo blemish of the same
     family, worth raising with the other small ones.
+40. ~~One acquirer can be switched on in sandbox AND production.~~
+    **Raised and answered 9 October: one mode per acquirer. Built in
+    `0773`.** Found sweeping `begin_shared_payment`, and measured
+    locally: with Billplz on in both modes, `shared_payment_intent`
+    returned two rows, the share link offered Billplz twice,
+    `pay-invoice` built the bill from `rows[0]`, `begin_shared_payment`
+    recorded its own first row, and the callback verifies with the
+    signature key of the RECORDED mode. So a sandbox page could settle a
+    real invoice with a real receipt, or a live payment fail its
+    signature and never settle. Now switching a mode on in
+    `set_org_payment_gateway` switches the same acquirer's other mode
+    off (that company, that acquirer, saying who), and a partial unique
+    index `org_payment_gateways_one_active_mode (org_id, gateway_code)
+    where is_active` refuses the double state by any other road. The
+    three readers needed no change. Production held NO acquirer
+    configuration (read only, 9 October), so the clean-up in the
+    migration -- keep the live keys on where both are -- does nothing
+    there. Restated from `0412`, whose text production runs exactly
+    (1d81a89c..., grants `authenticated` and `service_role`). Swept
+    13 / 14, one equivalent. The settings card already shows one mode
+    at a time and reloads after saving, so it shows the other mode
+    switched off without a change. **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -1102,6 +1124,7 @@ function:
 | `adjust_loyalty_points` (keyed) | `0736` | 6 / 6 | -- | `idempotency.sql` (four before: no key was reused for a different request, so points and note could drop out of it) |
 | `begin_gateway_payment` | `0297` | 10 / 11 | 1 | `gateway_payments.sql` (one before its block: every start was lower-case, trimmed and untaxed; equivalent: every platform invoice is written in MYR) |
 | `begin_shared_payment` | `0413` | 10 / 10 | -- | `shared_invoice_payment.sql` (three before its block: all sandbox, clean references, whole ringgit, no checkout page; raised: one acquirer active in both modes) |
+| `set_org_payment_gateway` | `0773` | 13 / 14 | 1 | `tenant_gateway_credentials.sql` (the mode and acquirer refusals were asserted by SQLSTATE, which the table's own check and foreign key raise too; equivalent: switching the saved row off before the upsert writes it back) |
 
 Every equivalent is written into its mutants file with the reason.
 

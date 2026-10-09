@@ -815,6 +815,19 @@ begin
   perform pg_temp.check_eq('pointed at the newest page',
     (select checkout_url from public.sales_gateway_payments where id = v_pay),
     'https://www.billplz.com/bills/live_1b');
+
+  -- `0773`. Switching the sandbox back on, for a test, used to leave
+  -- the live keys on too: the link then offered Billplz twice, and the
+  -- next payment went to whichever row the database returned first.
+  perform public.set_org_payment_gateway(
+    v_org, 'billplz', 'sandbox', 'sk_test', 'col_test', 'xsig_test', true);
+  perform public.set_org_payment_settlement(
+    v_org, 'billplz', 'sandbox', v_bank, '03');
+  perform pg_temp.check_eq('with the sandbox switched on, the acquirer is offered once',
+    (select count(*) from public.shared_payment_options(v_token)), 1);
+  perform pg_temp.check_eq('and the payment has one mode to start in',
+    (select string_agg(mode, ',') from app.shared_payment_intent(v_token, 'billplz')),
+    'sandbox');
 end $$;
 
 

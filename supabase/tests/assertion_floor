@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-15976
+16169
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1084,3 +1084,10 @@
 # 9 October: 15976. set_fiscal_period_status swept with a rule-by-rule
 # block, and 0772, a statement line matched only to what went through
 # its own account. run_locally.sh at 0772: 386 files, 15976 assertions.
+#
+# 9 October: 16169. Rule-by-rule blocks for split_pos_sale,
+# merge_pos_sales, unmatch_bank_transaction, reopen_bank_reconciliation,
+# void_bank_transfer, void_deposit, adjust_loyalty_points (both),
+# begin_gateway_payment and begin_shared_payment; and 0773, one
+# acquirer switched on in one mode at a time. run_locally.sh at 0773:
+# 386 files, 16169 assertions.
