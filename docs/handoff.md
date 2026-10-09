@@ -920,6 +920,7 @@ function:
 | `apply_tax_submission`, `dismiss_tax_submission` | `0626` | 8 / 8 | -- | `tax_details.sql` (four only after its rule-by-rule block) |
 | `create_payroll_run` | `0769` | 3 / 4 | 1 (another company's run cannot name this period: `payroll_runs_period_same_org`) | `payroll_periods.sql` |
 | `platform_publish_statutory_schedule` | `0404` | 16 / 16 | -- | `statutory_schedules.sql` (five only after its rule-by-rule block) + `hr_reference.sql` (two) |
+| `consolidate_pos_einvoices` | `0501` | 8 / 8 | -- | `pos_einvoice_consolidation.sql` (7) + `pos.sql` (1). Its `p_month` default is on the UTC clock -- see the mutants file; NOT YET RAISED, the app always passes the month |
 
 Every equivalent is written into its mutants file with the reason.
 
