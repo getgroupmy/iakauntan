@@ -78,8 +78,11 @@ begin
 
   select id into v_cash from public.accounts
    where org_id = v_org and code = '1120';
+  -- The first revenue LEAF: unordered and unfiltered this was 4000
+  -- REVENUE, a heading, which `0765` refuses a line on.
   select id into v_fees from public.accounts
-   where org_id = v_org and account_type = 'revenue' limit 1;
+   where org_id = v_org and account_type = 'revenue' and not is_group
+   order by code limit 1;
 
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'CL1', 'Puan Aminah', 'customer') returning id into v_c1;
@@ -334,8 +337,11 @@ begin
 
   select id into v_cash from public.accounts
    where org_id = v_org and code = '1120';
+  -- The first revenue LEAF: unordered and unfiltered this was 4000
+  -- REVENUE, a heading, which `0765` refuses a line on.
   select id into v_fees from public.accounts
-   where org_id = v_org and account_type = 'revenue' limit 1;
+   where org_id = v_org and account_type = 'revenue' and not is_group
+   order by code limit 1;
 
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'CL1', 'A client', 'customer') returning id into v_c;

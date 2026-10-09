@@ -36,6 +36,12 @@ begin;
 -- something in it. Revenue 1000, cost of sales 400, an expense of 100:
 -- gross profit 600, net profit 500 -- three figures that cannot be
 -- mistaken for one another.
+--
+-- On 4100 and 5100, not 4000 and 5000. This posted to the two HEADINGS
+-- until `0765`, which refuses a ledger line on one: the trial balance
+-- adds up leaves only, so these figures were in this P&L and out of the
+-- trial balance at once. Every block below that names 4000 reads 4100
+-- for the same reason.
 create or replace function pg_temp.rl_org(p_name text)
 returns uuid language plpgsql as $$
 declare
@@ -46,9 +52,9 @@ begin
   perform public.create_fiscal_year(v_org, date '2026-01-01');
 
   select id into v_rev from public.accounts
-   where org_id = v_org and code = '4000';
+   where org_id = v_org and code = '4100';
   select id into v_cos from public.accounts
-   where org_id = v_org and code = '5000';
+   where org_id = v_org and code = '5100';
   select id into v_exp from public.accounts
    where org_id = v_org and code = '6110';
   select id into v_bank from public.accounts
@@ -212,7 +218,7 @@ declare
   v_entry uuid;
 begin
   select id into v_rev from public.accounts
-   where org_id = v_org and code = '4000';
+   where org_id = v_org and code = '4100';
   select id into v_bank from public.accounts
    where org_id = v_org and code = '1110';
 
@@ -508,7 +514,7 @@ declare
   v_rev uuid; v_bank uuid;
 begin
   select id into v_rev from public.accounts
-   where org_id = v_org and code = '4000';
+   where org_id = v_org and code = '4100';
   select id into v_bank from public.accounts
    where org_id = v_org and code = '1110';
 

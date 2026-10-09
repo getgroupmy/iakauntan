@@ -434,4 +434,110 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- `bill_statutory_charge`, rule by rule
+--
+-- A mutation sweep of the function (`mutants/bill_statutory_charge.py`)
+-- left five of its rules with nothing in this file able to tell them
+-- from their absence: the charge that does not exist, the module, the
+-- half-year in the description, the account a caller names and the
+-- date a caller asks for. The block above named "a company that never
+-- bought the module" in its heading and never asked one -- its second
+-- company came from `test_org` with no list, which is every module.
+--
+-- And one the sweep led to: a caller-named account was not checked at
+-- all, so a HEADING was taken and the expense left the trial balance.
+-- `0765` refuses a line on a heading in the ledger itself; this asks
+-- it through here.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid := pg_temp.sc_org('Satu Persatu Sdn Bhd');
+  v_bare  uuid := pg_temp.test_org('Tiada Hartanah Sdn Bhd', array['accounting']);
+  v_site  uuid; v_bsite uuid;
+  v_land  uuid; v_bland uuid;
+  v_ch    uuid; v_half uuid; v_bch uuid;
+  v_bill  uuid;
+  v_named uuid;
+  v_today date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
+  v_year  integer := extract(year from (now() at time zone 'Asia/Kuala_Lumpur'))::integer;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  insert into public.property_sites (org_id, code, name, tenure)
+  values (v_org, 'S1', 'Wisma Satu', 'non_strata') returning id into v_site;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'PTG', 'Pejabat Tanah', 'supplier') returning id into v_land;
+  select id into v_named from public.accounts
+   where org_id = v_org and code = '6295';
+
+  -- No such charge: refused as missing, not as a permission.
+  perform pg_temp.check_refused('a charge that does not exist is not billed',
+    format('select public.bill_statutory_charge(%L, %L)', gen_random_uuid(), v_land),
+    'No such charge.', 'P0002');
+
+  -- A company without the property module.
+  perform pg_temp.check_true('the bare company has no property module',
+    not app.has_property_module(v_bare));
+  insert into public.property_sites (org_id, code, name, tenure)
+  values (v_bare, 'S1', 'Tapak', 'non_strata') returning id into v_bsite;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_bare, 'PTG', 'Pejabat Tanah', 'supplier') returning id into v_bland;
+  insert into public.property_statutory_charges
+    (org_id, site_id, kind, period_year, amount, due_date)
+  values (v_bare, v_bsite, 'quit_rent', v_year, 100, v_today + 30)
+  returning id into v_bch;
+  perform pg_temp.check_refused('a company without the module bills nothing',
+    format('select public.bill_statutory_charge(%L, %L)', v_bch, v_bland),
+    'The property module is not switched on for this company', '42501');
+
+  -- A heading named as the account.
+  insert into public.property_statutory_charges
+    (org_id, site_id, kind, authority, account_no, period_year, period_half,
+     amount, due_date)
+  values (v_org, v_site, 'assessment', 'Majlis', 'AS-9', v_year, 1, 240, v_today + 30)
+  returning id into v_half;
+  perform pg_temp.check_refused('a heading named as the account is refused',
+    format('select public.bill_statutory_charge(%L, %L, null, null, %L)', v_half, v_land,
+      (select id from public.accounts where org_id = v_org and code = '6000')),
+    'Account 6000 (EXPENSES) is a heading.%', '23514');
+  perform pg_temp.check_true('and the charge is still unbilled, with no bill left behind',
+    (select bill_document_id is null from public.property_statutory_charges where id = v_half)
+    and not exists (select 1 from public.purchase_documents where org_id = v_org));
+
+  -- A leaf named as the account, a date asked for, and a half-year.
+  v_bill := public.bill_statutory_charge(v_half, v_land, v_today - 10, 'MB-77', v_named);
+  perform pg_temp.check_eq('the account named is the account billed',
+    (select account_id from public.purchase_document_lines where document_id = v_bill),
+    v_named);
+  perform pg_temp.check_eq('and the journal debits it',
+    (select sum(l.debit) from public.gl_lines l
+       join public.purchase_documents d on d.gl_entry_id = l.entry_id
+      where d.id = v_bill and l.account_id = v_named), 240.00::numeric);
+  perform pg_temp.check_eq('the bill is dated the day asked for',
+    (select doc_date::text from public.purchase_documents where id = v_bill),
+    (v_today - 10)::text);
+  perform pg_temp.check_eq('the half-year is in the description',
+    (select description from public.purchase_document_lines where document_id = v_bill),
+    format('Wisma Satu — assessment, %s H1 (account AS-9)', v_year));
+
+  -- And with nothing named: the charge's own account, dated today.
+  insert into public.property_statutory_charges
+    (org_id, site_id, kind, period_year, amount, due_date)
+  values (v_org, v_site, 'quit_rent', v_year, 60, v_today + 30)
+  returning id into v_ch;
+  v_bill := public.bill_statutory_charge(v_ch, v_land);
+  perform pg_temp.check_eq('with no account named, quit rent goes to 6296',
+    (select a.code from public.purchase_document_lines dl
+       join public.accounts a on a.id = dl.account_id where dl.document_id = v_bill),
+    '6296');
+  perform pg_temp.check_eq('and with no date asked, the bill is dated today',
+    (select doc_date::text from public.purchase_documents where id = v_bill),
+    v_today::text);
+  perform pg_temp.check_eq('and a whole-year charge says only the year',
+    (select description from public.purchase_document_lines where document_id = v_bill),
+    format('Wisma Satu — quit rent, %s', v_year));
+
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

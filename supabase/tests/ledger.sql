@@ -394,4 +394,110 @@ begin
   perform pg_temp.check_eq('and neither left a journal behind', v_n, 0);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- 0765: a heading holds no line of its own
+--
+-- Every report adds up LEAVES (`and not a.is_group`), so a line on a
+-- heading left the trial balance with no error anywhere. The guard is
+-- on `gl_lines` itself, so it is asserted there first -- a line written
+-- straight into the ledger, by nothing that might have its own guard --
+-- and then through the two document posters, which had none.
+--
+-- The control beside each refusal is the same thing on a leaf, and the
+-- trial balance is read afterwards: the leaves balance, which is what
+-- the heading line broke.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_cust uuid; v_supp uuid; v_inv uuid; v_bill uuid; v_e uuid;
+  v_rev_head uuid; v_cos_head uuid; v_sales uuid; v_cash uuid;
+  v_today date := pg_temp.today();
+  v_dr numeric; v_cr numeric;
+begin
+  v_org := pg_temp.test_org('Kepala Akaun Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date_trunc('year', v_today)::date);
+  select id into v_rev_head from public.accounts where org_id = v_org and code = '4000';
+  select id into v_cos_head from public.accounts where org_id = v_org and code = '5000';
+  select id into v_sales    from public.accounts where org_id = v_org and code = '4100';
+  select id into v_cash     from public.accounts where org_id = v_org and code = '1210';
+  perform pg_temp.check_true('the fixture''s 4000 and 5000 are headings',
+    (select bool_and(is_group) from public.accounts where id in (v_rev_head, v_cos_head)));
+  perform pg_temp.check_true('and 4100 and 1210 are not',
+    (select not bool_or(is_group) from public.accounts where id in (v_sales, v_cash)));
+
+  -- Straight into the ledger.
+  v_e := public.create_gl_entry(v_org, v_today, 'manual',
+    jsonb_build_array(
+      jsonb_build_object('account_id', v_cash,  'debit', 10, 'credit', 0),
+      jsonb_build_object('account_id', v_sales, 'debit', 0,  'credit', 10)),
+    'a leaf journal');
+  perform pg_temp.check_eq('a journal on two leaves posts',
+    (select count(*)::integer from public.gl_lines where entry_id = v_e), 2);
+  perform pg_temp.check_refused(
+    'a line written straight onto a heading is refused',
+    format($q$insert into public.gl_lines (org_id, entry_id, line_no, account_id, debit, credit)
+              values (%L, %L, 3, %L, 0, 5)$q$, v_org, v_e, v_rev_head),
+    'Account 4000 (REVENUE) is a heading.%drop out of the trial balance%',
+    '23514');
+  perform pg_temp.check_refused(
+    'and so is a line moved onto one',
+    format($q$update public.gl_lines set account_id = %L
+               where entry_id = %L and account_id = %L$q$, v_rev_head, v_e, v_sales),
+    'Account 4000 (REVENUE) is a heading.%', '23514');
+  perform pg_temp.check_eq('and the journal still credits the leaf',
+    (select account_id from public.gl_lines where entry_id = v_e and credit > 0), v_sales);
+
+  -- An invoice, the way the app writes one, on the revenue heading.
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-KPL', 'Pelanggan Kepala', 'customer') returning id into v_cust;
+  insert into public.sales_documents (org_id, doc_type, doc_no, doc_date, due_date,
+    contact_id, currency, exchange_rate, status)
+  values (v_org, 'invoice', 'INV-KPL-1', v_today, v_today, v_cust, 'MYR', 1, 'draft')
+  returning id into v_inv;
+  insert into public.sales_document_lines (org_id, document_id, line_no, line_type,
+    description, quantity, unit_price, account_id, tax_rate)
+  values (v_org, v_inv, 1, 'item', 'Yuran', 1, 70, v_rev_head, 0);
+  perform pg_temp.check_refused(
+    'an invoice line on the revenue heading does not post',
+    format('select public.post_sales_document(%L)', v_inv),
+    'Account 4000 (REVENUE) is a heading.%', '23514');
+  perform pg_temp.check_true('and the invoice is still a draft, with no journal',
+    (select status = 'draft' and gl_entry_id is null
+       from public.sales_documents where id = v_inv));
+
+  -- The control: the same invoice on a leaf.
+  update public.sales_document_lines set account_id = v_sales where document_id = v_inv;
+  perform public.post_sales_document(v_inv);
+  perform pg_temp.check_true('on 4100 the same invoice posts',
+    (select gl_entry_id is not null from public.sales_documents where id = v_inv));
+
+  -- A bill on the cost-of-sales heading.
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'S-KPL', 'Pembekal Kepala', 'supplier') returning id into v_supp;
+  insert into public.purchase_documents (org_id, doc_type, doc_no, doc_date, due_date,
+    contact_id, currency, exchange_rate, status)
+  values (v_org, 'bill', 'B-KPL-1', v_today, v_today, v_supp, 'MYR', 1, 'draft')
+  returning id into v_bill;
+  insert into public.purchase_document_lines (org_id, document_id, line_no, line_type,
+    description, quantity, unit_price, account_id, tax_rate)
+  values (v_org, v_bill, 1, 'item', 'Bekalan', 1, 50, v_cos_head, 0);
+  perform pg_temp.check_refused(
+    'a bill line on the cost-of-sales heading does not post',
+    format('select public.post_purchase_document(%L)', v_bill),
+    'Account 5000 (COST OF SALES) is a heading.%', '23514');
+  perform pg_temp.check_true('and the bill is still a draft, with no journal',
+    (select status = 'draft' and gl_entry_id is null
+       from public.purchase_documents where id = v_bill));
+
+  -- What the heading line broke: the trial balance adds up leaves, and
+  -- the leaves balance.
+  select sum(debit), sum(credit) into v_dr, v_cr
+    from public.report_trial_balance(v_org);
+  perform pg_temp.check_eq('the trial balance''s debits are the ledger''s',
+    v_dr, (select sum(debit) from public.gl_lines where org_id = v_org));
+  perform pg_temp.check_eq('and its credits are too', v_cr,
+    (select sum(credit) from public.gl_lines where org_id = v_org));
+  perform pg_temp.check_eq('so it balances, at the 80 posted', v_dr, 80.00::numeric);
+end $$;
+
 rollback;

@@ -597,6 +597,51 @@ begin
     'no demo company banks on the heading'
     || coalesce(': ' || v_missing, ''), v_bad, 0);
 
+  -- --------------------------------------------------------------
+  -- And no demo line on a heading -- 0765
+  --
+  -- `demo_legal_guaman` took "the first revenue account by code" for
+  -- the practice's fee, which is 4000 REVENUE, the heading: RM4,500
+  -- left Guaman Aziz & Rakan's trial balance and its profit and loss,
+  -- rebuilt that way every day. The trigger refuses such a line now,
+  -- so this is the state behind it, named by company and code.
+  select count(*), string_agg(distinct o.name || ' -> ' || a.code, ', ')
+    into v_bad, v_missing
+    from public.gl_lines l
+    join public.accounts a on a.id = l.account_id
+    join public.organizations o on o.id = l.org_id
+   where o.is_demo and a.is_group;
+  perform pg_temp.check_eq(
+    'no demo company has a ledger line on a heading'
+    || coalesce(': ' || v_missing, ''), v_bad, 0);
+
+  -- What the heading line broke, asked of every demo company at once:
+  -- the accounts the trial balance adds up balance.
+  select count(*), string_agg(t.name || ' out by ' || t.diff, ', ')
+    into v_bad, v_missing
+    from (select o.name, sum(l.debit - l.credit) as diff
+            from public.gl_lines l
+            join public.gl_entries e on e.id = l.entry_id
+            join public.accounts a on a.id = l.account_id
+            join public.organizations o on o.id = l.org_id
+           where o.is_demo and e.status = 'posted'
+             and not a.is_group and a.deleted_at is null
+           group by o.name
+          having sum(l.debit - l.credit) <> 0) t;
+  perform pg_temp.check_eq(
+    'every demo company''s trial balance balances'
+    || coalesce(': ' || v_missing, ''), v_bad, 0);
+
+  perform pg_temp.check_eq(
+    'and the practice''s fee on the completed sale is on 4840 Professional Fees',
+    (select string_agg(a.code, ',')
+       from public.sales_document_lines dl
+       join public.accounts a on a.id = dl.account_id
+       join public.organizations o on o.id = dl.org_id
+      where o.name = 'Guaman Aziz & Rakan'
+        and dl.description = 'Professional fees, sale of the property'),
+    '4840');
+
   -- Both aging buckets. Either extreme is a screen with nothing to read.
   select count(*) into v_units from public.sales_documents
    where org_id = v_sinar and doc_type = 'invoice' and status = 'posted';

@@ -669,6 +669,58 @@ page and renumbering would quietly break the reference.
     only SELECT, one policy left (`bank_transfers_select`), RLS on, and
     `create_bank_transfer` (both overloads), `post_bank_transfer` and
     `void_bank_transfer` still SECURITY DEFINER.
+32. ~~The ledger takes a line on a heading account.~~ **Raised and
+    answered 8 October: refuse at the ledger. Built in `0765`.** Found
+    sweeping `bill_statutory_charge`, which takes a caller-named account
+    unchecked -- but the hole is the ledger's: every report adds up
+    LEAVES (`and not a.is_group`), and nothing but the manual journal,
+    `post_expense_claim` and the app's Dart pickers kept a line off a
+    heading. Reproduced: an invoice line on 4000 and a bill line on 5000
+    posted, and the trial balance read dr 70 / cr 150 over a 220 / 220
+    ledger. In production it had happened once, to the DEMO: Guaman Aziz
+    & Rakan's `INV-2026-00001`, RM4,500 on 4000 REVENUE, because
+    `app.demo_legal_guaman` took "the first revenue account by code";
+    its trial balance was out by RM4,500 and rebuilt that way daily. No
+    real company had a line on a heading. Now a trigger on `gl_lines`
+    refuses one (23514, naming the account), and the seeder -- restated
+    from production, md5 `c54ff937...`, one change -- bills the fee to
+    4840 via `app.time_income_account`. `demo_rebuild.sql` now asserts
+    that no demo line is on a heading and that every demo company's
+    leaves balance, each proved failing with the old seeder put back.
+    **Four fixtures had been posting to headings all along**, and the
+    full suite found the first: `report_layouts.sql` built its P&L on
+    4000 and 5000 -- and its revenue assertions PASSED, because
+    `report_with_layout` counts a heading's lines while
+    `report_trial_balance` drops them. So two reports disagreed about
+    the same company and no test could see it. It is now on 4100 and
+    5100. `bank_reconciliation.sql` and `matter_trial_balance.sql` (two
+    sites) took `account_type = ... limit 1` with no order and no
+    filter, which lands on 5000 and 4000; they now take the first leaf
+    by code. **Not included, deliberately:** a retired account (that
+    question is still open). See 33 for what building this turned up in
+    `upsert_account`. **Awaiting deploy.**
+33. **`upsert_account` reshapes the chart behind the person's back.
+    Raised and answered 9 October: guard the function and fix the app;
+    leave production's rows as they are. To be built in `0766`.** Found
+    building 32, each reproduced locally under `authenticated`:
+    (a) the app's EDIT dialog (`chart_of_accounts_card.dart`) sends
+    `p_is_group: false` and no parent for every account it saves, and
+    the function writes both (`is_group = coalesce(p_is_group, ...)`,
+    `parent_id = p_parent_id`). So renaming a heading DEMOTES it to a
+    postable leaf with its children still under it, and renaming any
+    account DETACHES it from its parent. Production, read-only, 9
+    October: DEVINDER & CO's 1200 and GESWANT & CO's 1300 are seeded
+    headings now `is_group = false` with no parent; 1120, 1210, 1220
+    (GESWANT), 1120-1000 (DEVINDER) and 5100 (YUSOF ZAIN) have lost their
+    parents. Nothing has been posted to the demoted two yet, so no
+    figure has moved. (b) `p_is_group => true` promotes an account
+    that already HAS postings, by RPC: the trial balance went 25 / 25
+    to 0 / 25. `0655` refuses exactly that on the sub-account path, and
+    this path skips it. What (a) does NOT do is unbalance anything: a
+    demoted heading is a leaf, so a line on it stays in the trial
+    balance. The harm is the chart -- a "heading" that takes postings
+    with its children hanging under a leaf, and accounts with no parent
+    -- and the person did nothing but rename something.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -747,6 +799,8 @@ function:
 | `allocate_with_discount`, `allocate_payment_with_discount` | `0760` | 20 / 20 | -- | `settlement_discount.sql` |
 | `settle_deposit` | `0728` | 19 / 19 | -- | `deposits.sql` |
 | `complete_bank_reconciliation` | `0716` | 14 / 15 | 1 (the column rounds the balance) | `bank_reconciliation.sql` |
+| `bill_statutory_charge` | `0387` | 15 / 15 | -- | `statutory_charges.sql` (five only after its rule-by-rule block; the named account led to `0765`) |
+| `app.refuse_line_on_heading` | `0765` | 4 / 4 | -- | `ledger.sql` |
 
 Every equivalent is written into its mutants file with the reason.
 

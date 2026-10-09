@@ -659,8 +659,11 @@ begin
   values (v_org, 'C-001', 'Buyer Bhd', 'customer') returning id into v_cust;
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'S-001', 'Parts Bhd', 'supplier') returning id into v_supp;
+  -- The first expense LEAF. Unordered and unfiltered this was 5000
+  -- COST OF SALES, a heading, which `0765` refuses a line on.
   select id into v_exp_acct from public.accounts
-   where org_id = v_org and account_type = 'expense' limit 1;
+   where org_id = v_org and account_type = 'expense' and not is_group
+   order by code limit 1;
 
   -- ------------------------------------------------------------------
   -- Money in on the tenth
