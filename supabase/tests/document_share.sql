@@ -180,4 +180,56 @@ begin
       'public.document_share_links', 'insert'));
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Revoking, rule by rule
+--
+-- The block above revokes one document's links as its owner. Nobody
+-- else ever tried, no document that does not exist was named, and no
+-- second document held a link for the revoke to leave alone.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org     uuid := pg_temp.test_org('Kongsi Satu Satu Sdn Bhd');
+  v_contact uuid;
+  v_one     uuid;
+  v_two     uuid;
+  v_keep    text;
+  v_n       integer;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  perform pg_temp.open_years(v_org, pg_temp.today());
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-1', 'Pembeli', 'customer') returning id into v_contact;
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate, status)
+  values (v_org, 'invoice', 'INV-A', pg_temp.today(), v_contact, 'MYR', 1, 'draft'),
+         (v_org, 'invoice', 'INV-B', pg_temp.today(), v_contact, 'MYR', 1, 'draft');
+  select id into v_one from public.sales_documents where org_id = v_org and doc_no = 'INV-A';
+  select id into v_two from public.sales_documents where org_id = v_org and doc_no = 'INV-B';
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, description, quantity, unit_price)
+  values (v_org, v_one, 1, 'Work', 1, 100), (v_org, v_two, 1, 'Work', 1, 200);
+  perform public.post_sales_document(v_one);
+  perform public.post_sales_document(v_two);
+  perform public.share_document(v_one);
+  v_keep := public.share_document(v_two);
+
+  perform pg_temp.sign_in_as(pg_temp.another_user('orang-luar@kongsi.test'));
+  perform pg_temp.check_refused('a stranger does not shut a company''s links',
+    format('select public.revoke_document_share(%L)', v_one),
+    'Not permitted', '42501');
+
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  perform pg_temp.check_refused('a document that does not exist is said so',
+    format('select public.revoke_document_share(%L)', gen_random_uuid()),
+    'Document not found', 'P0002');
+
+  v_n := public.revoke_document_share(v_one);
+  perform pg_temp.check_eq('revoking one document shuts its link', v_n, 1);
+  perform pg_temp.check_true('and leaves the other document''s open',
+    (public.open_shared_document(v_keep)) ->> 'state' = 'open');
+
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;
