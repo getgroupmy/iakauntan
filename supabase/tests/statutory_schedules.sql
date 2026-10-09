@@ -599,4 +599,74 @@ begin
   -- builds a schedule WITH a hole in it, a few hundred lines up.
 end $$;
 
+-- ---------------------------------------------------------------------
+-- `platform_publish_statutory_schedule`, rule by rule
+--
+-- A mutation sweep (`mutants/platform_publish_statutory_schedule.py`)
+-- left five rules that no file here could tell from their absence: an
+-- empty table, a nameless one, that publishing closes only tables that
+-- started EARLIER, that a table already closed before the new one keeps
+-- the date it closed on, and that an explicit null is not a claim the
+-- table was checked. Years far from the blocks above, so nothing here
+-- moves a table they read.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_admin uuid := pg_temp.test_user();
+  v_a uuid; v_b uuid; v_z uuid; v_y uuid; v_x uuid; v_n uuid;
+  v_rate jsonb := jsonb_build_array(jsonb_build_object('employer_rate', 1.00));
+begin
+  insert into public.platform_admins (user_id) values (v_admin)
+    on conflict do nothing;
+  perform pg_temp.sign_in_as(v_admin);
+
+  perform pg_temp.check_refused('a table with no rates is not published',
+    format($q$select public.platform_publish_statutory_schedule(
+      'hrdf', 'Empty', 'percentage', date '2041-01-01', '[]'::jsonb)$q$),
+    'A schedule with no rates would calculate nothing', '23514');
+  perform pg_temp.check_refused('nor one whose rates are not a list',
+    format($q$select public.platform_publish_statutory_schedule(
+      'hrdf', 'Not a list', 'percentage', date '2041-01-01',
+      '{"employer_rate": 1}'::jsonb)$q$),
+    'A schedule with no rates would calculate nothing', '23514');
+  perform pg_temp.check_refused('nor one with no name',
+    format($q$select public.platform_publish_statutory_schedule(
+      'hrdf', '   ', 'percentage', date '2041-01-01', %L::jsonb)$q$, v_rate),
+    'A schedule needs a name', '23514');
+
+  -- Publishing between two tables closes the earlier one, not the later.
+  v_a := public.platform_publish_statutory_schedule(
+    'hrdf', 'Levy 2041', 'percentage', date '2041-01-01', v_rate);
+  v_b := public.platform_publish_statutory_schedule(
+    'hrdf', 'Levy 2042', 'percentage', date '2042-01-01', v_rate);
+  perform public.platform_publish_statutory_schedule(
+    'hrdf', 'Levy mid-2041', 'percentage', date '2041-06-01', v_rate);
+  perform pg_temp.check_eq('the earlier table closes the day before',
+    (select effective_to::text from public.statutory_schedules where id = v_a),
+    '2041-05-31');
+  perform pg_temp.check_true('and the later one is left as it was',
+    (select effective_to is null from public.statutory_schedules where id = v_b));
+
+  -- A table already closed before the new one starts keeps its date.
+  v_z := public.platform_publish_statutory_schedule(
+    'hrdf', 'Levy 2043', 'percentage', date '2043-01-01', v_rate);
+  v_y := public.platform_publish_statutory_schedule(
+    'hrdf', 'Levy March 2043', 'percentage', date '2043-03-01', v_rate);
+  v_x := public.platform_publish_statutory_schedule(
+    'hrdf', 'Levy 2044', 'percentage', date '2044-01-01', v_rate);
+  perform pg_temp.check_eq('a table closed earlier keeps the day it closed',
+    (select effective_to::text from public.statutory_schedules where id = v_z),
+    '2043-02-28');
+  perform pg_temp.check_eq('and the one after it closes before the newest',
+    (select effective_to::text from public.statutory_schedules where id = v_y),
+    '2043-12-31');
+
+  -- An explicit null is not a claim the table was checked.
+  v_n := public.platform_publish_statutory_schedule(
+    'hrdf', 'Levy 2045', 'percentage', date '2045-01-01', v_rate,
+    null, null, null, 'nearest_cent', null);
+  perform pg_temp.check_true('a null for verified is published unverified',
+    (select not is_verified from public.statutory_schedules where id = v_n));
+end $$;
+
 rollback;

@@ -919,6 +919,7 @@ function:
 | `record_tax_instalment`, `tax_estimate_payment_summary` | `0768` | 14 / 14 | -- | `tax_estimate_payments.sql` (one more assertion for a missing estimate) |
 | `apply_tax_submission`, `dismiss_tax_submission` | `0626` | 8 / 8 | -- | `tax_details.sql` (four only after its rule-by-rule block) |
 | `create_payroll_run` | `0769` | 3 / 4 | 1 (another company's run cannot name this period: `payroll_runs_period_same_org`) | `payroll_periods.sql` |
+| `platform_publish_statutory_schedule` | `0404` | 16 / 16 | -- | `statutory_schedules.sql` (five only after its rule-by-rule block) + `hr_reference.sql` (two) |
 
 Every equivalent is written into its mutants file with the reason.
 
