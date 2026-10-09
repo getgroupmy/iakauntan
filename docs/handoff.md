@@ -1077,6 +1077,7 @@ function:
 | `cancel_landed_cost_run` | `0271` | 6 / 6 | -- | `landed_cost.sql` (one only after a second draft stood beside it) |
 | `settle_pos_stalls` | `0268` | 20 / 20 | -- | `pos_food_court.sql` (nine only after its rule-by-rule section; the bill's dates invisible while every settlement was one day) |
 | `recognise_revenue` | `0310` | 12 / 12 | -- | `revenue_recognition.sql` (five only after its rule-by-rule block: three invoices sharing period ends, one credited in full) |
+| `settle_gateway_payment` | `0491` | 15 / 15 | -- | `gateway_payments.sql` (four only after they were asserted: case, spaces, `failed`, `paid_at`) |
 
 Every equivalent is written into its mutants file with the reason.
 

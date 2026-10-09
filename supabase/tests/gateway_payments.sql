@@ -187,6 +187,7 @@ do $$
 declare
   v_org uuid := pg_temp.test_org('Gagal Sdn Bhd');
   v_inv uuid;
+  v_inv2 uuid;
 begin
   v_inv := pg_temp.an_invoice(v_org, 'PLT-0004', 60.00);
   perform public.begin_gateway_payment(
@@ -194,6 +195,23 @@ begin
 
   perform pg_temp.check_eq('a callback saying not paid marks it failed',
     public.settle_gateway_payment('billplz', 'W_failed', false, 0), 'not_paid');
+  -- The word returned was all that was asked; the row is what a person
+  -- looking at the payment sees (`mutants/settle_gateway_payment.py`).
+  perform pg_temp.check_eq('and the payment says failed',
+    (select state from public.platform_payments where provider_ref = 'W_failed'),
+    'failed');
+
+  -- The callback's spelling is not the platform's. A gateway named in
+  -- capitals and a reference with a space either side of it -- both
+  -- what a hand-built test request, or a gateway's own formatting, sends
+  -- -- find the same bill, and the paid one says when.
+  v_inv2 := pg_temp.an_invoice(v_org, 'PLT-0041', 75.00);
+  perform public.begin_gateway_payment(
+    v_inv2, 'billplz', 'W_spaced', 'https://www.billplz.com/bills/W_spaced');
+  perform pg_temp.check_eq('a gateway in capitals and a padded reference find the bill',
+    public.settle_gateway_payment('BillPlz', '  W_spaced  ', true, 75.00), 'paid');
+  perform pg_temp.check_true('and the payment says when it was paid',
+    (select paid_at = now() from public.platform_payments where provider_ref = 'W_spaced'));
   perform pg_temp.check_eq('and the invoice is untouched',
     (select status from public.platform_invoices where id = v_inv), 'issued');
 
