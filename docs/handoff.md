@@ -1429,6 +1429,7 @@ function:
 | `app.closed_project_takes_no_billable_time` | `0783` | 11 / 11 | -- | `project_budget.sql` (new in `0783`; one killed only once an invoiced hour on a closed job was edited) |
 | `hire_applicant` | `0784` | 24 / 25 | 1 | `hiring.sql` (19 of 24 before its block: no rejected applicant, no start on notice's last day, no spaced number, history's author unread; raised: a cancelled requisition hired into -- `0784`; equivalent since: the fill paragraph's cancelled guard) |
 | `app.request_header` | `0785` | 10 / 10 | -- | `client_address.sql` (new in `0785`: no test had ever set a request header; `secretarial.sql` asserted a link signature recorded no address) |
+| `detach_company_from_firm` | `0450` | 8 / 8 | -- | `firm_portfolio.sql` (three before its block: every detach by somebody who owned the company AND ran the firm, so "anybody ends it" survived; no second client; the count unread) |
 | `app.document_state_is_the_databases` | `0781` | 10 / 10 | -- | `posted_document_is_frozen.sql` (new in `0781`; the depth mutants killed by a real payment, which replaced a control that wrote the figures itself) |
 | `app.project_closes_only_when_billed` | `0778` | 11 / 11 | -- | `project_budget.sql` (new in `0778`; SECURITY DEFINER flipped by hand, equivalent while every member reads every time entry) |
 | `close_lead`, `reopen_lead` | `0373` | 12 / 12 | -- | `win_loss.sql` (four before its block: one clean lead, its owner) |

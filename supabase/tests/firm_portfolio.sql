@@ -466,4 +466,82 @@ begin
              where conname = 'firm_role_is_not_owner'));
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Who may end it, and how far it reaches
+--
+-- Every detach above was made by somebody who both owned the company
+-- and ran the firm, so the guard that lets EITHER side end it had never
+-- been asked a question: not a stranger, not a member of staff, not the
+-- firm alone, not the company alone. Nor had a firm kept a second
+-- client for its staff to stay in.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_firm  uuid;
+  v_one   uuid;
+  v_two   uuid;
+  v_admin uuid := pg_temp.another_user('admin-klien@detach.test');
+  v_mgr   uuid := pg_temp.another_user('pengurus@detach.test');
+  v_staff uuid := pg_temp.another_user('kakitangan@detach.test');
+  v_out   uuid := pg_temp.another_user('orang-luar@detach.test');
+  v_n     integer;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  perform pg_temp.allow_many_companies();
+  v_firm := public.create_firm('Kira Enam');
+  v_one  := pg_temp.test_org('Klien Satu Sdn Bhd');
+  v_two  := pg_temp.test_org('Klien Dua Sdn Bhd');
+
+  -- The client's administrator, in their own right, at both.
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_one, v_admin, 'admin', 'active', now()),
+         (v_two, v_admin, 'admin', 'active', now());
+  -- A manager and a member of staff at the firm, nobody at either
+  -- company until the firm is appointed.
+  insert into public.firm_members (firm_id, user_id, role, status, joined_at)
+  values (v_firm, v_mgr, 'manager', 'active', now()),
+         (v_firm, v_staff, 'staff', 'active', now());
+
+  perform public.attach_company_to_firm(v_one, v_firm, 'accountant');
+  perform public.attach_company_to_firm(v_two, v_firm, 'accountant');
+  perform pg_temp.check_eq('the firm''s two are in both companies',
+    (select count(*)::integer from public.org_members
+      where via_firm_id = v_firm and org_id in (v_one, v_two)), 4);
+
+  perform pg_temp.sign_in_as(v_out);
+  perform pg_temp.check_refused('a stranger does not end an appointment',
+    format('select public.detach_company_from_firm(%L)', v_one),
+    'Only the company or the firm may end the appointment', '42501');
+  perform pg_temp.sign_in_as(v_staff);
+  perform pg_temp.check_refused('nor does the firm''s own staff',
+    format('select public.detach_company_from_firm(%L)', v_one),
+    'Only the company or the firm may end the appointment', '42501');
+
+  -- The firm's side, by a manager who is nobody's administrator.
+  perform pg_temp.sign_in_as(v_mgr);
+  v_n := public.detach_company_from_firm(v_one);
+  perform pg_temp.check_eq('the firm may end it, and says how many went', v_n, 2);
+  perform pg_temp.check_eq('and its people stay at its other client',
+    (select count(*)::integer from public.org_members
+      where via_firm_id = v_firm and org_id = v_two), 2);
+
+  -- The company's side, by an administrator who is nobody at the firm.
+  perform pg_temp.sign_in_as(v_admin);
+  v_n := public.detach_company_from_firm(v_two);
+  perform pg_temp.check_eq('and so may the company', v_n, 2);
+  perform pg_temp.check_eq('after which neither keeps the firm',
+    (select count(*)::integer from public.organizations
+      where id in (v_one, v_two) and firm_id is not null), 0);
+  perform pg_temp.check_eq('and their own administrator stays at both',
+    (select count(*)::integer from public.org_members
+      where user_id = v_admin and org_id in (v_one, v_two)), 2);
+
+  -- Nothing to end is nothing to refuse.
+  perform pg_temp.sign_in_as(v_out);
+  perform pg_temp.check_eq('a company with no firm detaches nobody',
+    public.detach_company_from_firm(v_one), 0);
+
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;
