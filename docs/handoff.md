@@ -832,7 +832,11 @@ page and renumbering would quietly break the reference.
     second run to recalculate under a new levy table, and now
     recalculates the same run, which is what the refusal tells a person
     to do. Swept 3 / 4 plus one equivalent (`create_payroll_run.py`).
-    **Awaiting deploy.**
+    **Applied, and read back** (9 October, read-only, after run
+    37883005137 on `33df71f`): recorded; the partial unique index
+    present as written; the refusal in the live `create_payroll_run`,
+    which hashes to a1540330..., the same as the local build; no period
+    in production with two live runs.
 37. ~~A voided sale can be sent to LHDN.~~ **Raised and answered 9
     October: refuse, and withdraw. Built in `0770`.** Found sweeping
     `prepare_einvoice`, which refused only a draft, so a void invoice
