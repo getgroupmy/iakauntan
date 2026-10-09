@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-15844
+15865
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1065,3 +1065,7 @@
 # 9 October: 15844. apply_tax_submission swept with a rule-by-rule
 # block, and 0769, one payroll run per pay period. run_locally.sh at
 # 0769: 386 files, 15844 assertions.
+#
+# 9 October: 15865. platform_publish_statutory_schedule swept with a
+# rule-by-rule block, and 0770, a voided sale not sent to LHDN.
+# run_locally.sh at 0770: 386 files, 15865 assertions.

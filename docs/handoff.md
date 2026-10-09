@@ -807,7 +807,10 @@ page and renumbering would quietly break the reference.
     changes. The app's dialog already read commas and sent null rather
     than 0 when it could not. Both restated from `0673`, md5-verified by
     replay. Swept 14 / 14 (`tax_instalment.py`) after one assertion for
-    a missing estimate. **Awaiting deploy.**
+    a missing estimate. **Applied, and read back** (9 October, read-only,
+    after run 37880919821 on `a581fd5`): recorded; the nil refusal in
+    the live function; overdue and next due reading `outstanding`;
+    `anon` cannot record an instalment.
 36. ~~Two payroll runs for one pay period pay everybody twice.~~
     **Raised and answered 9 October: one live run per period. Built in
     `0769`.** Found sweeping `create_payroll_run`, which asked only
@@ -830,6 +833,20 @@ page and renumbering would quietly break the reference.
     recalculates the same run, which is what the refusal tells a person
     to do. Swept 3 / 4 plus one equivalent (`create_payroll_run.py`).
     **Awaiting deploy.**
+37. ~~A voided sale can be sent to LHDN.~~ **Raised and answered 9
+    October: refuse, and withdraw. Built in `0770`.** Found sweeping
+    `prepare_einvoice`, which refused only a draft, so a void invoice
+    was queued; and `void_sales_document` refused only an e-Invoice
+    already `valid`, so voiding an invoice whose e-Invoice was queued
+    left it queued. `myinvois/submit.ts` sends 'queued', 'draft',
+    'failed' and 'invalid' without looking at the invoice, so LHDN would
+    have validated an e-Invoice for a cancelled sale. Production had no
+    e-Invoices. Now `prepare_einvoice` refuses a void or deleted invoice;
+    `void_sales_document` refuses while the e-Invoice is `submitted` and
+    withdraws one LHDN never accepted by marking it `cancelled` with the
+    reason. Both restated (`0636`, `0421`), md5-verified by replay.
+    Swept 14 / 14 across `einvoice_statutory.sql` and
+    `void_an_invoice.sql` (`void_and_einvoice.py`). **Awaiting deploy.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -921,6 +938,7 @@ function:
 | `create_payroll_run` | `0769` | 3 / 4 | 1 (another company's run cannot name this period: `payroll_runs_period_same_org`) | `payroll_periods.sql` |
 | `platform_publish_statutory_schedule` | `0404` | 16 / 16 | -- | `statutory_schedules.sql` (five only after its rule-by-rule block) + `hr_reference.sql` (two) |
 | `consolidate_pos_einvoices` | `0501` | 8 / 8 | -- | `pos_einvoice_consolidation.sql` (7) + `pos.sql` (1). Its `p_month` default is on the UTC clock -- see the mutants file; NOT YET RAISED, the app always passes the month |
+| `void_sales_document`, `prepare_einvoice` (0770's guard) | `0770` | 14 / 14 | -- | `einvoice_statutory.sql` (10) + `void_an_invoice.sql` (4) |
 
 Every equivalent is written into its mutants file with the reason.
 

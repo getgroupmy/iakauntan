@@ -997,4 +997,92 @@ begin
 end $$;
 
 
+-- ---------------------------------------------------------------------
+-- 0770: a voided sale is not sent to LHDN
+--
+-- `prepare_einvoice` refused only a draft, and `void_sales_document`
+-- only an e-Invoice already valid -- so a void invoice could be queued,
+-- and voiding a queued one left it queued. The submit sweep sends what
+-- is queued, draft, failed or invalid without looking at the invoice.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_c uuid;
+  v_gone uuid; v_queued uuid; v_failed uuid; v_invalid uuid; v_sent uuid;
+  v_ei uuid; v_no text; v_deleted uuid; v_by uuid; v_by_ei uuid;
+begin
+  v_org := pg_temp.test_org('Jualan Batal Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  update public.organizations
+     set einvoice_enabled = true, tin = 'C1234567890' where id = v_org;
+  insert into public.contacts (org_id, code, contact_type, name, tin)
+  values (v_org, 'C-BATAL', 'customer', 'Pembeli Batal Sdn Bhd', 'C5555555555')
+  returning id into v_c;
+
+  -- Voided first: there is no sale to send.
+  v_gone := pg_temp.sales_doc(v_org, v_c);
+  select doc_no into v_no from public.sales_documents where id = v_gone;
+  perform public.void_sales_document(v_gone, 'salah pelanggan');
+  perform pg_temp.check_refused('a void invoice is not prepared for MyInvois',
+    format('select public.prepare_einvoice(%L)', v_gone),
+    v_no || ' has been voided, so there is no sale to submit to MyInvois.', '23514');
+  perform pg_temp.check_true('and nothing is queued for it',
+    not exists (select 1 from public.einvoice_documents where source_id = v_gone));
+  v_deleted := pg_temp.sales_doc(v_org, v_c);
+  select doc_no into v_no from public.sales_documents where id = v_deleted;
+  update public.sales_documents set deleted_at = now() where id = v_deleted;
+  perform pg_temp.check_refused('nor a deleted one',
+    format('select public.prepare_einvoice(%L)', v_deleted),
+    v_no || ' has been voided, so there is no sale to submit to MyInvois.', '23514');
+
+  -- A bystander, queued, which nothing below should touch.
+  v_by := pg_temp.sales_doc(v_org, v_c);
+  v_by_ei := public.prepare_einvoice(v_by);
+
+  -- Queued, then voided: withdrawn, with the reason.
+  v_queued := pg_temp.sales_doc(v_org, v_c);
+  select doc_no into v_no from public.sales_documents where id = v_queued;
+  v_ei := public.prepare_einvoice(v_queued);
+  perform pg_temp.check_eq('a posted invoice is queued',
+    (select status::text from public.einvoice_documents where id = v_ei), 'queued');
+  perform public.void_sales_document(v_queued, 'salah harga');
+  perform pg_temp.check_eq('voiding it withdraws the queued e-Invoice',
+    (select status::text from public.einvoice_documents where id = v_ei), 'cancelled');
+  perform pg_temp.check_eq('saying why',
+    (select cancellation_reason from public.einvoice_documents where id = v_ei),
+    'Withdrawn before LHDN accepted it: ' || v_no || ' was voided (salah harga)');
+  perform pg_temp.check_true('and when',
+    (select cancelled_at is not null from public.einvoice_documents where id = v_ei));
+  perform pg_temp.check_eq('and the invoice says so',
+    (select einvoice_status from public.sales_documents where id = v_queued), 'cancelled');
+  perform pg_temp.check_eq('while another invoice''s e-Invoice stays queued',
+    (select status::text from public.einvoice_documents where id = v_by_ei), 'queued');
+
+  -- Failed and invalid are sent again by the sweep, so they go too.
+  v_failed := pg_temp.sales_doc(v_org, v_c);
+  v_ei := public.prepare_einvoice(v_failed);
+  update public.einvoice_documents set status = 'failed' where id = v_ei;
+  perform public.void_sales_document(v_failed, null);
+  perform pg_temp.check_eq('a failed e-Invoice is withdrawn too',
+    (select status::text from public.einvoice_documents where id = v_ei), 'cancelled');
+  v_invalid := pg_temp.sales_doc(v_org, v_c);
+  v_ei := public.prepare_einvoice(v_invalid);
+  update public.einvoice_documents set status = 'invalid' where id = v_ei;
+  perform public.void_sales_document(v_invalid, null);
+  perform pg_temp.check_eq('and so is an invalid one',
+    (select status::text from public.einvoice_documents where id = v_ei), 'cancelled');
+
+  -- With LHDN and unanswered: the void waits.
+  v_sent := pg_temp.sales_doc(v_org, v_c);
+  select doc_no into v_no from public.sales_documents where id = v_sent;
+  v_ei := public.prepare_einvoice(v_sent);
+  update public.einvoice_documents set status = 'submitted' where id = v_ei;
+  perform pg_temp.check_refused('an invoice whose e-Invoice LHDN is deciding is not voided',
+    format('select public.void_sales_document(%L, %L)', v_sent, 'terlambat'),
+    'Cannot void ' || v_no || ': its e-Invoice is with LHDN awaiting validation.%', '55006');
+  perform pg_temp.check_true('so it is still posted, and its e-Invoice still submitted',
+    (select status::text = 'posted' from public.sales_documents where id = v_sent)
+    and (select status::text = 'submitted' from public.einvoice_documents where id = v_ei));
+end $$;
+
 rollback;
