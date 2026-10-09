@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-16405
+16417
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1135,3 +1135,7 @@
 # invite_member and accept_invitation swept, and 0782: a fiscal year's
 # periods tile it whatever day it starts. run_locally.sh at 0782: 386
 # files, 16405 assertions.
+#
+# 9 October: 16417. 0783: a closed project takes no billable time by any
+# change to the time entries. run_locally.sh at 0783: 386 files, 16417
+# assertions.

@@ -476,8 +476,12 @@ begin
      250, 500, true, false);
 
   perform public.close_project(v_shut, true);
+  -- Made billable again past `0783`, which would now refuse it: the
+  -- point is a closed job already holding time, as one could before.
+  alter table public.time_entries disable trigger time_not_onto_a_closed_project;
   update public.time_entries set is_billable = true
    where project_id = v_shut;
+  alter table public.time_entries enable trigger time_not_onto_a_closed_project;
 
   v_clerk := pg_temp.another_user('kerani@pintuprojek.test');
   insert into public.org_members (org_id, user_id, role, status)
@@ -574,6 +578,187 @@ begin
   perform pg_temp.check_eq('and none of the four deleted',
     (select count(*)::integer from public.time_entries
       where project_id = c.held), 4);
+  perform pg_temp.sign_out();
+end $$;
+
+-- ---------------------------------------------------------------------
+-- A closed job takes no billable time  (`0783`)
+--
+-- The other half of `0778`: billable, uninvoiced time cannot ARRIVE on
+-- a closed project by any change to the time entries -- logged, moved
+-- onto it, made billable or un-billed again, raised. Non-billable time
+-- and anything that lowers the figure are not refused.
+-- ---------------------------------------------------------------------
+create temporary table t_tc
+  (shut uuid, open uuid, written uuid, billed uuid, moving uuid, legacy uuid,
+   legacy_job uuid);
+grant select on t_tc to authenticated;
+
+do $$
+declare
+  v_org     uuid := pg_temp.test_org('Masa Tutup Sdn Bhd');
+  v_clerk   uuid;
+  v_shut    uuid;
+  v_open    uuid;
+  v_old     uuid;
+  v_written uuid;
+  v_billed  uuid;
+  v_moving  uuid;
+  v_legacy  uuid;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  insert into public.projects (org_id, code, name)
+  values (v_org, 'JOB-C', 'Finished') returning id into v_shut;
+  insert into public.projects (org_id, code, name)
+  values (v_org, 'JOB-O', 'Still going') returning id into v_open;
+  insert into public.projects (org_id, code, name)
+  values (v_org, 'JOB-L', 'Closed before 0783') returning id into v_old;
+
+  insert into public.time_entries
+    (org_id, project_id, user_id, entry_date, description, minutes,
+     hourly_rate, amount, is_billable, is_billed)
+  values (v_org, v_shut, auth.uid(), pg_temp.today() - 9, 'Written off',
+          60, 250, 250, true, false)
+  returning id into v_written;
+  insert into public.time_entries
+    (org_id, project_id, user_id, entry_date, description, minutes,
+     hourly_rate, amount, is_billable, is_billed)
+  values (v_org, v_shut, auth.uid(), pg_temp.today() - 8, 'Invoiced',
+          60, 250, 250, true, true)
+  returning id into v_billed;
+  insert into public.time_entries
+    (org_id, project_id, user_id, entry_date, description, minutes,
+     hourly_rate, amount, is_billable, is_billed)
+  values (v_org, v_open, auth.uid(), pg_temp.today() - 7, 'On the open job',
+          60, 250, 250, true, false)
+  returning id into v_moving;
+  perform public.close_project(v_shut, true);
+
+  -- A job closed with time still to bill, as a database from before
+  -- `0778` could hold one. Built past the two guards that would now
+  -- refuse it, which is the point: what it holds is not added to here.
+  insert into public.time_entries
+    (org_id, project_id, user_id, entry_date, description, minutes,
+     hourly_rate, amount, is_billable, is_billed)
+  values (v_org, v_old, auth.uid(), pg_temp.today() - 30, 'Left behind',
+          120, 250, 500, true, false)
+  returning id into v_legacy;
+  alter table public.projects disable trigger projects_close_only_when_billed;
+  update public.projects set is_active = false where id = v_old;
+  alter table public.projects enable trigger projects_close_only_when_billed;
+
+  v_clerk := pg_temp.another_user('kerani@masatutup.test');
+  insert into public.org_members (org_id, user_id, role, status)
+  values (v_org, v_clerk, 'sales', 'active');
+  perform pg_temp.sign_in_as(v_clerk);
+  insert into t_tc values (v_shut, v_open, v_written, v_billed, v_moving,
+                           v_legacy, v_old);
+end $$;
+
+set local role authenticated;
+
+do $$
+declare
+  c     record;
+  v_msg text;
+  v_org uuid;
+  v_n   integer := 0;
+  v_try text;
+begin
+  select * into c from t_tc;
+  select org_id into v_org from public.projects where id = c.shut;
+
+  foreach v_try in array array[
+    -- An hour logged.
+    format('insert into public.time_entries (org_id, project_id, user_id, '
+           'entry_date, description, minutes, hourly_rate, amount, '
+           'is_billable, is_billed) values (%L, %L, auth.uid(), %L, '
+           '''Late hours'', 120, 250, 500, true, false)',
+           v_org, c.shut, pg_temp.today()),
+    -- An hour at no rate yet: still one somebody should bill.
+    format('insert into public.time_entries (org_id, project_id, user_id, '
+           'entry_date, description, minutes, hourly_rate, amount, '
+           'is_billable, is_billed) values (%L, %L, auth.uid(), %L, '
+           '''Unpriced'', 60, 0, 0, true, false)',
+           v_org, c.shut, pg_temp.today()),
+    -- The written-off hour made billable again.
+    format('update public.time_entries set is_billable = true where id = %L',
+           c.written),
+    -- The invoiced hour un-billed.
+    format('update public.time_entries set is_billed = false where id = %L',
+           c.billed),
+    -- An hour moved from the open job.
+    format('update public.time_entries set project_id = %L where id = %L',
+           c.shut, c.moving),
+    -- The left-behind hour on the old closed job, raised.
+    format('update public.time_entries set minutes = 180, amount = 750 '
+           'where id = %L', c.legacy)]
+  loop
+    begin
+      execute v_try;
+      v_msg := null;
+    exception when check_violation then
+      get stacked diagnostics v_msg = message_text;
+    end;
+    v_n := v_n + 1;
+    perform pg_temp.check_eq(
+      format('billable time does not reach a closed job, road %s', v_n),
+      v_msg,
+      format('Project %s is closed. Reopen it before logging billable '
+             'time to it.',
+             case when v_n = 6 then 'JOB-L' else 'JOB-C' end));
+  end loop;
+
+  -- Not refused: non-billable time, the left-behind hour edited without
+  -- raising it, and lowered, and the hour on the open job edited.
+  insert into public.time_entries
+    (org_id, project_id, user_id, entry_date, description, minutes,
+     hourly_rate, amount, is_billable, is_billed)
+  values (v_org, c.shut, auth.uid(), pg_temp.today(), 'Handover notes',
+          30, 0, 0, false, false);
+  update public.time_entries set description = 'Left behind, chased'
+   where id = c.legacy;
+  update public.time_entries set minutes = 60, amount = 250
+   where id = c.legacy;
+  update public.time_entries set description = 'Open job, renamed'
+   where id = c.moving;
+  -- An invoiced hour on the closed job is still somebody's to annotate,
+  -- and the hour left behind is still somebody's to invoice.
+  update public.time_entries set description = 'Invoiced, on INV-9'
+   where id = c.billed;
+  update public.time_entries set is_billed = true where id = c.legacy;
+end $$;
+
+reset role;
+
+do $$
+declare c record;
+begin
+  select * into c from t_tc;
+  perform pg_temp.check_eq('the closed job holds nothing to bill',
+    (select count(*)::integer from public.time_entries
+      where project_id = c.shut and is_billable and not is_billed), 0);
+  perform pg_temp.check_eq('but has the non-billable hour logged',
+    (select count(*)::integer from public.time_entries
+      where project_id = c.shut and not is_billable
+        and description = 'Handover notes'), 1);
+  perform pg_temp.check_eq('the left-behind hour was edited, lowered and invoiced',
+    (select description || ' ' || amount || ' ' || is_billed
+       from public.time_entries where id = c.legacy),
+    'Left behind, chased 250.00 true');
+  perform pg_temp.check_eq('and the invoiced one annotated',
+    (select description from public.time_entries where id = c.billed),
+    'Invoiced, on INV-9');
+  perform pg_temp.check_eq('and the open job''s hour stayed where it was',
+    (select project_id from public.time_entries where id = c.moving), c.open);
+
+  -- Reopened, the same hour is taken.
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  perform public.reopen_project(c.shut);
+  update public.time_entries set project_id = c.shut where id = c.moving;
+  perform pg_temp.check_eq('reopened, the job takes its time again',
+    (select count(*)::integer from public.time_entries
+      where project_id = c.shut and is_billable and not is_billed), 1);
   perform pg_temp.sign_out();
 end $$;
 

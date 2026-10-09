@@ -1164,6 +1164,24 @@ page and renumbering would quietly break the reference.
     are still named for the month they START in, as before, so the
     period holding 29 March of that year is called "Feb 2026".
     **Still to read back.**
+50. ~~Billable time can be logged onto a closed project.~~ **Raised
+    and answered 9 October: refuse; reopen first. Built in `0783`.** The
+    other half of item 45, as item 43 is of 42. `time_entries_write`
+    asks nothing about the project's state: RM500 of billable time
+    logged onto a closed project was accepted as a member who may write
+    but not post -- measured -- and then invisible, the project being
+    off the open list. Now a trigger on `time_entries` refuses any change
+    that adds billable, uninvoiced time to a closed project -- logged,
+    moved onto it, made billable or un-billed again, raised -- counted by
+    entry as well as money, as `close_project` counts: "Project JOB-C is
+    closed. Reopen it before logging billable time to it." Non-billable
+    time, invoicing, and edits that do not raise a counted entry are
+    not refused. Item 45's NOT COVERED is closed by this. Production
+    held no closed project. Swept 11 / 11. `0778`'s own fixture, which
+    re-billed written-off time on a closed job to build that state, now
+    disables this trigger by name around that one update, as
+    `aged_balances.sql` does for its own legacy state.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -1363,6 +1381,7 @@ function:
 | `grant_support_access`, `end_support_access` | `0719` | 19 / 19 | -- | `support_access.sql` (five before its block: the reason refused by SQLSTATE the table also raises; no deleted company, null length, second administrator or company, stranger, or second ending) |
 | `invite_member`, `accept_invitation` | `0353` | 19 / 20 | 1 | `invitations.sql` (three before its block: no address already in another company, no caller signed out or without an address; equivalent: a used token is nulled, so the status filter finds nothing more) |
 | `create_fiscal_year`, `create_previous_fiscal_year` | `0782` | 13 / 19 | 6 | `previous_fiscal_year.sql` (6 of 13 before: no guard asked, no period name; raised: a year from the 31st lost days between periods -- `0782`; six equivalent by arithmetic, reasons in the file) |
+| `app.closed_project_takes_no_billable_time` | `0783` | 11 / 11 | -- | `project_budget.sql` (new in `0783`; one killed only once an invoiced hour on a closed job was edited) |
 | `app.document_state_is_the_databases` | `0781` | 10 / 10 | -- | `posted_document_is_frozen.sql` (new in `0781`; the depth mutants killed by a real payment, which replaced a control that wrote the figures itself) |
 | `app.project_closes_only_when_billed` | `0778` | 11 / 11 | -- | `project_budget.sql` (new in `0778`; SECURITY DEFINER flipped by hand, equivalent while every member reads every time entry) |
 | `close_lead`, `reopen_lead` | `0373` | 12 / 12 | -- | `win_loss.sql` (four before its block: one clean lead, its owner) |
