@@ -850,7 +850,14 @@ page and renumbering would quietly break the reference.
     withdraws one LHDN never accepted by marking it `cancelled` with the
     reason. Both restated (`0636`, `0421`), md5-verified by replay.
     Swept 14 / 14 across `einvoice_statutory.sql` and
-    `void_an_invoice.sql` (`void_and_einvoice.py`). **Awaiting deploy.**
+    `void_an_invoice.sql` (`void_and_einvoice.py`).
+    **Applied, and read back** (9 October, read-only, after run
+    37884511511 on `2506f78`): recorded; the void refusal in the live
+    `prepare_einvoice` (e6584534...) and the `submitted` refusal and the
+    withdrawal in the live `void_sales_document` (b5c5f6f3...), both
+    the same as the local build; execute granted to `authenticated` and
+    not to `anon`; still no e-Invoices in production, so none on a void
+    sale.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
