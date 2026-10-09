@@ -903,4 +903,176 @@ begin
   perform pg_temp.sign_in_as(v_owner);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Points buy what is left to pay  (`0787`)
+--
+-- Before `0787` a redemption was priced against the lines, and a bill
+-- discount on the same sale -- before the points or after them -- left
+-- the customer paying points for value the discount had already given,
+-- and the sale unable to complete: "Journal does not balance: debits
+-- 150.00, credits 100.00". Now what is left to pay is the limit, a
+-- later discount trims the points to fit, and the rest stay on the
+-- account.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org    uuid;
+  v_wh     uuid;
+  v_item   uuid;
+  v_walkin uuid;
+  v_member uuid;
+  v_outlet uuid;
+  v_reg    uuid;
+  v_cash   uuid;
+  v_prog   uuid;
+  v_acct   uuid;
+  v_shift  uuid;
+  v_sale   uuid;
+  v_n      integer;
+  v_a      numeric;
+  v_b      numeric;
+  v_c      numeric;
+  v_mrow   record;
+  v_tier   record;
+  v_jn     uuid;
+  v_m2     uuid;
+  v_acct2  uuid;
+  v_cashier uuid;
+  v_line   uuid;
+begin
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Pasaraya Baki Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_org, m, true from unnest(array['pos','loyalty','purchases','inventory']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+
+  insert into public.warehouses (org_id, code, name)
+  values (v_org, 'MAIN', 'Shop floor') returning id into v_wh;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'WALK-IN', 'Counter sales', 'customer') returning id into v_walkin;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'AMINAH', 'Puan Aminah', 'customer') returning id into v_member;
+
+  -- Priced before tax and with no tax code, so every figure below can
+  -- be worked by hand.
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, unit_price, cost_price)
+  values (v_org, 'TIN', 'Tin susu', 'stock', true, 'C62', 100.00, 40.00)
+  returning id into v_item;
+
+  insert into public.pos_outlets
+    (org_id, code, name, business_type, warehouse_id, walk_in_contact_id,
+     prices_include_tax)
+  values (v_org, 'SHOP', 'The shop', 'retail', v_wh, v_walkin, false)
+  returning id into v_outlet;
+  insert into public.pos_registers (org_id, outlet_id, code, name)
+  values (v_org, v_outlet, 'T1', 'Counter') returning id into v_reg;
+  insert into public.pos_settings (org_id, round_cash_to_5sen) values (v_org, true);
+  perform pg_temp.a_till(v_org);
+  insert into public.pos_tender_types
+    (org_id, code, name, kind, payment_mode_code, counts_in_drawer, gives_change)
+  values (v_org, 'CASH', 'Cash', 'cash', '01', true, true) returning id into v_cash;
+
+  insert into public.loyalty_programs
+    (org_id, code, name, earn_points_per_myr, redeem_value_per_point, min_redeem_points)
+  values (v_org, 'KAD', 'Kad Baki', 1, 0.01, 100) returning id into v_prog;
+  v_acct := public.enrol_loyalty_member(v_member, 'CARD-0787');
+  perform public.adjust_loyalty_points(v_acct, 30000, 'Opening balance');
+  v_shift := public.open_pos_shift(v_reg, 100.00);
+
+  -- A discount first, then the points.
+  v_sale := public.open_pos_sale(v_reg, v_member);
+  perform public.add_pos_sale_line(v_sale, v_item, 1, 100.00);
+  perform public.discount_pos_sale(v_sale, null, 50.00, 'Manager half off');
+  select r.points_applied, r.discount, r.new_total, r.points_after
+    into v_n, v_a, v_b, v_c
+    from public.redeem_loyalty_points(v_sale, 10000) r;
+  perform pg_temp.check_eq('after a fifty-ringgit discount, ten thousand points take only five thousand',
+    v_n || ' ' || v_a || ' ' || v_b || ' ' || v_c, '5000 50.00 0.00 25000');
+  perform public.complete_pos_sale(v_sale, '[]'::jsonb);
+  perform pg_temp.check_eq('and the sale completes, charging the five thousand',
+    app.loyalty_balance(v_acct), 25000);
+
+  -- The points first, then the discount.
+  v_sale := public.open_pos_sale(v_reg, v_member);
+  perform public.add_pos_sale_line(v_sale, v_item, 1, 100.00);
+  perform * from public.redeem_loyalty_points(v_sale, 8000);
+  perform public.discount_pos_sale(v_sale, null, 50.00, 'Manager half off');
+  perform pg_temp.check_eq('a discount after the points trims them to what is left',
+    (select loyalty_points_redeemed || ' ' || loyalty_discount || ' ' || total_amount
+       from public.pos_sales where id = v_sale), '5000 50.00 0.00');
+  perform public.complete_pos_sale(v_sale, '[]'::jsonb);
+  perform pg_temp.check_eq('and that sale completes too, the other three thousand kept',
+    app.loyalty_balance(v_acct), 20000);
+
+  -- A line taken off does the same, down to whole points.
+  v_sale := public.open_pos_sale(v_reg, v_member);
+  perform public.add_pos_sale_line(v_sale, v_item, 1, 100.00);
+  v_line := (select id from public.pos_sale_lines where sale_id = v_sale);
+  perform public.add_pos_sale_line(v_sale, v_item, 1, 33.335);
+  perform * from public.redeem_loyalty_points(v_sale, 13000);
+  perform pg_temp.check_eq('points within what is left are taken whole',
+    (select loyalty_points_redeemed from public.pos_sales where id = v_sale), 13000);
+  perform public.remove_pos_sale_line(v_line);
+  -- What is left is the one line, 33.34; at a sen a point that is
+  -- 3,334 whole points, and the other 9,666 stay where they were.
+  perform pg_temp.check_eq('a line taken off leaves only the points that still fit',
+    (select loyalty_points_redeemed || ' ' || loyalty_discount || ' ' || total_amount
+       from public.pos_sales where id = v_sale), '3334 33.34 0.00');
+  perform public.remove_pos_sale_line(
+    (select id from public.pos_sale_lines where sale_id = v_sale));
+  perform public.void_pos_sale(v_sale, 'customer_cancelled', 'Test sale');
+
+  -- Asked again for more: the second redemption is priced against the
+  -- whole bill, not against what the first one left.
+  v_sale := public.open_pos_sale(v_reg, v_member);
+  perform public.add_pos_sale_line(v_sale, v_item, 1, 100.00);
+  perform * from public.redeem_loyalty_points(v_sale, 9000);
+  perform * from public.redeem_loyalty_points(v_sale, 10000);
+  perform pg_temp.check_eq('a second, larger redemption replaces the first in full',
+    (select loyalty_points_redeemed || ' ' || total_amount
+       from public.pos_sales where id = v_sale), '10000 0.00');
+
+  -- A promotion takes its share first, and a delivery fee is not
+  -- something points pay for: what is left is the food after both
+  -- discounts, and the ride is still owed.
+  perform * from public.redeem_loyalty_points(v_sale, 0);
+  insert into public.pos_promotions (id, org_id, name, kind, amount)
+  values (gen_random_uuid(), v_org, 'Ten off', 'amount_off', 10);
+  insert into public.pos_sale_promotions (org_id, sale_id, promotion_id, amount)
+  select v_org, v_sale, p.id, 10 from public.pos_promotions p
+   where p.org_id = v_org and p.name = 'Ten off';
+  insert into public.pos_deliveries
+    (org_id, sale_id, outlet_id, address_line1, phone, fee, fee_is_manual)
+  values (v_org, v_sale, v_outlet, '1 Jalan Ujian', '012-0000000', 7, true);
+  select r.points_applied, r.new_total into v_n, v_b
+    from public.redeem_loyalty_points(v_sale, 20000) r;
+  perform pg_temp.check_eq('a promotion first, and the ride still owed',
+    v_n || ' ' || v_b, '9000 7.00');
+  perform * from public.redeem_loyalty_points(v_sale, 0);
+  delete from public.pos_deliveries where sale_id = v_sale;
+
+  -- A programme whose point is not a whole number of sen: what fits is
+  -- rounded DOWN, so points never buy one sen more than is left.
+  update public.loyalty_programs set redeem_value_per_point = 0.03
+   where id = v_prog;
+  perform * from public.redeem_loyalty_points(v_sale, 3000);
+  perform public.discount_pos_sale(v_sale, null, 40.00, 'Manager forty off');
+  perform pg_temp.check_eq('and a trim rounds the points down',
+    (select loyalty_points_redeemed || ' ' || loyalty_discount || ' ' || total_amount
+       from public.pos_sales where id = v_sale), '1666 49.98 0.02');
+
+  -- The loyalty module's guard, not the till's: a company with the till
+  -- and without the scheme does not redeem.
+  update public.org_modules set is_enabled = false
+   where org_id = v_org and module_code = 'loyalty';
+  perform pg_temp.check_refused('without the loyalty module, points are not redeemed',
+    format('select * from public.redeem_loyalty_points(%L, 100)', v_sale),
+    'not permitted to sell for this organization', '42501');
+
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

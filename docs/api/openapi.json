@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0786",
+    "version": "0787",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -57271,7 +57271,7 @@
       "post": {
         "operationId": "redeem_loyalty_points",
         "summary": "Spends points against a parked bill and returns what was applied",
-        "description": "Spends points against a parked bill and returns what was applied. Points cannot buy more than the basket: rather than refuse, it takes only what is needed and LEAVES THE REST ON THE ACCOUNT, rounding the points DOWN so that over-redeeming never takes one more point than the basket is worth. Zero clears a redemption thought better of, without voiding the sale. The basket is read from the lines rather than from `total_amount`, which already has any earlier redemption off it \u2014 reading that would let two calls stack until the sale was free. Refuses a bill that is not parked, a sale not on a member's account, and anything under the programme's minimum. Needs `can_write_module('loyalty')`.\n\n`public.redeem_loyalty_points(p_sale uuid, p_points integer)` Writes. Requires a signed-in user. Refused unless the company has the `loyalty` module and the caller may use it.",
+        "description": "Spends points against a parked bill and returns what was applied. Points buy only what is LEFT TO PAY after the bill discount and the promotions (`0787`): rather than refuse, it takes only what is needed and LEAVES THE REST ON THE ACCOUNT, rounding the points DOWN, and a discount that comes later trims the redemption the same way. Zero clears a redemption thought better of, without voiding the sale. A second call replaces the first rather than stacking. Refuses a bill that is not parked, a sale not on a member's account, and anything under the programme's minimum. Needs `can_write_module('loyalty')`.\n\n`public.redeem_loyalty_points(p_sale uuid, p_points integer)` Writes. Requires a signed-in user. Refused unless the company has the `loyalty` module and the caller may use it.",
         "tags": [
           "loyalty"
         ],

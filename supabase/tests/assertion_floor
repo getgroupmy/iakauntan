@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-16470
+16491
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1153,3 +1153,9 @@
 # join_company_group and the three bank feed writers swept, and 0786: a
 # disconnected feed comes back by its key and is neither paused nor
 # resumed. run_locally.sh at 0786: 387 files, 16470 assertions.
+#
+# 16470 -> 16491, 9 October: 0787, loyalty points buy only what is left
+# to pay (pos_loyalty.sql, a promotion and a delivery fee among them),
+# and exchange_rate_feed.sql's row-by-row block printing a status called
+# error in a form the runner does not read as a failure. Measured:
+# `all SQL assertions passed (387 files, 16491 assertions executed)`.

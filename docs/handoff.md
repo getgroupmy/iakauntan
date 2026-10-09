@@ -1251,6 +1251,27 @@ page and renumbering would quietly break the reference.
     cabbefce... and 71af3874..., identical). Swept 15 / 15, and the
     disconnect writer 6 / 6 in its own file.
     **Still to read back.**
+54. ~~Loyalty points pay for value a discount already gave away, and the
+    sale then cannot be completed.~~ **Raised and answered 9 October:
+    points buy what's left. Built in `0787`.** `redeem_loyalty_points`
+    priced points against the lines, and nothing looked again when a
+    bill discount or a promotion came before or after: on a RM100 sale
+    with a RM50 discount, 10,000 points (RM100) were all applied, and
+    the till showed RM0.00 -- and completion failed, "Journal does not
+    balance: debits 150.00, credits 100.00" -- both orders measured.
+    Now a redemption is priced against what is left after the bill
+    discount and promotions, and `app.recalc_pos_sale` trims any
+    redemption a later change outgrew to the whole points that fit,
+    rounding down; the rest stay on the account, the sale completes.
+    THE TRAP, paid for here: `redeem_loyalty_points`'s file text in
+    `0212` is not what production runs -- `0231` rewrote its module
+    guard from 'pos' to 'loyalty' at runtime -- and a restatement copied
+    from the file would have moved the guard back. Only the hash check
+    against production caught it; a test now pins the guard. Restated
+    from `0410` (recalc) and `0212`-as-`0231`-left-it (production hashes
+    c4e332ff... and b12bab0e..., identical). Production held one
+    programme and no redemption. Swept 8 / 11, three equivalent.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -1461,6 +1482,7 @@ function:
 | `ingest_exchange_rates` | `0104` | 16 / 16 | -- | `exchange_rate_feed.sql` (ten before its block; noted: a non-numeric rate or date fails the whole batch, and a slashed date reads by DateStyle -- unreachable through `fetch-rates`) |
 | `import_items` | `0103` | 25 / 25 | -- | `csv_import.sql` (ten before its block: one import and one preview of three kinds of bad row; the service check's comment claims untracked stock "posts to inventory" -- measured, it is expensed like non_stock) |
 | `revoke_document_share` | `0094` | 5 / 5 | -- | `document_share.sql` (two before its block: "anybody revokes" survived; one document only) |
+| `app.recalc_pos_sale` (trim), `redeem_loyalty_points` | `0787` | 8 / 11 | 3 | `pos_loyalty.sql` (new in `0787`; equivalent: the recalculation's trim corrects whatever the redemption priced; the loyalty guard had never been asked with the till on and the scheme off) |
 | `app.document_state_is_the_databases` | `0781` | 10 / 10 | -- | `posted_document_is_frozen.sql` (new in `0781`; the depth mutants killed by a real payment, which replaced a control that wrote the figures itself) |
 | `app.project_closes_only_when_billed` | `0778` | 11 / 11 | -- | `project_budget.sql` (new in `0778`; SECURITY DEFINER flipped by hand, equivalent while every member reads every time entry) |
 | `close_lead`, `reopen_lead` | `0373` | 12 / 12 | -- | `win_loss.sql` (four before its block: one clean lead, its owner) |
