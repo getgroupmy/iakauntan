@@ -524,4 +524,58 @@ begin
     v_body like '%amount owing%');
 end $$;
 
+-- ---------------------------------------------------------------------
+-- `apply_tax_submission`, rule by rule
+--
+-- A mutation sweep (`mutants/tax_submission.py`) left four rules with
+-- nothing here to tell them from their absence: a submission that does
+-- not exist, the record of who accepted one, that accepting what was
+-- set aside brings it back, and that what the public form already took
+-- stays on the record beside what was accepted later.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_owner uuid := pg_temp.test_user();
+  v_org   uuid;
+  v_buyer uuid;
+  v_sub   uuid;
+  s       public.tax_detail_submissions;
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  v_org := pg_temp.test_org('Satu Persatu Cukai Sdn Bhd');
+  v_buyer := pg_temp.a_contact(v_org, 'B099', 'Rekod Terima Sdn Bhd');
+  update public.contacts set sst_registration_no = 'W10-1808-31000001'
+   where id = v_buyer;
+
+  perform pg_temp.check_refused('a submission that does not exist is said so',
+    format('select public.apply_tax_submission(%L)', gen_random_uuid()),
+    'Submission not found', 'P0002');
+
+  -- The form takes the blank TIN and leaves the SST number it disagrees
+  -- with for somebody to decide.
+  perform public.submit_tax_details(pg_temp.a_link(v_buyer),
+    jsonb_build_object('tin', 'C7777777777',
+                       'sst_registration_no', 'W10-9999-31000009'));
+  select id into v_sub from public.tax_detail_submissions where contact_id = v_buyer;
+  perform pg_temp.check_eq('the form took the blank TIN',
+    (select array_to_string(applied_fields, ',') from public.tax_detail_submissions
+      where id = v_sub), 'tin');
+
+  -- Set aside, and then accepted after all.
+  perform public.dismiss_tax_submission(v_sub);
+  perform pg_temp.check_true('setting it aside is recorded',
+    (select dismissed_at is not null from public.tax_detail_submissions where id = v_sub));
+  perform public.apply_tax_submission(v_sub);
+  select * into s from public.tax_detail_submissions where id = v_sub;
+  perform pg_temp.check_true('accepting it brings it back from being set aside',
+    s.dismissed_at is null and s.dismissed_by is null);
+  perform pg_temp.check_eq('and keeps what the form took beside what was accepted',
+    array_to_string(s.applied_fields, ','), 'sst_registration_no,tin');
+  perform pg_temp.check_true('and says who accepted it, and when',
+    s.applied_by = v_owner and s.applied_at is not null);
+  perform pg_temp.check_eq('the contact holds the customer''s SST number',
+    (select sst_registration_no from public.contacts where id = v_buyer),
+    'W10-9999-31000009');
+end $$;
+
 rollback;

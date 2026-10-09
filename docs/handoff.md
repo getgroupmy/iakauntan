@@ -891,6 +891,7 @@ function:
 | `record_statutory_remittance`, `report_statutory_remittances`, `report_statutory_due` | `0767` | 16 / 16 | -- | `statutory_remittances.sql` (the sweep found 34; one more assertion for the second recording's reference) |
 | `mark_payroll_paid` | `0051` | 5 / 5 | -- | `statutory.sql` (one only after asserting `paid_at`) |
 | `record_tax_instalment`, `tax_estimate_payment_summary` | `0768` | 14 / 14 | -- | `tax_estimate_payments.sql` (one more assertion for a missing estimate) |
+| `apply_tax_submission`, `dismiss_tax_submission` | `0626` | 8 / 8 | -- | `tax_details.sql` (four only after its rule-by-rule block) |
 
 Every equivalent is written into its mutants file with the reason.
 
