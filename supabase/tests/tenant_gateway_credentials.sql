@@ -440,6 +440,27 @@ begin
   exception when unique_violation then
     raise notice 'ok   and nothing can switch one acquirer on twice';
   end;
+
+  -- Removing one acquirer's keys in one mode removes nothing else: not
+  -- another acquirer's, not another company's.
+  -- Live keys for the other acquirer and the other company too, so a
+  -- delete that ignored the acquirer or the company would find them.
+  perform public.set_org_payment_gateway(
+    v_org, 'toyyibpay', 'production', 'tp_live', 'cat_l', 'tsig_l', false);
+  perform public.set_org_payment_gateway(
+    v_them, 'billplz', 'production', 'sk_their_live', 'col_tl', 'xsig_tl', false);
+  perform public.clear_org_payment_gateway(v_org, 'billplz', 'production');
+  perform pg_temp.check_eq('removing live Billplz keys leaves the other acquirer''s live keys',
+    (select count(*) from public.org_payment_gateways
+      where org_id = v_org and gateway_code = 'toyyibpay' and mode = 'production'), 1);
+  perform pg_temp.check_eq('and the other company''s live Billplz',
+    (select count(*) from public.org_payment_gateways
+      where org_id = v_them and gateway_code = 'billplz' and mode = 'production'), 1);
+  perform pg_temp.sign_in_as(pg_temp.another_user('orang.luar@satumod.test'));
+  perform pg_temp.check_refused('a stranger does not remove this company''s keys',
+    format('select public.clear_org_payment_gateway(%L, %L, %L)', v_org, 'toyyibpay', 'sandbox'),
+    'Only an administrator can remove this company''s payment credentials', '42501');
+  perform pg_temp.sign_in_as(v_owner);
 end $$;
 
 rollback;

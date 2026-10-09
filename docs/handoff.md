@@ -1220,6 +1220,7 @@ function:
 | `update_leave_contact` | `0395` | 10 / 10 | -- | `leave_requests.sql` (seven before: no draft, none ending today, none missing) |
 | `remove_pos_sale_line` | `0225` | 6 / 6 | -- | `pos_fnb.sql` (three before: three files removed lines, none asked a refusal but the kitchen one) |
 | `send_order_to_kitchen` | `0220` | 14 / 14 | -- | `pos_fnb.sql` (six before its block: parked table bills only, every item routed, no notes, the docket's header never read) |
+| `clear_org_payment_gateway` | `0412` | 4 / 4 | -- | `tenant_gateway_credentials.sql` (one before: nothing else held keys in the mode cleared; noted: clearing keys strands a pending payment's callback) |
 
 Every equivalent is written into its mutants file with the reason.
 
