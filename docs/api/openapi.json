@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0781",
+    "version": "0782",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -30985,7 +30985,7 @@
       "post": {
         "operationId": "create_fiscal_year",
         "summary": "Opens a fiscal year and its periods, from the date given or from where the last one ended, honouring the\u2026",
-        "description": "Opens a fiscal year and its periods, from the date given or from where the last one ended, honouring the company's own year-end day. Refuses a year overlapping one that already exists, naming the dates: two periods covering one date would make \"which period does this post to\" ambiguous, and posting is refused outside an open period. Needs `can_post`.\n\n`public.create_fiscal_year(p_org_id uuid, p_start_date date)` Writes. Requires a signed-in user.",
+        "description": "Opens a fiscal year and its periods, from the date given or from where the last one ended, honouring the company's own year-end day. Refuses a year overlapping one that already exists, naming the dates: two periods covering one date would make \"which period does this post to\" ambiguous, and posting is refused outside an open period. The twelve periods tile the year back to back, so every day is in exactly one whatever day the year starts (`0782`). Needs `can_post`.\n\n`public.create_fiscal_year(p_org_id uuid, p_start_date date)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -31454,7 +31454,7 @@
       "post": {
         "operationId": "create_previous_fiscal_year",
         "summary": "Opens the fiscal year immediately BEFORE the earliest one, with its periods, for a company posting history it\u2026",
-        "description": "Opens the fiscal year immediately BEFORE the earliest one, with its periods, for a company posting history it arrived with. Anchored to its END -- the day before the earliest year -- rather than to a start date, because deriving the end from a start leaves a day uncovered when the earliest year begins on a leap day. Refuses a company with no fiscal year at all, and one where the year it would create already exists. The periods arrive OPEN, because the reason to add a prior year is to post to it. Needs `can_post`.\n\n`public.create_previous_fiscal_year(p_org_id uuid)` Writes. Requires a signed-in user.",
+        "description": "Opens the fiscal year immediately BEFORE the earliest one, with its periods, for a company posting history it arrived with. Anchored to its END -- the day before the earliest year -- rather than to a start date, because deriving the end from a start leaves a day uncovered when the earliest year begins on a leap day. The periods tile the year back to back (`0782`). Refuses a company with no fiscal year at all, and one where the year it would create already exists. The periods arrive OPEN, because the reason to add a prior year is to post to it. Needs `can_post`.\n\n`public.create_previous_fiscal_year(p_org_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],

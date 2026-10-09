@@ -223,6 +223,142 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- Who is refused, and what the periods are called
+--
+-- The privilege checks above ask whether a role may call it at all.
+-- These ask the function's own two guards, and the one figure on a
+-- period nothing read: its name.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid := pg_temp.test_org('Tahun Lalu Sdn Bhd');
+  v_clerk uuid := pg_temp.another_user('kerani@tahunlalu.test');
+  v_ghost uuid := gen_random_uuid();
+  v_prev  uuid;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  perform public.create_fiscal_year(v_org, date '2026-01-01');
+  perform pg_temp.check_refused('a company that does not exist is said so',
+    format('select public.create_previous_fiscal_year(%L)', v_ghost),
+    format('Organization %s not found', v_ghost), 'P0001');
+
+  insert into public.org_members (org_id, user_id, role, status)
+  values (v_org, v_clerk, 'sales', 'active');
+  perform pg_temp.sign_in_as(v_clerk);
+  perform pg_temp.check_refused('a member who may not post does not open a year',
+    format('select public.create_previous_fiscal_year(%L)', v_org),
+    'Insufficient privileges', '42501');
+
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_prev := public.create_previous_fiscal_year(v_org);
+  perform pg_temp.check_eq('each period is named for its month',
+    (select string_agg(name, ', ' order by period_no)
+       from public.fiscal_periods
+      where fiscal_year_id = v_prev and period_no in (1, 2, 12)),
+    'Jan 2025, Feb 2025, Dec 2025');
+
+  perform pg_temp.sign_out();
+end $$;
+
+-- ---------------------------------------------------------------------
+-- A year that starts late in a month  (`0782`)
+--
+-- Month arithmetic clamps a short month and never gives the day back.
+-- Periods built by adding months to a 31st left days in no period --
+-- before `0782`, 28 to 30 March, 30 May, 30 July, 30 October and 30
+-- December of a year from 31 January -- and a journal on one of them
+-- was refused inside a year that existed. Asked of both functions, for
+-- a 31st and for a leap day.
+-- ---------------------------------------------------------------------
+create or replace function pg_temp.pfy_tiling(p_fy uuid)
+returns text language sql as $$
+  -- Days in the year, days in a period, and days in two -- which must
+  -- read N, N, 0 -- and whether period n+1 starts the day after n ends.
+  with y as (select start_date, end_date from public.fiscal_years where id = p_fy),
+       d as (select g::date as day from y, generate_series(y.start_date, y.end_date, interval '1 day') g),
+       c as (select d.day, count(p.id) as n
+               from d left join public.fiscal_periods p
+                 on p.fiscal_year_id = p_fy and d.day between p.start_date and p.end_date
+              group by d.day)
+  select (select count(*) from d) || ' days, '
+      || (select count(*) from c where n = 1) || ' in one period, '
+      || (select count(*) from c where n <> 1) || ' in none or two, '
+      || (select count(*) from public.fiscal_periods a
+            join public.fiscal_periods b on b.fiscal_year_id = a.fiscal_year_id
+                                        and b.period_no = a.period_no + 1
+           where a.fiscal_year_id = p_fy and b.start_date <> a.end_date + 1)
+      || ' gaps between periods, last ends '
+      || (select max(end_date) from public.fiscal_periods where fiscal_year_id = p_fy)
+      || ' of ' || (select end_date from y);
+$$;
+
+do $$
+declare
+  v_org  uuid := pg_temp.test_org('Hujung Bulan Sdn Bhd');
+  v_org2 uuid;
+  v_fy   uuid;
+  v_prev uuid;
+  v_e    uuid;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_fy := public.create_fiscal_year(v_org, date '2026-01-31');
+  perform pg_temp.check_eq('a year from the 31st is every day once, end to end',
+    pg_temp.pfy_tiling(v_fy),
+    '365 days, 365 in one period, 0 in none or two, 0 gaps between '
+    'periods, last ends 2027-01-30 of 2027-01-30');
+  perform pg_temp.check_eq('its second period runs on from the first',
+    (select start_date || '..' || end_date from public.fiscal_periods
+      where fiscal_year_id = v_fy and period_no = 2),
+    '2026-02-28..2026-03-30');
+
+  -- The day that was refused.
+  v_e := public.create_gl_entry(v_org, date '2026-03-29',
+    'manual'::app.journal_source,
+    jsonb_build_array(
+      jsonb_build_object('account_id', (select id from public.accounts
+                          where org_id = v_org and code = '1110'),
+                         'debit', 100, 'credit', 0),
+      jsonb_build_object('account_id', (select id from public.accounts
+                          where org_id = v_org and code = '3100'),
+                         'debit', 0, 'credit', 100)),
+    'Posted on a day that was in no period');
+  perform pg_temp.check_eq('and 29 March posts, into the period that holds it',
+    (select p.period_no from public.gl_entries e
+       join public.fiscal_periods p on p.id = e.fiscal_period_id
+      where e.id = v_e), 2);
+
+  v_prev := public.create_previous_fiscal_year(v_org);
+  perform pg_temp.check_eq('the year before it is tiled too',
+    pg_temp.pfy_tiling(v_prev),
+    '365 days, 365 in one period, 0 in none or two, 0 gaps between '
+    'periods, last ends 2026-01-30 of 2026-01-30');
+  -- Tiled is not enough: periods that each ran a month from their own
+  -- start would tile too, drifting to the 28th by March and leaving
+  -- the last one five weeks long.
+  perform pg_temp.check_eq('and its periods keep to the year''s own day',
+    (select string_agg(start_date || '..' || end_date, ', ' order by period_no)
+       from public.fiscal_periods
+      where fiscal_year_id = v_prev and period_no in (3, 12)),
+    '2025-03-31..2025-04-29, 2025-12-31..2026-01-30');
+
+  -- And a leap day, both ways.
+  perform pg_temp.allow_many_companies();
+  v_org2 := pg_temp.test_org('Hari Lompat Sdn Bhd');
+  v_fy := public.create_fiscal_year(v_org2, date '2028-02-29');
+  perform pg_temp.check_eq('a year from a leap day is every day once',
+    pg_temp.pfy_tiling(v_fy),
+    '365 days, 365 in one period, 0 in none or two, 0 gaps between '
+    'periods, last ends 2029-02-27 of 2029-02-27');
+  v_prev := public.create_previous_fiscal_year(v_org2);
+  perform pg_temp.check_eq('and the year before it',
+    pg_temp.pfy_tiling(v_prev),
+    '365 days, 365 in one period, 0 in none or two, 0 gaps between '
+    'periods, last ends 2028-02-28 of 2028-02-28');
+
+  perform pg_temp.sign_out();
+end $$;
+
+-- ---------------------------------------------------------------------
 -- Who may call it
 -- ---------------------------------------------------------------------
 do $$

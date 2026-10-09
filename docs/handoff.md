@@ -1145,6 +1145,25 @@ page and renumbering would quietly break the reference.
     BILL, so a wrong posted bill is undone only by a purchase credit
     note against it.
     **Still to read back.**
+49. ~~A year that starts late in a month has days in no period.~~
+    **Raised and answered 9 October: tile the periods. Built in
+    `0782`.** `create_fiscal_year` and `create_previous_fiscal_year`
+    built periods by adding months to a date, and month arithmetic
+    clamps a short month without giving the day back: a year from 31
+    January 2026 left 28-30 March, 30 May, 30 July, 30 October and 30
+    December in no period, and a journal on 29 March was refused "No
+    fiscal period covers 2026-03-29" inside a year that existed --
+    measured. Each period now starts the day after the last ends and
+    ends the day before the year's start plus its months, counted from
+    the YEAR's start. For a start on the 1st to the 28th the periods are
+    the same day for day, so all 47 production years (every one starting
+    on the 1st, none with a gap) would be built identically. The app
+    never passes a start date; this was the API's road. Restated from
+    `0422` and `0659` (production hashes d96bb5ba... and 520926f9...,
+    identical). Swept 13 / 19, six equivalent by arithmetic. Periods
+    are still named for the month they START in, as before, so the
+    period holding 29 March of that year is called "Feb 2026".
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -1343,6 +1362,7 @@ function:
 | `report_uncapitalised_purchases` | `0780` | 12 / 12 | -- | `capitalisation.sql` (three by `0780`'s blocks: the paid, the part-paid, and a dollar bill's amount) |
 | `grant_support_access`, `end_support_access` | `0719` | 19 / 19 | -- | `support_access.sql` (five before its block: the reason refused by SQLSTATE the table also raises; no deleted company, null length, second administrator or company, stranger, or second ending) |
 | `invite_member`, `accept_invitation` | `0353` | 19 / 20 | 1 | `invitations.sql` (three before its block: no address already in another company, no caller signed out or without an address; equivalent: a used token is nulled, so the status filter finds nothing more) |
+| `create_fiscal_year`, `create_previous_fiscal_year` | `0782` | 13 / 19 | 6 | `previous_fiscal_year.sql` (6 of 13 before: no guard asked, no period name; raised: a year from the 31st lost days between periods -- `0782`; six equivalent by arithmetic, reasons in the file) |
 | `app.document_state_is_the_databases` | `0781` | 10 / 10 | -- | `posted_document_is_frozen.sql` (new in `0781`; the depth mutants killed by a real payment, which replaced a control that wrote the figures itself) |
 | `app.project_closes_only_when_billed` | `0778` | 11 / 11 | -- | `project_budget.sql` (new in `0778`; SECURITY DEFINER flipped by hand, equivalent while every member reads every time entry) |
 | `close_lead`, `reopen_lead` | `0373` | 12 / 12 | -- | `win_loss.sql` (four before its block: one clean lead, its owner) |

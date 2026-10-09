@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-16374
+16405
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1130,3 +1130,8 @@
 # 9 October: 16374. 0781: a document's status, paid amount and balance
 # move only by the database's own hand, not by a client's statement.
 # run_locally.sh at 0781: 386 files, 16374 assertions.
+#
+# 9 October: 16405. grant_support_access, end_support_access,
+# invite_member and accept_invitation swept, and 0782: a fiscal year's
+# periods tile it whatever day it starts. run_locally.sh at 0782: 386
+# files, 16405 assertions.
