@@ -707,4 +707,288 @@ begin
     '%Not your scheme%', '42501');
 end $$;
 
+-- ---------------------------------------------------------------------
+-- `raise_rent_invoices`, rule by rule
+--
+-- A mutation sweep (`mutants/raise_rent_invoices.py`) left ten of its
+-- rules with nothing above able to tell them from their absence. Three
+-- were shadowed: `rent_preview` refuses a stranger and a company
+-- without the module too, in other words ("Not your site"), so the
+-- block above passed whichever guard did it. A VIEWER is the case that
+-- separates them -- a member, so `rent_preview` lets them through, who
+-- may not post. The rest were never asked: the due date either way,
+-- what the invoice and its line say, the months on the run line, that
+-- the invoices are posted, and a site with nobody to bill.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_owner uuid := pg_temp.test_user();
+  v_viewer uuid := pg_temp.another_user('rent-viewer@iakauntan.test');
+  v_org uuid; v_bare uuid; v_site uuid; v_empty uuid; v_bsite uuid;
+  v_t1 uuid; v_t2 uuid; v_u1 uuid; v_u2 uuid;
+  v_run uuid; v_inv uuid; v_inv2 uuid;
+  v_runs integer;
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  v_org := pg_temp.test_org('Sewa Satu Persatu Sdn Bhd');
+  insert into public.org_modules (org_id, module_code, is_enabled, enabled_at)
+  values (v_org, 'property_nonstrata', true, now())
+  on conflict (org_id, module_code) do update set is_enabled = true;
+  perform public.create_fiscal_year(v_org, date '2026-01-01');
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_org, v_viewer, 'viewer', 'active', now());
+
+  insert into public.property_sites (org_id, code, name, tenure)
+  values (v_org, 'ROW9', 'Jalan Sembilan', 'non_strata') returning id into v_site;
+  insert into public.property_sites (org_id, code, name, tenure)
+  values (v_org, 'ROW0', 'Jalan Kosong', 'non_strata') returning id into v_empty;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'TEN9', 'Penyewa Sembilan', 'customer') returning id into v_t1;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'TEN8', 'Penyewa Lapan', 'customer') returning id into v_t2;
+  insert into public.property_units (org_id, site_id, unit_no, unit_type)
+  values (v_org, v_site, 'LOT-9', 'shop') returning id into v_u1;
+  insert into public.property_units (org_id, site_id, unit_no, unit_type)
+  values (v_org, v_site, 'LOT-8', 'shop') returning id into v_u2;
+  insert into public.tenancies
+    (org_id, unit_id, tenant_contact_id, tenancy_no, start_date, end_date,
+     monthly_rent, status)
+  values (v_org, v_u1, v_t1, 'T-009', date '2025-06-01', date '2027-05-31',
+          3000, 'active');
+  insert into public.tenancies
+    (org_id, unit_id, tenant_contact_id, tenancy_no, start_date, end_date,
+     monthly_rent, status)
+  values (v_org, v_u2, v_t2, 'T-008', date '2026-01-15', date '2027-01-14',
+          2000, 'active');
+
+  -- Who and where.
+  perform pg_temp.check_refused('a site that does not exist is said so',
+    format('select public.raise_rent_invoices(%L, %L, %L)',
+           gen_random_uuid(), date '2026-01-01', date '2026-01-31'),
+    'No such site', 'P0002');
+
+  perform pg_temp.sign_in_as(v_viewer);
+  perform pg_temp.check_true('the viewer can see the site''s rent',
+    (select count(*) from public.rent_preview(v_site, date '2026-01-01', date '2026-01-31')) = 2);
+  perform pg_temp.check_refused('but may not raise it',
+    format('select public.raise_rent_invoices(%L, %L, %L)',
+           v_site, date '2026-01-01', date '2026-01-31'),
+    'Insufficient privileges to raise invoices', '42501');
+  perform pg_temp.sign_in_as(v_owner);
+
+  perform pg_temp.allow_many_companies();
+  v_bare := pg_temp.test_org('Tiada Sewa Sdn Bhd', array['property_strata']);
+  insert into public.property_sites (org_id, code, name, tenure)
+  values (v_bare, 'ROW1', 'Jalan Satu', 'non_strata') returning id into v_bsite;
+  perform pg_temp.check_refused('a company without the module is told which module',
+    format('select public.raise_rent_invoices(%L, %L, %L)',
+           v_bsite, date '2026-01-01', date '2026-01-31'),
+    'The non-strata property module is not switched on for this company', '42501');
+
+  -- Nobody to bill: refused, and no empty run left behind.
+  perform pg_temp.check_refused('a site with nobody to bill raises nothing',
+    format('select public.raise_rent_invoices(%L, %L, %L)',
+           v_empty, date '2026-01-01', date '2026-01-31'),
+    'No active tenancy at this site covers 2026-01-01 to 2026-01-31.', 'P0002');
+  select count(*) into v_runs from public.rent_runs where site_id = v_empty;
+  perform pg_temp.check_eq('and leaves no run behind', v_runs, 0);
+
+  -- A due date asked for.
+  v_run := public.raise_rent_invoices(
+    v_site, date '2026-01-01', date '2026-01-31', date '2026-01-10');
+  select l.invoice_id into v_inv from public.rent_run_lines l
+    join public.tenancies t on t.id = l.tenancy_id
+   where l.run_id = v_run and t.tenancy_no = 'T-009';
+  select l.invoice_id into v_inv2 from public.rent_run_lines l
+    join public.tenancies t on t.id = l.tenancy_id
+   where l.run_id = v_run and t.tenancy_no = 'T-008';
+  perform pg_temp.check_eq('the invoice falls due the day asked for',
+    (select due_date::text from public.sales_documents where id = v_inv), '2026-01-10');
+  perform pg_temp.check_eq('and is dated the first day of the period',
+    (select doc_date::text from public.sales_documents where id = v_inv), '2026-01-01');
+  perform pg_temp.check_eq('it names the unit',
+    (select subject from public.sales_documents where id = v_inv), 'Rent — LOT-9');
+  perform pg_temp.check_eq('and its line names the days',
+    (select description from public.sales_document_lines where document_id = v_inv2),
+    'Rent for LOT-8, 2026-01-15 to 2026-01-31');
+  perform pg_temp.check_eq('the run line holds the part of a month billed',
+    (select months from public.rent_run_lines where invoice_id = v_inv2), 0.5484::numeric);
+  perform pg_temp.check_true('both invoices are posted, each with a journal',
+    (select bool_and(d.status = 'posted' and d.gl_entry_id is not null)
+       from public.rent_run_lines l join public.sales_documents d on d.id = l.invoice_id
+      where l.run_id = v_run));
+  perform pg_temp.check_eq('and the journal credits rent with the rent',
+    (select sum(gl.credit) from public.gl_lines gl
+       join public.sales_documents d on d.gl_entry_id = gl.entry_id
+      where d.id = v_inv and gl.account_id = app.property_income_account(v_org, 'rent')),
+    3000.00::numeric);
+
+  -- No due date: it falls due when the period starts.
+  v_run := public.raise_rent_invoices(v_site, date '2026-02-01', date '2026-02-28');
+  perform pg_temp.check_eq('with no due date, rent falls due on the first day',
+    (select min(d.due_date)::text || '/' || max(d.due_date)::text
+       from public.rent_run_lines l join public.sales_documents d on d.id = l.invoice_id
+      where l.run_id = v_run), '2026-02-01/2026-02-01');
+end $$;
+
+-- ---------------------------------------------------------------------
+-- `raise_strata_charges`, rule by rule
+--
+-- A mutation sweep (`mutants/raise_strata_charges.py`) left thirteen of
+-- its nineteen rules with nothing in this file to tell them from their
+-- absence -- including that a period is not raised twice, which the
+-- rent side has asserted since `0584` and this side never did. Each
+-- refusal here has the case beside it that must still go through.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_owner  uuid := pg_temp.test_user();
+  v_viewer uuid := pg_temp.another_user('strata-viewer@iakauntan.test');
+  v_org uuid; v_bare uuid; v_site uuid; v_bsite uuid; v_esite uuid; v_nsite uuid;
+  v_scheme uuid; v_bscheme uuid; v_empty uuid; v_norate uuid; v_unowned uuid;
+  v_jan_rate uuid;
+  v_c1 uuid; v_c2 uuid; v_u1 uuid; v_u2 uuid;
+  v_run uuid; v_inv uuid;
+  v_runs integer;
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Strata Satu Persatu', array['property_strata']);
+  insert into public.org_modules (org_id, module_code, is_enabled, enabled_at)
+  values (v_org, 'property_strata', true, now())
+  on conflict (org_id, module_code) do update set is_enabled = true;
+  perform public.create_fiscal_year(v_org, date '2026-01-01');
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_org, v_viewer, 'viewer', 'active', now());
+
+  insert into public.property_sites (org_id, code, name, tenure)
+  values (v_org, 'SR1', 'Residensi Satu', 'strata') returning id into v_site;
+  insert into public.strata_schemes (org_id, site_id, stage, total_share_units)
+  values (v_org, v_site, 'mc', 300) returning id into v_scheme;
+  -- Two rates: the AGM's for January, and a higher one from March. A
+  -- quarter starting in January is charged at January's.
+  insert into public.strata_charge_rates
+    (org_id, scheme_id, effective_from, rate_per_share_unit,
+     sinking_fund_percent, late_interest_percent)
+  values (v_org, v_scheme, date '2026-01-01', 0.35, 10, 10)
+  returning id into v_jan_rate;
+  insert into public.strata_charge_rates
+    (org_id, scheme_id, effective_from, rate_per_share_unit,
+     sinking_fund_percent, late_interest_percent)
+  values (v_org, v_scheme, date '2026-03-01', 0.40, 10, 10);
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'OWB1', 'Pemilik B-1', 'customer') returning id into v_c1;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'OWB2', 'Pemilik B-2', 'customer') returning id into v_c2;
+  insert into public.property_units
+    (org_id, site_id, unit_no, unit_type, share_units, owner_contact_id)
+  values (v_org, v_site, 'B-1', 'parcel', 100, v_c1) returning id into v_u1;
+  insert into public.property_units
+    (org_id, site_id, unit_no, unit_type, share_units, owner_contact_id)
+  values (v_org, v_site, 'B-2', 'parcel', 200, v_c2) returning id into v_u2;
+
+  -- Who and where.
+  perform pg_temp.check_refused('a scheme that does not exist is said so',
+    format('select public.raise_strata_charges(%L, %L, %L)',
+           gen_random_uuid(), date '2026-01-01', date '2026-03-31'),
+    'No such strata scheme', 'P0002');
+
+  perform pg_temp.sign_in_as(v_viewer);
+  perform pg_temp.check_refused('a viewer may not raise charges',
+    format('select public.raise_strata_charges(%L, %L, %L)',
+           v_scheme, date '2026-01-01', date '2026-03-31'),
+    'Insufficient privileges to raise charges', '42501');
+  perform pg_temp.sign_in_as(v_owner);
+
+  v_bare := pg_temp.test_org('Bukan Strata Sdn Bhd', array['property_nonstrata']);
+  insert into public.property_sites (org_id, code, name, tenure)
+  values (v_bare, 'SR2', 'Residensi Dua', 'strata') returning id into v_bsite;
+  insert into public.strata_schemes (org_id, site_id, stage, total_share_units)
+  values (v_bare, v_bsite, 'mc', 100) returning id into v_bscheme;
+  perform pg_temp.check_refused('a company without the module is told which module',
+    format('select public.raise_strata_charges(%L, %L, %L)',
+           v_bscheme, date '2026-01-01', date '2026-03-31'),
+    'The strata module is not switched on for this company', '42501');
+
+  -- No rate in force, and nothing chargeable: refused, no run left.
+  insert into public.property_sites (org_id, code, name, tenure)
+  values (v_org, 'SR3', 'Residensi Tiga', 'strata') returning id into v_nsite;
+  insert into public.strata_schemes (org_id, site_id, stage, total_share_units)
+  values (v_org, v_nsite, 'mc', 100) returning id into v_norate;
+  perform pg_temp.check_refused('no rate in force, no charges',
+    format('select public.raise_strata_charges(%L, %L, %L)',
+           v_norate, date '2026-01-01', date '2026-03-31'),
+    'No charge rate is in force on 2026-01-01.%', 'P0002');
+
+  insert into public.property_sites (org_id, code, name, tenure)
+  values (v_org, 'SR4', 'Residensi Empat', 'strata') returning id into v_esite;
+  insert into public.strata_schemes (org_id, site_id, stage, total_share_units)
+  values (v_org, v_esite, 'mc', 100) returning id into v_empty;
+  insert into public.strata_charge_rates
+    (org_id, scheme_id, effective_from, rate_per_share_unit, sinking_fund_percent)
+  values (v_org, v_empty, date '2026-01-01', 0.35, 10);
+  perform pg_temp.check_refused('a scheme with nothing chargeable raises nothing',
+    format('select public.raise_strata_charges(%L, %L, %L)',
+           v_empty, date '2026-01-01', date '2026-03-31'),
+    'No parcel in this scheme is chargeable.%', 'P0002');
+  select count(*) into v_runs from public.strata_charge_runs
+   where scheme_id in (v_norate, v_empty);
+  perform pg_temp.check_eq('and neither left a run behind', v_runs, 0);
+
+  -- The quarter, due on the 20th.
+  v_run := public.raise_strata_charges(
+    v_scheme, date '2026-01-01', date '2026-03-31', date '2026-01-20');
+  perform pg_temp.check_eq('the run is at the rate in force when the period starts',
+    (select rate_id from public.strata_charge_runs where id = v_run), v_jan_rate);
+  perform pg_temp.check_eq('so B-1 is charged 100 units at 0.35 for three months',
+    (select maintenance_amount from public.strata_charge_lines
+      where run_id = v_run and unit_id = v_u1), 105.00::numeric);
+  select invoice_id into v_inv from public.strata_charge_lines
+   where run_id = v_run and unit_id = v_u1;
+  perform pg_temp.check_eq('the invoice falls due the day asked for',
+    (select due_date::text from public.sales_documents where id = v_inv), '2026-01-20');
+  perform pg_temp.check_eq('it names the parcel',
+    (select subject from public.sales_documents where id = v_inv),
+    'Maintenance charges — B-1');
+  perform pg_temp.check_eq('and the sinking fund is credited to the sinking fund',
+    (select sum(gl.credit) from public.gl_lines gl
+       join public.sales_documents d on d.gl_entry_id = gl.entry_id
+      where d.id = v_inv
+        and gl.account_id = app.property_income_account(v_org, 'sinking')),
+    10.50::numeric);
+
+  -- Not twice over the same days.
+  perform pg_temp.check_refused('the same quarter again is refused',
+    format('select public.raise_strata_charges(%L, %L, %L)',
+           v_scheme, date '2026-01-01', date '2026-03-31'),
+    'Charges for this scheme have already been raised for 2026-01-01 to 2026-03-31%',
+    '23505');
+  perform pg_temp.check_refused('and so is a period that merely overlaps it',
+    format('select public.raise_strata_charges(%L, %L, %L)',
+           v_scheme, date '2026-03-01', date '2026-05-31'),
+    'Charges for this scheme have already been raised%', '23505');
+
+  -- The next quarter touches nothing, and has no due date: it falls due
+  -- when it starts.
+  v_run := public.raise_strata_charges(v_scheme, date '2026-04-01', date '2026-06-30');
+  perform pg_temp.check_eq('with no due date, charges fall due on the first day',
+    (select min(d.due_date)::text || '/' || max(d.due_date)::text
+       from public.strata_charge_lines l join public.sales_documents d on d.id = l.invoice_id
+      where l.run_id = v_run), '2026-04-01/2026-04-01');
+
+  -- Undone, the same quarter can be raised again.
+  perform public.void_strata_charge_run(v_run, 'wrong quarter');
+  v_run := public.raise_strata_charges(v_scheme, date '2026-04-01', date '2026-06-30');
+  perform pg_temp.check_true('a voided run does not hold its period', v_run is not null);
+
+  -- A chargeable parcel with nobody to invoice stops the whole run.
+  insert into public.property_units
+    (org_id, site_id, unit_no, unit_type, share_units)
+  values (v_org, v_esite, 'C-1', 'parcel', 100) returning id into v_unowned;
+  perform pg_temp.check_refused('a parcel with no owner is named, not skipped',
+    format('select public.raise_strata_charges(%L, %L, %L)',
+           v_empty, date '2026-01-01', date '2026-03-31'),
+    'Parcel C-1 has no owner on record%', '23502');
+end $$;
+
 rollback;

@@ -840,6 +840,8 @@ function:
 | `bill_statutory_charge` | `0387` | 15 / 15 | -- | `statutory_charges.sql` (five only after its rule-by-rule block; the named account led to `0765`) |
 | `app.refuse_line_on_heading` | `0765` | 4 / 4 | -- | `ledger.sql` |
 | `upsert_account` (0766's guards) | `0766` | 10 / 10 | -- | `chart_of_accounts.sql` |
+| `raise_rent_invoices` | `0585` | 16 / 16 | -- | `property.sql` (ten only after its rule-by-rule block; three were shadowed by `rent_preview`'s own refusal, separated by a viewer) |
+| `raise_strata_charges` | `0585` | 19 / 19 | -- | `property.sql` (thirteen only after its rule-by-rule block; it had no assertion that a period is not raised twice) |
 
 Every equivalent is written into its mutants file with the reason.
 

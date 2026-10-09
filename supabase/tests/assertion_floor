@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-15777
+15807
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1049,3 +1049,7 @@
 # drop a figure and a demotion that would orphan accounts, and keeping a
 # parent the account already has. run_locally.sh at 0766: 386 files,
 # 15777 assertions.
+#
+# 9 October: 15807. raise_rent_invoices and raise_strata_charges swept
+# (16 of 16, 19 of 19) with a rule-by-rule block each in property.sql.
+# run_locally.sh: 386 files, 15807 assertions.
