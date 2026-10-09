@@ -1395,4 +1395,118 @@ begin
     'That cheque is deposited.', '23514');
 end $$;
 
+-- ---------------------------------------------------------------------
+-- `cancel_pdc`, rule by rule
+--
+-- A mutation sweep (`mutants/cancel_pdc.py`) found ONE assertion behind
+-- handing a cheque back -- the invoice owing again, and that a
+-- cancelled cheque cannot clear. Eleven of its thirteen rules had
+-- nothing: the cheque that does not exist, the permission and which side
+-- of the books it is asked of, a cheque already paid in, the reason
+-- required and kept and trimmed, the journal reversed, the day it is
+-- reversed on, and the reversing entry recorded on the cheque.
+--
+-- The cheque here is RECEIVED ten days ago, so its journal is dated
+-- then. Reversed today and reversed on the day it was received are two
+-- different rows only because of that. Leaving the day to
+-- `reverse_gl_entry`'s default is EQUIVALENT: that default is
+-- `app.today()` as well.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_owner uuid := pg_temp.test_user();
+  v_clerk uuid := pg_temp.another_user('pdc-cancel-buyer@iakauntan.test');
+  v_then date := pg_temp.today() - 10;
+  v_org uuid; v_cust uuid; v_bank uuid; v_type uuid; v_item uuid;
+  v_inv uuid; v_inv2 uuid; v_pdc uuid; v_pdc2 uuid; v_rev uuid;
+begin
+  v_org := pg_temp.test_org('Cek Dipulangkan Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date_trunc('year', v_then)::date);
+  if extract(year from v_then) <> extract(year from pg_temp.today()) then
+    perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  end if;
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_org, m, true from unnest(array['sales','purchases','accounting']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+  perform pg_temp.sign_in_as(v_owner);
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'CUST', 'Pelanggan Pulang', 'customer') returning id into v_cust;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, unit_price)
+  values (v_org, 'KERJA', 'Work', 'service', false, 1)
+  returning id into v_item;
+  v_bank := pg_temp.test_bank_account(
+    v_org, 'Current account', 'current', 'MYR', 0, 0, '512345678903');
+
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'invoice', 'INV-P1', v_then, v_then, v_cust, 'MYR', 1, 'draft'),
+         (v_org, 'invoice', 'INV-P2', v_then, v_then, v_cust, 'MYR', 1, 'draft');
+  select id into v_inv from public.sales_documents where org_id = v_org and doc_no = 'INV-P1';
+  select id into v_inv2 from public.sales_documents where org_id = v_org and doc_no = 'INV-P2';
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price)
+  values (v_org, v_inv, 1, 'item', v_item, 'Work', 1000, 1),
+         (v_org, v_inv2, 1, 'item', v_item, 'Work', 400, 1);
+  perform public.post_sales_document(v_inv);
+  perform public.post_sales_document(v_inv2);
+
+  v_pdc := public.record_pdc(v_org, 'incoming', v_cust, '800001',
+    pg_temp.today() + 10, 1000,
+    jsonb_build_array(jsonb_build_object('document', v_inv, 'amount', 1000)),
+    v_bank, 'Maybank', v_then);
+  v_pdc2 := public.record_pdc(v_org, 'incoming', v_cust, '800002',
+    pg_temp.today() + 10, 400,
+    jsonb_build_array(jsonb_build_object('document', v_inv2, 'amount', 400)),
+    v_bank, 'Maybank', v_then);
+
+  perform pg_temp.check_refused('a cheque that does not exist is said so',
+    format('select public.cancel_pdc(%L, %L)', gen_random_uuid(), 'gone'),
+    'No such cheque.', 'P0002');
+
+  -- Write on purchasing and only read on sales does not hand back a
+  -- cheque the company RECEIVED.
+  insert into public.access_types (org_id, name)
+  values (v_org, 'Purchasing clerk') returning id into v_type;
+  insert into public.access_type_modules (access_type_id, module_code, access)
+  values (v_type, 'purchases', 'write'), (v_type, 'sales', 'read');
+  insert into public.org_members (org_id, user_id, role, access_type_id)
+  values (v_org, v_clerk, 'purchaser', v_type);
+  perform pg_temp.sign_in_as(v_clerk);
+  perform pg_temp.check_refused('a received cheque is handed back on the selling side''s permission',
+    format('select public.cancel_pdc(%L, %L)', v_pdc, 'buyer only'),
+    'not permitted to write for this organization', '42501');
+  perform pg_temp.sign_in_as(v_owner);
+
+  perform pg_temp.check_refused('not without saying why',
+    format('select public.cancel_pdc(%L, %L)', v_pdc, '   '),
+    'Say why.', '23514');
+
+  -- A cheque already paid in is the bank's now, not ours to hand back.
+  perform public.deposit_pdc(v_pdc2);
+  perform pg_temp.check_refused('a cheque paid in is not handed back',
+    format('select public.cancel_pdc(%L, %L)', v_pdc2, 'too late'),
+    'That cheque is deposited.%', '23514');
+
+  v_rev := public.cancel_pdc(v_pdc, '  He paid cash instead  ');
+  perform pg_temp.check_true('the cheque''s journal is reversed',
+    (select r.reversed_entry_id = c.gl_entry_id and r.status = 'posted'
+       from public.gl_entries r, public.post_dated_cheques c
+      where r.id = v_rev and c.id = v_pdc));
+  perform pg_temp.check_eq('on the day it was handed back',
+    (select entry_date::text from public.gl_entries where id = v_rev),
+    pg_temp.today()::text);
+  perform pg_temp.check_eq('not the day it was received, which its own entry keeps',
+    (select e.entry_date::text from public.gl_entries e
+       join public.post_dated_cheques c on c.gl_entry_id = e.id where c.id = v_pdc),
+    v_then::text);
+  perform pg_temp.check_true('the reversing entry is on the cheque',
+    (select bounce_entry_id = v_rev from public.post_dated_cheques where id = v_pdc));
+  perform pg_temp.check_eq('and so is why, without the spaces round it',
+    (select bounce_reason from public.post_dated_cheques where id = v_pdc),
+    'He paid cash instead');
+end $$;
+
 rollback;
