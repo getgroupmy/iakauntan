@@ -256,4 +256,81 @@ begin
   end;
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Items, rule by rule
+--
+-- The block above asks one file with four bad rows of three kinds. A
+-- sweep of `import_items` found most of its checks unasked: who may
+-- import, a file that is not a list or is empty, a missing code or
+-- name, a code twice -- in the file in another case, or already here,
+-- or deleted, or another company's -- a classification, currency,
+-- cost, reorder level or yes-or-no that is not one, and the order the
+-- rows come back in. One preview, one rule to a row.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid := pg_temp.test_org('Barang Satu Satu Sdn Bhd');
+  v_other uuid;
+  v_got   text;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  perform pg_temp.allow_many_companies();
+  v_other := pg_temp.test_org('Barang Jiran Sdn Bhd');
+  insert into public.items (org_id, code, name) values (v_org, 'EXIST', 'Here');
+  insert into public.items (org_id, code, name, deleted_at)
+  values (v_org, 'GONE', 'Deleted', now());
+  insert into public.items (org_id, code, name) values (v_other, 'ELSE', 'Theirs');
+
+  select string_agg(row_no || ' ' || coalesce(nullif(code, ''), '-') || ' '
+                    || status || coalesce(' ' || nullif(message, ''), ''),
+                    ' | ' order by ord)
+    into v_got
+    from public.import_items(v_org, jsonb_build_array(
+      jsonb_build_object('name', 'No code'),
+      jsonb_build_object('code', 'N1'),
+      jsonb_build_object('code', 'dup', 'name', 'First'),
+      jsonb_build_object('code', 'DUP', 'name', 'Second'),
+      jsonb_build_object('code', 'exist', 'name', 'Again'),
+      jsonb_build_object('code', 'GONE', 'name', 'Back'),
+      jsonb_build_object('code', 'ELSE', 'name', 'Ours too'),
+      jsonb_build_object('code', 'K1', 'name', 'F', 'classification_code', '999'),
+      jsonb_build_object('code', 'K2', 'name', 'G', 'currency', 'xyz'),
+      jsonb_build_object('code', 'K3', 'name', 'H', 'cost_price', 'abc'),
+      jsonb_build_object('code', 'K4', 'name', 'I', 'reorder_level', 'lots'),
+      jsonb_build_object('code', 'K5', 'name', 'J', 'track_inventory', 'maybe')),
+      false) with ordinality as t(row_no, code, status, message, ord);
+
+  perform pg_temp.check_eq('every row answered for itself, in the order sent',
+    v_got,
+    '1 - error No code.'
+    || ' | 2 N1 error No name.'
+    || ' | 3 dup ok'
+    || ' | 4 DUP error The code DUP is in this file more than once.'
+    || ' | 5 exist error exist is already an item here.'
+    || ' | 6 GONE ok'
+    || ' | 7 ELSE ok'
+    || ' | 8 K1 error "999" is not a MyInvois classification code.'
+    || ' | 9 K2 error "XYZ" is not a currency this system knows.'
+    || ' | 10 K3 error "abc" is not a cost.'
+    || ' | 11 K4 error "lots" is not a reorder level.'
+    || ' | 12 K5 error "maybe" is not a yes or a no.');
+
+  perform pg_temp.check_refused('a file that is not a list is refused',
+    format('select * from public.import_items(%L, %L::jsonb, false)',
+           v_org, '{"code": "A"}'),
+    'Rows must be a list', '22023');
+  perform pg_temp.check_refused('and an empty one',
+    format('select * from public.import_items(%L, %L::jsonb, false)',
+           v_org, '[]'),
+    'There is nothing in the file', '22023');
+
+  perform pg_temp.sign_in_as(pg_temp.another_user('orang-luar@barang.test'));
+  perform pg_temp.check_refused('a stranger does not import into a company',
+    format('select * from public.import_items(%L, %L::jsonb, false)',
+           v_org, '[{"code": "A", "name": "B"}]'),
+    'Insufficient privileges', '42501');
+
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;
