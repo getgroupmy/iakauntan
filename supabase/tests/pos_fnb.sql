@@ -328,6 +328,31 @@ begin
   perform pg_temp.check_true('and it stayed where it was',
     (select s.table_id from public.pos_sales s where s.id = v_sale) = v_bar);
 
+  -- `move_pos_sale`, rule by rule. A mutation sweep
+  -- (`mutants/move_pos_sale.py`) left these with nothing to tell them
+  -- from their absence.
+  perform pg_temp.check_refused('a bill that does not exist cannot move',
+    format('select public.move_pos_sale(%L, %L)', gen_random_uuid(), v_t7),
+    'No such sale.', 'P0002');
+  perform pg_temp.check_refused('nor can a bill move to a table that does not exist',
+    format('select public.move_pos_sale(%L, %L)', v_sale, gen_random_uuid()),
+    'No such table.', 'P0002');
+  perform pg_temp.sign_in_as(pg_temp.another_user('pindah-luar@example.test'));
+  perform pg_temp.check_refused('a stranger cannot move the party',
+    format('select public.move_pos_sale(%L, %L)', v_sale, v_t7),
+    'not permitted to sell for this organization', '42501');
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  -- The till's own permission and not another module's: a restaurant
+  -- that keeps no stock still moves its tables.
+  update public.org_modules set is_enabled = false
+   where org_id = v_org and module_code = 'inventory';
+  perform public.move_pos_sale(v_sale, v_t7);
+  perform pg_temp.check_true('a party moves with the stock module off',
+    (select s.table_id from public.pos_sales s where s.id = v_sale) = v_t7);
+  update public.org_modules set is_enabled = true
+   where org_id = v_org and module_code = 'inventory';
+  perform public.move_pos_sale(v_sale, v_bar);
+
   -- A bill can leave the room and still be a bill: that is takeaway.
   perform public.move_pos_sale(v_sale, null);
   perform pg_temp.check_true('a takeaway bill sits at no table',
@@ -355,6 +380,9 @@ begin
   perform pg_temp.check_eq('and settling it clears the table',
     (select count(*) from public.pos_floor_plan(v_outlet) f
       where f.table_id = v_t7 and f.sale_id is not null), 0);
+  perform pg_temp.check_refused('and a settled bill has nobody left to move',
+    format('select public.move_pos_sale(%L, %L)', v_sale, v_bar),
+    'That bill is already completed, so there is nobody left to move.', '23514');
 
   -- ------------------------------------------------------------------
   -- What is on the plate

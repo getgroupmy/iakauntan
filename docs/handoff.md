@@ -1519,6 +1519,7 @@ function:
 | `ingest_exchange_rates` | `0104` | 16 / 16 | -- | `exchange_rate_feed.sql` (ten before its block; noted: a non-numeric rate or date fails the whole batch, and a slashed date reads by DateStyle -- unreachable through `fetch-rates`) |
 | `import_items` | `0103` | 25 / 25 | -- | `csv_import.sql` (ten before its block: one import and one preview of three kinds of bad row; the service check's comment claims untracked stock "posts to inventory" -- measured, it is expensed like non_stock) |
 | `revoke_document_share` | `0094` | 5 / 5 | -- | `document_share.sql` (two before its block: "anybody revokes" survived; one document only) |
+| `move_pos_sale` | `0213` | 8 / 8 | -- | `pos_fnb.sql` (three before its assertions; noted: a table out of service is not refused, and the floor plan hides it -- the bill stays on the open-bills list) |
 | `clock_in`, `clock_out` (the company check) | `0789` | 6 / 6 | -- | `clock_out.sql` (new in `0789`; nothing had asked that a member who is not HR cannot clock somebody else in) |
 | `apply_pos_coupon` | `0256` | 14 / 16 | 2 | `pos.sql` (five before its assertions; found `0788`, a voucher typed twice taken twice; equivalent: the refresh rewrites a typed voucher's amount and reason) |
 | `app.recalc_pos_sale` (trim), `redeem_loyalty_points` | `0787` | 8 / 11 | 3 | `pos_loyalty.sql` (new in `0787`; equivalent: the recalculation's trim corrects whatever the redemption priced; the loyalty guard had never been asked with the till on and the scheme off) |
