@@ -1198,7 +1198,12 @@ page and renumbering would quietly break the reference.
     re-billed written-off time on a closed job to build that state, now
     disables this trigger by name around that one update, as
     `aged_balances.sql` does for its own legacy state.
-    **Still to read back.**
+    **Applied, and read back** (9 October, read-only, after run
+    37946358449 on `c35d9e7`): recorded; the live
+    `app.closed_project_takes_no_billable_time` hashes to 10884f07...,
+    the same as the migration's own body; SECURITY DEFINER, executable
+    by its owner only; the trigger `time_not_onto_a_closed_project` is
+    BEFORE INSERT OR UPDATE on `time_entries`; the comment names `0783`.
 51. ~~A cancelled vacancy can be hired into.~~ **Raised and answered 9
     October: refuse; reopen first. Built in `0784`.** `hire_applicant`
     refused a rejected or withdrawn applicant and a full requisition, but
