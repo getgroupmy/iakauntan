@@ -223,6 +223,8 @@ declare
   v_org   uuid := pg_temp.test_org('Tutup Projek Sdn Bhd');
   v_proj  uuid;
   v_clean uuid;
+  v_other uuid;
+  v_org2  uuid;
   v_said  text;
   v_row   record;
   v_n     integer;
@@ -233,6 +235,18 @@ begin
   values (v_org, 'JOB-1', 'Fit-out', 10000) returning id into v_proj;
   insert into public.projects (org_id, code, name)
   values (v_org, 'JOB-2', 'Nothing on it') returning id into v_clean;
+  -- An hour on ANOTHER job, still to bill -- in another company, so it
+  -- stays out of this one's lists: writing JOB-1 off is not a decision
+  -- about it.
+  perform pg_temp.allow_many_companies();
+  v_org2 := pg_temp.test_org('Projek Jiran Sdn Bhd');
+  insert into public.projects (org_id, code, name)
+  values (v_org2, 'JOB-3', 'Still going') returning id into v_other;
+  insert into public.time_entries
+    (org_id, project_id, user_id, entry_date, description, minutes,
+     hourly_rate, amount, is_billable, is_billed)
+  values (v_org2, v_other, auth.uid(), pg_temp.today() - 5, 'Survey', 60,
+          250, 250, true, false);
 
   insert into public.time_entries
     (org_id, project_id, user_id, entry_date, description, minutes,
@@ -298,6 +312,8 @@ begin
   select count(*)::integer into v_n from public.time_entries
    where project_id = v_proj;
   perform pg_temp.check_eq('and the hours still recorded', v_n, 4);
+  perform pg_temp.check_true('and another job''s hour is still there to bill',
+    (select is_billable from public.time_entries where project_id = v_other));
   perform pg_temp.check_eq('the invoiced entry is untouched',
     (select count(*)::integer from public.time_entries
       where project_id = v_proj and is_billed and is_billable), 1);
@@ -389,6 +405,9 @@ begin
   end;
   perform pg_temp.check_true('no such project, said as such',
     v_said like '%No such project%');
+  perform pg_temp.check_refused('and reopening one that does not exist is said so too',
+    format('select public.reopen_project(%L)', gen_random_uuid()),
+    'No such project.', 'P0002');
 
   perform pg_temp.sign_out();
 end $$;
