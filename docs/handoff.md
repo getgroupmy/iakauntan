@@ -698,10 +698,19 @@ page and renumbering would quietly break the reference.
     filter, which lands on 5000 and 4000; they now take the first leaf
     by code. **Not included, deliberately:** a retired account (that
     question is still open). See 33 for what building this turned up in
-    `upsert_account`. **Awaiting deploy.**
+    `upsert_account`. **Applied, and read back** (9 October, read-only,
+    after run 37867079957 on `ebef668`): recorded; the trigger present as
+    `BEFORE INSERT OR UPDATE OF account_id`; `demo_legal_guaman`'s live
+    body calls `app.time_income_account(p_org)` and no longer picks by
+    type; `authenticated` cannot execute the trigger function; no real
+    company has a line on a heading. The demo's ONE line on 4000 is still
+    there until the next daily rebuild (11:00 UTC) replaces it -- **check
+    after that rebuild that it is 0 and that the rebuild did not fail**:
+    a seeder still posting to a heading would now stop it, which the
+    local `demo_rebuild.sql` says none does.
 33. **`upsert_account` reshapes the chart behind the person's back.
     Raised and answered 9 October: guard the function and fix the app;
-    leave production's rows as they are. To be built in `0766`.** Found
+    leave production's rows as they are. Built in `0766`.** Found
     building 32, each reproduced locally under `authenticated`:
     (a) the app's EDIT dialog (`chart_of_accounts_card.dart`) sends
     `p_is_group: false` and no parent for every account it saves, and
@@ -721,6 +730,35 @@ page and renumbering would quietly break the reference.
     balance. The harm is the chart -- a "heading" that takes postings
     with its children hanging under a leaf, and accounts with no parent
     -- and the person did nothing but rename something.
+    **What `0766` does:** `upsert_account` refuses promotion whenever
+    `app.sub_account_refusal` would (posted entries, an opening balance,
+    a number the ledger posts to), refuses demoting a heading with live
+    accounts under it, and no longer re-examines a parent the account
+    already has -- without that, the fixed dialog re-saving GESWANT's
+    1120-1000 (filed under a leaf by `0693`, legitimately) would have
+    been refused. The edit dialog now sends `isGroup` and the new
+    `Account.parentId`; `chart_of_accounts_screen_test.dart` asserts the
+    RPC's `p_is_group` and `p_parent_id` for a heading and for a leaf
+    -- `scripts/mutate.py` on the dialog: 4 of 4 killed (no is_group,
+    no parent, everything a heading, filed under itself), control
+    survived.
+    `chart_of_accounts.sql` had a fixture with the app's bug: it renamed
+    1200 without `p_is_group`, demoting it, and its renumbering
+    assertion would then have been satisfied by 0766's demotion guard
+    alone. Fixed, with "and stays the heading it was". The production
+    rows named above are untouched, as answered.
+    **A trap paid for building it:** the first draft restated
+    `upsert_account` from `0459`, because a case-sensitive search for
+    `function public.upsert_account` found nothing later -- `0550`
+    restated it as `CREATE OR REPLACE FUNCTION`. The draft silently
+    dropped `0550`'s type-and-subtype rule; every file but
+    `chart_import.sql` passed, and the mutation sweep passed too, since
+    the harness compares the migration with the LIVE text, which was by
+    then the draft itself. What would have caught it before the suite:
+    replay the source you restate from into a rolled-back transaction
+    and compare its `md5(pg_get_functiondef(...))` with production's.
+    `0766` was rebuilt on `0550` that way (a6e8d692 both). **Search
+    migrations for a function with `grep -i`.** **Awaiting deploy.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -801,6 +839,7 @@ function:
 | `complete_bank_reconciliation` | `0716` | 14 / 15 | 1 (the column rounds the balance) | `bank_reconciliation.sql` |
 | `bill_statutory_charge` | `0387` | 15 / 15 | -- | `statutory_charges.sql` (five only after its rule-by-rule block; the named account led to `0765`) |
 | `app.refuse_line_on_heading` | `0765` | 4 / 4 | -- | `ledger.sql` |
+| `upsert_account` (0766's guards) | `0766` | 10 / 10 | -- | `chart_of_accounts.sql` |
 
 Every equivalent is written into its mutants file with the reason.
 

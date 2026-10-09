@@ -153,9 +153,17 @@ begin
   -- The receivables control account. Posting finds it by number, so
   -- renumbering it detaches the path silently -- the next invoice posts
   -- its receivable somewhere else or fails at the ledger.
+  --
+  -- `p_is_group => true` in both calls below, because 1200 is a heading
+  -- with accounts under it. These used to leave it out, which DEMOTED
+  -- the heading as a side effect of renaming it -- the same thing the
+  -- app's edit dialog did to two companies in production -- and since
+  -- 0766 refuses that with the same SQLSTATE, the renumbering assertion
+  -- would have passed whether its own guard existed or not.
   begin
     perform public.upsert_account(
-      '1201', 'Trade receivables', 'asset', 'current_asset', p_id => v_id);
+      '1201', 'Trade receivables', 'asset', 'current_asset', p_id => v_id,
+      p_is_group => true);
     v_took := true;
   exception when sqlstate '23514' then v_took := false;
   end;
@@ -168,9 +176,12 @@ begin
 
   -- Renaming it is allowed. The name is not what the machinery holds.
   perform public.upsert_account(
-    '1200', 'Debtors', 'asset', 'current_asset', p_id => v_id);
+    '1200', 'Debtors', 'asset', 'current_asset', p_id => v_id,
+    p_is_group => true);
   perform pg_temp.check_eq('but it can still be renamed',
     (select name from public.accounts where id = v_id), 'Debtors');
+  perform pg_temp.check_true('and stays the heading it was',
+    (select is_group from public.accounts where id = v_id));
 
   -- And it cannot be removed at all.
   --
@@ -514,6 +525,153 @@ begin
   perform pg_temp.check_eq(
     'leaving the account''s own column at zero',
     (select opening_balance from public.accounts where id = v_id), 0);
+
+  perform pg_temp.sign_out();
+end $$;
+
+-- ---------------------------------------------------------------------
+-- 0766: a rename leaves the chart as it was
+--
+-- The app's edit dialog sent `p_is_group => false` and no parent for
+-- every account it saved, and `upsert_account` wrote both: renaming a
+-- heading made it a postable leaf with its children still under it.
+-- And nothing stopped `p_is_group => true` promoting an account with
+-- postings, whose figure then left the trial balance. Each refusal
+-- has the case beside it that must still go through, so a guard that
+-- refused everything fails here as surely as one that refused nothing.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid;
+  v_head  uuid; v_empty uuid; v_gone uuid; v_kid uuid;
+  v_posted uuid; v_opened uuid; v_fresh uuid; v_coded uuid; v_cash uuid;
+  v_sub   uuid; v_other uuid;
+  v_code  text;
+  v_dr numeric; v_cr numeric;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_org := pg_temp.coa_org('Nama Semula Sdn Bhd');
+  v_head := pg_temp.acct(v_org, '6000');
+
+  -- 1. A heading renamed the way the app now saves it stays a heading.
+  perform public.upsert_account(p_code => '6000', p_name => 'Operating Expenses',
+    p_type => 'expense', p_subtype => 'operating_expense', p_id => v_head,
+    p_parent_id => null, p_is_group => true, p_description => null, p_org_id => null);
+  perform pg_temp.check_true('a heading renamed as a heading keeps its name and stays one',
+    (select is_group and name = 'Operating Expenses' from public.accounts where id = v_head));
+
+  -- The way the app USED to save it.
+  perform pg_temp.check_refused(
+    'a heading with accounts under it does not stop being one',
+    format($q$select public.upsert_account(p_code => '6000', p_name => 'Operating Expenses',
+      p_type => 'expense', p_subtype => 'operating_expense', p_id => %L,
+      p_parent_id => null, p_is_group => false, p_description => null, p_org_id => null)$q$, v_head),
+    'Account 6000 (Operating Expenses) has accounts under it, so it stays a heading.',
+    '23514');
+  perform pg_temp.check_true('and is still a heading',
+    (select is_group from public.accounts where id = v_head));
+
+  -- An empty heading may become an account that posts.
+  v_empty := public.upsert_account('6380', 'Kosong', 'expense', 'operating_expense',
+    p_is_group => true, p_org_id => v_org);
+  perform public.upsert_account('6380', 'Kosong', 'expense', 'operating_expense',
+    p_id => v_empty, p_is_group => false);
+  perform pg_temp.check_true('a heading with nothing under it may start posting',
+    (select not is_group from public.accounts where id = v_empty));
+
+  -- And one whose only child has been retired.
+  v_gone := public.upsert_account('6390', 'Bekas', 'expense', 'operating_expense',
+    p_is_group => true, p_org_id => v_org);
+  v_kid := public.upsert_account('6391', 'Bekas Anak', 'expense', 'operating_expense',
+    p_parent_id => v_gone, p_org_id => v_org);
+  update public.accounts set opening_balance = 10 where id = v_kid;
+  perform pg_temp.check_eq('the child is closed, not deleted',
+    public.retire_account(v_kid), 'closed');
+  perform public.upsert_account('6390', 'Bekas', 'expense', 'operating_expense',
+    p_id => v_gone, p_is_group => false);
+  perform pg_temp.check_true('so a retired child does not hold its parent a heading',
+    (select not is_group from public.accounts where id = v_gone));
+
+  -- 2. Becoming a heading. An account with a posted entry may not.
+  v_posted := pg_temp.acct(v_org, '6295');
+  v_cash   := pg_temp.acct(v_org, '1210');
+  perform public.create_gl_entry(v_org, date '2026-03-01', 'manual',
+    jsonb_build_array(
+      jsonb_build_object('account_id', v_posted, 'debit', 25, 'credit', 0),
+      jsonb_build_object('account_id', v_cash,   'debit', 0,  'credit', 25)),
+    'lesen');
+  perform pg_temp.check_refused(
+    'an account with a posted entry does not become a heading',
+    format($q$select public.upsert_account(p_code => '6295', p_name => 'Licence and Permit',
+      p_type => 'expense', p_subtype => 'operating_expense', p_id => %L,
+      p_parent_id => %L, p_is_group => true, p_description => null, p_org_id => null)$q$,
+      v_posted, v_head),
+    'Account 6295 (Licence and Permit) has 1 posted entry, so it cannot become a heading.%',
+    '23514');
+  select sum(debit), sum(credit) into v_dr, v_cr from public.report_trial_balance(v_org);
+  perform pg_temp.check_eq('so its 25 stays in the trial balance', v_dr, 25.00::numeric);
+  perform pg_temp.check_eq('on both sides', v_cr, 25.00::numeric);
+
+  -- Nor one carrying an opening balance.
+  v_opened := pg_temp.acct(v_org, '6290');
+  update public.accounts set opening_balance = 100 where id = v_opened;
+  perform pg_temp.check_refused(
+    'an account carrying an opening balance does not become a heading',
+    format($q$select public.upsert_account(p_code => '6290', p_name => 'Insurance',
+      p_type => 'expense', p_subtype => 'operating_expense', p_id => %L,
+      p_parent_id => %L, p_is_group => true, p_description => null, p_org_id => null)$q$,
+      v_opened, v_head),
+    'Account 6290 (Insurance) carries an opening balance%', '23514');
+
+  -- Nor one whose number the ledger posts to.
+  select c.code into v_code
+    from app.posting_account_codes() c
+    join public.accounts a on a.org_id = v_org and a.code = c.code
+   where not a.is_group and a.deleted_at is null
+     and coalesce(a.opening_balance, 0) = 0
+     and not exists (select 1 from public.gl_lines l where l.account_id = a.id)
+   order by c.code limit 1;
+  v_coded := pg_temp.acct(v_org, v_code);
+  perform pg_temp.check_refused(
+    'an account the ledger finds by number does not become a heading',
+    format($q$select public.upsert_account(p_code => %L, p_name => 'Renamed',
+      p_type => a.account_type, p_subtype => a.account_subtype, p_id => %L,
+      p_parent_id => a.parent_id, p_is_group => true, p_description => null, p_org_id => null)
+      from public.accounts a where a.id = %L$q$, v_code, v_coded, v_coded),
+    format('Account %s is one the ledger finds by number when it posts%%', v_code), '23514');
+
+  -- A fresh account with nothing behind it may.
+  v_fresh := public.upsert_account('6385', 'Baharu', 'expense', 'operating_expense',
+    p_parent_id => v_head, p_org_id => v_org);
+  perform public.upsert_account('6385', 'Baharu', 'expense', 'operating_expense',
+    p_id => v_fresh, p_parent_id => v_head, p_is_group => true);
+  perform pg_temp.check_true('an account with nothing behind it may become a heading',
+    (select is_group from public.accounts where id = v_fresh));
+
+  -- 3. A parent the account already has. `0693` files a child under an
+  -- account that still posts; re-saving the child must keep it there.
+  v_sub := (public.add_sub_account(v_posted, 'Lesen Premis') ->> 'id')::uuid;
+  perform pg_temp.check_true('0693 put the child under a leaf that posts',
+    (select a.parent_id = v_posted and not p.is_group
+       from public.accounts a join public.accounts p on p.id = a.parent_id
+      where a.id = v_sub));
+  perform public.upsert_account(
+    (select code from public.accounts where id = v_sub), 'Lesen Premis Kedai',
+    'expense', 'operating_expense', p_id => v_sub, p_parent_id => v_posted,
+    p_is_group => false);
+  perform pg_temp.check_true('and renaming it keeps it there',
+    (select parent_id = v_posted and name = 'Lesen Premis Kedai'
+       from public.accounts where id = v_sub));
+
+  -- Moving something else under that leaf is still refused.
+  v_other := pg_temp.acct(v_org, '6280');
+  perform pg_temp.check_refused(
+    'but nothing new is moved under a leaf',
+    format($q$select public.upsert_account(p_code => '6280', p_name => 'Professional Fees',
+      p_type => 'expense', p_subtype => 'operating_expense', p_id => %L,
+      p_parent_id => %L, p_is_group => false, p_description => null, p_org_id => null)$q$,
+      v_other, v_posted),
+    'A parent has to be a heading in the same company.', '23514');
 
   perform pg_temp.sign_out();
 end $$;

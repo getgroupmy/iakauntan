@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-15761
+15777
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1044,3 +1044,8 @@
 # the demo practice's fee moved off 4000, and bill_statutory_charge's
 # five survivors asserted. run_locally.sh at 0765: 386 files, 15761
 # assertions.
+#
+# 9 October: 15777. 0766, upsert_account refusing a promotion that would
+# drop a figure and a demotion that would orphan accounts, and keeping a
+# parent the account already has. run_locally.sh at 0766: 386 files,
+# 15777 assertions.

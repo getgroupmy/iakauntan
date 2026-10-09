@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show SupabaseClient;
 
 import 'package:iakauntan/src/core/providers.dart';
 import 'package:iakauntan/src/core/theme.dart';
 import 'package:iakauntan/src/data/models.dart';
+import 'package:iakauntan/src/data/repository.dart';
 import 'package:iakauntan/src/features/settings/chart_of_accounts_card.dart';
 
 /// The chart of accounts, and the door it did not have.
@@ -209,4 +211,116 @@ void main() {
           reason: '${headings[i]} comes after ${headings[i - 1]}');
     }
   });
+
+  group('saving an edit sends what the account already is (0766)', () {
+    // Built once, outside any test: a client made inside one starts
+    // timers the framework then reports as left running.
+    setUpAll(() => _unusedClient);
+
+    // The dialog called `upsertAccount` with neither `isGroup` nor
+    // `parentId`, so every save went to the database as `is_group:
+    // false` with no parent. Renaming a heading made it a postable
+    // leaf with its children still under it, and renaming anything
+    // took it out from under its parent -- two production companies
+    // lost a seeded heading that way. The database refuses the first
+    // now; the second is only ever what the app sends, so it is
+    // asserted here, on the parameters the RPC receives.
+    //
+    // Neither half collapses into the fallback: the heading's `true`
+    // is not the old `false`, and the leaf's parent is not the old
+    // null. Each case also catches the other's wrong answer -- a
+    // dialog that always said "heading" fails the leaf, and one that
+    // sent the account's own id as its parent fails the heading.
+    final heading = Account(
+      id: 'a-6000',
+      code: '6000',
+      name: 'EXPENSES',
+      accountType: 'expense',
+      accountSubtype: 'operating_expense',
+      isGroup: true,
+    );
+    final leaf = Account(
+      id: 'a-6200',
+      code: '6200',
+      name: 'Rental',
+      accountType: 'expense',
+      accountSubtype: 'operating_expense',
+      parentId: 'a-6000',
+    );
+
+    Future<Map<String, dynamic>> saveRenamed(
+      WidgetTester tester,
+      String row,
+      String from,
+      String to,
+    ) async {
+      final repo = _RecordingRepo();
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.physicalSize = const Size(1400, 760);
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          accountsProvider.overrideWith((ref) async => [heading, leaf]),
+          canPostProvider.overrideWithValue(true),
+          repoProvider.overrideWithValue(repo),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: const ChartOfAccountsScreen(),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text(row));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.widgetWithText(TextField, from), to);
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      final upserts =
+          repo.calls.where((c) => c.$1 == 'upsert_account').toList();
+      expect(upserts, hasLength(1), reason: 'one save, one call');
+      return upserts.single.$2!;
+    }
+
+    testWidgets('a heading renamed stays a heading', (tester) async {
+      final p = await saveRenamed(
+          tester, '6000  EXPENSES', 'EXPENSES', 'Operating Expenses');
+
+      expect(p['p_id'], 'a-6000');
+      expect(p['p_name'], 'Operating Expenses');
+      expect(p['p_is_group'], isTrue);
+      expect(p['p_parent_id'], isNull);
+    });
+
+    testWidgets('and an account renamed stays under its heading',
+        (tester) async {
+      final p = await saveRenamed(tester, '6200  Rental', 'Rental', 'Sewa');
+
+      expect(p['p_id'], 'a-6200');
+      expect(p['p_name'], 'Sewa');
+      expect(p['p_is_group'], isFalse);
+      expect(p['p_parent_id'], 'a-6000');
+    });
+  });
 }
+
+/// The real repository, so `upsertAccount`'s own mapping to `p_*` is
+/// what gets asserted, with the network taken out underneath it.
+class _RecordingRepo extends Repo {
+  _RecordingRepo() : super(_unusedClient, 'org-1');
+
+  final List<(String, Map<String, dynamic>?)> calls = [];
+
+  @override
+  Future<dynamic> callRpc(String fn, {Map<String, dynamic>? params}) async {
+    calls.add((fn, params));
+    if (fn != 'upsert_account') return null;
+    return params?['p_id'] ?? 'a-new';
+  }
+
+  @override
+  Future<void> setAccountTaxTreatment(String id, String? treatment) async {}
+}
+
+final _unusedClient = SupabaseClient('https://example.invalid', 'not-a-key');

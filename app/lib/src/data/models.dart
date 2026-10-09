@@ -963,6 +963,7 @@ class Account {
     required this.accountSubtype,
     this.taxTreatment,
     this.isGroup = false,
+    this.parentId,
     this.currentBalance = 0,
     this.isActive = true,
   });
@@ -978,6 +979,11 @@ class Account {
   /// account is. Not a to-do.
   final String? taxTreatment;
   final bool isGroup;
+
+  /// The heading it is filed under, if any. Read so that saving an edit
+  /// can send it back: the edit dialog used to send none, and every
+  /// account it saved came out from under its parent (0766).
+  final String? parentId;
   final double currentBalance;
   final bool isActive;
 
@@ -989,6 +995,7 @@ class Account {
     accountSubtype: j['account_subtype']?.toString() ?? 'current_asset',
     taxTreatment: j['tax_treatment'] as String?,
     isGroup: j['is_group'] == true,
+    parentId: j['parent_id'] as String?,
     currentBalance: Fmt.toDouble(j['current_balance']),
     isActive: j['is_active'] != false,
   );

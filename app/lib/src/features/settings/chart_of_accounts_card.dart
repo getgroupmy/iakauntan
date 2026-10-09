@@ -529,6 +529,13 @@ class _AccountDialogState extends ConsumerState<_AccountDialog> {
                   subtype:
                       choices.contains(_subtype) ? _subtype : choices.first,
                   id: widget.existing?.id,
+                  // What the account already is (0766). Left out, these
+                  // went as `is_group: false` and no parent on every
+                  // save: renaming a heading made it postable with its
+                  // children still under it, and renaming any account
+                  // took it out from under its parent.
+                  isGroup: widget.existing?.isGroup ?? false,
+                  parentId: widget.existing?.parentId,
                 );
                 // After, and with the id the upsert returns: a new
                 // account has none until it exists. Cleared where the
