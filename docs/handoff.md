@@ -1071,7 +1071,15 @@ page and renumbering would quietly break the reference.
     it is: time can still be LOGGED onto a closed project -- the app
     offers only open ones, but `time_entries_write` asks nothing about
     the project's state -- the twin of item 43 for jobs. Not raised yet.
-    **Still to read back.**
+    **Applied, and read back** (9 October, read-only, after run
+    37929252887 on `2dece94`: the database job and "Apply the
+    migrations" green; the Android build red at `setup-java`, "API rate
+    limit exceeded" on all three attempts -- GitHub's limit, not this
+    change): recorded; the live `app.project_closes_only_when_billed`
+    hashes to aa8e1ae6..., the same as the local build; SECURITY
+    DEFINER, executable by nobody but its owner; the trigger fires
+    BEFORE UPDATE OF is_active on `projects`; the comment names `0778`;
+    production still holds no closed project.
 46. ~~Gateway keys removed under a payment on its way back.~~ **Raised,
     answered "refuse with payments pending", raised AGAIN with two facts
     the first question lacked, and answered "refuse only recent ones".
