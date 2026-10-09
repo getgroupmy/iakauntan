@@ -597,4 +597,48 @@ begin
     '%No such received e-Invoice%', 'P0002');
 end $$;
 
+-- ---------------------------------------------------------------------
+-- `draft_bill_from_received_einvoice`, rule by rule
+--
+-- A mutation sweep (`mutants/draft_bill_from_received_einvoice.py`)
+-- left four rules with nothing here to tell them from their absence: a
+-- missing document, a debit note (only the bill and the credit note
+-- were asked), the bill dated by the supplier rather than by whoever
+-- pressed the button, and a line's own discount.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_doc jsonb; v_id uuid; v_bill uuid;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Kedai Diskaun Sdn Bhd');
+
+  perform pg_temp.check_refused('a document that does not exist is said so',
+    format('select public.draft_bill_from_received_einvoice(%L)', gen_random_uuid()),
+    'No such received e-Invoice', 'P0002');
+
+  -- A debit note.
+  v_doc := pg_temp.parsed('DN-0001', '03', 'C7777777777');
+  v_id := (public.record_received_einvoice(v_org, v_doc, v_doc) ->> 'id')::uuid;
+  perform public.create_supplier_from_received_einvoice(v_id);
+  v_bill := public.draft_bill_from_received_einvoice(v_id);
+  perform pg_temp.check_eq('type 03 becomes a purchase debit note',
+    (select doc_type::text from public.purchase_documents where id = v_bill),
+    'purchase_debit_note');
+  perform pg_temp.check_eq('dated the day the supplier issued it, not today',
+    (select doc_date::text from public.purchase_documents where id = v_bill),
+    '2026-03-15');
+
+  -- A line with its own discount.
+  v_doc := jsonb_set(pg_temp.parsed('INV-D001', '01', 'C8888888888'),
+                     '{lines,0,discountAmount}', '5'::jsonb);
+  v_id := (public.record_received_einvoice(v_org, v_doc, v_doc) ->> 'id')::uuid;
+  perform public.create_supplier_from_received_einvoice(v_id);
+  v_bill := public.draft_bill_from_received_einvoice(v_id);
+  perform pg_temp.check_eq('a line''s discount stays on its line',
+    (select discount_amount from public.purchase_document_lines
+      where document_id = v_bill and line_no = 1), 5.00::numeric);
+end $$;
+
 rollback;

@@ -940,6 +940,7 @@ function:
 | `consolidate_pos_einvoices` | `0501` | 8 / 8 | -- | `pos_einvoice_consolidation.sql` (7) + `pos.sql` (1). Its `p_month` default is on the UTC clock -- see the mutants file; NOT YET RAISED, the app always passes the month |
 | `void_sales_document`, `prepare_einvoice` (0770's guard) | `0770` | 14 / 14 | -- | `einvoice_statutory.sql` (10) + `void_an_invoice.sql` (4) |
 | `request_einvoice_for_sale` | `0402` | 8 / 9 | 1 ("every line" -- posting stamps the contact on every line) | `pos.sql` (five only after lines added). NOT RAISED: `0501` keeps naming the buyer on the module bar for a cashier who is not a writer, but `prepare_einvoice` inside it asks `can_write`, so that cashier is refused anyway -- the stated intent is unreachable |
+| `draft_bill_from_received_einvoice` | `0650` | 15 / 15 | -- | `received_einvoice.sql` (four only after its rule-by-rule block) |
 
 Every equivalent is written into its mutants file with the reason.
 
