@@ -1030,6 +1030,23 @@ page and renumbering would quietly break the reference.
     as the local build; SECURITY DEFINER, executable by nobody but its
     owner; the trigger fires BEFORE INSERT OR DELETE OR UPDATE on
     `client_account_transactions`; the comment names `0776`.
+44. ~~A version 1.1 company's signing certificate can be cleared.~~
+    **Raised and answered 9 October: refuse while on 1.1. Built in
+    `0777`.** `set_einvoice_version` refuses 1.1 without a certificate
+    and key for the environment the company submits to, so the failure
+    shows on the settings screen; `clear_einvoice_signing_certificate`
+    took that certificate off a company already on 1.1 without asking,
+    and every e-Invoice after it would have been refused by LHDN. Now
+    refused for the environment the company submits to, saying "Switch
+    back to version 1.0 first, or load a new certificate in its place";
+    the other environment's certificate and a 1.0 company's may still be
+    cleared. Restated from `0615`, whose text production runs exactly
+    (b23b65e6...); no company in production was on 1.1 or held a
+    certificate. Swept 6 / 6. NOT COVERED, and named so nobody assumes
+    it is: `clear_einvoice_credentials` deletes the whole login,
+    certificate included, for any company -- but that removes the client
+    id too, which stops a company filing in any version and is not
+    mistaken for anything else. **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -1221,7 +1238,8 @@ function:
 | `archive_payment_method` | `0635` | 5 / 5 | -- | `payment_methods.sql` (two before its block) |
 | `prepare_self_billed_einvoice` | `0636` | 25 / 25 | -- | `self_billed_einvoice.sql`, `tariff_code.sql` (ten before the block: every document a bill, one TIN, no shipping, one item line, prepared once) |
 | `reissue_terminal_secret` | `0612` | 5 / 5 | -- | `terminal_punches.sql` (one before its block: one terminal, its owner, the secret never measured) |
-| `set_einvoice_version`, `set_einvoice_signing_certificate`, `clear_einvoice_signing_certificate` | `0615` | 19 / 20 | 1 | `einvoice_signing_certificate.sql` (ten before its block; equivalent: the environment column is NOT NULL; noted: clearing the certificate of a 1.1 company is not refused) |
+| `set_einvoice_version`, `set_einvoice_signing_certificate` | `0615` | 16 / 17 | 1 | `einvoice_signing_certificate.sql` (ten before its block; equivalent: the environment column is NOT NULL) |
+| `clear_einvoice_signing_certificate` | `0777` | 6 / 6 | -- | `einvoice_signing_certificate.sql` (restated in `0777`: a 1.1 company's certificate is not cleared from under it) |
 | `close_project`, `reopen_project` | `0389` | 14 / 14 | -- | `project_budget.sql` (twelve before: one company with one job carrying hours; noted: `projects_update` closes a job over unbilled hours directly) |
 | `close_lead`, `reopen_lead` | `0373` | 12 / 12 | -- | `win_loss.sql` (four before its block: one clean lead, its owner) |
 | `close_opportunity`, `reopen_opportunity` | `0422`, `0373` | 20 / 20 | -- | `win_loss.sql` (twelve before its block: one won and one lost stage per pipeline, one pipeline, the owner) |

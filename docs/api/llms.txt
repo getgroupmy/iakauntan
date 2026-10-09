@@ -6,7 +6,7 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0776` (the highest applied migration).
+Schema version `0777` (the highest applied migration).
 843 functions and 367 readable tables, of which
 318 functions only read.
 
@@ -518,7 +518,7 @@ Not gated on any module.
 - `claims_awaiting_my_approval(p_org_id uuid)`
 - `clear_ai_credentials(p_org_id uuid, p_provider text)` *(writes)* — Removes a company's own key for one AI provider.
 - `clear_einvoice_credentials(p_org_id uuid, p_environment text)` *(writes)* — Removes a company's MyInvois credentials for one environment -- sandbox or production -- so nothing further is submitted with them.
-- `clear_einvoice_signing_certificate(p_org_id uuid, p_environment text)` *(writes)* — Takes the signing certificate off one environment, leaving the client id and secret.
+- `clear_einvoice_signing_certificate(p_org_id uuid, p_environment text)` *(writes)* — Removes a company's e-Invoice signing certificate for one environment.
 - `clear_ocr_credentials(p_org_id uuid, p_provider text)` *(writes)* — Removes a company's own document-scanning key and SWITCHES SCANNING OFF in the same call.
 - `clear_org_payment_gateway(p_org_id uuid, p_gateway text, p_mode text)` *(writes)* — Removes a company's own acquirer credentials for one gateway in one mode, live or test.
 - `clear_pdc(p_id uuid, p_on date, p_bank uuid)` *(writes)* — Records that a post-dated cheque actually cleared, which is the moment it stops being a promise and becomes money: the bank balance moves and the receivable or payable is discharged.

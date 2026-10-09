@@ -404,4 +404,55 @@ begin
       where org_id = v_org and environment = 'sandbox'));
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The certificate a 1.1 company signs with stays  (`0777`)
+--
+-- `set_einvoice_version` refuses 1.1 without a certificate; clearing
+-- the certificate from under a company already on 1.1 was the other
+-- road to the same state. Refused for the environment it submits to;
+-- the other environment's, and a 1.0 company's, may still go.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid;
+begin
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Tandatangan Kekal Sdn Bhd');
+  perform public.set_einvoice_credentials(v_org, 'sandbox', 'cid-s', 'secret-s');
+  perform public.set_einvoice_credentials(v_org, 'production', 'cid-p', 'secret-p');
+  perform public.set_einvoice_signing_certificate(v_org, 'sandbox',
+    '-----BEGIN CERTIFICATE-----', '-----BEGIN PRIVATE KEY-----');
+  perform public.set_einvoice_signing_certificate(v_org, 'production',
+    '-----BEGIN CERTIFICATE-----', '-----BEGIN PRIVATE KEY-----');
+  perform public.set_einvoice_version(v_org, '1.1');
+
+  perform pg_temp.check_refused('a 1.1 company''s signing certificate is not taken from under it',
+    format('select public.clear_einvoice_signing_certificate(%L, %L)', v_org, 'sandbox'),
+    'This company files version 1.1 e-Invoices in sandbox, and those have to be signed.%',
+    '23514');
+  perform pg_temp.check_true('and it is still there',
+    (select cert_pem is not null from public.einvoice_credentials
+      where org_id = v_org and environment = 'sandbox'));
+
+  perform public.clear_einvoice_signing_certificate(v_org, 'production');
+  perform pg_temp.check_true('the environment it does not submit to may be cleared',
+    (select cert_pem is null from public.einvoice_credentials
+      where org_id = v_org and environment = 'production'));
+
+  -- Moved to production, the same rule follows it there.
+  perform public.set_einvoice_signing_certificate(v_org, 'production',
+    '-----BEGIN CERTIFICATE-----', '-----BEGIN PRIVATE KEY-----');
+  update public.organizations set einvoice_environment = 'production' where id = v_org;
+  perform pg_temp.check_refused('the rule follows the environment the company submits to',
+    format('select public.clear_einvoice_signing_certificate(%L, %L)', v_org, 'production'),
+    'This company files version 1.1 e-Invoices in production%', '23514');
+  perform public.clear_einvoice_signing_certificate(v_org, 'sandbox');
+
+  perform public.set_einvoice_version(v_org, '1.0');
+  perform public.clear_einvoice_signing_certificate(v_org, 'production');
+  perform pg_temp.check_true('back on 1.0, the certificate can go',
+    (select cert_pem is null from public.einvoice_credentials
+      where org_id = v_org and environment = 'production'));
+end $$;
+
 rollback;

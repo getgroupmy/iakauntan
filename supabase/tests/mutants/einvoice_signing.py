@@ -15,6 +15,9 @@
 #
 # RESULT: 20 mutants and a control. 19 killed by
 # `einvoice_signing_certificate.sql`, ten before its rule-by-rule block.
+# Since `0777` restated `clear_einvoice_signing_certificate`, its three
+# mutants live in `mutants/clear_einvoice_signing_certificate.py`, run
+# against `0777`; the 17 here are the two functions `0615` still owns.
 #
 # One is EQUIVALENT: "a company with no environment set is taken to
 # submit to production". `organizations.einvoice_environment` is NOT
@@ -25,7 +28,8 @@
 # without its key will do for 1.1" was worth killing:
 # `set_einvoice_credentials` stores one (measured).
 #
-# Noted, not yet raised: `clear_einvoice_signing_certificate` does not
+# Raised and answered (`0777`, refuse while on 1.1):
+# `clear_einvoice_signing_certificate` did not
 # ask whether the company is on version 1.1 for that environment, so it
 # leaves exactly the state `set_einvoice_version` refuses to create -- a
 # 1.1 company with nothing to sign with, whose e-Invoice button then
@@ -132,24 +136,6 @@ m("a certificate with no credentials to sit beside is lost without a word",
   "  if not found then\n    raise exception 'Add the MyInvois client id and secret for % first",
   "  if false then  -- silently lost\n    raise exception 'Add the MyInvois client id and secret for % first",
   "-- silently lost")
-
-m("anybody clears the certificate",
-  "clear_einvoice_signing_certificate",
-  "  if not app.can_admin(p_org_id) then",
-  "  if false then  -- whoever asks",
-  "-- whoever asks")
-
-m("clearing leaves the private key behind",
-  "clear_einvoice_signing_certificate",
-  "    cert_private_key_pem = null,",
-  "    cert_private_key_pem = cert_private_key_pem,  -- key left",
-  "-- key left")
-
-m("clearing one environment clears both",
-  "clear_einvoice_signing_certificate",
-  "   where org_id = p_org_id and environment = p_environment;",
-  "   where org_id = p_org_id;  -- both environments",
-  "-- both environments")
 
 m("CONTROL: a comment inside the block",
   "set_einvoice_version",
