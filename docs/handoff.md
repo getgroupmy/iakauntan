@@ -1093,6 +1093,7 @@ function:
 | `discount_pos_sale` | `0255` | 17 / 17 | -- | `pos.sql` -- ALL only after its rule-by-rule block; before it, none of four files killed one |
 | `discount_pos_sale_line` | `0255` | 17 / 17 | -- | `pos.sql` (fourteen only after its rule-by-rule block; a refusal caught as any `check_violation` let its own guard go) |
 | `split_pos_sale` | `0255` | 18 / 18 | -- | `pos_fnb.sql` (four of fourteen before its rule-by-rule block: the file's one split was of a walk-in bill with nothing on it to carry, and its moved line was already line 1) |
+| `merge_pos_sales` | `0259` | 25 / 25 | -- | `pos_fnb.sql`, `pos_loyalty.sql`, `pos_delivery.sql` (four before the blocks; none of the six refusals or the carry-over rules was asked; a rate is told from its amount only on a bill rated while empty) |
 
 Every equivalent is written into its mutants file with the reason.
 

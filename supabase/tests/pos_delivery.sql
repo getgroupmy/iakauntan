@@ -50,6 +50,7 @@ declare
   v_b      record;
   v_msg    text;
   v_inv    uuid;
+  v_bare   uuid;
 begin
   v_org := pg_temp.test_org('Kedai Hantar Sdn Bhd');
   perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
@@ -426,6 +427,31 @@ begin
     v_b.runs, 3);
   perform pg_temp.check_true('and adds up what the rides earned',
     v_b.fees > 0);
+
+  -- The two merge refusals by what they say, after the day's counts so
+  -- the runs made here are not counted in them. The two-houses test in
+  -- "Folding one bill into another" catches any `check_violation`, and
+  -- with the address guard gone the merge still failed -- on the
+  -- unique index under `pos_deliveries.sale_id`, in words no cashier
+  -- could act on.
+  v_sale2 := public.open_pos_sale(v_reg);
+  perform public.add_pos_sale_line(v_sale2, v_item, 2, 12.00);
+  perform public.set_pos_delivery(
+    v_sale2, '9 Jalan Tiga', '012-3333333', null, null, null, '58000');
+  perform pg_temp.check_refused('two addresses refuse in words a cashier can act on',
+    format('select public.merge_pos_sales(%L, %L)', v_sale3, v_sale2),
+    'Both of those bills are going somewhere.%', '23514');
+
+  -- A run already given to a driver is food that has left, or is about
+  -- to. Folding its bill into one that is staying is the one merge that
+  -- would take an address with nothing going to it.
+  perform public.assign_pos_delivery(
+    (select d.id from public.pos_deliveries d where d.sale_id = v_sale2), v_drv);
+  v_bare := public.open_pos_sale(v_reg);
+  perform public.add_pos_sale_line(v_bare, v_item, 1, 12.00);
+  perform pg_temp.check_refused('a bill out with a driver is not folded into another',
+    format('select public.merge_pos_sales(%L, %L)', v_bare, v_sale2),
+    'That bill is already out with a driver.%', '23514');
 
 
   -- ------------------------------------------------------------------

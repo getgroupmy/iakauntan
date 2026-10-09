@@ -87,6 +87,11 @@ declare
   v_la     uuid;
   v_lb     uuid;
   v_lc     uuid;
+  v_ma     uuid;
+  v_mb     uuid;
+  v_mo     uuid;
+  v_mby    uuid;
+  v_mat    timestamptz;
 begin
   v_org := pg_temp.test_org('Warung Sedap Sdn Bhd');
   perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
@@ -675,6 +680,121 @@ begin
     format('select public.split_pos_sale(%L, array[%L]::uuid[])', v_s3, v_lb),
     'not permitted to sell for this organization', '42501');
   perform pg_temp.sign_in_as(pg_temp.test_user());
+
+  -- Joining, one rule at a time. The merge above folds a one-line bill
+  -- with no discount, no docket of its own and no address into
+  -- another: a merge that counted one however many moved, put the
+  -- lines in backwards, left the dockets behind or dropped a discount
+  -- came out exactly the same, and not one of its six refusals was
+  -- ever asked for.
+  v_ma := public.open_pos_sale(v_reg, v_cust);
+  perform public.add_pos_sale_line(v_ma, v_teh, 1, 3.00);
+  perform pg_temp.check_refused('a bill is not merged into itself',
+    format('select public.merge_pos_sales(%L, %L)', v_ma, v_ma),
+    'A bill cannot be merged into itself.', '23514');
+  perform pg_temp.check_refused('nor from a bill that does not exist',
+    format('select public.merge_pos_sales(%L, %L)', v_ma, gen_random_uuid()),
+    'No such sale.', 'P0002');
+  perform pg_temp.check_refused('nor into one',
+    format('select public.merge_pos_sales(%L, %L)', gen_random_uuid(), v_ma),
+    'No such sale.', 'P0002');
+  -- v_n3 is the second bill of the flat-amount split, voided above, in
+  -- this outlet: only its status is wrong.
+  perform pg_temp.check_refused('a voided bill is not folded into an open one',
+    format('select public.merge_pos_sales(%L, %L)', v_ma, v_n3),
+    'Both bills have to still be open.%', '23514');
+  perform pg_temp.check_refused('nor an open one into a voided one',
+    format('select public.merge_pos_sales(%L, %L)', v_n3, v_ma),
+    'Both bills have to still be open.%', '23514');
+  perform public.open_pos_shift(v_reg2, 0.00);
+  v_mo := public.open_pos_sale(v_reg2);
+  perform pg_temp.check_refused('two outlets'' bills are not joined',
+    format('select public.merge_pos_sales(%L, %L)', v_ma, v_mo),
+    'Those bills are in different outlets.', '23514');
+  v_mb := public.open_pos_sale(v_reg);
+  perform pg_temp.sign_in_as(pg_temp.another_user('joiner@iakauntan.test'));
+  perform pg_temp.check_refused('a stranger does not join this company''s bills',
+    format('select public.merge_pos_sales(%L, %L)', v_ma, v_mb),
+    'not permitted to sell for this organization', '42501');
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+
+  -- Three lines, a docket and a rate, into a bill with a line of its own
+  -- and nothing off it.
+  perform public.add_pos_sale_line(v_ma, v_teh, 1, 3.00);
+  v_la := public.add_pos_sale_line(v_mb, v_teh, 1, 1.00);
+  v_lb := public.add_pos_sale_line(v_mb, v_teh, 1, 2.00);
+  v_lc := public.add_pos_sale_line(v_mb, v_teh, 1, 4.00);
+  perform pg_temp.check_eq('the bill being folded in has been to the bar',
+    (select count(*) from public.send_order_to_kitchen(v_mb)), 1);
+  perform public.discount_pos_sale(v_mb, 10, null, 'regulars');
+  select s.bill_discounted_by, s.bill_discounted_at into v_mby, v_mat
+    from public.pos_sales s where s.id = v_mb;
+  perform pg_temp.check_eq('three lines moved is three, not one',
+    public.merge_pos_sales(v_ma, v_mb), 3);
+  perform pg_temp.check_eq('numbered on after the bill''s own two, in the order they stood',
+    (select string_agg(l.line_no::text, ',' order by l.line_no)
+       from public.pos_sale_lines l where l.id = v_la)
+      || '-' || (select l.line_no from public.pos_sale_lines l where l.id = v_lb)::text
+      || '-' || (select l.line_no from public.pos_sale_lines l where l.id = v_lc)::text,
+    '3-4-5');
+  perform pg_temp.check_eq('the docket followed the food',
+    (select count(*) from public.pos_kitchen_tickets k where k.sale_id = v_ma), 1);
+  perform pg_temp.check_eq('the rate followed it too',
+    (select s.bill_discount_percent from public.pos_sales s where s.id = v_ma), 10);
+  perform pg_temp.check_true('with its reason',
+    (select s.bill_discount_reason from public.pos_sales s where s.id = v_ma) = 'regulars');
+  perform pg_temp.check_true('who gave it',
+    v_mby is not null
+    and (select s.bill_discounted_by from public.pos_sales s where s.id = v_ma) = v_mby);
+  perform pg_temp.check_true('and when',
+    v_mat is not null
+    and (select s.bill_discounted_at from public.pos_sales s where s.id = v_ma) = v_mat);
+  perform pg_temp.check_eq('so thirteen ringgit of tea comes to eleven seventy',
+    (select s.total_amount from public.pos_sales s where s.id = v_ma), 11.70);
+
+  -- A flat amount travels on a merge, where it does not on a split: the
+  -- food it was given against is travelling with it.
+  v_ma := public.open_pos_sale(v_reg);
+  perform public.add_pos_sale_line(v_ma, v_teh, 1, 3.00);
+  v_mb := public.open_pos_sale(v_reg);
+  perform public.add_pos_sale_line(v_mb, v_teh, 1, 3.00);
+  perform public.discount_pos_sale(v_mb, null, 1.00, 'spilt');
+  perform public.merge_pos_sales(v_ma, v_mb);
+  perform pg_temp.check_eq('a flat amount travels with the food it was given against',
+    (select s.total_amount from public.pos_sales s where s.id = v_ma), 5.00);
+
+  -- A rate set before anything was rung up is a rate with nothing yet
+  -- to come off. It is still the manager's word, and it still travels.
+  v_ma := public.open_pos_sale(v_reg);
+  perform public.add_pos_sale_line(v_ma, v_teh, 1, 10.00);
+  v_mb := public.open_pos_sale(v_reg);
+  perform public.discount_pos_sale(v_mb, 10, null, null);
+  perform public.merge_pos_sales(v_ma, v_mb);
+  perform pg_temp.check_eq('a rate given on an empty bill travels too',
+    (select s.total_amount from public.pos_sales s where s.id = v_ma), 9.00);
+
+  -- The receiving bill's own discount is never overwritten, whichever
+  -- kind either of them is.
+  v_ma := public.open_pos_sale(v_reg);
+  perform public.add_pos_sale_line(v_ma, v_teh, 1, 10.00);
+  perform public.discount_pos_sale(v_ma, null, 2.00, 'loyal');
+  v_mb := public.open_pos_sale(v_reg);
+  perform public.add_pos_sale_line(v_mb, v_teh, 1, 10.00);
+  perform public.discount_pos_sale(v_mb, 50, null, 'half');
+  perform public.merge_pos_sales(v_ma, v_mb);
+  perform pg_temp.check_eq('a bill''s own flat amount is not replaced by a rate',
+    (select s.total_amount from public.pos_sales s where s.id = v_ma), 18.00);
+  perform pg_temp.check_true('nor its reason',
+    (select s.bill_discount_reason from public.pos_sales s where s.id = v_ma) = 'loyal');
+
+  v_ma := public.open_pos_sale(v_reg);
+  perform public.discount_pos_sale(v_ma, 10, null, null);
+  v_mb := public.open_pos_sale(v_reg);
+  perform public.add_pos_sale_line(v_mb, v_teh, 1, 10.00);
+  perform public.discount_pos_sale(v_mb, null, 3.00, 'cold');
+  perform public.merge_pos_sales(v_ma, v_mb);
+  perform pg_temp.check_eq('nor its rate by a flat amount, even one with nothing yet to take off',
+    (select s.total_amount from public.pos_sales s where s.id = v_ma), 9.00);
 
   -- ------------------------------------------------------------------
   -- Taking something off, before and after the kitchen was told

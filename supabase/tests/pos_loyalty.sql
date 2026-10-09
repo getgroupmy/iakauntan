@@ -46,6 +46,9 @@ declare
   v_c      numeric;
   v_mrow   record;
   v_tier   record;
+  v_jn     uuid;
+  v_m2     uuid;
+  v_acct2  uuid;
 begin
   v_org := pg_temp.test_org('Pasaraya Mesra Sdn Bhd');
   perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
@@ -600,6 +603,46 @@ begin
    where org_id = v_org and module_code = 'loyalty';
   perform pg_temp.check_eq('switched back on, the bands are there again',
     (select count(*) from public.loyalty_tiers_admin(v_org)), 3);
+
+  -- ------------------------------------------------------------------
+  -- A redemption on a bill that is folded into another
+  -- ------------------------------------------------------------------
+  -- `merge_pos_sales` deletes the bill it empties, and a redemption on
+  -- it goes with it unless it is carried -- which it is only when the
+  -- bill it joins has none of its own. pos_fnb.sql joins bills with no
+  -- redemption on either, the one case in which carrying it, dropping
+  -- it and overwriting with it all look the same.
+  perform public.adjust_loyalty_points(v_acct, 5000, 'For the joined bills');
+  v_sale := public.open_pos_sale(v_reg, v_member);
+  perform public.add_pos_sale_line(v_sale, v_item, 1, 100.00);
+  perform * from public.redeem_loyalty_points(v_sale, 500);
+  v_jn := public.open_pos_sale(v_reg);
+  perform public.add_pos_sale_line(v_jn, v_item, 1, 10.00);
+  perform public.merge_pos_sales(v_jn, v_sale);
+  perform pg_temp.check_eq('a redemption is carried onto the bill it joins',
+    (select s.loyalty_points_redeemed from public.pos_sales s where s.id = v_jn), 500);
+  perform pg_temp.check_true('against the account it was made on',
+    (select s.loyalty_account_id from public.pos_sales s where s.id = v_jn) = v_acct);
+  perform pg_temp.check_eq('with the five ringgit it is worth',
+    (select s.total_amount from public.pos_sales s where s.id = v_jn), 105.00);
+
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'BADRUL', 'Encik Badrul', 'customer') returning id into v_m2;
+  v_acct2 := public.enrol_loyalty_member(v_m2, 'CARD-0077');
+  perform public.adjust_loyalty_points(v_acct2, 1000, 'Opening balance carried over');
+  v_jn := public.open_pos_sale(v_reg, v_m2);
+  perform public.add_pos_sale_line(v_jn, v_item, 1, 10.00);
+  perform * from public.redeem_loyalty_points(v_jn, 100);
+  v_sale := public.open_pos_sale(v_reg, v_member);
+  perform public.add_pos_sale_line(v_sale, v_item, 1, 100.00);
+  perform * from public.redeem_loyalty_points(v_sale, 500);
+  perform public.merge_pos_sales(v_jn, v_sale);
+  perform pg_temp.check_eq('a bill''s own redemption is not replaced by the one joining it',
+    (select s.loyalty_points_redeemed from public.pos_sales s where s.id = v_jn), 100);
+  perform pg_temp.check_true('nor moved to somebody else''s card',
+    (select s.loyalty_account_id from public.pos_sales s where s.id = v_jn) = v_acct2);
+  perform pg_temp.check_eq('so the joined bill takes one ringgit off, not five',
+    (select s.total_amount from public.pos_sales s where s.id = v_jn), 109.00);
 
   raise notice 'point of sale loyalty: all assertions passed';
 end;
