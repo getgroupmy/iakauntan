@@ -395,4 +395,64 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The rest, rule by rule
+--
+-- Every address above was nobody's until it was invited, and every
+-- accepting caller was signed in with an address. So an invitation
+-- that re-roled a member of ANOTHER company, one taken by nobody, and
+-- one taken by an account with no address were never asked about.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_owner  uuid := pg_temp.test_user();
+  v_both   uuid := pg_temp.another_user('elsewhere@example.test');
+  v_nomail uuid := pg_temp.another_user('nomail@example.test');
+  v_org    uuid;
+  v_org2   uuid;
+  v_token  text;
+  v_token2 text;
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.allow_many_companies();
+  v_org  := pg_temp.test_org('Jemputan Satu Sdn Bhd');
+  v_org2 := pg_temp.test_org('Jemputan Dua Sdn Bhd');
+  -- A member of the other company, and of that one only.
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_org2, v_both, 'viewer', 'active', now());
+
+  v_token := public.invite_member(v_org, 'elsewhere@example.test', 'accountant');
+  perform pg_temp.check_true(
+    'an address that belongs to another company is invited here, with a link',
+    v_token is not null);
+  perform pg_temp.check_eq('and keeps its role there',
+    (select role::text from public.org_members
+      where org_id = v_org2 and user_id = v_both), 'viewer');
+
+  perform pg_temp.sign_out();
+  perform pg_temp.check_refused('an invitation is not taken by nobody',
+    format('select public.accept_invitation(%L)', v_token),
+    'Sign in first', '42501');
+
+  perform pg_temp.sign_in_as(v_owner);
+  v_token2 := public.invite_member(v_org, 'nomail@example.test', 'sales');
+  update auth.users set email = null where id = v_nomail;
+  perform pg_temp.sign_in_as(v_nomail);
+  perform pg_temp.check_refused('nor by an account with no address at all',
+    format('select public.accept_invitation(%L)', v_token2),
+    'That invitation was sent to somebody else. Sign in as the address it '
+    'was sent to.', '42501');
+
+  perform pg_temp.sign_in_as(v_both);
+  perform public.accept_invitation(v_token);
+  perform pg_temp.check_eq('the address it names takes it, into this company',
+    (select role::text from public.org_members
+      where org_id = v_org and user_id = v_both), 'accountant');
+  perform pg_temp.check_eq('and is still what it was in the other',
+    (select role::text from public.org_members
+      where org_id = v_org2 and user_id = v_both), 'viewer');
+
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

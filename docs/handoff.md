@@ -1338,6 +1338,7 @@ function:
 | `capitalise_bill_line` | `0780` | 26 / 26 | -- | `capitalisation.sql` (9 of 20 before its block: every bill dated today, in ringgit, one line, nothing named; raised: a paid bill was "not posted" -- `0780`) |
 | `report_uncapitalised_purchases` | `0780` | 12 / 12 | -- | `capitalisation.sql` (three by `0780`'s blocks: the paid, the part-paid, and a dollar bill's amount) |
 | `grant_support_access`, `end_support_access` | `0719` | 19 / 19 | -- | `support_access.sql` (five before its block: the reason refused by SQLSTATE the table also raises; no deleted company, null length, second administrator or company, stranger, or second ending) |
+| `invite_member`, `accept_invitation` | `0353` | 19 / 20 | 1 | `invitations.sql` (three before its block: no address already in another company, no caller signed out or without an address; equivalent: a used token is nulled, so the status filter finds nothing more) |
 | `app.document_state_is_the_databases` | `0781` | 10 / 10 | -- | `posted_document_is_frozen.sql` (new in `0781`; the depth mutants killed by a real payment, which replaced a control that wrote the figures itself) |
 | `app.project_closes_only_when_billed` | `0778` | 11 / 11 | -- | `project_budget.sql` (new in `0778`; SECURITY DEFINER flipped by hand, equivalent while every member reads every time entry) |
 | `close_lead`, `reopen_lead` | `0373` | 12 / 12 | -- | `win_loss.sql` (four before its block: one clean lead, its owner) |
