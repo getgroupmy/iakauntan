@@ -434,4 +434,58 @@ begin
     'Insufficient privileges%', '42501');
 end $$;
 
+-- ---------------------------------------------------------------------
+-- 0768: an instalment is paid when what was paid covers it
+--
+-- The summary behind the tax tile read `paid_on`: RM0 or RM1 against an
+-- overdue RM10,000 instalment made it paid, not overdue and not next
+-- due, while `outstanding_total` still said otherwise. Asserted against
+-- the figures before, so it does not depend on what today is -- the
+-- first instalment, due 15 February 2026, is overdue on any day this
+-- can run.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_est uuid;
+  b record; a record;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_org := pg_temp.co('Kedai Kurang Bayar Sdn Bhd');
+  v_est := public.open_tax_estimate(v_org, pg_temp.year_of(v_org), 120000);
+  select * into b from public.tax_estimate_payment_summary(v_est);
+  perform pg_temp.check_true('the first instalment is overdue and next',
+    b.overdue_count >= 1 and b.next_due_on = date '2026-02-15'
+    and b.next_due_amount = 10000 and b.instalments_paid = 0);
+
+  perform pg_temp.check_refused('an estimate that does not exist is said so',
+    format('select public.record_tax_instalment(%L, 1)', gen_random_uuid()),
+    'No such estimate', 'P0002');
+  perform pg_temp.check_refused('nil is not an instalment paid',
+    format('select public.record_tax_instalment(%L, 1, %L, 0)', v_est, date '2026-02-15'),
+    'An instalment is paid with something: 0.00 is not an amount paid to LHDN.', '23514');
+  perform pg_temp.check_refused('nor is a negative amount',
+    format('select public.record_tax_instalment(%L, 1, %L, -5)', v_est, date '2026-02-15'),
+    'An instalment is paid with something: -5.00 is not an amount paid to LHDN.', '23514');
+
+  -- RM1 of it.
+  perform public.record_tax_instalment(v_est, 1, date '2026-02-15', 1);
+  select * into a from public.tax_estimate_payment_summary(v_est);
+  perform pg_temp.check_eq('a short instalment is still overdue',
+    a.overdue_count, b.overdue_count);
+  perform pg_temp.check_eq('owing all but what was paid',
+    a.overdue_total, b.overdue_total - 1);
+  perform pg_temp.check_eq('and is not counted paid', a.instalments_paid, 0);
+  perform pg_temp.check_eq('it is still the next one due',
+    a.next_due_on::text, '2026-02-15');
+  perform pg_temp.check_eq('for what is still to pay on it', a.next_due_amount, 9999.00::numeric);
+
+  -- The rest of it.
+  perform public.record_tax_instalment(v_est, 1, date '2026-02-15', 10000);
+  select * into a from public.tax_estimate_payment_summary(v_est);
+  perform pg_temp.check_eq('paid in full it is paid', a.instalments_paid, 1);
+  perform pg_temp.check_eq('and no longer overdue', a.overdue_count, b.overdue_count - 1);
+  perform pg_temp.check_eq('and the next is the second',
+    a.next_due_on::text, '2026-03-15');
+end $$;
+
 rollback;

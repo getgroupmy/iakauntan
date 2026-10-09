@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-15819
+15832
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1057,3 +1057,7 @@
 # 9 October: 15819. 0767, a statutory remittance settling only what it
 # covers, nil refused. run_locally.sh at 0767: 386 files, 15819
 # assertions.
+#
+# 9 October: 15832. mark_payroll_paid's paid_at asserted, and 0768, a
+# CP204 instalment paid only when what was paid covers it. run_locally.sh
+# at 0768: 386 files, 15832 assertions.

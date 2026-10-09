@@ -788,6 +788,22 @@ page and renumbering would quietly break the reference.
     16 (`statutory_remittance.py`) after one assertion added for the
     reference a second recording keeps; `mutate.py` on the screen 5 / 5.
     **Awaiting deploy.**
+35. ~~A CP204 instalment with anything paid on it is paid.~~ **Raised
+    and answered 9 October: the same fix as 0767. Built in `0768`.**
+    The schedule already said what was OUTSTANDING; the summary behind
+    the tax tile read `paid_on` instead, so RM0 or RM1 against an
+    overdue RM10,000 instalment took it out of the overdue count (8 to
+    6), out of the overdue total (RM80,000 to RM60,000) and out of "next
+    due", while the outstanding total still said RM119,999.
+    `record_tax_instalment` took an explicit RM0 (the table allows `>=
+    0`). Production had no tax estimates. Now nil or less is refused --
+    including a bare recording of an instalment a downward revision left
+    at nothing -- and the summary counts paid, overdue and next due by
+    what is outstanding, next due naming what is still to pay. No column
+    changes. The app's dialog already read commas and sent null rather
+    than 0 when it could not. Both restated from `0673`, md5-verified by
+    replay. Swept 14 / 14 (`tax_instalment.py`) after one assertion for
+    a missing estimate. **Awaiting deploy.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -874,6 +890,7 @@ function:
 | `transfer_document` | `0646` | 31 / 31 | -- | six files: 18 by `transfer.sql`, the other 13 each by one of `approvals`, `document_dates`, `prospect_quotation`, `transfer_carries_the_price_agreed`, `transfer_shapes` (listed in the mutants file) |
 | `record_statutory_remittance`, `report_statutory_remittances`, `report_statutory_due` | `0767` | 16 / 16 | -- | `statutory_remittances.sql` (the sweep found 34; one more assertion for the second recording's reference) |
 | `mark_payroll_paid` | `0051` | 5 / 5 | -- | `statutory.sql` (one only after asserting `paid_at`) |
+| `record_tax_instalment`, `tax_estimate_payment_summary` | `0768` | 14 / 14 | -- | `tax_estimate_payments.sql` (one more assertion for a missing estimate) |
 
 Every equivalent is written into its mutants file with the reason.
 
