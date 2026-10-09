@@ -92,6 +92,7 @@ declare
   v_a uuid := pg_temp.test_org('Kumpulan Satu Sdn Bhd');
   v_b uuid := pg_temp.test_org('Kumpulan Dua Sdn Bhd');
   v_c uuid := pg_temp.test_org('Kumpulan Tiga Sdn Bhd');
+  v_d uuid := pg_temp.test_org('Kumpulan Luar Sdn Bhd');
   v_outsider uuid := pg_temp.another_user('outsider@kumpulan.test');
   v_group uuid;
   v_seen int;
@@ -120,6 +121,26 @@ begin
     'a stranger cannot move a company into a group',
     format($q$ select public.join_company_group(%L, %L) $q$, v_c, v_group),
     '%Only an administrator can move a company%', '42501');
+
+  -- Nor a company they DO administer. The check above is answered by
+  -- the company; this one only the group can answer.
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_d, v_outsider, 'admin', 'active', now());
+  perform pg_temp.check_refused(
+    'a stranger cannot bring their own company into somebody else''s group',
+    format($q$ select public.join_company_group(%L, %L) $q$, v_d, v_group),
+    'You are not a member of that group', '42501');
+  perform pg_temp.check_refused('nor into a group that does not exist',
+    format($q$ select public.join_company_group(%L, %L) $q$, v_d, gen_random_uuid()),
+    'No such group', 'P0002');
+  perform pg_temp.check_true('and their company is in no group',
+    (select group_id from public.organizations where id = v_d) is null);
+
+  -- Leaving is joining nothing.
+  perform pg_temp.sign_in_as(v_owner);
+  perform public.join_company_group(v_b, null);
+  select count(*) into v_seen from public.my_group_companies(v_a);
+  perform pg_temp.check_eq('a company that leaves is no longer shown', v_seen, 1);
 end $$;
 
 -- ---------------------------------------------------------------------
