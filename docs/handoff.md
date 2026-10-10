@@ -1579,6 +1579,7 @@ function:
 | `claim_pos_sale` | `0226` | 10 / 11 | 1 | `pos_fnb.sql` (four before its assertions; equivalent: a bill already on this till moved again -- a parked bill's shift is always open) |
 | `pos_scan_serial` | `0546` | 11 / 13 | 2 | `pos_serial_sale.sql` (eight before its assertions: a missing line, a stranger, an outlet with no shelf, another company's basket; equivalent: `items` forbids serial tracking on an item not kept, and `v_lot_balances` keeps no zero row) |
 | `move_pos_sale` | `0213` | 8 / 8 | -- | `pos_fnb.sql` (three before its assertions; noted: a table out of service is not refused, and the floor plan hides it -- the bill stays on the open-bills list) |
+| `set_document_numbering` | `0480` | 22 / 22 | -- | `document_numbering.sql` (21 before; a new reset policy restarting from 1 added; noted: a prefix switched away and back with a low number re-issues numbers, and the save then fails on the unique key) |
 | `corp_sign_document` | `0069` | 14 / 14 | -- | `secretarial.sql` (six before its assertions: the evidence -- time, name, address, browser, login -- had never been read back; found `0791`) |
 | `app.signature_evidence_is_the_databases` | `0791` | 24 / 24 | -- | `signature_evidence.sql` (new in `0791`; a bare 'signed' insert added; SECURITY DEFINER flipped by hand) |
 | `ensure_pay_period` | `0279` | 7 / 8 | 1 | `payroll_periods.sql` (all seven before -- nothing added; equivalent: `pay_day` is NOT NULL, so the inner default never decides) |

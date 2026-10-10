@@ -234,6 +234,14 @@ begin
     'INV/' || v_year || '-00001/KL');
   perform pg_temp.check_eq('the draw follows the new suffix',
     public.next_document_number(v_org, 'invoice'), 'INV/' || v_year || '-00001/KL');
+  -- And a new reset policy: the period it puts in the number makes the
+  -- numbers different strings from the ones already issued. (Asked
+  -- since a sweep of `set_document_numbering` found nothing asking.)
+  perform pg_temp.check_eq('a new reset policy may start from 1',
+    pg_temp.set_series(v_org, 'invoice', 'INV/', '/KL', 5, 'monthly', 1),
+    'INV/' || to_char((now() at time zone 'Asia/Kuala_Lumpur')::date, 'YYYYMM')
+      || '-00001/KL');
+  perform pg_temp.set_series(v_org, 'invoice', 'INV/', '/KL', 5, 'yearly', 2);
   -- Padding alone is not a new series: 00001 and 0001 sit next to each
   -- other on the same list.
   perform pg_temp.check_true('padding alone does not let the number go down',
