@@ -1384,7 +1384,13 @@ page and renumbering would quietly break the reference.
     desk", so it is the design; and nothing withdraws a request (re-
     raising it with `corp_request_signatures` is the road), though two
     messages still say "withdraw the signature request".
-    **Still to read back.**
+    **Applied, and read back** (10 October, read-only, after run
+    38037332565 on `4668e55` had applied the migrations): recorded; the
+    live `app.signature_evidence_is_the_databases` hashes to 41042a1c...,
+    the same as the migration's own body; not SECURITY DEFINER, and
+    executable by its owner alone; the comment names `0791`; the
+    trigger `signature_is_the_databases` is on `corp_signatures` and
+    `corp_signature_requests`, both enabled.
 59. ~~A retired signing link can be revived and used to sign.~~
     **Raised and answered 10 October: guard it too. Built in `0792`.**
     The links beside `0791`'s tables had the same `ALL` policy. Measured,
