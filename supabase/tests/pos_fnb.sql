@@ -1371,6 +1371,54 @@ begin
     raise notice 'ok   an unsplit table has nothing to put back';
   end;
 
+  -- `merge_pos_table`, rule by rule. A mutation sweep
+  -- (`mutants/merge_pos_table.py`) left five rules with nothing here
+  -- to tell them from their absence.
+  --
+  -- Merged once, a table is not split any more: its retired halves are
+  -- not parts of anything.
+  perform pg_temp.check_refused('a table merged once is not merged again',
+    format('select public.merge_pos_table(%L)', v_long),
+    'Table LONG is not split.', '23514');
+  perform pg_temp.check_refused('a table that is not there is not merged',
+    format('select public.merge_pos_table(%L)', gen_random_uuid()),
+    'No such table.', 'P0002');
+
+  -- A bill that is finished is not a party at the table. One half's
+  -- bill voided, the other's still open: the merge goes ahead, and the
+  -- open one comes to the whole table.
+  perform public.split_pos_table(v_long, 2);
+  declare
+    v_gone uuid := public.seat_table(v_reg, v_pa, 2);
+    v_stay uuid := public.seat_table(v_reg, v_pb, 2);
+    v_other uuid; v_ohalf uuid;
+  begin
+    perform public.void_pos_sale(v_gone, 'customer_cancelled', 'Pergi');
+    -- And another long table, split at the same time, which merging
+    -- this one must leave alone.
+    insert into public.pos_tables (org_id, outlet_id, area_id, code, seats)
+    values (v_org, v_outlet, v_area, 'BANQ', 8) returning id into v_other;
+    perform public.split_pos_table(v_other, 2);
+    select id into v_ohalf from public.pos_tables
+     where outlet_id = v_outlet and code = 'BANQ-A';
+
+    perform public.merge_pos_table(v_pa);
+    perform pg_temp.check_eq('a voided bill on one half does not stop the merge',
+      (select table_id from public.pos_sales where id = v_stay), v_long);
+    perform pg_temp.check_true('and the table split beside it stays split',
+      (select is_active from public.pos_tables where id = v_ohalf));
+    perform public.merge_pos_table(v_other);
+  end;
+
+  -- Somebody who may not sell here merges nothing.
+  perform public.split_pos_table(v_long, 2);
+  perform pg_temp.sign_in_as(pg_temp.another_user('orang-luar-meja@example.test'));
+  perform pg_temp.check_refused('a stranger merges nothing',
+    format('select public.merge_pos_table(%L)', v_long),
+    'not permitted to sell for this organization', '42501');
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  perform public.merge_pos_table(v_long);
+
   -- ------------------------------------------------------------------
   -- Keeping the questions, rather than seeding them (0250)
   -- ------------------------------------------------------------------
