@@ -1437,6 +1437,39 @@ page and renumbering would quietly break the reference.
     three. New `customer_link_evidence.sql`, added to `ci.yml`, reads the
     columns from the catalogue. Swept 9 / 9, the definer flip by hand.
     **Still to read back.**
+62. ~~An employee can approve their own expense claim, and payroll pays
+    it.~~ **Raised and answered 10 October: guard both tables. Built in
+    `0795`.** A claim goes up its chain through `decide_claim_step`;
+    leave is filed through `submit_leave_request` (the balance asked,
+    the days held) and decided through `decide_leave_request`. `0038`'s
+    own comment said a submitted request is changed only "through the
+    RPC" -- but `expense_claims_update` and `leave_requests_update` let
+    the employee write their own draft, and HR, a manager and (claims)
+    anybody who may post write any row, WITH CHECK only that the HR
+    module is on; the INSERT policies never asked what the row said.
+    Measured as a member with the employee's role, no HR and no
+    posting: a claim inserted 'approved' at RM5,000 and their own draft
+    turned 'approved' at RM9,000, no step asked -- and the owner's next
+    payroll run put RM14,000 on their payslip, gross RM17,000 on a
+    RM3,000 salary. Leave the same both ways, the balance never asked
+    and the days never taken. Above them, an accountant could approve
+    their own claim, and a manager or accountant move an approved claim
+    onto another employee. Now a client's own statement files a claim
+    only as a draft or submitted (what the app does; the chain is built
+    on that insert) and leave only as a draft, with no decision, posting
+    or payment on either; writes no status; changes nothing on a request
+    that has left draft; changes on a draft neither whose it is nor its
+    decision; deletes only a draft. The trigger is named
+    `a_decision_is_the_approvers` to fire before `check_leave_days` and
+    `refuse_reposting`, so a forgery is answered as one. The app
+    never updates or deletes either table. Production held no claim and
+    no leave request. New `request_decisions.sql`, added to `ci.yml`:
+    every column of a submitted and an approved claim and leave request
+    from the catalogue, the chain walked by its three approvers and
+    posted, leave filed and decided through its functions, and a payroll
+    run that pays only what the chain approved. Swept 23 / 23, the
+    definer flip by hand.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -1660,6 +1693,7 @@ function:
 | `corp_decline_signature`, `corp_decline_with_link` | `0378` | 21 / 21 | -- | `decline_and_lodge.sql` (six before its assertions, all at the desk -- the link decline had never been called; noted: a refusal records no time of its own) |
 | `corp_request_signatures` | `0069` | 10 / 10 | -- | `secretarial.sql` (one before its assertions; three first "killed" by an ambiguous column in the mutant itself, then qualified and asserted -- raising a request again is the road back) |
 | `app.customer_link_is_the_databases` | `0794` | 9 / 9 | -- | `customer_link_evidence.sql` (new in `0794`; every column of the three tables read from the catalogue; SECURITY DEFINER flipped by hand) |
+| `app.request_decision_is_the_databases` | `0795` | 23 / 23 | -- | `request_decisions.sql` (new in `0795`; every column of a submitted and an approved claim and leave request read from the catalogue; SECURITY DEFINER flipped by hand) |
 | `app.share_link_is_the_databases` | `0793` | 14 / 14 | -- | `document_share.sql` (share-link section new in `0793`; SECURITY DEFINER flipped by hand) |
 | `app.signing_link_is_the_databases` | `0792` | 16 / 16 | -- | `signature_evidence.sql` (links section new in `0792`; SECURITY DEFINER flipped by hand) |
 | `set_document_numbering` | `0480` | 22 / 22 | -- | `document_numbering.sql` (21 before; a new reset policy restarting from 1 added; noted: a prefix switched away and back with a low number re-issues numbers, and the save then fails on the unique key) |

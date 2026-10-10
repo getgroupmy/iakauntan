@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-16764
+16917
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1211,3 +1211,11 @@
 # two the company keeps, and each link issued and opened through its
 # functions). Measured: `all SQL assertions passed (389 files, 16764
 # assertions executed)`.
+#
+# 16764 -> 16917, 10 October: 0795, a decision is the approver's (new
+# request_decisions.sql: claims and leave filed, decided, posted and
+# deleted by a client only as the functions allow; every column of a
+# submitted and an approved claim and leave request read from the
+# catalogue and refused; the chain walked by its approvers and a payroll
+# run paying only what it approved). Measured: `all SQL assertions passed
+# (390 files, 16917 assertions executed)`.
