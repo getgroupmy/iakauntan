@@ -1251,7 +1251,8 @@ jobs:
                    supabase/tests/client_address.sql \
                    supabase/tests/signature_evidence.sql \
                    supabase/tests/customer_link_evidence.sql \
-                   supabase/tests/request_decisions.sql; do
+                   supabase/tests/request_decisions.sql \
+                   supabase/tests/document_discard.sql; do
             echo "== $f"
             # Captured, NOT piped. This step runs under `bash -e` with no
             # `pipefail`, so `psql ... | grep` would hand the shell grep's

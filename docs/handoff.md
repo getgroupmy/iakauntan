@@ -1611,6 +1611,27 @@ page and renumbering would quietly break the reference.
     equivalent: `sync_einvoice_status` makes a valid document's bill
     'valid', which is refused first).
     **Still to read back.**
+69. ~~A posted invoice or bill can be discarded through the API, its
+    journal left in the ledger and its e-Invoice left queued.~~
+    **Raised and answered 10 October: only a draft is deleted. Built in
+    `0802`.** The app discards a draft alone (`canDiscard`), and voids a
+    posted invoice; `0238` refuses a hard delete of a posted document;
+    nothing refused the soft one, `deleted_at`. Measured as the owner
+    with the role `authenticated`: a posted invoice and a posted bill,
+    each with an e-Invoice queued, both set deleted -- the journals
+    stayed, the e-Invoices stayed queued for the bulk sweep, and both
+    left every list. Found looking for the purchase side of `0770`
+    (`prepare_self_billed_einvoice` refuses a draft and not a deleted
+    bill; with deletion closed past draft, a bill that can be prepared
+    cannot be deleted). Now a client's own statement discards only a
+    draft, sales or purchase; bringing a discarded one back stays
+    allowed; the database's own statements pass. Production held one
+    deleted sales document, a draft. New `document_discard.sql`, added
+    to `ci.yml`. Swept 6 / 6, the definer flip by hand.
+    NOTED, NOT RAISED: nothing voids a bill (`void_sales_document` has
+    no purchase twin); a posted bill is reversed with a purchase credit
+    note.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -1843,6 +1864,7 @@ function:
 | `remove_pos_sale_promotion` | `0256` | 7 / 7 | -- | `pos_promotion_admin.sql` (two only after a bill carrying two promotions and a stranger) |
 | `merge_pos_table` | `0245` | 11 / 11 | -- | `pos_fnb.sql` (five only after its rule-by-rule lines: a missing table, a stranger, a table merged twice, a voided bill on one half, another split table left alone) |
 | `open_tax_detail_request` | `0627` | 11 / 11 | -- | `tax_details.sql` (nine only after its rule-by-rule block: a deleted customer's form, its openings, what it shows of what is held, the state order, and whether it was answered) |
+| `app.a_draft_is_what_is_discarded` | `0802` | 6 / 6 | -- | `document_discard.sql` (new in `0802`; SECURITY DEFINER flipped by hand) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |
