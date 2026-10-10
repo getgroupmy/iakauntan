@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17106
+17110
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1285,3 +1285,9 @@
 # re-queued, a receipt not taken out of a consolidation; the functions
 # and the service role still writing). Measured: `all SQL assertions
 # passed (393 files, 17106 assertions executed)`.
+#
+# 17106 -> 17110, 10 October: 0805, a consolidated sale is not filed
+# twice (pos_einvoice_consolidation.sql, 4: as a client, a sale in the
+# month's return refused its own e-Invoice in request_einvoice_for_sale's
+# words and none made, a sale outside it prepared beside it). Measured:
+# `all SQL assertions passed (393 files, 17110 assertions executed)`.

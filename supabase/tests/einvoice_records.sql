@@ -42,6 +42,7 @@ create temporary table t_er (
   inv_valid uuid, ei_valid uuid,       -- LHDN accepted it
   inv_void uuid, ei_void uuid,         -- voided, its e-Invoice withdrawn
   inv_new uuid,                        -- posted, for the client to prepare
+  inv_cons uuid,                       -- posted, in the month's consolidation
   submission uuid, consolidation uuid);
 grant select on t_er to authenticated;
 
@@ -66,9 +67,12 @@ begin
   r.ei_void := public.prepare_einvoice(r.inv_void);
   perform public.void_sales_document(r.inv_void, 'salah pelanggan');
   r.inv_new := pg_temp.er_invoice(r.org, v_c, 'INV-R3');
+  r.inv_cons := pg_temp.er_invoice(r.org, v_c, 'INV-R4');
 
   -- A submission and a consolidation with one receipt in it, as the
-  -- MyInvois function and the month-end job leave them.
+  -- MyInvois function and the month-end job leave them. Not INV-R3,
+  -- which the client prepares below: `0805` refuses an e-Invoice of its
+  -- own for a sale the month's return carries.
   insert into public.einvoice_submissions (org_id, document_count)
   values (r.org, 1) returning id into r.submission;
   update public.einvoice_documents set submission_id = r.submission
@@ -81,7 +85,7 @@ begin
   returning id into r.consolidation;
   insert into public.einvoice_consolidation_items
     (org_id, consolidation_id, sales_document_id, amount)
-  values (r.org, r.consolidation, r.inv_new, 100);
+  values (r.org, r.consolidation, r.inv_cons, 100);
 
   insert into t_er select r.*;
 end $$;

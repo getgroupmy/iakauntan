@@ -1711,6 +1711,27 @@ page and renumbering would quietly break the reference.
     grant and policy and then grant alone (30 / 30 fail the file), and a
     policy restored without its grant fails the file's last assertion.
     **Still to read back.**
+72. ~~A counter sale already in the month's consolidated e-Invoice can
+    be given one of its own.~~ **Raised and answered 10 October: refuse
+    it, in the same words. Built in `0805`.** Consolidating marks nothing
+    on the invoice, so the document's "Submit e-Invoice" is still
+    offered on a consolidated sale, and `prepare_einvoice`, which it
+    calls, never asked; `request_einvoice_for_sale` refused the same
+    case from the counter. Measured as the owner with the role
+    `authenticated`: three counter sales consolidated (RM60.00), the
+    consolidated e-Invoice accepted, then `prepare_einvoice` on one
+    RM10.00 sale queued a second document for it. A completed counter
+    sale is paid, so the void was already refused. Now `prepare_einvoice`
+    refuses a sales document in any consolidation with
+    `request_einvoice_for_sale`'s sentence. Restated from `0770`
+    (production hash 2ae14dc0..., identical). Production held no
+    consolidation and no e-Invoice. Asserted in
+    `pos_einvoice_consolidation.sql`'s `0805` block, as a client. Swept
+    4 / 4 (the new rule only; the rest is `0770`'s). The full suite
+    caught `einvoice_records.sql` (`0804`) putting into its consolidation
+    the very invoice its client then prepares; the consolidation now
+    holds an invoice of its own.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -1947,6 +1968,7 @@ function:
 | `app.a_draft_is_what_is_discarded` | `0802` | 6 / 6 | -- | `document_discard.sql` (new in `0802`; SECURITY DEFINER flipped by hand) |
 | `app.einvoice_state_is_lhdns`, `void_sales_document` (the valid check) | `0803` | 22 / 22 | -- | `einvoice_columns.sql` (new in `0803`; two of the void's only after two valid e-Invoices that carry the invoice's id without being its own, another company's and a bill's; SECURITY DEFINER flipped by hand) |
 | (the write grants and policies on the five e-Invoice tables) | `0804` | 30 / 30 restored by hand | -- | `einvoice_records.sql` (new in `0804`; each table's insert, update and delete restored with its policy and then alone; a policy alone fails its last assertion) |
+| `prepare_einvoice` (the consolidation check) | `0805` | 4 / 4 | -- | `pos_einvoice_consolidation.sql` (its `0805` block, as a client: a consolidated sale refused in `request_einvoice_for_sale`'s words, a sale outside the return prepared beside it) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |

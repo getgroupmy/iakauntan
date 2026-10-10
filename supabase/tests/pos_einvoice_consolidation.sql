@@ -760,4 +760,58 @@ begin
     exists (select 1 from public.einvoice_consolidations_due(30) where org_id = v_far));
 end $$;
 
+-- =====================================================================
+-- A consolidated sale is not filed again (0805)
+--
+-- The month's return carries each unclaimed sale as a line. Consolidating
+-- marks nothing on the invoice, so the document's own "Submit e-Invoice"
+-- is still offered on one -- and `prepare_einvoice`, which it calls,
+-- queued a second document for a sale LHDN already held.
+-- `request_einvoice_for_sale` refused this from the counter; the
+-- document's road now refuses it in the same words. Asked as the owner
+-- with the role `authenticated`, which is who presses the button.
+-- =====================================================================
+select set_config('request.jwt.claims',
+  json_build_object('sub', pg_temp.test_user(), 'role', 'authenticated')::text, true);
+set local role authenticated;
+
+do $$
+declare
+  v_org     uuid;
+  v_in      uuid;
+  v_claim   uuid;
+  v_ei      uuid;
+begin
+  perform pg_temp.check_eq('the owner presses it as a client', current_user, 'authenticated');
+  select id into v_org from public.organizations
+   where name = 'Kedai Konsolidasi Sdn Bhd';
+  select i.sales_document_id into v_in
+    from public.einvoice_consolidation_items i
+    join public.einvoice_consolidations c on c.id = i.consolidation_id
+   where c.org_id = v_org
+   order by i.created_at, i.sales_document_id
+   limit 1;
+  select d.id into v_claim
+    from public.sales_documents d
+    join public.contacts k on k.id = d.contact_id
+   where d.org_id = v_org and k.code = 'BERDAFTAR';
+
+  perform pg_temp.check_refused('a sale in the month''s return gets no e-Invoice of its own',
+    format('select public.prepare_einvoice(%L)', v_in),
+    'This sale has already gone into a consolidated e-Invoice. Raise a '
+    'credit note and re-issue it if the buyer needs their own.', '23514');
+  perform pg_temp.check_eq('and none was made for it',
+    (select count(*)::integer from public.einvoice_documents
+      where source_table = 'sales_documents' and source_id = v_in), 0);
+
+  -- A sale the return does not carry is filed as before, beside one
+  -- that it does.
+  v_ei := public.prepare_einvoice(v_claim);
+  perform pg_temp.check_true('a sale outside the return is prepared on its own',
+    exists (select 1 from public.einvoice_documents
+             where id = v_ei and source_id = v_claim));
+end $$;
+
+reset role;
+
 rollback;
