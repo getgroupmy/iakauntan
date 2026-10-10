@@ -564,20 +564,32 @@ begin
     raise notice 'ok   an expired link cannot sign';
   end;
 
+  -- `corp_sign_with_link`, rule by rule. A mutation sweep
+  -- (`mutants/signing_links.py`) left these with nothing to tell them
+  -- from their absence.
+  perform pg_temp.check_refused('a link signs only with a name',
+    format('select public.corp_sign_with_link(%L, %L)', v_live, '   '),
+    'A signature needs a name', '22023');
+  perform pg_temp.check_refused('a token nobody issued cannot sign',
+    format('select public.corp_sign_with_link(%L, %L)', 'no-such-token', 'Siapa'),
+    'This link is not valid', '42501');
+  -- Asked while Director One's line is still open: the retired link is
+  -- refused for being retired, not for anything else.
+  perform pg_temp.check_refused('a retired link cannot sign',
+    format('select public.corp_sign_with_link(%L, %L)', v_first, 'Director One'),
+    'This link has already been used', '22023');
+
   -- `0785`. The address recorded as evidence of the signature is the
   -- one the edge saw, not the one the signer wrote first.
   perform set_config('request.headers',
-    '{"x-forwarded-for": "6.6.6.6, 203.0.113.21", "cf-connecting-ip": "203.0.113.21"}',
+    '{"x-forwarded-for": "6.6.6.6, 203.0.113.21", "cf-connecting-ip": "203.0.113.21", "user-agent": "Pautan/1.0"}',
     true);
-  perform public.corp_sign_with_link(v_live, 'Director One');
+  perform public.corp_sign_with_link(v_live, '  Director One  ');
   perform set_config('request.headers', '{}', true);
 
-  begin
-    perform public.corp_sign_with_link(v_live, 'Director One');
-    raise exception 'FAIL: a link signed twice';
-  exception when sqlstate '22023' then
-    raise notice 'ok   a link signs once and is then spent';
-  end;
+  perform pg_temp.check_refused('a link signs once and is then spent',
+    format('select public.corp_sign_with_link(%L, %L)', v_live, 'Director One'),
+    'This link has already been used', '22023');
 
   select l.state into v_state from public.corp_open_signing_link(v_live) l;
   perform pg_temp.check_true('and reopening it says used', v_state = 'used');
@@ -588,6 +600,9 @@ begin
   perform pg_temp.check_eq('a link signature records the address the edge saw',
     (select host(ip_address) from public.corp_signatures where id = v_sig_a),
     '203.0.113.21');
+  perform pg_temp.check_true('and the browser, and when',
+    (select user_agent = 'Pautan/1.0' and signed_at is not null
+       from public.corp_signatures where id = v_sig_a));
   perform pg_temp.sign_in_as(v_owner);
 
   perform pg_temp.check_true('the signature stands as an ordinary signature',
@@ -637,6 +652,93 @@ begin
   perform pg_temp.check_true('opening a link is recorded',
     (select opened_at is not null from public.corp_signing_links
       where token_hash = app.corp_token_hash(v_live)));
+
+  -- The rest of `corp_create_signing_link`, `corp_open_signing_link`
+  -- and `corp_sign_with_link`, rule by rule, as the owner.
+  declare
+    v_c     uuid;
+    v_d     uuid;
+    v_sig_c uuid;
+    v_sig_d uuid;
+    v_tok   text;
+  begin
+    -- A line answered at the desk: its link still in somebody's inbox
+    -- says so, and cannot answer it again.
+    perform public.corp_decline_signature(v_sig_b, 'Away until next month');
+    select l.state into v_state from public.corp_open_signing_link(v_stale) l;
+    perform pg_temp.check_eq('a link whose line was answered says so', v_state,
+      'already_signed');
+    perform pg_temp.check_refused('and cannot sign it',
+      format('select public.corp_sign_with_link(%L, %L)', v_stale, 'Director Two'),
+      'That line is already declined', '22023');
+
+    insert into public.corp_persons (org_id, kind, full_name, nric)
+    values (v_org, 'individual', 'Director Three', '900505055555') returning id into v_c;
+    insert into public.corp_persons (org_id, kind, full_name, nric)
+    values (v_org, 'individual', 'Director Four', '900606066666') returning id into v_d;
+    perform public.corp_request_signatures(v_doc, array[v_c, v_d], null, null, null);
+    select id into v_sig_c from public.corp_signatures where request_id = v_req and person_id = v_c;
+    select id into v_sig_d from public.corp_signatures where request_id = v_req and person_id = v_d;
+
+    -- Somebody signed in who opens a director's link has not signed as
+    -- themselves: the link is the attribution, whoever is logged in.
+    v_tok := public.corp_create_signing_link(v_sig_d, 14, 'empat@example.test');
+    perform public.corp_sign_with_link(v_tok, 'Director Four');
+    perform pg_temp.check_true('a link signature names no login, even with one present',
+      (select status = 'signed' and signed_by is null
+         from public.corp_signatures where id = v_sig_d));
+
+    perform pg_temp.check_refused('a link for a line that does not exist is said so',
+      format('select public.corp_create_signing_link(%L)', gen_random_uuid()),
+      'Signature not found', 'P0002');
+    perform pg_temp.check_refused('a signed line gets no link',
+      format('select public.corp_create_signing_link(%L)', v_sig_a),
+      'That line is already signed', '22023');
+    perform pg_temp.sign_in_as(pg_temp.another_user('pautan-luar@example.test'));
+    perform pg_temp.check_refused('a stranger cannot issue a link',
+      format('select public.corp_create_signing_link(%L)', v_sig_c),
+      'Not permitted to issue a signing link', '42501');
+    perform pg_temp.sign_in_as(v_owner);
+
+    -- A link lives a fortnight unless told otherwise, never less than a
+    -- day and never more than ninety.
+    v_tok := public.corp_create_signing_link(v_sig_c, 365, 'tiga@example.test');
+    perform pg_temp.check_eq('a link is never good for more than ninety days',
+      (select (expires_at::date - now()::date) from public.corp_signing_links
+        where token_hash = app.corp_token_hash(v_tok)), 90);
+    v_tok := public.corp_create_signing_link(v_sig_c, 0, 'tiga@example.test');
+    perform pg_temp.check_eq('nor for less than a day',
+      (select (expires_at::date - now()::date) from public.corp_signing_links
+        where token_hash = app.corp_token_hash(v_tok)), 1);
+    v_tok := public.corp_create_signing_link(v_sig_c, null, 'tiga@example.test');
+    perform pg_temp.check_true('a fortnight by default, to the address given, by whoever issued it',
+      (select expires_at::date - now()::date = 14
+              and sent_to_email = 'tiga@example.test' and created_by = v_owner
+         from public.corp_signing_links
+        where token_hash = app.corp_token_hash(v_tok)));
+
+    -- The FIRST opening is the evidence. Set as the owner -- since
+    -- `0792` nothing a client does writes it -- then opened again.
+    update public.corp_signing_links
+       set opened_at = timestamptz '2026-01-02 09:00+08', ip_address = '203.0.113.50'
+     where token_hash = app.corp_token_hash(v_tok);
+    perform public.corp_open_signing_link(v_tok);
+    perform pg_temp.check_true('opening it again keeps the first opening',
+      (select opened_at = timestamptz '2026-01-02 09:00+08'
+              and host(ip_address) = '203.0.113.50'
+         from public.corp_signing_links
+        where token_hash = app.corp_token_hash(v_tok)));
+
+    -- And a withdrawn request is withdrawn on its links too. As the
+    -- owner: no client road withdraws one.
+    update public.corp_signature_requests set is_withdrawn = true where id = v_req;
+    select l.state into v_state from public.corp_open_signing_link(v_tok) l;
+    perform pg_temp.check_eq('a link on a withdrawn request says so', v_state,
+      'withdrawn');
+    perform pg_temp.check_refused('and cannot sign',
+      format('select public.corp_sign_with_link(%L, %L)', v_tok, 'Director Three'),
+      'The signature request has been withdrawn', '22023');
+  end;
 end $$;
 
 -- ---------------------------------------------------------------------
