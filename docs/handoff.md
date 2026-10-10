@@ -1550,7 +1550,11 @@ page and renumbering would quietly break the reference.
     asserting that an invoice for nothing is not owed; Dart 12 / 12 in
     `customer_portal_summary_test.dart` and 3 / 3 in the new
     `customer_portal_page_test.dart`, at a phone's size.
-    **Still to read back.**
+    **Applied, and read back** (10 October, read-only, after run
+    38058937541 on `03c1e53` had applied the migrations and passed the
+    Dart tests): recorded; the live `open_customer_portal` hashes to
+    8d5df7d6..., the same as the migration's own body; SECURITY DEFINER;
+    `anon` may still execute it; the comment names `0797`.
 65. ~~A withdrawn customer's portal still mints document links.~~
     **Raised and answered 10 October: refuse it. Built in `0798`.**
     `open_customer_portal` answers a customer the company has deleted
