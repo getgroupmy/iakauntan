@@ -227,25 +227,52 @@ begin
 
   perform pg_temp.sign_in_as(v_boss);
 
-  v_refused := false;
-  begin perform public.set_group_ownership(v_b, v_b, 100);
-  exception when others then v_refused := true; end;
-  perform pg_temp.sign_in_as(v_boss);
-  perform pg_temp.check_true('a company cannot own itself', v_refused);
-
-  v_refused := false;
-  begin perform public.set_group_ownership(v_b, v_hidden, 100);
-  exception when others then v_refused := true; end;
-  perform pg_temp.sign_in_as(v_boss);
-  perform pg_temp.check_true(
+  -- Each refusal reads its own words. They caught any error until a
+  -- sweep (`mutants/set_group_ownership.py`) found that the table
+  -- refuses nought percent too, in other words, so the function's own
+  -- bound could go and nothing said so.
+  perform pg_temp.check_refused('a company cannot own itself',
+    format('select public.set_group_ownership(%L, %L, 100)', v_b, v_b),
+    'A company cannot own itself', '42501');
+  perform pg_temp.check_refused(
     'and cannot be owned by a group company you are not in — otherwise '
-    'this becomes a way to discover which companies exist', v_refused);
-
-  v_refused := false;
-  begin perform public.set_group_ownership(v_b, v_a, 0);
-  exception when others then v_refused := true; end;
+    'this becomes a way to discover which companies exist',
+    format('select public.set_group_ownership(%L, %L, 100)', v_b, v_hidden),
+    'That is not a company in this group that you belong to', '42501');
+  perform pg_temp.check_refused('and nought percent is not ownership',
+    format('select public.set_group_ownership(%L, %L, 0)', v_b, v_a),
+    'Ownership must be more than 0 and at most 100 percent');
+  perform pg_temp.check_refused('nor is more than all of it',
+    format('select public.set_group_ownership(%L, %L, 100.01)', v_b, v_a),
+    'Ownership must be more than 0 and at most 100 percent');
+  perform pg_temp.check_refused('nor no share at all',
+    format('select public.set_group_ownership(%L, %L, null)', v_b, v_a),
+    'Ownership must be more than 0 and at most 100 percent');
+  -- A company of ANOTHER group, even one the caller belongs to.
+  declare
+    v_group2    uuid;
+    v_elsewhere uuid;
+    v_loose     uuid;
+  begin
+    insert into public.company_groups (name, created_by)
+    values ('Kumpulan Lain', v_boss) returning id into v_group2;
+    v_elsewhere := pg_temp.cons_org('Lain Kumpulan Sdn Bhd', v_boss, v_group2);
+    perform pg_temp.sign_in_as(v_boss);
+    perform pg_temp.check_refused('nor by a company of another group',
+      format('select public.set_group_ownership(%L, %L, 100)', v_b, v_elsewhere),
+      'That is not a company in this group that you belong to', '42501');
+    v_loose := pg_temp.cons_org('Tiada Kumpulan Sdn Bhd', v_boss, null);
+    perform pg_temp.sign_in_as(v_boss);
+    perform pg_temp.check_refused('a company in no group has no group parent',
+      format('select public.set_group_ownership(%L, %L, 100)', v_loose, v_a),
+      'This company is not in a group', '42501');
+  end;
+  -- Said by an administrator of the company OWNED, and nobody else.
+  perform pg_temp.sign_in_as(v_other);
+  perform pg_temp.check_refused('somebody who does not run the company cannot say who owns it',
+    format('select public.set_group_ownership(%L, %L, 100)', v_b, v_a),
+    'You cannot change this company''s ownership', '42501');
   perform pg_temp.sign_in_as(v_boss);
-  perform pg_temp.check_true('and nought percent is not ownership', v_refused);
 
   -- The control for all three.
   begin
@@ -261,13 +288,10 @@ begin
        from public.organizations where id = v_b));
 
   -- A chain, which is a real structure and not one this consolidates.
-  v_refused := false;
-  begin perform public.set_group_ownership(v_c, v_b, 100);
-  exception when others then v_refused := true; end;
-  perform pg_temp.sign_in_as(v_boss);
-  perform pg_temp.check_true(
+  perform pg_temp.check_refused(
     'a chain of holdings is refused rather than consolidated wrongly',
-    v_refused);
+    format('select public.set_group_ownership(%L, %L, 100)', v_c, v_b),
+    'That company is itself owned by another%');
 
   -- And it can be taken back off.
   perform public.set_group_ownership(v_b, null, null);
