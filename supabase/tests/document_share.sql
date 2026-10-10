@@ -396,4 +396,134 @@ begin
         and tgrelid = 'public.document_share_links'::regclass), 1);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- `open_shared_document`, rule by rule
+--
+-- A mutation sweep (`mutants/open_shared_document.py`) left twelve of
+-- seventeen rules with nothing here to tell them from their absence --
+-- nor in any of the seven other files that call it: an expired link, a
+-- deleted or rejected document, most of the record of who opened it, a
+-- paid invoice offered a way to pay, the company's TIN, the balance, and
+-- which lines are shown in what order.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid := pg_temp.test_org('Satu Persatu Kongsi Sdn Bhd');
+  v_cust  uuid;
+  v_bank  uuid;
+  v_doc   uuid;
+  v_other uuid;
+  v_tok   text;
+  v_case  text;
+  v_out   jsonb;
+  l       public.document_share_links;
+begin
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  update public.organizations set tin = 'C2584563220' where id = v_org;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-1', 'Pembeli Bhd', 'customer') returning id into v_cust;
+  v_bank := pg_temp.test_bank_account(v_org, 'RHB current');
+  perform public.set_org_payment_gateway(
+    v_org, 'billplz', 'sandbox', 'sk_test', 'col_1', 'xsig', true);
+  perform public.set_org_payment_settlement(
+    v_org, 'billplz', 'sandbox', v_bank, '03');
+
+  -- An invoice of three lines, part paid, written out of order; and
+  -- another invoice whose lines must not appear on it.
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
+     subtotal, total_amount, balance_amount, status)
+  values (v_org, 'invoice', 'INV-R1', pg_temp.today(), v_cust, 'MYR', 1,
+          600, 600, 600, 'draft')
+  returning id into v_doc;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, description, quantity, unit_price,
+     line_total, cost_amount)
+  values (v_org, v_doc, 3, 'Ketiga', 1, 100, 100, 0),
+         (v_org, v_doc, 1, 'Pertama', 1, 300, 300, 0),
+         (v_org, v_doc, 2, 'Kedua', 1, 200, 200, 0);
+  perform public.post_sales_document(v_doc);
+  update public.sales_documents set paid_amount = 250, balance_amount = 350
+   where id = v_doc;
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
+     subtotal, total_amount, balance_amount, status)
+  values (v_org, 'invoice', 'INV-R2', pg_temp.today(), v_cust, 'MYR', 1,
+          50, 50, 50, 'draft')
+  returning id into v_other;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, description, quantity, unit_price,
+     line_total, cost_amount)
+  values (v_org, v_other, 1, 'Bukan ini', 1, 50, 50, 0);
+  perform public.post_sales_document(v_other);
+
+  v_tok := public.share_document(v_doc, 30, 'pembeli@example.test');
+
+  -- The first opening, from a browser behind a proxy.
+  perform set_config('request.headers', json_build_object(
+    'x-forwarded-for', '203.0.113.20, 10.0.0.1',
+    'user-agent', 'Pertama/1.0')::text, true);
+  v_out := public.open_shared_document(v_tok);
+  perform pg_temp.check_eq('the balance shown is what is still owed',
+    (v_out -> 'document' ->> 'balance_amount')::numeric, 350);
+  perform pg_temp.check_eq('with the company''s TIN on it',
+    v_out -> 'company' ->> 'tin', 'C2584563220');
+  perform pg_temp.check_eq('its own lines, in order, and no other document''s',
+    (select string_agg(x ->> 'description', ', ' order by n)
+       from jsonb_array_elements(v_out -> 'lines') with ordinality y(x, n)),
+    'Pertama, Kedua, Ketiga');
+  perform pg_temp.check_eq('and a way to pay while it owes anything',
+    jsonb_array_length(v_out -> 'pay_with'), 1);
+
+  -- An hour on, as far as the record goes, from somewhere else.
+  update public.document_share_links
+     set opened_at = now() - interval '1 hour',
+         last_opened_at = now() - interval '1 hour'
+   where document_id = v_doc;
+  perform set_config('request.headers', json_build_object(
+    'x-forwarded-for', '198.51.100.7',
+    'user-agent', 'Kedua/2.0')::text, true);
+  perform public.open_shared_document(v_tok);
+  select * into l from public.document_share_links where document_id = v_doc;
+  perform pg_temp.check_true('the first opening keeps its time',
+    l.opened_at = now() - interval '1 hour');
+  perform pg_temp.check_true('the last opening is now', l.last_opened_at = now());
+  perform pg_temp.check_eq('the first address is kept',
+    host(l.ip_address), '203.0.113.20');
+  perform pg_temp.check_eq('and the first browser', l.user_agent, 'Pertama/1.0');
+
+  -- Paid off: nothing to pay with. `pay_with`'s own `balance > 0` is
+  -- the second copy of a rule: `shared_payment_options`, which it
+  -- reads, already offers nothing on a balance of nothing, and its
+  -- sweep kills that one. This asks the rule, not which copy holds it.
+  update public.sales_documents set paid_amount = 600, balance_amount = 0
+   where id = v_doc;
+  perform pg_temp.check_eq('a paid invoice is offered no way to pay',
+    jsonb_array_length(public.open_shared_document(v_tok) -> 'pay_with'), 0);
+  update public.sales_documents set paid_amount = 250, balance_amount = 350
+   where id = v_doc;
+
+  -- Expired, deleted, rejected: each its own state, each restored after.
+  foreach v_case in array array['expired', 'deleted', 'rejected'] loop
+    case v_case
+      when 'expired' then
+        update public.document_share_links
+           set expires_at = now() - interval '1 minute' where document_id = v_doc;
+      when 'deleted' then
+        update public.sales_documents set deleted_at = now() where id = v_doc;
+      else
+        update public.sales_documents set status = 'rejected' where id = v_doc;
+    end case;
+    perform pg_temp.check_eq('a link to a document ' || v_case || ' says so',
+      public.open_shared_document(v_tok) ->> 'state',
+      case v_case when 'expired' then 'expired' else 'withdrawn' end);
+    update public.document_share_links
+       set expires_at = now() + interval '30 days' where document_id = v_doc;
+    update public.sales_documents set deleted_at = null, status = 'partial'
+     where id = v_doc;
+  end loop;
+  perform pg_temp.check_eq('and, all of that undone, it opens again',
+    public.open_shared_document(v_tok) ->> 'state', 'open');
+end $$;
+
 rollback;
