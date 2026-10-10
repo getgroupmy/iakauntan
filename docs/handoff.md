@@ -1452,7 +1452,13 @@ page and renumbering would quietly break the reference.
     otherwise; a revoked link stays revoked. Production held none of the
     three. New `customer_link_evidence.sql`, added to `ci.yml`, reads the
     columns from the catalogue. Swept 9 / 9, the definer flip by hand.
-    **Still to read back.**
+    **Applied, and read back** (10 October, read-only, after run
+    38053302054 on `ec93b17` had applied the migrations): recorded; the
+    live `app.customer_link_is_the_databases` hashes to d27f355c..., the
+    same as the migration's own body; not SECURITY DEFINER, and
+    executable by its owner alone; the comment names `0794`; the trigger
+    is on `customer_portal_links`, `tax_detail_requests` and
+    `ticket_share_links`, all three enabled.
 62. ~~An employee can approve their own expense claim, and payroll pays
     it.~~ **Raised and answered 10 October: guard both tables. Built in
     `0795`.** A claim goes up its chain through `decide_claim_step`;
