@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-16707
+16764
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1204,3 +1204,10 @@
 # departures.sql, expense_split.sql, shared_invoice_payment.sql,
 # group_consolidation.sql). Measured: `all SQL assertions passed (388
 # files, 16707 assertions executed)`.
+#
+# 16707 -> 16764, 10 October: 0794, a customer link is the database's
+# (new customer_link_evidence.sql: every column of the portal, tax-detail
+# and ticket links read from the catalogue and refused to a client, the
+# two the company keeps, and each link issued and opened through its
+# functions). Measured: `all SQL assertions passed (389 files, 16764
+# assertions executed)`.

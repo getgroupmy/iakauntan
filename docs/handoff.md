@@ -1413,6 +1413,23 @@ page and renumbering would quietly break the reference.
     through the function and `anon` opening it. Swept 14 / 14, the
     definer flip by hand.
     **Still to read back.**
+61. ~~Three more customer links can be revived and repointed.~~
+    **Raised and answered 10 October: guard all three. Built in
+    `0794`.** Found by scanning for the class `0791`-`0793` closed:
+    every table holding a token, an expiry, an opening record or a
+    revocation, with its client privileges. `customer_portal_links`,
+    `tax_detail_requests` and `ticket_share_links` each granted any
+    member who may write an UPDATE of every column; the app only reads
+    them, and every writer is a definer. Measured on the portal: a
+    revoked link revived, given fifty years, pointed at another customer
+    -- and its holder opened that customer's account. Now one guard on
+    all three lets a client change only the address a link went to and a
+    live link's revocation, asked of every other column rather than of a
+    list, so a column added later is guarded until somebody decides
+    otherwise; a revoked link stays revoked. Production held none of the
+    three. New `customer_link_evidence.sql`, added to `ci.yml`, reads the
+    columns from the catalogue. Swept 9 / 9, the definer flip by hand.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -1635,6 +1652,7 @@ function:
 | `corp_create_signing_link`, `corp_open_signing_link`, `corp_sign_with_link` | `0070` | 31 / 31 | -- | `secretarial.sql` (ten before its assertions; a link's life, author and address, the states, the first opening kept, and no login on a link signature even with one present) |
 | `corp_decline_signature`, `corp_decline_with_link` | `0378` | 21 / 21 | -- | `decline_and_lodge.sql` (six before its assertions, all at the desk -- the link decline had never been called; noted: a refusal records no time of its own) |
 | `corp_request_signatures` | `0069` | 10 / 10 | -- | `secretarial.sql` (one before its assertions; three first "killed" by an ambiguous column in the mutant itself, then qualified and asserted -- raising a request again is the road back) |
+| `app.customer_link_is_the_databases` | `0794` | 9 / 9 | -- | `customer_link_evidence.sql` (new in `0794`; every column of the three tables read from the catalogue; SECURITY DEFINER flipped by hand) |
 | `app.share_link_is_the_databases` | `0793` | 14 / 14 | -- | `document_share.sql` (share-link section new in `0793`; SECURITY DEFINER flipped by hand) |
 | `app.signing_link_is_the_databases` | `0792` | 16 / 16 | -- | `signature_evidence.sql` (links section new in `0792`; SECURITY DEFINER flipped by hand) |
 | `set_document_numbering` | `0480` | 22 / 22 | -- | `document_numbering.sql` (21 before; a new reset policy restarting from 1 added; noted: a prefix switched away and back with a low number re-issues numbers, and the save then fails on the unique key) |
