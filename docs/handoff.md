@@ -1285,7 +1285,13 @@ page and renumbering would quietly break the reference.
     from `0410` (recalc) and `0212`-as-`0231`-left-it (production hashes
     c4e332ff... and b12bab0e..., identical). Production held one
     programme and no redemption. Swept 8 / 11, three equivalent.
-    **Still to read back.**
+    **Applied, and read back** (10 October, read-only, after run
+    38025424777 on `c41a8ef`): recorded; the live `app.recalc_pos_sale`
+    hashes to 2438e054... and `redeem_loyalty_points` to bcb4b9d8...,
+    both the same as the migration's own bodies; both SECURITY DEFINER,
+    the recalculation executable by its owner only (as before) and the
+    redemption by `authenticated` and `service_role`; the redemption's
+    comment names `0787` (the recalculation has never carried one).
 55. ~~A voucher typed twice is taken off twice.~~ **Raised and answered
     9 October: one row per voucher. Built in `0788`.**
     `apply_pos_coupon` writes `on conflict (sale_id, promotion_id,
