@@ -1506,6 +1506,29 @@ page and renumbering would quietly break the reference.
     a stranger could reach beyond its list, never whether the list was
     still reachable. Both now ask. Swept 10 / 10, the grant by hand.
     **Still to read back.**
+64. ~~The customer portal adds ringgit and dollars together.~~ **Raised
+    and answered 10 October: a total per currency. Built in `0797`.**
+    `open_customer_portal` returned each invoice in its own currency and,
+    at the top, every balance added together under the company's base
+    currency. Measured: RM100 and USD 100 came to "MYR 200.00", and the
+    page -- which formatted every row in the account's currency too --
+    showed the dollar invoice as "RM 100.00". A customer billed only in
+    dollars was told their dollars were ringgit. Now the portal returns
+    `totals`, one per currency, the base currency first;
+    `total_outstanding` and `currency` are as before wherever there is
+    one currency (now that currency), and `total_outstanding` is null
+    where there are several. The page shows each total ("RM 100.00 · USD
+    100.00") and each invoice in its own currency; the account view is
+    public as `PortalAccountView` so a test can draw it. Restated from
+    `0493` (production hash d982fe29..., identical), with `anon`'s grant
+    written after it. Production held 109 open invoices, all in base
+    currency, and no portal link. SQL swept 16 / 17 (one equivalent: a
+    document's contact is held to its company by
+    `sales_documents_contact_same_org`, now asserted), one only after
+    asserting that an invoice for nothing is not owed; Dart 12 / 12 in
+    `customer_portal_summary_test.dart` and 3 / 3 in the new
+    `customer_portal_page_test.dart`, at a phone's size.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -1730,6 +1753,7 @@ function:
 | `corp_request_signatures` | `0069` | 10 / 10 | -- | `secretarial.sql` (one before its assertions; three first "killed" by an ambiguous column in the mutant itself, then qualified and asserted -- raising a request again is the road back) |
 | `app.customer_link_is_the_databases` | `0794` | 9 / 9 | -- | `customer_link_evidence.sql` (new in `0794`; every column of the three tables read from the catalogue; SECURITY DEFINER flipped by hand) |
 | `app.request_decision_is_the_databases` | `0795` | 23 / 23 | -- | `request_decisions.sql` (new in `0795`; every column of a submitted and an approved claim and leave request read from the catalogue; SECURITY DEFINER flipped by hand) |
+| `open_customer_portal` | `0797` | 16 / 17 | 1 (another company's contact with our party id: `sales_documents_contact_same_org` already holds a document's contact to its company; asserted) | `customer_portal_shapes.sql` (its new block, as `anon`; one only after asserting an invoice for nothing is not owed) |
 | `place_public_pos_order` | `0796` | 10 / 10 | -- | `pos_public_menu.sql` (its new block, every order as `anon`; the `anon` grant revoked by hand fails it and `function_grants.sql`) |
 | `submit_tax_details` | `0626` | 25 / 26 | 1 (a state code upper-cased: every `ref_states` code is two digits, and the foreign key refuses any other) | `tax_details.sql` (seventeen only after its rule-by-rule block: the deleted contact, the record of who answered and from where, three spellings, the link's count, when an answer was taken, what the form is told, and which answers a correction supersedes) |
 | `app.share_link_is_the_databases` | `0793` | 14 / 14 | -- | `document_share.sql` (share-link section new in `0793`; SECURITY DEFINER flipped by hand) |

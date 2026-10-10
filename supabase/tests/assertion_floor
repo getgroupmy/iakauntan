@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-16943
+16955
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1227,3 +1227,9 @@
 # reachable; tax_details.sql: submit_tax_details rule by rule).
 # Measured: `all SQL assertions passed (390 files, 16943 assertions
 # executed)`.
+#
+# 16943 -> 16955, 10 October: 0797, a ringgit and a dollar are not two
+# of anything (customer_portal_shapes.sql: what a customer owes,
+# currency by currency, the base first, one figure only where there is
+# one currency, as anon). Measured: `all SQL assertions passed (390
+# files, 16955 assertions executed)`.

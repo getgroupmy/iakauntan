@@ -16,6 +16,7 @@ void main() {
     double total = 1000,
     bool overdue = false,
     String? due = '2026-02-01',
+    String? currency,
   }) => {
     'id': id,
     'doc_no': no,
@@ -24,19 +25,23 @@ void main() {
     'overdue': overdue,
     'due_date': due,
     'doc_date': '2026-01-15',
+    'currency': ?currency,
   };
 
   PortalAccount account({
     String state = 'open',
     List<Map<String, dynamic>>? invoices,
     double outstanding = 1000,
+    String currency = 'MYR',
+    List<Map<String, dynamic>>? totals,
   }) => PortalAccount.fromMap({
     'state': state,
     'company': {'name': 'Sinar Teknologi Sdn Bhd', 'email': 'ar@sinar.test'},
     'contact': {'name': 'Buyer Bhd'},
-    'currency': 'MYR',
+    'currency': currency,
     'total_outstanding': outstanding,
     'invoices': invoices ?? [inv()],
+    'totals': ?totals,
   });
 
   group('what comes back', () {
@@ -80,6 +85,40 @@ void main() {
 
     test('and anything else is the money', () {
       expect(portalOutstandingLine(account()), 'RM 1,000.00');
+    });
+
+    // 0797. The server used to add every balance together under the
+    // company's currency: RM100 and USD 100 came to "RM 200.00".
+    test('owed in two currencies is two figures, not one sum', () {
+      final a = account(
+        invoices: [
+          inv(balance: 100, total: 100, currency: 'MYR'),
+          inv(id: 'i2', no: 'INV-2', balance: 100, total: 100, currency: 'USD'),
+        ],
+        totals: [
+          {'currency': 'MYR', 'amount': 100},
+          {'currency': 'USD', 'amount': 100},
+        ],
+      );
+      expect(portalOutstandingLine(a), 'RM 100.00 · USD 100.00');
+    });
+
+    test('owed only in dollars is dollars', () {
+      final a = account(
+        currency: 'USD',
+        outstanding: 250,
+        invoices: [inv(balance: 250, total: 250, currency: 'USD')],
+        totals: [
+          {'currency': 'USD', 'amount': 250},
+        ],
+      );
+      expect(portalOutstandingLine(a), 'USD 250.00');
+    });
+
+    test('a server from before 0797 is read as the one total it sent', () {
+      // No `totals` at all: the one figure, in the one currency.
+      expect(account(outstanding: 640).totals.single.amount, 640);
+      expect(portalOutstandingLine(account(outstanding: 640)), 'RM 640.00');
     });
 
     test('a settled account is thanked, not left blank', () {
@@ -157,6 +196,24 @@ void main() {
 
     test('and one paid in full says nothing extra', () {
       expect(portalPartPaidNote(PortalInvoice.fromMap(inv())), isNull);
+    });
+
+    test('a dollar invoice is shown in dollars, part-paid or not', () {
+      // 0797: the page formatted every row in the account's currency.
+      final i = PortalInvoice.fromMap(
+        inv(balance: 150, total: 250, currency: 'USD'),
+      );
+      expect(portalInvoiceAmount(i), 'USD 150.00');
+      expect(portalPartPaidNote(i), 'of USD 250.00');
+    });
+
+    test('and one that does not say is in the account\'s currency', () {
+      final i = PortalInvoice.fromMap(inv(), fallbackCurrency: 'SGD');
+      expect(portalInvoiceAmount(i), 'SGD 1,000.00');
+      expect(
+        account(currency: 'SGD').invoices.single.currency,
+        'SGD',
+      );
     });
   });
 

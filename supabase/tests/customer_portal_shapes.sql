@@ -741,4 +741,121 @@ begin
     not has_table_privilege('anon', 'public.customer_portal_links', 'select'));
 end $$;
 
+-- =====================================================================
+-- `0797`. Owed currency by currency
+--
+-- A ringgit and a dollar are not two of anything. Before `0797` the
+-- figure at the top was every balance added together under the
+-- company's currency: RM100 and USD 100 came to "MYR 200.00".
+-- =====================================================================
+create temporary table t_ccy (mixed text, dollars text, settled text, aud text, zero text);
+grant select on t_ccy to anon;
+
+do $$
+declare
+  v_org uuid := pg_temp.cp_org('Mata Wang Sdn Bhd');
+  v_c uuid; v_d uuid; v_s uuid; v_a uuid; v_doc uuid;
+  r t_ccy;
+begin
+  -- RM100 and USD 100 on one account.
+  v_c := pg_temp.cp_customer(v_org, 'C-MIX', 'Dua Wang Bhd');
+  perform pg_temp.cp_invoice(v_org, v_c, 'INV-M1', 100);
+  v_doc := pg_temp.cp_invoice(v_org, v_c, 'INV-U1', 100, p_post => false);
+  update public.sales_documents set currency = 'USD', exchange_rate = 4.70 where id = v_doc;
+  perform public.post_sales_document(v_doc);
+  r.mixed := pg_temp.cp_share(v_c, 30);
+
+  -- Two dollar invoices and nothing else.
+  v_d := pg_temp.cp_customer(v_org, 'C-USD', 'Dolar Sahaja Bhd');
+  foreach v_doc in array array[
+      pg_temp.cp_invoice(v_org, v_d, 'INV-U2', 150, p_post => false),
+      pg_temp.cp_invoice(v_org, v_d, 'INV-U3', 100, p_post => false)] loop
+    update public.sales_documents set currency = 'USD', exchange_rate = 4.70 where id = v_doc;
+    perform public.post_sales_document(v_doc);
+  end loop;
+  r.dollars := pg_temp.cp_share(v_d, 30);
+
+  -- Owing nothing.
+  v_s := pg_temp.cp_customer(v_org, 'C-NIL', 'Lunas Bhd');
+  r.settled := pg_temp.cp_share(v_s, 30);
+
+  -- Australian dollars sort before ringgit by name; the company's own
+  -- currency still comes first.
+  v_a := pg_temp.cp_customer(v_org, 'C-AUD', 'Kanggaru Bhd');
+  v_doc := pg_temp.cp_invoice(v_org, v_a, 'INV-A1', 80, p_post => false);
+  update public.sales_documents set currency = 'AUD', exchange_rate = 3.00 where id = v_doc;
+  perform public.post_sales_document(v_doc);
+  perform pg_temp.cp_invoice(v_org, v_a, 'INV-A2', 50);
+  r.aud := pg_temp.cp_share(v_a, 30);
+
+  -- An invoice for nothing posts as 'posted', owing nothing. The
+  -- balance test is the only thing between it and the list.
+  v_s := pg_temp.cp_customer(v_org, 'C-ZERO', 'Percuma Bhd');
+  perform pg_temp.cp_invoice(v_org, v_s, 'INV-Z1', 0);
+  r.zero := pg_temp.cp_share(v_s, 30);
+
+  insert into t_ccy select r.*;
+end $$;
+
+set local role anon;
+
+do $$
+declare
+  q t_ccy;
+  v jsonb;
+begin
+  select * into q from t_ccy;
+  perform pg_temp.check_eq('a customer opens their account as a stranger', current_user, 'anon');
+
+  v := public.open_customer_portal(q.mixed);
+  perform pg_temp.check_eq('ringgit and dollars are owed separately',
+    (v -> 'totals')::text,
+    '[{"amount": 100.00, "currency": "MYR"}, {"amount": 100.00, "currency": "USD"}]');
+  perform pg_temp.check_true('and there is no one figure for the two',
+    v -> 'total_outstanding' = 'null'::jsonb);
+  perform pg_temp.check_eq('each invoice still says its own currency',
+    (select string_agg(i ->> 'doc_no' || ' ' || (i ->> 'currency'), ', ' order by i ->> 'doc_no')
+       from jsonb_array_elements(v -> 'invoices') i),
+    'INV-M1 MYR, INV-U1 USD');
+
+  v := public.open_customer_portal(q.dollars);
+  perform pg_temp.check_eq('a customer billed only in dollars is owed dollars',
+    v ->> 'currency', 'USD');
+  perform pg_temp.check_eq('added up as one figure',
+    (v ->> 'total_outstanding')::numeric, 250);
+  perform pg_temp.check_eq('and one total',
+    jsonb_array_length(v -> 'totals'), 1);
+
+  v := public.open_customer_portal(q.settled);
+  perform pg_temp.check_eq('owing nothing is nothing, in the company''s currency',
+    v ->> 'currency' || ' ' || (v ->> 'total_outstanding'), 'MYR 0');
+  perform pg_temp.check_eq('with no totals to show',
+    (v -> 'totals')::text, '[]');
+
+  v := public.open_customer_portal(q.aud);
+  perform pg_temp.check_eq('the company''s own currency comes first',
+    (select string_agg(t ->> 'currency', ',' order by n)
+       from jsonb_array_elements(v -> 'totals') with ordinality x(t, n)),
+    'MYR,AUD');
+
+  v := public.open_customer_portal(q.zero);
+  perform pg_temp.check_eq('an invoice for nothing is not owed',
+    jsonb_array_length(v -> 'invoices'), 0);
+end $$;
+
+reset role;
+
+-- The equivalent mutant: `c2.org_id = l.org_id` cannot be observed in
+-- the listing, because the documents are already held to the link's
+-- company and a document's contact is held to the document's company by
+-- a composite key -- another company's contact, whatever its party id,
+-- owns no document of ours. The constraint is the rule.
+do $$
+begin
+  perform pg_temp.check_eq('a document''s customer is the document''s own company''s',
+    (select count(*)::integer from pg_constraint
+      where conrelid = 'public.sales_documents'::regclass
+        and conname = 'sales_documents_contact_same_org'), 1);
+end $$;
+
 rollback;

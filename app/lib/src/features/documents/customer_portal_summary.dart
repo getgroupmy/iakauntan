@@ -18,15 +18,24 @@ class PortalInvoice {
     required this.balance,
     required this.total,
     required this.overdue,
+    this.currency = 'MYR',
     this.dueDate,
     this.docDate,
   });
 
-  factory PortalInvoice.fromMap(Map<String, dynamic> m) => PortalInvoice(
+  /// [fallbackCurrency] is the account's, for an invoice that does not
+  /// say its own.
+  factory PortalInvoice.fromMap(
+    Map<String, dynamic> m, {
+    String fallbackCurrency = 'MYR',
+  }) => PortalInvoice(
     id: m['id']?.toString() ?? '',
     docNo: m['doc_no']?.toString() ?? '',
     balance: Fmt.toDouble(m['balance_amount']),
     total: Fmt.toDouble(m['total_amount']),
+    // Its own. A dollar invoice shown in the account's ringgit is a
+    // figure the customer will try to pay (0797).
+    currency: m['currency']?.toString() ?? fallbackCurrency,
     // Decided by the server against Malaysian time, not by the device.
     // A phone in another time zone must not tell somebody they are late
     // when they are not.
@@ -39,6 +48,7 @@ class PortalInvoice {
   final String docNo;
   final double balance;
   final double total;
+  final String currency;
   final bool overdue;
   final DateTime? dueDate;
   final DateTime? docDate;
@@ -46,6 +56,19 @@ class PortalInvoice {
   /// True where part of it has already been paid, which is the only
   /// case in which showing the total as well as the balance helps.
   bool get partlyPaid => total > balance && balance > 0;
+}
+
+/// What is owed in one currency.
+class PortalTotal {
+  const PortalTotal(this.currency, this.amount);
+
+  factory PortalTotal.fromMap(Map<String, dynamic> m) => PortalTotal(
+    m['currency']?.toString() ?? 'MYR',
+    Fmt.toDouble(m['amount']),
+  );
+
+  final String currency;
+  final double amount;
 }
 
 /// The account behind one portal token.
@@ -57,6 +80,7 @@ class PortalAccount {
     required this.currency,
     required this.outstanding,
     required this.invoices,
+    this.totals = const [],
     this.logoUrl,
     this.companyEmail,
     this.companyPhone,
@@ -65,16 +89,29 @@ class PortalAccount {
   factory PortalAccount.fromMap(Map<String, dynamic> m) {
     final company = Map<String, dynamic>.from(m['company'] as Map? ?? {});
     final contact = Map<String, dynamic>.from(m['contact'] as Map? ?? {});
+    final currency = m['currency']?.toString() ?? 'MYR';
+    final outstanding = Fmt.toDouble(m['total_outstanding']);
     return PortalAccount(
       state: m['state']?.toString() ?? 'invalid',
       companyName: company['name']?.toString() ?? '',
       contactName: contact['name']?.toString() ?? '',
-      currency: m['currency']?.toString() ?? 'MYR',
-      outstanding: Fmt.toDouble(m['total_outstanding']),
+      currency: currency,
+      outstanding: outstanding,
       invoices: [
         for (final i in (m['invoices'] as List? ?? const []))
-          PortalInvoice.fromMap(Map<String, dynamic>.from(i as Map)),
+          PortalInvoice.fromMap(
+            Map<String, dynamic>.from(i as Map),
+            fallbackCurrency: currency,
+          ),
       ],
+      // One per currency, from 0797. A server from before it sent the
+      // one figure, which is read as the one total it meant.
+      totals: m['totals'] is List
+          ? [
+              for (final t in m['totals'] as List)
+                PortalTotal.fromMap(Map<String, dynamic>.from(t as Map)),
+            ]
+          : [PortalTotal(currency, outstanding)],
       logoUrl: company['logo_url']?.toString(),
       companyEmail: company['email']?.toString(),
       companyPhone: company['phone']?.toString(),
@@ -87,6 +124,7 @@ class PortalAccount {
   final String currency;
   final double outstanding;
   final List<PortalInvoice> invoices;
+  final List<PortalTotal> totals;
   final String? logoUrl;
   final String? companyEmail;
   final String? companyPhone;
@@ -99,9 +137,14 @@ class PortalAccount {
 ///
 /// A customer who owes nothing is told so in words. "RM 0.00" beside
 /// "outstanding" reads like a system that has lost their payments.
+///
+/// One figure per currency owed, the company's own first as the server
+/// sends them: RM100 and USD 100 are not RM200 (0797).
 String portalOutstandingLine(PortalAccount a) => a.owesNothing
     ? 'Nothing outstanding'
-    : Fmt.money(a.outstanding, currency: a.currency);
+    : [
+        for (final t in a.totals) Fmt.money(t.amount, currency: t.currency),
+      ].join(' · ');
 
 /// And the sentence under it.
 String portalSummaryLine(PortalAccount a) {
@@ -131,10 +174,14 @@ String portalInvoiceLine(PortalInvoice i) {
       : '${i.docNo} · due ${Fmt.date(i.dueDate)}';
 }
 
+/// What one row says it owes, in its own currency.
+String portalInvoiceAmount(PortalInvoice i) =>
+    Fmt.money(i.balance, currency: i.currency);
+
 /// What is said beside the amount when part of it is already paid, so
 /// the figure shown is not mistaken for the whole invoice.
 String? portalPartPaidNote(PortalInvoice i) =>
-    i.partlyPaid ? 'of ${Fmt.money(i.total)}' : null;
+    i.partlyPaid ? 'of ${Fmt.money(i.total, currency: i.currency)}' : null;
 
 /// Every unhappy state says the same thing in different words: ask the
 /// company. Naming which of them it is helps the customer say something

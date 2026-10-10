@@ -3,7 +3,6 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/error_text.dart';
-import '../../core/format.dart';
 import '../../core/theme.dart';
 import 'customer_portal_summary.dart';
 
@@ -96,7 +95,7 @@ class _CustomerPortalPageState extends State<CustomerPortalPage> {
                     body: m.body,
                   );
                 }
-                return _Account(
+                return PortalAccountView(
                   account: account,
                   busyId: _busyId,
                   onOpen: _openInvoice,
@@ -113,8 +112,13 @@ class _CustomerPortalPageState extends State<CustomerPortalPage> {
   }
 }
 
-class _Account extends StatelessWidget {
-  const _Account({
+/// One open account: what is owed at the top, each invoice under it.
+///
+/// Public so a test can draw it without a token or a server: every
+/// figure on it is money a stranger is being told they owe (0797).
+class PortalAccountView extends StatelessWidget {
+  const PortalAccountView({
+    super.key,
     required this.account,
     required this.busyId,
     required this.onOpen,
@@ -191,7 +195,7 @@ class _Account extends StatelessWidget {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              Fmt.money(i.balance, currency: account.currency),
+                              portalInvoiceAmount(i),
                               style: text.titleMedium?.copyWith(
                                 fontWeight: FontWeight.w600,
                                 color: i.overdue
