@@ -232,17 +232,11 @@ end $$;
 -- by anybody who knows the URL.
 -- =====================================================================
 do $$
-declare v_extra text;
-begin
-  select string_agg(p.proname, ', ' order by p.proname) into v_extra
-    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-   where n.nspname = 'public' and p.prokind = 'f'
-     and has_function_privilege('anon', p.oid, 'execute')
-     and not exists (
-       select 1 from pg_depend d
-        where d.objid = p.oid and d.classid = 'pg_proc'::regclass
-          and d.deptype = 'e')
-     and p.proname not in (
+declare
+  v_extra text;
+  v_lost  text;
+  -- The list, once, read both ways below.
+  v_list  text[] := array[
        -- Corporate secretarial signing, by emailed link.
        'corp_decline_with_link',
        'corp_open_signing_link',
@@ -276,17 +270,38 @@ begin
        -- session. One date out, no argument in, and the date is when
        -- Bank Negara published a rate to the world. Added by 0744 after
        -- the feed went eleven days dead unnoticed.
-       'rate_feed_newest');
+       'rate_feed_newest'];
+begin
+  select string_agg(p.proname, ', ' order by p.proname) into v_extra
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.prokind = 'f'
+     and has_function_privilege('anon', p.oid, 'execute')
+     and not exists (
+       select 1 from pg_depend d
+        where d.objid = p.oid and d.classid = 'pg_proc'::regclass
+          and d.deptype = 'e')
+     and p.proname <> all (v_list);
 
   perform pg_temp.check_eq(
     'no function in public is reachable by a stranger unless it is on '
     'this list', coalesce(v_extra, ''), '');
 
-  -- And the control, so the list above is not passing because the
-  -- query is broken: one that IS on it really is reachable.
-  perform pg_temp.check_true(
-    'and the ones on the list really are reachable by a stranger',
-    has_function_privilege('anon', 'public.landing_page()', 'execute'));
+  -- And the other way: every function on it really is reachable. The
+  -- event trigger `0165` takes EXECUTE from `anon` on every create or
+  -- replace, so a migration that restates one of these and forgets the
+  -- grant after it leaves a door shut that a customer is standing at --
+  -- and the assertion above, which only asks what is open, passes.
+  -- `0796` restated `place_public_pos_order` and was caught doing
+  -- exactly that, locally, by a probe rather than by this file.
+  select string_agg(l, ', ' order by l) into v_lost
+    from unnest(v_list) l
+   where not exists (
+     select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.proname = l
+        and has_function_privilege('anon', p.oid, 'execute'));
+  perform pg_temp.check_eq(
+    'every function on the list is reachable by a stranger',
+    coalesce(v_lost, ''), '');
 end $$;
 
 -- =====================================================================

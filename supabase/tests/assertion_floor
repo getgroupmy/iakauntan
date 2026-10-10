@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-16917
+16943
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1219,3 +1219,11 @@
 # catalogue and refused; the chain walked by its approvers and a payroll
 # run paying only what it approved). Measured: `all SQL assertions passed
 # (390 files, 16917 assertions executed)`.
+#
+# 16917 -> 16943, 10 October: 0796, a phone answers the dish's own
+# questions (pos_public_menu.sql: every order as anon, another dish's
+# answer and a retired question's refused, required questions asked per
+# plate; function_grants.sql: every function on the anon list asserted
+# reachable; tax_details.sql: submit_tax_details rule by rule).
+# Measured: `all SQL assertions passed (390 files, 16943 assertions
+# executed)`.

@@ -174,8 +174,12 @@ begin
   -- stopped asking. Their NAMES sort the other way round from their
   -- order, so a list ordered by name is a different list.
   -- ------------------------------------------------------------------
+  -- Optional, though a shop would usually require a size: from `0796` a
+  -- phone's order must answer every question a dish requires, and the
+  -- orders below are about tills, channels, promotions and links, each
+  -- of a plain nasi at RM12. The required case is `pos_public_menu.sql`'s.
   insert into public.pos_modifier_groups (org_id, code, name, min_select, max_select)
-  values (v_org, 'SAIZ', 'What size?', 1, 1) returning id into v_g_size;
+  values (v_org, 'SAIZ', 'What size?', 0, 1) returning id into v_g_size;
   insert into public.pos_modifier_groups (org_id, code, name, min_select, max_select)
   values (v_org, 'PEDAS', 'How spicy?', 0, 3) returning id into v_g_spice;
   insert into public.pos_modifier_groups

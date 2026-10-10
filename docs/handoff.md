@@ -1476,6 +1476,31 @@ page and renumbering would quietly break the reference.
     run that pays only what the chain approved. Swept 23 / 23, the
     definer flip by hand.
     **Still to read back.**
+63. ~~A phone's order can carry another dish's answer, priced below
+    nothing.~~ **Raised and answered 10 October: refuse on the public
+    road. Built in `0796`.** `place_public_pos_order` -- a QR menu's
+    order, no login -- asked of each answer only that it was the same
+    company's and within its question's maximum, never that the dish
+    asks that question. Measured with no login: a nasi lemak (RM12) and
+    three teh tarik (RM3) each carrying another dish's "small portion"
+    (-RM4) -- a bill of RM9, the teh tarik line -RM3. A bill wholly below
+    nothing was refused only by the bill discount's check. Nor was a
+    required question asked; `pos_line_modifier_gaps` then held the bill
+    from the kitchen. The phone page offers only the dish's own questions
+    and asks the required ones, so only a hand-made request did either.
+    Now the order refuses an answer to a question the dish does not (or
+    no longer) ask -- the active ones `public_pos_menu_modifiers` shows
+    -- and a line whose required question went unanswered, by the
+    kitchen's own rule, asked of the lines this order made (a table's
+    bill may carry the waiter's). The till is unchanged. Restated from
+    `0535` (production hash 8ad03b77..., identical). Production held no
+    menu link and no answer priced below nothing. The first draft lost
+    `anon`'s EXECUTE -- `0165`'s event trigger takes it on every replace
+    -- and the full suite would have passed it: `pos_public_menu.sql`
+    ordered as the superuser, and `function_grants.sql` asked only what
+    a stranger could reach beyond its list, never whether the list was
+    still reachable. Both now ask. Swept 10 / 10, the grant by hand.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -1700,6 +1725,7 @@ function:
 | `corp_request_signatures` | `0069` | 10 / 10 | -- | `secretarial.sql` (one before its assertions; three first "killed" by an ambiguous column in the mutant itself, then qualified and asserted -- raising a request again is the road back) |
 | `app.customer_link_is_the_databases` | `0794` | 9 / 9 | -- | `customer_link_evidence.sql` (new in `0794`; every column of the three tables read from the catalogue; SECURITY DEFINER flipped by hand) |
 | `app.request_decision_is_the_databases` | `0795` | 23 / 23 | -- | `request_decisions.sql` (new in `0795`; every column of a submitted and an approved claim and leave request read from the catalogue; SECURITY DEFINER flipped by hand) |
+| `place_public_pos_order` | `0796` | 10 / 10 | -- | `pos_public_menu.sql` (its new block, every order as `anon`; the `anon` grant revoked by hand fails it and `function_grants.sql`) |
 | `submit_tax_details` | `0626` | 25 / 26 | 1 (a state code upper-cased: every `ref_states` code is two digits, and the foreign key refuses any other) | `tax_details.sql` (seventeen only after its rule-by-rule block: the deleted contact, the record of who answered and from where, three spellings, the link's count, when an answer was taken, what the form is told, and which answers a correction supersedes) |
 | `app.share_link_is_the_databases` | `0793` | 14 / 14 | -- | `document_share.sql` (share-link section new in `0793`; SECURITY DEFINER flipped by hand) |
 | `app.signing_link_is_the_databases` | `0792` | 16 / 16 | -- | `signature_evidence.sql` (links section new in `0792`; SECURITY DEFINER flipped by hand) |
