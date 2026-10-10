@@ -266,12 +266,52 @@ begin
   perform pg_temp.check_true('and says what to do about it',
     v_said like '%Void it first%');
 
+  -- `record_departure`, rule by rule. A mutation sweep
+  -- (`mutants/record_departure.py`) left these with nothing to tell
+  -- them from their absence.
+  --
+  -- Only a month PAID TO THEM stops it: a later run calculated but not
+  -- posted has paid nobody, and a posted one that did not pay this
+  -- person has nothing of theirs to restate.
+  perform pg_temp.dep_run(v_org, '2026-07', date '2026-07-01', date '2026-07-31');
+  v_run := pg_temp.dep_run(v_org, '2026-08', date '2026-08-01', date '2026-08-31');
+  delete from public.payslips where run_id = v_run and employee_id = v_emp;
+  update public.payroll_runs set status = 'posted', posted_at = now()
+   where id = v_run;
+
   -- A last working day inside that month is fine: they were there for
   -- part of it and the run paid them for part of it.
   perform public.record_departure(v_emp, date '2026-06-20', 'resigned');
   perform pg_temp.check_eq('a departure within the paid month is allowed',
     (select last_working_date from public.employees where id = v_emp)::text,
     '2026-06-20');
+  perform pg_temp.check_true('past an unposted run and a posted run that did not pay them',
+    (select count(*) = 2 from public.payroll_runs r join public.pay_periods p
+        on p.id = r.period_id
+      where r.org_id = v_org and p.period_start > date '2026-06-20'));
+
+  perform pg_temp.check_refused('an employee who does not exist is said so',
+    format('select public.record_departure(%L, %L, %L)',
+           gen_random_uuid(), pg_temp.today(), 'resigned'),
+    'No such employee.', 'P0002');
+  perform pg_temp.check_refused('a departure needs a last working day',
+    format('select public.record_departure(%L, null, %L)', v_emp, 'resigned'),
+    'A departure needs a last working day.', '23514');
+  perform pg_temp.sign_in_as(pg_temp.another_user('keluar-luar@example.test'));
+  perform pg_temp.check_refused('a stranger cannot record somebody leaving',
+    format('select public.record_departure(%L, %L, %L)',
+           v_emp, pg_temp.today(), 'resigned'),
+    'not permitted to record a departure', '42501');
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+
+  -- Leaving today is leaving, not serving notice; and the reason is
+  -- kept as words, not as the spaces around them.
+  perform public.record_departure(v_emp, pg_temp.today(), 'resigned',
+    '  Moved to Penang  ');
+  perform pg_temp.check_eq('somebody whose last day is today has resigned',
+    (select employment_status::text || ' | ' || termination_reason
+       from public.employees where id = v_emp),
+    'resigned | Moved to Penang');
 
   perform pg_temp.sign_out();
 end $$;
