@@ -1306,7 +1306,10 @@ page and renumbering would quietly break the reference.
     Found sweeping `apply_pos_coupon`, 14 / 16, two equivalent; the key
     itself checked by hand (put back as nulls-distinct, `pos.sql` fails
     "expected 1, got 3"; a no-op control passes).
-    **Still to read back.**
+    **Applied, and read back** (10 October, read-only, after run
+    38029218300 on `a7f1208` had applied the migrations): recorded; the
+    live key reads `UNIQUE NULLS NOT DISTINCT (sale_id, promotion_id,
+    line_id)`, under its old name; its comment names `0788`.
 56. ~~HR of one company can close the day of another company's
     employee.~~ **Raised and answered 9 October: fix both. Built in
     `0789`.** `clock_in` and `clock_out` take `p_employee_id` for HR
