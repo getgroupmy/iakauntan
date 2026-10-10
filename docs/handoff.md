@@ -1335,6 +1335,35 @@ page and renumbering would quietly break the reference.
     checked before building, and the answer does not change.) Swept
     12 / 12.
     **Still to read back.**
+58. ~~A resolution's signatures can be forged, and its signed text
+    rewritten, through the API.~~ **Raised and answered 10 October:
+    guard the columns. Built in `0791`.** `0069` writes a signature's
+    evidence itself -- "a signature record the signer can write is not
+    evidence of anything" -- but `corp_signatures_write` and
+    `corp_signature_requests_write` give any member who may write `ALL`
+    on both tables. Measured, as a member with the accountant's role:
+    Director Two's line set signed, backdated, with a made-up address
+    and browser; and the request marked withdrawn (which unlocks the text
+    for `0072`), the signed text rewritten, every hash set to the new
+    text, the request un-withdrawn -- under Director One's real
+    signature. `corp_signature_state` then said both had signed and the
+    text was unchanged. Now a trigger, as `0781`'s, refuses a client's
+    own statement that writes a line's evidence (status, time, name,
+    decline reason, hash, address, browser, login, request, person; the
+    capacity once answered), inserts anything but a pending line, deletes
+    an answered line, raises a request by hand, writes a request's
+    document, hash, author or withdrawal, or deletes an answered request.
+    A request's due date and note, and a pending line's capacity, stay
+    editable; the five signing functions are definers and pass. The app
+    and edge functions write neither table. Production held no document,
+    request or signature. New `signature_evidence.sql`, added to
+    `ci.yml`. Swept 24 / 24, the definer flip by hand.
+    NOTED, NOT RAISED: in-app signing records whichever login is at the
+    desk -- `entity_screen.dart` says "for somebody who will sign at this
+    desk", so it is the design; and nothing withdraws a request (re-
+    raising it with `corp_request_signatures` is the road), though two
+    messages still say "withdraw the signature request".
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -1550,6 +1579,8 @@ function:
 | `claim_pos_sale` | `0226` | 10 / 11 | 1 | `pos_fnb.sql` (four before its assertions; equivalent: a bill already on this till moved again -- a parked bill's shift is always open) |
 | `pos_scan_serial` | `0546` | 11 / 13 | 2 | `pos_serial_sale.sql` (eight before its assertions: a missing line, a stranger, an outlet with no shelf, another company's basket; equivalent: `items` forbids serial tracking on an item not kept, and `v_lot_balances` keeps no zero row) |
 | `move_pos_sale` | `0213` | 8 / 8 | -- | `pos_fnb.sql` (three before its assertions; noted: a table out of service is not refused, and the floor plan hides it -- the bill stays on the open-bills list) |
+| `corp_sign_document` | `0069` | 14 / 14 | -- | `secretarial.sql` (six before its assertions: the evidence -- time, name, address, browser, login -- had never been read back; found `0791`) |
+| `app.signature_evidence_is_the_databases` | `0791` | 24 / 24 | -- | `signature_evidence.sql` (new in `0791`; a bare 'signed' insert added; SECURITY DEFINER flipped by hand) |
 | `ensure_pay_period` | `0279` | 7 / 8 | 1 | `payroll_periods.sql` (all seven before -- nothing added; equivalent: `pay_day` is NOT NULL, so the inner default never decides) |
 | `check_in_booking` | `0790` | 12 / 12 | -- | `pos_service.sql` (two before its assertions; the guard first survived -- `open_pos_sale` refuses a stranger in the same words -- until asked of an appointment already checked in, where it is the only guard) |
 | `clock_in`, `clock_out` (the company check) | `0789` | 6 / 6 | -- | `clock_out.sql` (new in `0789`; nothing had asked that a member who is not HR cannot clock somebody else in) |

@@ -255,11 +255,33 @@ begin
   select id into v_sig_b from public.corp_signatures
    where request_id = v_req and person_id = v_b;
 
-  perform public.corp_sign_document(v_sig_a, 'Director One');
+  -- Signed at the desk, from an address and a browser the edge
+  -- reports, with the name typed carelessly.
+  perform set_config('request.headers',
+    '{"cf-connecting-ip": "203.0.113.30", "user-agent": "Meja/1.0"}', true);
+  perform public.corp_sign_document(v_sig_a, '  Director One  ');
+  perform set_config('request.headers', '{}', true);
   perform pg_temp.check_true('a signature vouches for the text it was given',
     (select s.document_unchanged
        from public.corp_signature_state(v_doc) s
       where s.signature_id = v_sig_a));
+  -- `corp_sign_document`, rule by rule. A mutation sweep
+  -- (`mutants/corp_sign_document.py`) left the evidence itself with
+  -- nothing to tell it from its absence: only the hash was asked.
+  perform pg_temp.check_eq('the evidence is what the database saw',
+    (select signed_name || ' | ' || host(ip_address) || ' | ' || user_agent
+            || ' | ' || (signed_at is not null)::text
+            || ' | ' || (signed_by = auth.uid())::text
+       from public.corp_signatures where id = v_sig_a),
+    'Director One | 203.0.113.30 | Meja/1.0 | true | true');
+  perform pg_temp.check_refused('a signature line that does not exist is said so',
+    format('select public.corp_sign_document(%L, %L)', gen_random_uuid(), 'Siapa'),
+    'Signature not found', 'P0002');
+  perform pg_temp.sign_in_as(pg_temp.another_user('tandatangan-luar@example.test'));
+  perform pg_temp.check_refused('a stranger cannot sign for the company''s directors',
+    format('select public.corp_sign_document(%L, %L)', v_sig_b, 'Director Two'),
+    'Not permitted to sign', '42501');
+  perform pg_temp.sign_in_as(pg_temp.test_user());
 
   begin
     perform public.corp_sign_document(v_sig_a, 'Director One');
@@ -308,6 +330,15 @@ begin
   exception when sqlstate '23514' then
     raise notice 'ok   nobody can sign a text that changed since it was circulated';
   end;
+
+  -- A withdrawn request takes no more signatures. Nothing a client can
+  -- call reaches this state since `0791` -- re-raising the request is
+  -- the road -- so it is set here as the owner, which is the only way
+  -- left to ask the question.
+  update public.corp_signature_requests set is_withdrawn = true where id = v_req;
+  perform pg_temp.check_refused('a withdrawn request takes no more signatures',
+    format('select public.corp_sign_document(%L, %L)', v_sig_b, 'Director Two'),
+    'The signature request has been withdrawn', '22023');
 end $$;
 
 -- ---------------------------------------------------------------------

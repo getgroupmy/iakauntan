@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-16561
+16601
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1180,3 +1180,11 @@
 # and complete_kiosk_order (pos_fnb.sql, pos_serial_sale.sql,
 # pos_kiosk.sql). Measured:
 # `all SQL assertions passed (387 files, 16561 assertions executed)`.
+#
+# 16561 -> 16601, 10 October: 0791, a signature is the database's (new
+# signature_evidence.sql: every evidence column, the request's hash and
+# withdrawal, inserts and deletes, and the signing functions still
+# working as a client), corp_sign_document's evidence read back in
+# secretarial.sql, and ensure_pay_period swept with nothing to add.
+# Measured: `all SQL assertions passed (388 files, 16601 assertions
+# executed)`.
