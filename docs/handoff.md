@@ -1610,7 +1610,13 @@ page and renumbering would quietly break the reference.
     (2438e054..., 6cff0bd2...). Production held fourteen sales, none with
     a service charge. The test now reads the line itself, a reprint after
     a rate change, and a fractional rate. Swept 5 / 5.
-    **Still to read back.**
+    **Applied, and read back** (10 October, read-only, after run
+    38069207731 on `d7f984c` had applied the migrations): recorded;
+    `app.recalc_pos_sale` hashes to 9473db16... and `pos_receipt_text` to
+    85966d3c..., each the same as the migration's own body, both SECURITY
+    DEFINER with their grants as before; `pos_sales.service_charge_percent`
+    is there, not null, default 0, with its 0-to-100 check and a comment
+    naming `0800`; the fourteen sales hold no rate, as none was charged.
 68. ~~Unticking a bill leaves its prepared self-billed e-Invoice queued
     for LHDN.~~ **Raised and answered 10 October: withdraw the prepared
     one. Built in `0801`.** `set_requires_self_billed` refused only once
