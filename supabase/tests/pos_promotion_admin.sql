@@ -271,6 +271,38 @@ begin
   perform pg_temp.check_eq('and it is still on it',
     (select count(*) from public.pos_sale_promotions where sale_id = v_done), 1);
 
+  -- `remove_pos_sale_promotion`, rule by rule. A mutation sweep
+  -- (`mutants/remove_pos_sale_promotion.py`) left two rules with nothing
+  -- here to tell them from their absence: that it takes off the one row
+  -- asked for and leaves the others, and that a stranger takes off none.
+  declare
+    v_two  uuid := public.open_pos_sale(v_reg);
+    v_rows uuid[];
+  begin
+    -- A second promotion, so the bill carries two rows to tell apart.
+    perform public.upsert_pos_promotion(
+      v_org, 'Seringgit teh', 'amount_off', p_amount => 1.00,
+      p_items => array[v_teh]);
+    perform public.add_pos_sale_line(v_two, v_roti, 1, 10.00);
+    perform public.add_pos_sale_line(v_two, v_teh, 1, 10.00);
+    perform public.refresh_pos_sale_promotions(v_two);
+    select array_agg(id order by id) into v_rows
+      from public.pos_sale_promotions where sale_id = v_two;
+    perform pg_temp.check_eq('both promotions land on the bill',
+      cardinality(v_rows), 2);
+
+    perform public.remove_pos_sale_promotion(v_rows[1]);
+    perform pg_temp.check_eq('taking one off leaves the other',
+      (select count(*) from public.pos_sale_promotions
+        where sale_id = v_two and id = v_rows[2]), 1);
+
+    perform pg_temp.sign_in_as(pg_temp.another_user('orang-luar-promo@example.test'));
+    perform pg_temp.check_refused('a stranger takes off none',
+      format('select public.remove_pos_sale_promotion(%L)', v_rows[2]),
+      'not permitted to sell for this organization', '42501');
+    perform pg_temp.sign_in_as(pg_temp.test_user());
+  end;
+
   -- ==================================================================
   -- The list the shop sets them up from
   -- ==================================================================
