@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0805",
+    "version": "0806",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -18790,7 +18790,7 @@
       "get": {
         "operationId": "select_rent_run_lines",
         "summary": "Read rent_run_lines",
-        "description": "Row-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "description": "The invoice a rent run raised for one tenancy. WRITTEN ONLY BY FUNCTION -- 0806 revoked insert, update and delete from clients and dropped the write policies; raise_rent_invoices writes it and void_rent_run undoes it, voiding the invoices first. Members with the module read it.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
         "tags": [
           "tables"
         ],
@@ -18854,7 +18854,7 @@
       "get": {
         "operationId": "select_rent_runs",
         "summary": "Read rent_runs",
-        "description": "Row-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "description": "A month (or other period) of rent raised for a site's tenancies. WRITTEN ONLY BY FUNCTION -- 0806 revoked insert, update and delete from clients and dropped the write policies; raise_rent_invoices writes it and void_rent_run undoes it, voiding the invoices first. Members with the module read it.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
         "tags": [
           "tables"
         ],
@@ -80471,7 +80471,7 @@
       "get": {
         "operationId": "select_strata_charge_lines",
         "summary": "Read strata_charge_lines",
-        "description": "Row-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "description": "The invoice a strata charge run raised for one parcel. WRITTEN ONLY BY FUNCTION -- 0806 revoked insert, update and delete from clients and dropped the write policies; raise_strata_charges writes it and void_strata_charge_run undoes it, voiding the invoices first. Members with the module read it.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
         "tags": [
           "tables"
         ],
@@ -80599,7 +80599,7 @@
       "get": {
         "operationId": "select_strata_charge_runs",
         "summary": "Read strata_charge_runs",
-        "description": "Row-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "description": "A period of maintenance and sinking fund charges raised for a scheme. WRITTEN ONLY BY FUNCTION -- 0806 revoked insert, update and delete from clients and dropped the write policies; raise_strata_charges writes it and void_strata_charge_run undoes it, voiding the invoices first. Members with the module read it.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
         "tags": [
           "tables"
         ],

@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17110
+17136
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1291,3 +1291,11 @@
 # month's return refused its own e-Invoice in request_einvoice_for_sale's
 # words and none made, a sale outside it prepared beside it). Measured:
 # `all SQL assertions passed (393 files, 17110 assertions executed)`.
+#
+# 17110 -> 17136, 10 October: 0806, a billing run is undone by undoing
+# it (new billing_runs.sql, 26: the four rent and strata run tables read
+# by a member and refusing a client's insert, update and delete by name;
+# a run not stamped void by hand, so neither period is raised twice; the
+# void functions still undo a run and the period is raised once more).
+# Measured: `all SQL assertions passed (394 files, 17136 assertions
+# executed)`.

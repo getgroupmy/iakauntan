@@ -1732,6 +1732,38 @@ page and renumbering would quietly break the reference.
     the very invoice its client then prepares; the consolidation now
     holds an invoice of its own.
     **Still to read back.**
+73. ~~A rent or strata billing run can be stamped void by hand, and the
+    period billed again.~~ **Raised and answered 10 October: read-only
+    to clients. Built in `0806`.** `raise_rent_invoices` and
+    `raise_strata_charges` refuse a period overlapping a run whose
+    `voided_at` is null; `void_rent_run` and `void_strata_charge_run`
+    refuse while an invoice is paid or accepted by LHDN, void each
+    invoice, and only then stamp the run. The app only reads the four
+    tables, but `authenticated` held insert, update and delete on them
+    (`can_write_module`, which `0501` found says 'write' for most
+    members). Measured as the owner with the role `authenticated`:
+    January's rent raised for two tenancies (RM5,000), the run's
+    `voided_at` set by hand, January raised again -- four live invoices,
+    RM10,000. Now, as `0740` and `0804`, the grants are revoked and the
+    write policies dropped on `rent_runs`, `rent_run_lines`,
+    `strata_charge_runs` and `strata_charge_lines`, the restrictive
+    `module_gate_` write policies with them (`table_grants.sql` refuses a
+    policy on a command nobody holds); reading and `module_gate_select`
+    stay. Production held no run of either kind. New `billing_runs.sql`,
+    added to `ci.yml`. Each of the twelve doors restored by hand, grant
+    and policy and then grant alone, fails the file (24 / 24); a policy
+    alone fails its last assertion.
+    Found by a scan for tables a client may write that the app writes
+    only through functions: 114 named nowhere in the app's own writes,
+    ten already guarded by a trigger that asks the caller. Of the rest,
+    the configuration lists are written by `saveSetupRow` with the table
+    in a variable, so that scan cannot tell them apart; the records
+    worth the same question next are `payroll_ytd` (only
+    `post_payroll_run` writes it; the policy is `can_run_payroll`, and
+    the YTD feeds the next month's PCB), `tax_filings` and
+    `tax_estimate_payments`, `bank_transactions`, `leave_balances`,
+    `attendance_records` and `expense_lines`.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -1969,6 +2001,7 @@ function:
 | `app.einvoice_state_is_lhdns`, `void_sales_document` (the valid check) | `0803` | 22 / 22 | -- | `einvoice_columns.sql` (new in `0803`; two of the void's only after two valid e-Invoices that carry the invoice's id without being its own, another company's and a bill's; SECURITY DEFINER flipped by hand) |
 | (the write grants and policies on the five e-Invoice tables) | `0804` | 30 / 30 restored by hand | -- | `einvoice_records.sql` (new in `0804`; each table's insert, update and delete restored with its policy and then alone; a policy alone fails its last assertion) |
 | `prepare_einvoice` (the consolidation check) | `0805` | 4 / 4 | -- | `pos_einvoice_consolidation.sql` (its `0805` block, as a client: a consolidated sale refused in `request_einvoice_for_sale`'s words, a sale outside the return prepared beside it) |
+| (the write grants and policies on the four billing run tables) | `0806` | 24 / 24 restored by hand | -- | `billing_runs.sql` (new in `0806`; each table's insert, update and delete restored with its policy and then alone; a policy alone fails its last assertion) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |
