@@ -80,8 +80,11 @@ begin
     (select status::text from public.corp_signatures where id = v_sig_a),
     'pending');
 
+  perform set_config('request.headers',
+    '{"cf-connecting-ip": "203.0.113.41", "user-agent": "Meja/2.0"}', true);
   perform public.corp_decline_signature(
     v_sig_a, 'The third resolution misstates the consideration.');
+  perform set_config('request.headers', '{}', true);
   perform pg_temp.check_eq('declined is reachable at last',
     (select status::text from public.corp_signatures where id = v_sig_a),
     'declined');
@@ -93,6 +96,22 @@ begin
   perform pg_temp.check_true('and attributed to whoever did it',
     (select signed_by is not null from public.corp_signatures
       where id = v_sig_a));
+  -- `corp_decline_signature`, rule by rule. A mutation sweep
+  -- (`mutants/corp_decline.py`) left these with nothing to tell them
+  -- from their absence.
+  perform pg_temp.check_eq('from the address and browser the edge saw',
+    (select host(ip_address) || ' ' || user_agent
+       from public.corp_signatures where id = v_sig_a),
+    '203.0.113.41 Meja/2.0');
+  perform pg_temp.check_refused('a line that does not exist is said so',
+    format('select public.corp_decline_signature(%L, %L)',
+           gen_random_uuid(), 'No'),
+    'Signature not found', 'P0002');
+  perform pg_temp.sign_in_as(pg_temp.another_user('tolak-luar@example.test'));
+  perform pg_temp.check_refused('a stranger cannot decline for a director',
+    format('select public.corp_decline_signature(%L, %L)', v_sig_b, 'No'),
+    'Not permitted', '42501');
+  perform pg_temp.sign_in_as(pg_temp.test_user());
   -- It is not a signature. Nothing downstream should read it as one.
   perform pg_temp.check_true('a declined line has signed nothing',
     (select signed_at is null and signed_name is null
@@ -127,6 +146,91 @@ begin
   perform pg_temp.check_eq('and can still be signed',
     (select status::text from public.corp_signatures where id = v_sig_b),
     'signed');
+
+  -- ------------------------------------------------------------------
+  -- Saying no on a link (`corp_decline_with_link`), rule by rule
+  -- ------------------------------------------------------------------
+  -- Nothing called it. A director reading the resolution on a link
+  -- who will not sign says so on that screen, or simply never replies.
+  declare
+    v_c     uuid;
+    v_doc2  uuid;
+    v_req2  uuid;
+    v_l_a   uuid;
+    v_l_b   uuid;
+    v_l_c   uuid;
+    v_old   text;
+    v_tok   text;
+    v_tok_b text;
+    v_tok_c text;
+  begin
+    insert into public.corp_persons (org_id, kind, full_name, nric)
+    values ((select org_id from public.corp_signatures where id = v_sig_a),
+            'individual', 'Director Three', '900303033333')
+    returning id into v_c;
+    v_doc2 := public.corp_generate_document(v_e, 'sec_particulars');
+    v_req2 := public.corp_request_signatures(v_doc2, array[v_a, v_b, v_c],
+                null, null, null);
+    select id into v_l_a from public.corp_signatures where request_id = v_req2 and person_id = v_a;
+    select id into v_l_b from public.corp_signatures where request_id = v_req2 and person_id = v_b;
+    select id into v_l_c from public.corp_signatures where request_id = v_req2 and person_id = v_c;
+
+    perform pg_temp.check_refused('a link that was never issued is not valid',
+      format('select public.corp_decline_with_link(%L, %L)', 'no-such-token', 'No'),
+      'This link is not valid', '42501');
+
+    -- Sent to the wrong address and replaced: the first is retired.
+    v_old := public.corp_create_signing_link(v_l_a, 14, 'salah@example.test');
+    v_tok := public.corp_create_signing_link(v_l_a, 14, 'betul@example.test');
+    perform pg_temp.check_refused('a refusal has to say why, on a link too',
+      format('select public.corp_decline_with_link(%L, %L)', v_tok, '   '),
+      'Say why you are not signing.', '23514');
+    perform pg_temp.check_refused('a retired link cannot decline',
+      format('select public.corp_decline_with_link(%L, %L)', v_old, 'No'),
+      'This link has already been used', '22023');
+    -- Run out, as the owner -- nothing a client can do moves an expiry.
+    update public.corp_signing_links set expires_at = now() - interval '1 day'
+     where token_hash = app.corp_token_hash(v_tok);
+    perform pg_temp.check_refused('nor an expired one',
+      format('select public.corp_decline_with_link(%L, %L)', v_tok, 'No'),
+      'This link has expired', '22023');
+    v_tok := public.corp_create_signing_link(v_l_a, 14, 'betul@example.test');
+
+    perform set_config('request.headers',
+      '{"cf-connecting-ip": "203.0.113.42", "user-agent": "Telefon/1.0"}', true);
+    perform pg_temp.check_eq('a director on a link can say no',
+      public.corp_decline_with_link(v_tok, '  Not at that price.  '), 'declined');
+    perform set_config('request.headers', '{}', true);
+    perform pg_temp.check_eq('and the refusal carries what the edge saw, and no login',
+      (select status || ' | ' || decline_reason || ' | ' || host(ip_address)
+              || ' | ' || user_agent || ' | ' || (signed_by is null)::text
+         from public.corp_signatures where id = v_l_a),
+      'declined | Not at that price. | 203.0.113.42 | Telefon/1.0 | true');
+    perform pg_temp.check_true('and the link is spent by it',
+      (select used_at is not null from public.corp_signing_links
+        where token_hash = app.corp_token_hash(v_tok)));
+    perform pg_temp.check_refused('so it cannot be used again',
+      format('select public.corp_decline_with_link(%L, %L)', v_tok, 'Again'),
+      'This link has already been used', '22023');
+
+    -- A line already answered at the desk is not answered again here.
+    v_tok_b := public.corp_create_signing_link(v_l_b, 14, 'dua@example.test');
+    perform public.corp_sign_document(v_l_b, 'Director Two');
+    perform pg_temp.check_refused('a line signed at the desk is not declined on its link',
+      format('select public.corp_decline_with_link(%L, %L)', v_tok_b, 'No'),
+      'That line is already signed', '22023');
+
+    -- And a withdrawn request is answered by nobody, either way. As the
+    -- owner, since `0791`: no client road withdraws one.
+    v_tok_c := public.corp_create_signing_link(v_l_c, 14, 'tiga@example.test');
+    update public.corp_signature_requests set is_withdrawn = true where id = v_req2;
+    perform pg_temp.check_refused('a withdrawn request is not declined on a link',
+      format('select public.corp_decline_with_link(%L, %L)', v_tok_c, 'No'),
+      'The signature request has been withdrawn', '22023');
+    perform pg_temp.check_refused('nor at the desk',
+      format('select public.corp_decline_signature(%L, %L)', v_l_c, 'No'),
+      'The signature request has been withdrawn', '22023');
+  end;
 
   perform pg_temp.sign_out();
 end $$;
