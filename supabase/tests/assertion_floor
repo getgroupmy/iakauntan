@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17011
+17018
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1253,3 +1253,9 @@
 # open_tax_detail_request, merge_pos_table and remove_pos_sale_promotion
 # swept rule by rule. Measured: `all SQL assertions passed (390 files,
 # 17011 assertions executed)`.
+#
+# 17011 -> 17018, 10 October: 0801, a self-billed invoice goes with the
+# obligation (self_billed_einvoice.sql: unticking withdraws a queued and
+# a failed self-billed e-Invoice, the bill is left owing none, a re-tick
+# clears the withdrawal). Measured: `all SQL assertions passed (390
+# files, 17018 assertions executed)`.

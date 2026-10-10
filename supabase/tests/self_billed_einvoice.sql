@@ -450,6 +450,61 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- `0801`. A prepared one goes with the obligation
+--
+-- Unticking a bill used to leave its prepared self-billed e-Invoice
+-- queued, where the bulk MyInvois sweep -- everything queued for the
+-- company, the bill never asked -- would file it.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v      record;
+  v_bill uuid;
+  v_id   uuid;
+  v_fail uuid;
+  v_fid  uuid;
+  e      public.einvoice_documents;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  perform pg_temp.allow_many_companies();
+  select * into v from pg_temp.sb_company('Tarik Balik Sdn Bhd');
+  v_bill := pg_temp.sb_bill(v.org, v.foreign_supplier, v.item, 'BILL-W');
+  v_id := public.prepare_self_billed_einvoice(v_bill);
+  -- And one the sweep tried and failed: still not with LHDN.
+  v_fail := pg_temp.sb_bill(v.org, v.foreign_supplier, v.item, 'BILL-X');
+  v_fid := public.prepare_self_billed_einvoice(v_fail);
+  update public.einvoice_documents set status = 'failed' where id = v_fid;
+
+  perform public.set_requires_self_billed(v_bill, false);
+  perform public.set_requires_self_billed(v_fail, false);
+  select * into e from public.einvoice_documents where id = v_id;
+  perform pg_temp.check_eq('unticked, the prepared e-Invoice is withdrawn',
+    e.status::text, 'cancelled');
+  perform pg_temp.check_true('saying when, and why',
+    e.cancelled_at is not null
+    and e.cancellation_reason like 'Withdrawn before it was sent%');
+  perform pg_temp.check_eq('and one that failed to send is withdrawn too',
+    (select status::text from public.einvoice_documents where id = v_fid), 'cancelled');
+  perform pg_temp.check_eq('so the bulk sweep has nothing of this company''s to send',
+    (select count(*) from public.einvoice_documents
+      where org_id = v.org and status in ('queued', 'draft', 'failed', 'invalid')), 0);
+  perform pg_temp.check_true('and the bill owes none and points at none',
+    (select einvoice_status = 'not_applicable' and einvoice_id is null
+       from public.purchase_documents where id = v_bill));
+
+  -- Owed again, and prepared again: a clean document, queued.
+  perform public.set_requires_self_billed(v_bill, true);
+  perform pg_temp.check_true('ticked again, the withdrawal is not left on it',
+    (select cancelled_at is null and cancellation_reason is null
+       from public.einvoice_documents where id = v_id));
+  -- Into a variable first: `where id = prepare_...()` would call it
+  -- once for every row the scan reads.
+  v_id := public.prepare_self_billed_einvoice(v_bill);
+  perform pg_temp.check_eq('and preparing it again queues it',
+    (select status::text from public.einvoice_documents where id = v_id), 'queued');
+end $$;
+
+-- ---------------------------------------------------------------------
 -- Preparing one, rule by rule
 --
 -- Every self-billed document above is a BILL, from a company whose

@@ -1593,6 +1593,24 @@ page and renumbering would quietly break the reference.
     a service charge. The test now reads the line itself, a reprint after
     a rate change, and a fractional rate. Swept 5 / 5.
     **Still to read back.**
+68. ~~Unticking a bill leaves its prepared self-billed e-Invoice queued
+    for LHDN.~~ **Raised and answered 10 October: withdraw the prepared
+    one. Built in `0801`.** `set_requires_self_billed` refused only once
+    the e-Invoice was submitted or valid, and took the tick off and
+    nothing else. Measured: prepared (queued), then unticked; the bill
+    said it owed none, the document stayed queued, and
+    `myinvois/submit.ts`'s bulk sweep -- everything queued for the
+    company, the bill never asked -- would file it, beside the supplier's
+    own. Now unticking marks a self-billed e-Invoice LHDN has not
+    received (draft, queued, failed, invalid) 'cancelled', with when and
+    why, and leaves the bill 'not_applicable' and pointing at none;
+    ticking again clears a withdrawal that never reached LHDN, so a
+    second preparation re-queues a clean document. Restated from `0611`
+    (production hash e4274e28..., identical). Production held no
+    self-billed e-Invoice and no bill owing one. Swept 8 / 9 (one
+    equivalent: `sync_einvoice_status` makes a valid document's bill
+    'valid', which is refused first).
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -1825,6 +1843,7 @@ function:
 | `remove_pos_sale_promotion` | `0256` | 7 / 7 | -- | `pos_promotion_admin.sql` (two only after a bill carrying two promotions and a stranger) |
 | `merge_pos_table` | `0245` | 11 / 11 | -- | `pos_fnb.sql` (five only after its rule-by-rule lines: a missing table, a stranger, a table merged twice, a voided bill on one half, another split table left alone) |
 | `open_tax_detail_request` | `0627` | 11 / 11 | -- | `tax_details.sql` (nine only after its rule-by-rule block: a deleted customer's form, its openings, what it shows of what is held, the state order, and whether it was answered) |
+| `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |
 | `reply_to_shared_ticket` | `0390` | 16 / 16 | -- | `ticket_share.sql` (eight only after its rule-by-rule block: the channel, the event and how much of the reply it keeps, on-hold and resolved tickets coming back and why, the link's reply count, the id handed back) |
