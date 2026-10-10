@@ -1568,7 +1568,11 @@ page and renumbering would quietly break the reference.
     2120aa59..., identical), with `anon`'s grant after it. Production
     held no portal link. Swept with the rest of the function, 13 / 16
     (three equivalent, already named in the file).
-    **Still to read back.**
+    **Applied, and read back** (10 October, read-only, after run
+    38061327308 on `a922940` had applied the migrations): recorded; the
+    live `portal_document_token` hashes to 15c84c47..., the same as the
+    migration's own body; SECURITY DEFINER; `anon` may still execute
+    it; the comment names `0798`.
 66. ~~A deleted ticket's share link still opens and takes replies.~~
     **Raised and answered 10 October: withdrawn, like cancelled. Built
     in `0799`.** `app.ticket_link_state`, which `open_shared_ticket` and
