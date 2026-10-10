@@ -1259,7 +1259,12 @@ page and renumbering would quietly break the reference.
     it again with its key." Restated from `0567` (production hashes
     cabbefce... and 71af3874..., identical). Swept 15 / 15, and the
     disconnect writer 6 / 6 in its own file.
-    **Still to read back.**
+    **Applied, and read back** (10 October, read-only, after run
+    38022094052 on `4cb6649`): recorded; the live `connect_bank_feed`
+    hashes to aa9ad45c... and `set_bank_feed_paused` to ef50808a...,
+    both the same as the migration's own bodies; SECURITY DEFINER,
+    executable by `authenticated` and `service_role` as before; both
+    comments name `0786`.
 54. ~~Loyalty points pay for value a discount already gave away, and the
     sale then cannot be completed.~~ **Raised and answered 9 October:
     points buy what's left. Built in `0787`.** `redeem_loyalty_points`
