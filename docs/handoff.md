@@ -1522,7 +1522,12 @@ page and renumbering would quietly break the reference.
     ordered as the superuser, and `function_grants.sql` asked only what
     a stranger could reach beyond its list, never whether the list was
     still reachable. Both now ask. Swept 10 / 10, the grant by hand.
-    **Still to read back.**
+    **Applied, and read back** (10 October, read-only, after run
+    38057483642 on `7d5263f` had applied the migrations): recorded; the
+    live `place_public_pos_order` hashes to 10cca9a1..., the same as the
+    migration's own body; SECURITY DEFINER; and `anon` may still execute
+    it -- the grant a replace loses, restated after it; the comment
+    names `0796`.
 64. ~~The customer portal adds ringgit and dollars together.~~ **Raised
     and answered 10 October: a total per currency. Built in `0797`.**
     `open_customer_portal` returned each invoice in its own currency and,
