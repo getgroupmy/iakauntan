@@ -1408,7 +1408,12 @@ page and renumbering would quietly break the reference.
     Production held no link. Asserted in `signature_evidence.sql`, down
     to a client issuing a link through the function and `anon` signing
     with it. Swept 16 / 16, the definer flip by hand.
-    **Still to read back.**
+    **Applied, and read back** (10 October, read-only, after run
+    38049802909 on `6d7b829` had applied the migrations): recorded; the
+    live `app.signing_link_is_the_databases` hashes to d3815fca..., the
+    same as the migration's own body; not SECURITY DEFINER, and
+    executable by its owner alone; the comment names `0792`; the
+    trigger is on `corp_signing_links`, enabled.
 60. ~~An invoice share link can be revived and pointed at another
     customer's invoice.~~ **Raised and answered 10 October: guard it
     like `0792`. Built in `0793`.** `0094`'s update policy was meant for
