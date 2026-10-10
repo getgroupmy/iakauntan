@@ -1545,6 +1545,7 @@ function:
 | `claim_pos_sale` | `0226` | 10 / 11 | 1 | `pos_fnb.sql` (four before its assertions; equivalent: a bill already on this till moved again -- a parked bill's shift is always open) |
 | `pos_scan_serial` | `0546` | 11 / 13 | 2 | `pos_serial_sale.sql` (eight before its assertions: a missing line, a stranger, an outlet with no shelf, another company's basket; equivalent: `items` forbids serial tracking on an item not kept, and `v_lot_balances` keeps no zero row) |
 | `move_pos_sale` | `0213` | 8 / 8 | -- | `pos_fnb.sql` (three before its assertions; noted: a table out of service is not refused, and the floor plan hides it -- the bill stays on the open-bills list) |
+| `ensure_pay_period` | `0279` | 7 / 8 | 1 | `payroll_periods.sql` (all seven before -- nothing added; equivalent: `pay_day` is NOT NULL, so the inner default never decides) |
 | `check_in_booking` | `0790` | 12 / 12 | -- | `pos_service.sql` (two before its assertions; the guard first survived -- `open_pos_sale` refuses a stranger in the same words -- until asked of an appointment already checked in, where it is the only guard) |
 | `clock_in`, `clock_out` (the company check) | `0789` | 6 / 6 | -- | `clock_out.sql` (new in `0789`; nothing had asked that a member who is not HR cannot clock somebody else in) |
 | `apply_pos_coupon` | `0256` | 14 / 16 | 2 | `pos.sql` (five before its assertions; found `0788`, a voucher typed twice taken twice; equivalent: the refresh rewrites a typed voucher's amount and reason) |
