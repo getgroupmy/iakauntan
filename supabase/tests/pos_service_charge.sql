@@ -249,13 +249,34 @@ begin
   v_txt := public.pos_receipt_text(v_first);
   perform pg_temp.check_true('the receipt names the service charge',
     v_txt like '%Service charge%');
-  perform pg_temp.check_true('with the percentage on it',
-    v_txt like '%Service charge 10%%');
+  -- Asked of the line itself, not with LIKE: in `like '%Service charge
+  -- 10%%'` the percent after the 10 is a wildcard, and it passed a
+  -- receipt that read "10.%" (`0800`).
+  perform pg_temp.check_eq('with the percentage on it, as a person writes it',
+    substring(v_txt from 'Service charge [^ ]*'), 'Service charge 10%');
+  perform pg_temp.check_eq('and the bill keeps the rate it was charged at',
+    (select service_charge_percent from public.pos_sales where id = v_first), 10);
   perform pg_temp.check_true('and the amount beside it',
     v_txt like '%10.00%');
   perform pg_temp.check_true('above the tax it is taxed with, where a '
     'Malaysian bill puts it',
     position('Service charge' in v_txt) < position('Tax' in v_txt));
+
+  -- `0800`. The outlet changes its rate; the bill already settled does
+  -- not, and its reprint says what its charge was worked at.
+  perform public.set_pos_service_charge(v_outlet, 7.5,
+    (select service_charge_tax_code_id from public.pos_outlets where id = v_outlet));
+  perform pg_temp.check_eq('a reprint after the rate changes says the bill''s own rate',
+    substring(public.pos_receipt_text(v_first) from 'Service charge [^ ]*'),
+    'Service charge 10%');
+  perform public.set_pos_service_charge(v_outlet, 10,
+    (select service_charge_tax_code_id from public.pos_outlets where id = v_outlet));
+  -- And a rate with a fraction in it prints the fraction, and no more.
+  update public.pos_sales set service_charge_percent = 7.5 where id = v_first;
+  perform pg_temp.check_eq('a rate of seven and a half is printed so',
+    substring(public.pos_receipt_text(v_first) from 'Service charge [^ ]*'),
+    'Service charge 7.5%');
+  update public.pos_sales set service_charge_percent = 10 where id = v_first;
 
   -- ------------------------------------------------------------------
   -- Setting it

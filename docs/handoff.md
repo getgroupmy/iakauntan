@@ -1569,6 +1569,24 @@ page and renumbering would quietly break the reference.
     tickets, none deleted, and no ticket link. Swept 6 / 6 in
     `ticket_share.sql`.
     **Still to read back.**
+67. ~~A reprinted receipt states the outlet's service charge rate today,
+    not the bill's, and every receipt writes it "10.%".~~ **Raised and
+    answered 10 October: store the rate on the bill. Built in `0800`.**
+    The bill kept only the amount of its service charge; `pos_receipt_text`
+    read the percentage from the outlet as it is now. Measured: a bill
+    charged 10% (RM10.00 on RM100) reprinted after the outlet moved to
+    5% read "Service charge 5.% ... 10.00". The "5." is the other fault:
+    `to_char(.., 'FM990.99')` keeps the point, so a fresh receipt read
+    "10.%" -- and `pos_service_charge.sql` asserted `like '%Service
+    charge 10%%'`, in which the percent after 10 is a wildcard. Now
+    `pos_sales.service_charge_percent` is written by `recalc_pos_sale`
+    beside the amount, and the receipt prints the bill's own rate as
+    "10%" or "7.5%"; bills charged before are backfilled from their own
+    amounts. Both functions otherwise restated as production runs them
+    (2438e054..., 6cff0bd2...). Production held fourteen sales, none with
+    a service charge. The test now reads the line itself, a reprint after
+    a rate change, and a fractional rate. Swept 5 / 5.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -1801,6 +1819,7 @@ function:
 | `remove_pos_sale_promotion` | `0256` | 7 / 7 | -- | `pos_promotion_admin.sql` (two only after a bill carrying two promotions and a stranger) |
 | `merge_pos_table` | `0245` | 11 / 11 | -- | `pos_fnb.sql` (five only after its rule-by-rule lines: a missing table, a stranger, a table merged twice, a voided bill on one half, another split table left alone) |
 | `open_tax_detail_request` | `0627` | 11 / 11 | -- | `tax_details.sql` (nine only after its rule-by-rule block: a deleted customer's form, its openings, what it shows of what is held, the state order, and whether it was answered) |
+| `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |
 | `reply_to_shared_ticket` | `0390` | 16 / 16 | -- | `ticket_share.sql` (eight only after its rule-by-rule block: the channel, the event and how much of the reply it keeps, on-hold and resolved tickets coming back and why, the link's reply count, the id handed back) |
 | `submit_tax_details` | `0626` | 25 / 26 | 1 (a state code upper-cased: every `ref_states` code is two digits, and the foreign key refuses any other) | `tax_details.sql` (seventeen only after its rule-by-rule block: the deleted contact, the record of who answered and from where, three spellings, the link's count, when an answer was taken, what the form is told, and which answers a correction supersedes) |

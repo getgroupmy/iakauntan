@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-16991
+17011
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1246,3 +1246,10 @@
 # rule by rule in shared_invoice_payment.sql and document_share.sql.
 # Measured: `all SQL assertions passed (390 files, 16991 assertions
 # executed)`.
+#
+# 16991 -> 17011, 10 October: 0800, the rate the bill was charged at
+# (pos_service_charge.sql: the receipt's line asserted as text, a
+# reprint after a rate change, a fractional rate), with
+# open_tax_detail_request, merge_pos_table and remove_pos_sale_promotion
+# swept rule by rule. Measured: `all SQL assertions passed (390 files,
+# 17011 assertions executed)`.
