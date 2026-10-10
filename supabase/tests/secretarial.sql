@@ -255,6 +255,38 @@ begin
   select id into v_sig_b from public.corp_signatures
    where request_id = v_req and person_id = v_b;
 
+  -- `corp_request_signatures`, rule by rule. A mutation sweep
+  -- (`mutants/corp_request_signatures.py`) left these with nothing to
+  -- tell them from their absence.
+  perform pg_temp.check_true('the request says who raised it, and each line its capacity',
+    (select r.requested_by = auth.uid()
+            and (select bool_and(s.capacity = 'Director')
+                   from public.corp_signatures s where s.request_id = r.id)
+       from public.corp_signature_requests r where r.id = v_req));
+  perform pg_temp.check_refused('a document that does not exist is said so',
+    format('select public.corp_request_signatures(%L, %L)',
+           gen_random_uuid(), array[v_a]),
+    'Document not found', 'P0002');
+  perform pg_temp.check_refused('a request has to ask somebody',
+    format('select public.corp_request_signatures(%L, %L)',
+           v_doc, '{}'::uuid[]),
+    'Nobody to sign', '22023');
+  perform pg_temp.sign_in_as(pg_temp.another_user('edar-luar@example.test'));
+  perform pg_temp.check_refused('a stranger cannot circulate the company''s documents',
+    format('select public.corp_request_signatures(%L, %L)', v_doc, array[v_a]),
+    'Not permitted to request signatures', '42501');
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  -- Raised again with the same people, it is the same request: nobody
+  -- is asked twice, and the new due date and note are what it carries.
+  perform public.corp_request_signatures(v_doc, array[v_a, v_b],
+    array['Director', 'Director'], pg_temp.today() + 21, 'Second round');
+  perform pg_temp.check_eq('raised again, nobody is asked twice',
+    (select count(*)::integer from public.corp_signatures where request_id = v_req), 2);
+  perform pg_temp.check_eq('and it carries the new date and note',
+    (select (due_on - pg_temp.today())::text || ' ' || note
+       from public.corp_signature_requests where id = v_req),
+    '21 Second round');
+
   -- Signed at the desk, from an address and a browser the edge
   -- reports, with the name typed carelessly.
   perform set_config('request.headers',
@@ -339,6 +371,21 @@ begin
   perform pg_temp.check_refused('a withdrawn request takes no more signatures',
     format('select public.corp_sign_document(%L, %L)', v_sig_b, 'Director Two'),
     'The signature request has been withdrawn', '22023');
+
+  -- Raising it again is the road back: the request is open again and
+  -- takes the text as it NOW stands, so the next signature is made
+  -- against that -- while the one made against the old text says so.
+  perform public.corp_request_signatures(v_doc, array[v_a, v_b],
+    array['Director', 'Director'], null, null);
+  perform pg_temp.check_true('raised again, a withdrawn request is open again',
+    (select not is_withdrawn and withdrawn_at is null
+       from public.corp_signature_requests where id = v_req));
+  perform public.corp_sign_document(v_sig_b, 'Director Two');
+  perform pg_temp.check_eq('and signs against the text as it now stands',
+    (select string_agg(s.person_name || '=' || s.document_unchanged::text, '; '
+                       order by s.person_name)
+       from public.corp_signature_state(v_doc) s),
+    'Director One=false; Director Two=true');
 end $$;
 
 -- ---------------------------------------------------------------------
