@@ -1314,6 +1314,22 @@ page and renumbering would quietly break the reference.
     (`clock_out`, c6e1aa59..., identical). Production held no
     attendance record. Swept 6 / 6.
     **Still to read back.**
+57. ~~A salon appointment whose bill was voided can never be checked in
+    again.~~ **Raised and answered 9 October: check-in opens a new
+    bill. Built in `0790`.** `check_in_booking` returns the bill it
+    linked, so a second tap reaches the same sale; nothing asked what had
+    become of it. Measured: check in, void the bill, check in again --
+    the voided bill came back and refused every line, and
+    `set_booking_status` back to 'booked' kept the link, so the only way
+    on was to cancel and book again. Now a linked bill that was voided
+    counts as none: a fresh one is opened and linked, the voided one kept
+    as the record. Parked and settled bills are returned as before.
+    Restated from `0217` (production hash d4c30096..., identical).
+    Production held five bookings, none linked to a voided bill. (The
+    question put to the user said production held none; it held five --
+    checked before building, and the answer does not change.) Swept
+    12 / 12.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -1529,6 +1545,7 @@ function:
 | `claim_pos_sale` | `0226` | 10 / 11 | 1 | `pos_fnb.sql` (four before its assertions; equivalent: a bill already on this till moved again -- a parked bill's shift is always open) |
 | `pos_scan_serial` | `0546` | 11 / 13 | 2 | `pos_serial_sale.sql` (eight before its assertions: a missing line, a stranger, an outlet with no shelf, another company's basket; equivalent: `items` forbids serial tracking on an item not kept, and `v_lot_balances` keeps no zero row) |
 | `move_pos_sale` | `0213` | 8 / 8 | -- | `pos_fnb.sql` (three before its assertions; noted: a table out of service is not refused, and the floor plan hides it -- the bill stays on the open-bills list) |
+| `check_in_booking` | `0790` | 12 / 12 | -- | `pos_service.sql` (two before its assertions; the guard first survived -- `open_pos_sale` refuses a stranger in the same words -- until asked of an appointment already checked in, where it is the only guard) |
 | `clock_in`, `clock_out` (the company check) | `0789` | 6 / 6 | -- | `clock_out.sql` (new in `0789`; nothing had asked that a member who is not HR cannot clock somebody else in) |
 | `apply_pos_coupon` | `0256` | 14 / 16 | 2 | `pos.sql` (five before its assertions; found `0788`, a voucher typed twice taken twice; equivalent: the refresh rewrites a typed voucher's amount and reason) |
 | `app.recalc_pos_sale` (trim), `redeem_loyalty_points` | `0787` | 8 / 11 | 3 | `pos_loyalty.sql` (new in `0787`; equivalent: the recalculation's trim corrects whatever the redemption priced; the loyalty guard had never been asked with the till on and the scheme off) |

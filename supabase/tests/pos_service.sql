@@ -349,6 +349,105 @@ begin
           join public.pos_membership_subscriptions s on s.recurring_document_id = r.id
          where s.id = v_sub));
 
+  -- ------------------------------------------------------------------
+  -- A bill voided after check-in (0790)
+  -- ------------------------------------------------------------------
+  -- The wrong service rung up, the bill voided, the customer still in
+  -- the chair. Checking in again returned the voided bill, which refuses
+  -- every line, and putting the appointment back to 'booked' kept the
+  -- link -- the only way on was to cancel and book again.
+  declare
+    v_b3    uuid;
+    v_first uuid;
+    v_next  uuid;
+    v_bx    uuid;
+    v_out2  uuid;
+    v_reg2  uuid;
+  begin
+    v_b3 := public.book_appointment(v_p2, v_cut,
+      (v_mon + time '15:00') at time zone 'Asia/Kuala_Lumpur', v_cust);
+    v_first := public.check_in_booking(v_b3, v_reg);
+    perform public.void_pos_sale(v_first, 'wrong_item', 'rang up the wrong service');
+
+    v_next := public.check_in_booking(v_b3, v_reg);
+    perform pg_temp.check_true('checking in after a void opens a new bill',
+      v_next is distinct from v_first
+        and (select s.status from public.pos_sales s where s.id = v_next) = 'parked');
+    perform pg_temp.check_eq('with the service on it, at the quoted price',
+      (select s.total_amount from public.pos_sales s where s.id = v_next), 45.00);
+    perform pg_temp.check_true('and the appointment now points at it',
+      (select b.sale_id = v_next and b.status = 'arrived'
+         from public.pos_bookings b where b.id = v_b3));
+    perform pg_temp.check_true('while the voided bill stays voided, as the record',
+      (select s.status from public.pos_sales s where s.id = v_first) = 'voided');
+    -- And the new bill is the one a second tap reaches.
+    perform pg_temp.check_true('a second tap reaches the new bill, not a third',
+      public.check_in_booking(v_b3, v_reg) = v_next);
+    perform pg_temp.check_true('and the bill is the customer''s',
+      (select s.contact_id from public.pos_sales s where s.id = v_next) = v_cust);
+
+    -- `check_in_booking`, rule by rule. A mutation sweep
+    -- (`mutants/a_voided_bill_does_not_keep_the_customer_waiting.py`)
+    -- left these with nothing to tell them from their absence.
+    --
+    -- Settled is not voided: an appointment already paid for reaches
+    -- its settled bill, and is not opened again.
+    perform pg_temp.check_true('a settled appointment reaches its settled bill',
+      public.check_in_booking(v_b2, v_reg) = v_sale
+        and (select b.status from public.pos_bookings b where b.id = v_b2) = 'completed');
+
+    perform pg_temp.check_refused('a booking that does not exist is said so',
+      format('select public.check_in_booking(%L, %L)', gen_random_uuid(), v_reg),
+      'No such booking.', 'P0002');
+
+    v_bx := public.book_appointment(v_p2, v_cut,
+      (v_mon + time '11:00') at time zone 'Asia/Kuala_Lumpur', v_cust);
+    perform pg_temp.check_refused('a register that does not exist is said so',
+      format('select public.check_in_booking(%L, %L)', v_bx, gen_random_uuid()),
+      'No such register.', 'P0002');
+    insert into public.pos_outlets (org_id, code, name, business_type, warehouse_id,
+      walk_in_contact_id, prices_include_tax)
+    values (v_org, 'SALON2', 'The other salon', 'service', v_wh, v_walkin, false)
+    returning id into v_out2;
+    insert into public.pos_registers (org_id, outlet_id, code, name)
+    values (v_org, v_out2, 'T2', 'Other reception') returning id into v_reg2;
+    perform pg_temp.check_refused('a register in another outlet is not this salon''s',
+      format('select public.check_in_booking(%L, %L)', v_bx, v_reg2),
+      'That appointment is at another outlet.', '23514');
+    perform pg_temp.sign_in_as(pg_temp.another_user('salon-luar@example.test'));
+    perform pg_temp.check_refused('a stranger cannot check a customer in',
+      format('select public.check_in_booking(%L, %L)', v_bx, v_reg),
+      'not permitted to sell for this organization', '42501');
+    -- Asked of an appointment ALREADY checked in as well: that road
+    -- returns the open bill without opening one, so `open_pos_sale`'s
+    -- own guard is never reached and this function's is the only one.
+    perform pg_temp.check_refused('nor be handed a bill already open',
+      format('select public.check_in_booking(%L, %L)', v_b3, v_reg),
+      'not permitted to sell for this organization', '42501');
+    perform pg_temp.sign_in_as(pg_temp.test_user());
+
+    -- The quote holds: the price moved after the booking, and the bill
+    -- is rung at what the customer was told.
+    update public.items set unit_price = 60.00 where id = v_cut;
+    v_next := public.check_in_booking(v_bx, v_reg);
+    perform pg_temp.check_eq('the bill is rung at the quoted price, not today''s',
+      (select s.total_amount from public.pos_sales s where s.id = v_next), 45.00);
+    update public.items set unit_price = 45.00 where id = v_cut;
+
+    v_bx := public.book_appointment(v_p2, v_cut,
+      (v_mon + time '12:00') at time zone 'Asia/Kuala_Lumpur', v_cust);
+    perform public.set_booking_status(v_bx, 'cancelled');
+    perform pg_temp.check_refused('a cancelled appointment cannot be checked in',
+      format('select public.check_in_booking(%L, %L)', v_bx, v_reg),
+      'That appointment was cancelled.', '23514');
+    v_bx := public.book_appointment(v_p2, v_cut,
+      (v_mon + time '13:00') at time zone 'Asia/Kuala_Lumpur', v_cust);
+    perform public.set_booking_status(v_bx, 'no_show');
+    perform pg_temp.check_refused('nor can a no-show',
+      format('select public.check_in_booking(%L, %L)', v_bx, v_reg),
+      'That appointment was no_show.', '23514');
+  end;
+
   raise notice 'point of sale service: all assertions passed';
 end;
 $$;

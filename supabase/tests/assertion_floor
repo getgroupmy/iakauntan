@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-16511
+16561
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1172,3 +1172,11 @@
 # day untouched, HR off the payroll starts somebody's day, and a member
 # who is not HR cannot clock somebody else in). Measured:
 # `all SQL assertions passed (387 files, 16511 assertions executed)`.
+#
+# 16511 -> 16561, 10 October: 0790, a voided bill does not keep the
+# customer waiting (pos_service.sql: check-in after a void, a settled
+# appointment, the quote, the refusals), and the sweeps of
+# move_pos_sale, pos_scan_serial, claim_pos_sale, add_line_free_modifier
+# and complete_kiosk_order (pos_fnb.sql, pos_serial_sale.sql,
+# pos_kiosk.sql). Measured:
+# `all SQL assertions passed (387 files, 16561 assertions executed)`.
