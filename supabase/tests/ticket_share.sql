@@ -370,4 +370,73 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- `reply_to_shared_ticket`, rule by rule
+--
+-- A mutation sweep (`mutants/reply_to_shared_ticket.py`) left eight of
+-- sixteen rules with nothing here to tell them from their absence: the
+-- channel the reply came by, the event that records it and how much of
+-- the reply the event keeps, that a ticket on hold or resolved comes
+-- back (pending and closed were asked), the reason the reopening gives,
+-- the link's count of replies, and the id handed back.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid := pg_temp.ts_org('Satu Persatu Balasan Sdn Bhd');
+  v_cust  uuid;
+  v_tkt   uuid;
+  v_token text;
+  v_out   jsonb;
+  v_body  text := repeat('Masih rosak. ', 25);  -- 325 characters
+  v_from  text;
+begin
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C1', 'Encik Rahim', 'customer') returning id into v_cust;
+  v_tkt := public.create_ticket(v_org, 'Printer', null, null, 'p3',
+    null, 'email', null, v_cust);
+  v_token := public.share_ticket(v_tkt);
+
+  perform pg_temp.sign_out();
+  v_out := public.reply_to_shared_ticket(v_token, '   ' || v_body);
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+
+  perform pg_temp.check_true('the reply''s own id is handed back',
+    exists (select 1 from public.ticket_comments
+             where id = (v_out ->> 'comment_id')::uuid and ticket_id = v_tkt));
+  perform pg_temp.check_eq('it came by the web',
+    (select channel::text from public.ticket_comments
+      where id = (v_out ->> 'comment_id')::uuid), 'web');
+  perform pg_temp.check_eq('and is recorded as the requester''s reply, its first 200 characters',
+    (select note from public.ticket_events
+      where ticket_id = v_tkt and event_type = 'requester_reply'),
+    left(btrim(v_body), 200));
+  perform pg_temp.check_eq('the link counts it',
+    (select reply_count from public.ticket_share_links
+      where ticket_id = v_tkt and revoked_at is null), 1);
+
+  perform pg_temp.sign_out();
+  perform public.reply_to_shared_ticket(v_token, 'Dan lagi');
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  perform pg_temp.check_eq('and every one after it',
+    (select reply_count from public.ticket_share_links
+      where ticket_id = v_tkt and revoked_at is null), 2);
+
+  -- On hold, and resolved: each comes back to the company, and says why.
+  foreach v_from in array array['on_hold', 'resolved'] loop
+    v_tkt := public.create_ticket(v_org, 'Printer ' || v_from, null, null, 'p3',
+      null, 'email', null, v_cust);
+    v_token := public.share_ticket(v_tkt);
+    perform public.transition_ticket(v_tkt, v_from::app.ticket_status, 'Menunggu');
+    perform pg_temp.sign_out();
+    perform public.reply_to_shared_ticket(v_token, 'Sudah dicuba');
+    perform pg_temp.sign_in_as(pg_temp.test_user());
+    perform pg_temp.check_eq('a ticket ' || v_from || ' comes back to us',
+      (select status::text from public.tickets where id = v_tkt), 'open');
+    perform pg_temp.check_eq('and says the requester brought it back',
+      (select note from public.ticket_events
+        where ticket_id = v_tkt and event_type = 'status' and to_value = 'open'
+        order by created_at desc limit 1), 'Reopened by the requester');
+  end loop;
+end $$;
+
 rollback;
