@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-16955
+16969
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1233,3 +1233,9 @@
 # currency by currency, the base first, one figure only where there is
 # one currency, as anon). Measured: `all SQL assertions passed (390
 # files, 16955 assertions executed)`.
+#
+# 16955 -> 16969, 10 October: 0798, a withdrawn account mints nothing
+# (customer_portal_shapes.sql: a deleted customer's portal mints no
+# document link; and portal_document_token, reply_to_shared_ticket swept
+# rule by rule in it and ticket_share.sql). Measured: `all SQL
+# assertions passed (390 files, 16969 assertions executed)`.

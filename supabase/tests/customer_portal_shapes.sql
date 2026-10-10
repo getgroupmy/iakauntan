@@ -662,6 +662,14 @@ begin
     (select sent_to_email from public.document_share_links
       where token_hash = app.corp_token_hash(v_doctok)),
     'akaun@pembeli.test');
+
+  -- `0798`. The company deletes the customer: the portal says
+  -- 'withdrawn', and it mints nothing more either.
+  update public.contacts set deleted_at = now() where id = v_c;
+  perform pg_temp.check_eq('a withdrawn account is withdrawn',
+    public.open_customer_portal(v_tok) ->> 'state', 'withdrawn');
+  perform pg_temp.check_eq('and mints no more links',
+    pg_temp.cp_doc_token(v_tok, v_inv), 'This link is no longer open');
 end $$;
 
 -- =====================================================================

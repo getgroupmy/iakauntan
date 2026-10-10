@@ -1,17 +1,19 @@
-# Mutants for public.portal_document_token (0493) -- from an open portal
-# link, a link to one of this customer's own documents in this company,
+# Mutants for public.portal_document_token (0493, restated in 0798) --
+# from an open portal link to a customer the company has not deleted, a
+# link to one of this customer's own documents in this company,
 # never a draft, void or rejected one, living no longer than the portal
 # link or thirty days, addressed where the portal link was.
 #
 #     python3 scripts/mutate_sql.py \
-#       supabase/migrations/0493_the_customer_who_holds_three_links.sql \
+#       supabase/migrations/0798_a_withdrawn_account_mints_nothing.sql \
 #       supabase/tests/customer_portal_shapes.sql \
 #       supabase/tests/mutants/portal_document_token.py
 #
 # RESULT: 16 mutants and a control. 13 killed by
 # `customer_portal_shapes.sql`, three of them (a rejected document, the
 # thirty-day cap under a longer portal, the address a minted link
-# inherits) only after the block added beside section 5.
+# inherits) only after the block added beside section 5, and one (a
+# withdrawn account) by `0798`'s own assertion there.
 #
 # EQUIVALENT, three, all recorded in the file's section 6:
 #   * "another company's document opens" and "another company's record
@@ -32,6 +34,10 @@ m("an expired portal mints links", F,
   "     and revoked_at is null and expires_at >= now();\n  if l.id is null then\n    raise exception 'This link is no longer open'",
   "     and revoked_at is null;  -- expired mints\n  if l.id is null then\n    raise exception 'This link is no longer open'",
   "-- expired mints")
+m("a withdrawn account mints links", F,
+  "  if c.id is null or c.deleted_at is not null then\n    raise exception 'This link is no longer open' using errcode = '42501';",
+  "  if c.id is null then  -- withdrawn mints\n    raise exception 'This link is no longer open' using errcode = '42501';",
+  "-- withdrawn mints")
 m("a deleted document opens", F,
   "     or d.deleted_at is not null\n",
   "     or false  -- deleted opens\n",
