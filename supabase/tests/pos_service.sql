@@ -349,6 +349,64 @@ begin
           join public.pos_membership_subscriptions s on s.recurring_document_id = r.id
          where s.id = v_sub));
 
+  -- `set_membership_status`, rule by rule. A mutation sweep
+  -- (`mutants/set_membership_status.py`) left eight of nine rules with
+  -- nothing here to tell them from their absence.
+  declare
+    v_s2   uuid;
+    v_s3   uuid;
+    v_salem uuid;
+    v_back app.pos_membership_status;
+    v_billing_of uuid;
+  begin
+    v_salem := public.open_pos_sale(v_reg, v_cust);
+    perform public.add_pos_sale_line(v_salem, v_plan, 1, 150.00);
+    perform public.complete_pos_sale(v_salem, jsonb_build_array(
+      jsonb_build_object('type', v_cash, 'amount', 150.00)));
+    v_s2 := public.start_membership(v_salem, v_mem);
+
+    -- Paused: written, handed back, still billed, not ended.
+    v_back := public.set_membership_status(v_s2, 'paused');
+    perform pg_temp.check_eq('the status asked for is handed back', v_back::text, 'paused');
+    perform pg_temp.check_eq('and written',
+      (select status::text from public.pos_membership_subscriptions where id = v_s2), 'paused');
+    select recurring_document_id into v_billing_of
+      from public.pos_membership_subscriptions where id = v_s2;
+    perform pg_temp.check_true('a paused membership is still billed',
+      (select is_active from public.recurring_documents where id = v_billing_of));
+    perform pg_temp.check_true('and has not ended',
+      (select ends_on is null from public.pos_membership_subscriptions where id = v_s2));
+
+    -- Expired: ended today, and the billing stops.
+    perform public.set_membership_status(v_s2, 'expired');
+    perform pg_temp.check_true('an expired membership ends today',
+      (select ends_on = app.today() from public.pos_membership_subscriptions where id = v_s2));
+    perform pg_temp.check_true('and is billed no more',
+      not (select is_active from public.recurring_documents where id = v_billing_of));
+
+    -- One with an end already set keeps it. Started only now: a
+    -- customer holds one live membership of a plan at a time.
+    v_salem := public.open_pos_sale(v_reg, v_cust);
+    perform public.add_pos_sale_line(v_salem, v_plan, 1, 150.00);
+    perform public.complete_pos_sale(v_salem, jsonb_build_array(
+      jsonb_build_object('type', v_cash, 'amount', 150.00)));
+    v_s3 := public.start_membership(v_salem, v_mem);
+    update public.pos_membership_subscriptions
+       set ends_on = app.today() + 90 where id = v_s3;
+    perform public.set_membership_status(v_s3, 'cancelled');
+    perform pg_temp.check_true('a membership already ending keeps its end',
+      (select ends_on = app.today() + 90 from public.pos_membership_subscriptions where id = v_s3));
+
+    perform pg_temp.check_refused('a membership that is not there is said so',
+      format('select public.set_membership_status(%L, %L)', gen_random_uuid(), 'paused'),
+      'No such membership.', 'P0002');
+    perform pg_temp.sign_in_as(pg_temp.another_user('orang-luar-ahli@example.test'));
+    perform pg_temp.check_refused('a stranger sets nothing',
+      format('select public.set_membership_status(%L, %L)', v_s3, 'active'),
+      'not permitted to sell for this organization', '42501');
+    perform pg_temp.sign_in_as(pg_temp.test_user());
+  end;
+
   -- ------------------------------------------------------------------
   -- A bill voided after check-in (0790)
   -- ------------------------------------------------------------------
