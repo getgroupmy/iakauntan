@@ -717,4 +717,61 @@ begin
     'This link is no longer open', '42501');
 end $$;
 
+-- ---------------------------------------------------------------------
+-- `open_tax_detail_request`, rule by rule
+--
+-- A mutation sweep (`mutants/open_tax_detail_request.py`) left nine of
+-- eleven rules with nothing here to tell them from their absence: a
+-- deleted customer's form, the record of its openings, what the form
+-- shows the customer of what the company holds, the order of the state
+-- list, and whether it says they have answered before.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid := pg_temp.test_org('Buka Borang Sdn Bhd');
+  v_buyer uuid;
+  v_token text;
+  v_open  jsonb;
+  l       public.tax_detail_requests;
+begin
+  v_buyer := pg_temp.a_contact(v_org, 'B200', 'Dipegang Sdn Bhd');
+  update public.contacts
+     set tin = 'C9090909090', id_type = 'BRN', id_value = '201901000090',
+         is_tin_verified = true, tin_verified_at = now()
+   where id = v_buyer;
+  v_token := pg_temp.a_link(v_buyer);
+
+  v_open := public.open_tax_detail_request(v_token);
+  perform pg_temp.check_eq('the form shows the TIN the company holds',
+    v_open -> 'contact' ->> 'tin', 'C9090909090');
+  perform pg_temp.check_eq('and the identification it was matched against',
+    v_open -> 'contact' ->> 'id_value', '201901000090');
+  perform pg_temp.check_true('and that it was verified',
+    (v_open -> 'contact' ->> 'is_tin_verified')::boolean);
+  perform pg_temp.check_eq('the states come by code, as the standard numbers them',
+    (select string_agg(x ->> 'code', ',' order by n)
+       from jsonb_array_elements(v_open -> 'states') with ordinality y(x, n)),
+    (select string_agg(code, ',' order by code) from public.ref_states));
+  perform pg_temp.check_true('a form never answered says so',
+    not (v_open ->> 'already_submitted')::boolean);
+
+  -- Its first opening, an hour back as far as the record goes.
+  update public.tax_detail_requests
+     set opened_at = now() - interval '1 hour'
+   where contact_id = v_buyer and revoked_at is null;
+  perform public.submit_tax_details(v_token, jsonb_build_object('city', 'Kuantan'));
+  v_open := public.open_tax_detail_request(v_token);
+  perform pg_temp.check_true('a form answered before says so',
+    (v_open ->> 'already_submitted')::boolean);
+  select * into l from public.tax_detail_requests
+   where contact_id = v_buyer and revoked_at is null;
+  perform pg_temp.check_true('the first opening keeps its time',
+    l.opened_at = now() - interval '1 hour');
+  perform pg_temp.check_eq('and every opening is counted', l.open_count, 2);
+
+  update public.contacts set deleted_at = now() where id = v_buyer;
+  perform pg_temp.check_eq('a deleted customer''s form is withdrawn',
+    public.open_tax_detail_request(v_token) ->> 'state', 'withdrawn');
+end $$;
+
 rollback;
