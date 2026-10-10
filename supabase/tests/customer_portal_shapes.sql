@@ -630,6 +630,40 @@ begin
     pg_temp.cp_doc_token(v_tok, v_inv), 'This link is no longer open');
 end $$;
 
+-- The three rules the sweep of `portal_document_token`
+-- (`mutants/portal_document_token.py`) found nothing here to tell from
+-- their absence: a rejected document, the thirty days a minted link is
+-- capped at even under a longer portal, and the address it inherits.
+do $$
+declare
+  v_org uuid := pg_temp.cp_org('Pautan Tiga Puluh Sdn Bhd');
+  v_c uuid; v_inv uuid; v_rej uuid;
+  v_tok text; v_doctok text;
+begin
+  v_c   := pg_temp.cp_customer(v_org, 'C-1', 'Pembeli Lama Bhd');
+  v_inv := pg_temp.cp_invoice(v_org, v_c, 'INV-1', 100);
+  v_rej := pg_temp.cp_invoice(v_org, v_c, 'QT-1', 100, p_post => false,
+                              p_type => 'quotation');
+  update public.sales_documents set status = 'rejected' where id = v_rej;
+
+  -- A portal good for ninety days, sent to an address.
+  v_tok := pg_temp.cp_share(v_c, 90, 'akaun@pembeli.test');
+
+  perform pg_temp.check_eq('nor a rejected one',
+    pg_temp.cp_doc_token(v_tok, v_rej), 'A rejected document cannot be opened');
+
+  v_doctok := public.portal_document_token(v_tok, v_inv);
+  perform pg_temp.check_true(
+    'a minted link lasts thirty days, however long the portal has left',
+    (select expires_at <= now() + interval '30 days' + interval '1 minute'
+       from public.document_share_links
+      where token_hash = app.corp_token_hash(v_doctok)));
+  perform pg_temp.check_eq('and goes to the address the portal went to',
+    (select sent_to_email from public.document_share_links
+      where token_hash = app.corp_token_hash(v_doctok)),
+    'akaun@pembeli.test');
+end $$;
+
 -- =====================================================================
 -- 6. The survivors that are equivalent, and the rules they lean on
 -- =====================================================================
