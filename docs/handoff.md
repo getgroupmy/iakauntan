@@ -1348,7 +1348,14 @@ page and renumbering would quietly break the reference.
     question put to the user said production held none; it held five --
     checked before building, and the answer does not change.) Swept
     12 / 12.
-    **Still to read back.**
+    **Applied, and read back** (10 October, read-only, after run
+    38032241711 on `a1a2458` had applied the migrations -- its first
+    attempt lost "Start the throwaway local stack" to a runner whose
+    port 54322 was already taken, and the re-run of the failed jobs went
+    green): recorded; the live `check_in_booking` hashes to 6e67de17...,
+    the same as the migration's own body; SECURITY DEFINER, executable
+    by `authenticated` and `service_role` as before; the comment names
+    `0790`.
 58. ~~A resolution's signatures can be forged, and its signed text
     rewritten, through the API.~~ **Raised and answered 10 October:
     guard the columns. Built in `0791`.** `0069` writes a signature's
