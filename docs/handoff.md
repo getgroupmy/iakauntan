@@ -1430,7 +1430,12 @@ page and renumbering would quietly break the reference.
     link. Asserted in `document_share.sql`, down to a client sharing
     through the function and `anon` opening it. Swept 14 / 14, the
     definer flip by hand.
-    **Still to read back.**
+    **Applied, and read back** (10 October, read-only, after run
+    38051363126 on `181b510` had applied the migrations): recorded; the
+    live `app.share_link_is_the_databases` hashes to 8896825d..., the
+    same as the migration's own body; not SECURITY DEFINER, and
+    executable by its owner alone; the comment names `0793`; the
+    trigger is on `document_share_links`, enabled.
 61. ~~Three more customer links can be revived and repointed.~~
     **Raised and answered 10 October: guard all three. Built in
     `0794`.** Found by scanning for the class `0791`-`0793` closed:
