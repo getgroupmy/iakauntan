@@ -1327,7 +1327,12 @@ page and renumbering would quietly break the reference.
     two comments stripped, 77c26432... once they are) and `0363`
     (`clock_out`, c6e1aa59..., identical). Production held no
     attendance record. Swept 6 / 6.
-    **Still to read back.**
+    **Applied, and read back** (10 October, read-only, after run
+    38030588242 on `6079416` had applied the migrations): recorded; the
+    live `clock_in` hashes to 16b71121... and `clock_out` to
+    1e6899c8..., both the same as the migration's own bodies; SECURITY
+    DEFINER, executable by `authenticated` and `service_role` as before;
+    both comments name `0789`.
 57. ~~A salon appointment whose bill was voided can never be checked in
     again.~~ **Raised and answered 9 October: check-in opens a new
     bill. Built in `0790`.** `check_in_booking` returns the bill it
