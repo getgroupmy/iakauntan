@@ -1548,6 +1548,21 @@ page and renumbering would quietly break the reference.
     held no portal link. Swept with the rest of the function, 13 / 16
     (three equivalent, already named in the file).
     **Still to read back.**
+66. ~~A deleted ticket's share link still opens and takes replies.~~
+    **Raised and answered 10 October: withdrawn, like cancelled. Built
+    in `0799`.** `app.ticket_link_state`, which `open_shared_ticket` and
+    `reply_to_shared_ticket` obey, answered 'withdrawn' for a ticket gone
+    or cancelled and never asked `tickets.deleted_at` -- which the SLA
+    sweep and the dashboard read as gone. Measured: a ticket deleted
+    after its link went out; the link still showed the subject,
+    description and visible comments, and took a customer's reply onto a
+    ticket nobody at the company could see. The app deletes no ticket; a
+    write through the API does. Now a deleted ticket's link is
+    'withdrawn'. Restated from `0390` (production hash 4d4b82bc...,
+    identical), still its owner's alone. Production held thirteen
+    tickets, none deleted, and no ticket link. Swept 6 / 6 in
+    `ticket_share.sql`.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -1777,6 +1792,7 @@ function:
 | `open_shared_document` | `0642` | 16 / 17 | 1 (`pay_with`'s balance check: `shared_payment_options`, which it reads, already offers nothing on a zero balance) | `document_share.sql` (eleven only after its rule-by-rule block; none by the seven other files that call it) |
 | `shared_payment_options` | `0413` | 9 / 9 | -- | `shared_invoice_payment.sql` (five only after its rule-by-rule block: a link revoked or expired, a document deleted, void or rejected, each against a control offered the acquirer) |
 | `portal_document_token` | `0493`, `0798` | 13 / 16 | 3 (two that mask each other -- one rule written twice, the pair removed together is killed -- and a null contact that the schema will not hold) | `customer_portal_shapes.sql` (three only after the block beside section 5: a rejected document, the thirty-day cap, the inherited address; and `0798`'s withdrawn account) |
+| `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |
 | `reply_to_shared_ticket` | `0390` | 16 / 16 | -- | `ticket_share.sql` (eight only after its rule-by-rule block: the channel, the event and how much of the reply it keeps, on-hold and resolved tickets coming back and why, the link's reply count, the id handed back) |
 | `submit_tax_details` | `0626` | 25 / 26 | 1 (a state code upper-cased: every `ref_states` code is two digits, and the foreign key refuses any other) | `tax_details.sql` (seventeen only after its rule-by-rule block: the deleted contact, the record of who answered and from where, three spellings, the link's count, when an answer was taken, what the form is told, and which answers a correction supersedes) |
 | `app.share_link_is_the_databases` | `0793` | 14 / 14 | -- | `document_share.sql` (share-link section new in `0793`; SECURITY DEFINER flipped by hand) |

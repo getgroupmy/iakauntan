@@ -439,4 +439,39 @@ begin
   end loop;
 end $$;
 
+-- ---------------------------------------------------------------------
+-- `0799`. A deleted ticket is withdrawn
+--
+-- `app.ticket_link_state` asked whether a ticket was gone or cancelled,
+-- never whether it was deleted: the link opened a ticket the company
+-- could no longer see, and took replies onto it.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid := pg_temp.ts_org('Tiket Dibuang Sdn Bhd');
+  v_cust  uuid;
+  v_tkt   uuid;
+  v_token text;
+  v_open  text;
+  v_reply text;
+begin
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C1', 'Cik Siti', 'customer') returning id into v_cust;
+  v_tkt := public.create_ticket(v_org, 'Rahsia dalaman', 'Butiran', null, 'p3',
+    null, 'email', null, v_cust);
+  v_token := public.share_ticket(v_tkt);
+  update public.tickets set deleted_at = now() where id = v_tkt;
+
+  perform pg_temp.sign_out();
+  v_open := public.open_shared_ticket(v_token) ->> 'state';
+  v_reply := public.reply_to_shared_ticket(v_token, 'Masih di sini?') ->> 'state';
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+
+  perform pg_temp.check_eq('a deleted ticket''s link is withdrawn', v_open, 'withdrawn');
+  perform pg_temp.check_eq('and takes no reply', v_reply, 'withdrawn');
+  perform pg_temp.check_eq('so nothing lands on it',
+    (select count(*) from public.ticket_comments
+      where ticket_id = v_tkt and author_contact_id is not null), 0);
+end $$;
+
 rollback;
