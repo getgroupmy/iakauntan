@@ -238,64 +238,100 @@ begin
   -- carries and what nothing in the schema would otherwise refuse: the
   -- line would post one company's spending into another's ledger and
   -- each screen would look right on its own.
-  begin
-    perform public.set_expense_split(v_exp, jsonb_build_array(
-      jsonb_build_object('account_id', pg_temp.acct(v_other, '6250'),
-                         'amount', 100)));
-    raise exception
-      'FAIL a company cannot split an expense into somebody else''s account';
-  exception when others then
-    if sqlerrm like 'FAIL %' then raise; end if;
-    raise notice
-      'ok   a company cannot split an expense into somebody else''s account';
-  end;
+  --
+  -- Each refusal below reads its own words. They caught any error until
+  -- a sweep (`mutants/set_expense_split.py`) found that the table's own
+  -- constraints refuse most of these too -- in other words -- so the
+  -- function's checks could all go and nothing said so.
+  perform pg_temp.check_refused(
+    'a company cannot split an expense into somebody else''s account',
+    format('select public.set_expense_split(%L, %L)', v_exp,
+      jsonb_build_array(jsonb_build_object(
+        'account_id', pg_temp.acct(v_other, '6250'), 'amount', 100))),
+    'Line 1 of expense EXP-5 names an unknown account', '23503');
   perform pg_temp.check_eq('and the refusal leaves no half-written split',
     (select count(*) from public.expense_lines where expense_id = v_exp), 0);
+  perform pg_temp.check_refused('nor into no account at all',
+    format('select public.set_expense_split(%L, %L)', v_exp,
+      jsonb_build_array(jsonb_build_object('amount', 100))),
+    'Line 1 of expense EXP-5 names an unknown account', '23503');
 
   -- A line with no money in it is a typing accident, not a split.
-  begin
-    perform public.set_expense_split(v_exp, jsonb_build_array(
-      jsonb_build_object('account_id', pg_temp.acct(v_org, '6250'),
-                         'amount', 100),
-      jsonb_build_object('account_id', pg_temp.acct(v_org, '6260'),
-                         'amount', 0)));
-    raise exception 'FAIL a line with no amount is refused';
-  exception when others then
-    if sqlerrm like 'FAIL %' then raise; end if;
-    raise notice 'ok   a line with no amount is refused';
-  end;
+  perform pg_temp.check_refused('a line with no amount is refused',
+    format('select public.set_expense_split(%L, %L)', v_exp,
+      jsonb_build_array(
+        jsonb_build_object('account_id', pg_temp.acct(v_org, '6250'), 'amount', 100),
+        jsonb_build_object('account_id', pg_temp.acct(v_org, '6260'), 'amount', 0))),
+    'Line 2 of expense EXP-5 has no amount', '23514');
+
+  perform pg_temp.check_refused('an expense that does not exist is said so',
+    format('select public.set_expense_split(%L, %L)', gen_random_uuid(),
+      jsonb_build_array(jsonb_build_object(
+        'account_id', pg_temp.acct(v_org, '6250'), 'amount', 100))),
+    'Expense % not found', 'P0002');
 
   -- Somebody who may read the company but not write to it.
   perform pg_temp.sign_in_as(v_them);
-  begin
-    perform public.set_expense_split(v_exp, jsonb_build_array(
-      jsonb_build_object('account_id', pg_temp.acct(v_org, '6250'),
-                         'amount', 100)));
-    raise exception 'FAIL a reader cannot split an expense';
-  exception when others then
-    if sqlerrm like 'FAIL %' then raise; end if;
-    raise notice 'ok   a reader cannot split an expense';
-  end;
+  perform pg_temp.check_refused('a reader cannot split an expense',
+    format('select public.set_expense_split(%L, %L)', v_exp,
+      jsonb_build_array(jsonb_build_object(
+        'account_id', pg_temp.acct(v_org, '6250'), 'amount', 100))),
+    'Insufficient privileges to edit an expense', '42501');
   perform pg_temp.sign_in_as(pg_temp.test_user());
 
+  -- A split is replaced, not added to: a second one is the split.
+  perform public.set_expense_split(v_exp, jsonb_build_array(
+    jsonb_build_object('account_id', pg_temp.acct(v_org, '6280'),
+                       'amount', 100)));
   -- Once it is in the ledger, what it was for is a journal, not an edit.
   perform public.set_expense_split(v_exp, jsonb_build_array(
     jsonb_build_object('account_id', pg_temp.acct(v_org, '6250'),
                        'amount', 60),
     jsonb_build_object('account_id', pg_temp.acct(v_org, '6260'),
                        'amount', 40)));
+  perform pg_temp.check_eq('a second split replaces the first',
+    (select string_agg(a.code || '=' || l.amount, ' ' order by l.line_no)
+       from public.expense_lines l join public.accounts a on a.id = l.account_id
+      where l.expense_id = v_exp),
+    '6250=60.00 6260=40.00');
   perform public.post_expense(v_exp);
-  begin
-    perform public.set_expense_split(v_exp, jsonb_build_array(
-      jsonb_build_object('account_id', pg_temp.acct(v_org, '6280'),
-                         'amount', 100)));
-    raise exception 'FAIL a posted expense cannot be re-split';
-  exception when others then
-    if sqlerrm like 'FAIL %' then raise; end if;
-    raise notice 'ok   a posted expense cannot be re-split';
-  end;
+  perform pg_temp.check_refused('a posted expense cannot be re-split',
+    format('select public.set_expense_split(%L, %L)', v_exp,
+      jsonb_build_array(jsonb_build_object(
+        'account_id', pg_temp.acct(v_org, '6280'), 'amount', 100))),
+    'Expense EXP-5 is already posted', '23514');
   perform pg_temp.check_eq('and the split it was posted on is still there',
     (select count(*) from public.expense_lines where expense_id = v_exp), 2);
+
+  -- A deleted claim is not split; and the tax on a split's lines is the
+  -- header's tax, inside its total.
+  declare
+    v_gone uuid;
+    v_taxed uuid;
+  begin
+    v_gone := pg_temp.an_expense(v_org, 'EXP-8', '6250', 50.00, 0, 50.00, v_bank);
+    update public.expenses set deleted_at = now() where id = v_gone;
+    perform pg_temp.check_refused('a deleted expense is not split',
+      format('select public.set_expense_split(%L, %L)', v_gone,
+        jsonb_build_array(jsonb_build_object(
+          'account_id', pg_temp.acct(v_org, '6250'), 'amount', 50))),
+      'Expense EXP-8 has been deleted', 'P0002');
+
+    v_taxed := pg_temp.an_expense(v_org, 'EXP-6', '6250', 100.00, 0, 100.00, v_bank);
+    perform public.set_expense_split(v_taxed, jsonb_build_array(
+      jsonb_build_object('account_id', pg_temp.acct(v_org, '6250'),
+                         'amount', 60, 'tax_amount', 3.60),
+      jsonb_build_object('account_id', pg_temp.acct(v_org, '6260'),
+                         'amount', 40, 'tax_amount', 2.40)));
+    perform pg_temp.check_eq('a split''s tax is the header''s tax, inside its total',
+      (select amount || ' + ' || tax_amount || ' = ' || total_amount
+         from public.expenses where id = v_taxed),
+      '100.00 + 6.00 = 106.00');
+    perform pg_temp.check_eq('and each line keeps its own',
+      (select string_agg(tax_amount::text, ' ' order by line_no)
+         from public.expense_lines where expense_id = v_taxed),
+      '3.60 2.40');
+  end;
 end $$;
 
 -- ---------------------------------------------------------------------

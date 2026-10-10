@@ -1469,6 +1469,7 @@ function:
 | `app.close_attendance_day` | `0360` | 25 / 25 | -- | `attendance_close.sql` |
 | `adjust_attendance`, `app.recompute_attendance` | `0363` | 42 / 42 | -- | `attendance_adjust.sql` |
 | `app.employee_departure_guard`, `reinstate_employee` | `0371` | 16 / 16 | -- | `departures.sql` |
+| `set_expense_split` | `0692` | 18 / 20 | 2 | `expense_split.sql` (eight before; its refusals caught any error and the table refuses most of them itself; equivalent: a null account fails the existence check in the same words, and `expense_total` sets the total) |
 | `record_departure` | `0371` | 15 / 16 | 1 | `departures.sql` (seven before its assertions; equivalent: the guard refuses a day before joining in the same words) |
 | `app.record_terminal_punch` | `0612` | 24 / 24 | -- | `terminal_punches.sql` |
 | `submit_manager_appraisal`, `finalise_appraisal`, `reopen_appraisal` | `0379` | 40 / 40 | -- | `appraisals.sql` |
