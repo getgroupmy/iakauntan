@@ -1491,7 +1491,13 @@ page and renumbering would quietly break the reference.
     posted, leave filed and decided through its functions, and a payroll
     run that pays only what the chain approved. Swept 23 / 23, the
     definer flip by hand.
-    **Still to read back.**
+    **Applied, and read back** (10 October, read-only, after run
+    38056020724 on `881bc19` had applied the migrations): recorded; the
+    live `app.request_decision_is_the_databases` hashes to bc6d8b11...,
+    the same as the migration's own body; not SECURITY DEFINER, and
+    executable by its owner alone; the comment names `0795`; the trigger
+    `a_decision_is_the_approvers` is on `expense_claims` and
+    `leave_requests`, both enabled.
 63. ~~A phone's order can carry another dish's answer, priced below
     nothing.~~ **Raised and answered 10 October: refuse on the public
     road. Built in `0796`.** `place_public_pos_order` -- a QR menu's
