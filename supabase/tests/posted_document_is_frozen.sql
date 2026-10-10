@@ -111,6 +111,11 @@ begin
   -- Made here, as the owner, so the payment below finds an account to
   -- bank to without the client having to set one up.
   perform pg_temp.a_bank_account(v_org);
+  -- And able to file e-Invoices, so LHDN's answer below arrives the way
+  -- it does: on an e-Invoice, copied onto the invoice.
+  update public.organizations
+     set einvoice_enabled = true, tin = 'C12345678901'
+   where id = v_org;
 
   v_acct := pg_temp.another_user('beku@example.test');
   insert into public.org_members (org_id, user_id, role, status)
@@ -354,9 +359,17 @@ begin
     (select paid_amount || '/' || status from public.sales_documents
       where id = c.inv), '400.00/partial');
 
-  update public.sales_documents
-     set einvoice_status = 'valid'
-   where id = c.inv;
+  -- LHDN's answer, the way it arrives: an e-Invoice prepared by the
+  -- client, its answer written by the MyInvois function as the service
+  -- role, and copied onto the invoice by `sync_einvoice_status`. Until
+  -- `0803` this control wrote the copy directly, which is the write
+  -- `0803` now refuses a client.
+  perform public.prepare_einvoice(c.inv);
+  execute 'set local role service_role';
+  update public.einvoice_documents
+     set status = 'valid', myinvois_uuid = 'LHDN-UUID-BEKU', validated_at = now()
+   where source_table = 'sales_documents' and source_id = c.inv;
+  execute 'set local role authenticated';
   perform pg_temp.check_eq('and LHDN''s answer still reaches it afterwards',
     (select einvoice_status::text from public.sales_documents where id = c.inv),
     'valid');

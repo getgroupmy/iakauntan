@@ -1641,6 +1641,38 @@ page and renumbering would quietly break the reference.
     no purchase twin); a posted bill is reversed with a purchase credit
     note.
     **Still to read back.**
+70. ~~A document's e-Invoice status, its e-Invoice and a bill's
+    self-billed obligation are client-writable, and the void read the
+    copy.~~ **Raised and answered 10 October: guard the columns and ask
+    LHDN's copy. Built in `0803`.** `einvoice_status` and `einvoice_id`
+    are copies of the e-Invoice, written by `prepare_einvoice` and its
+    siblings and by `sync_einvoice_status` from LHDN's answer;
+    `requires_self_billed` is set from the supplier and changed through
+    `set_requires_self_billed`. The app writes none of them; the UPDATE
+    policies let anybody who may write a document write all three. And
+    `void_sales_document` refused an accepted invoice by reading the
+    copy. Measured as the owner with the role `authenticated`: an
+    invoice whose e-Invoice LHDN had validated, its copy set to
+    'pending' by hand, then voided -- void in the books, valid at LHDN.
+    Now a client's own statement does not write the two copies or the
+    obligation, nor create a document with any of them set (named to
+    fire before `suggest_self_billed`, so a bill from abroad still comes
+    out owing one); the functions pass, and the copy one trigger down.
+    The void refuses when the copy OR the e-Invoice itself says valid;
+    the rent and strata run voids go through it. `void_sales_document`
+    restated from `0770` (production hash f3857258..., identical).
+    Production held no e-Invoice, no document marked with one and no
+    bill owing one. New `einvoice_columns.sql`, added to `ci.yml`. Swept
+    22 / 22, the definer flip by hand. `posted_document_is_frozen.sql`'s
+    control "LHDN's answer still reaches it" wrote the copy as a client,
+    which the full suite caught; it now prepares the e-Invoice and has
+    the service role write the answer, as MyInvois does.
+    NOTED, TO RAISE NEXT: `einvoice_documents` itself takes a client's
+    insert, update and delete (`can_write` and the e-Invoice module),
+    and only the MyInvois function, as the service role, writes it -- so
+    LHDN's own copy is client-writable too, and `source_id` has no
+    foreign key.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -1875,6 +1907,7 @@ function:
 | `merge_pos_table` | `0245` | 11 / 11 | -- | `pos_fnb.sql` (five only after its rule-by-rule lines: a missing table, a stranger, a table merged twice, a voided bill on one half, another split table left alone) |
 | `open_tax_detail_request` | `0627` | 11 / 11 | -- | `tax_details.sql` (nine only after its rule-by-rule block: a deleted customer's form, its openings, what it shows of what is held, the state order, and whether it was answered) |
 | `app.a_draft_is_what_is_discarded` | `0802` | 6 / 6 | -- | `document_discard.sql` (new in `0802`; SECURITY DEFINER flipped by hand) |
+| `app.einvoice_state_is_lhdns`, `void_sales_document` (the valid check) | `0803` | 22 / 22 | -- | `einvoice_columns.sql` (new in `0803`; two of the void's only after two valid e-Invoices that carry the invoice's id without being its own, another company's and a bill's; SECURITY DEFINER flipped by hand) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |

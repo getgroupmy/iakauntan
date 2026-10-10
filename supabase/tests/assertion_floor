@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17028
+17075
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1265,3 +1265,14 @@
 # quotation refused to a client's discard; drafts discarded and brought
 # back; the database's own statement passes). Measured: `all SQL
 # assertions passed (391 files, 17028 assertions executed)`.
+#
+# 17028 -> 17075, 10 October: set_membership_status rule by rule
+# (pos_service.sql, 9: a pause still billed and not ended, an expiry
+# dated and unbilled, an end kept, a missing membership and a stranger),
+# and 0803, LHDN's answer is not typed in (new einvoice_columns.sql, 38:
+# a document's e-Invoice status and e-Invoice and a bill's self-billed
+# obligation refused to a client's update and insert, the functions and
+# LHDN's copied answer passing, and the void refusing on the copy or the
+# e-Invoice itself, beside valid e-Invoices that carry the invoice's id
+# without being its own). Measured: `all SQL assertions passed (392
+# files, 17075 assertions executed)`.
