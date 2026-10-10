@@ -1396,6 +1396,23 @@ page and renumbering would quietly break the reference.
     to a client issuing a link through the function and `anon` signing
     with it. Swept 16 / 16, the definer flip by hand.
     **Still to read back.**
+60. ~~An invoice share link can be revived and pointed at another
+    customer's invoice.~~ **Raised and answered 10 October: guard it
+    like `0792`. Built in `0793`.** `0094`'s update policy was meant for
+    revoking ("members may see and revoke"), granted every column, and
+    revoking has gone through `revoke_document_share` since; the app only
+    reads the table. Measured, as a member with the accountant's role: a
+    link revoked for going to the wrong address revived, given fifty
+    years, pointed at another customer's invoice, its opened record made
+    up -- and the old link's holder read the other customer's invoice.
+    Now a client cannot change a share link's document, token, expiry,
+    opened record, author or issue time, or bring a revoked one back.
+    Revoking a live link and correcting its address stay allowed; the
+    five share functions are definers and pass. Production held no share
+    link. Asserted in `document_share.sql`, down to a client sharing
+    through the function and `anon` opening it. Swept 14 / 14, the
+    definer flip by hand.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -1618,6 +1635,7 @@ function:
 | `corp_create_signing_link`, `corp_open_signing_link`, `corp_sign_with_link` | `0070` | 31 / 31 | -- | `secretarial.sql` (ten before its assertions; a link's life, author and address, the states, the first opening kept, and no login on a link signature even with one present) |
 | `corp_decline_signature`, `corp_decline_with_link` | `0378` | 21 / 21 | -- | `decline_and_lodge.sql` (six before its assertions, all at the desk -- the link decline had never been called; noted: a refusal records no time of its own) |
 | `corp_request_signatures` | `0069` | 10 / 10 | -- | `secretarial.sql` (one before its assertions; three first "killed" by an ambiguous column in the mutant itself, then qualified and asserted -- raising a request again is the road back) |
+| `app.share_link_is_the_databases` | `0793` | 14 / 14 | -- | `document_share.sql` (share-link section new in `0793`; SECURITY DEFINER flipped by hand) |
 | `app.signing_link_is_the_databases` | `0792` | 16 / 16 | -- | `signature_evidence.sql` (links section new in `0792`; SECURITY DEFINER flipped by hand) |
 | `set_document_numbering` | `0480` | 22 / 22 | -- | `document_numbering.sql` (21 before; a new reset policy restarting from 1 added; noted: a prefix switched away and back with a low number re-issues numbers, and the save then fails on the unique key) |
 | `corp_sign_document` | `0069` | 14 / 14 | -- | `secretarial.sql` (six before its assertions: the evidence -- time, name, address, browser, login -- had never been read back; found `0791`) |

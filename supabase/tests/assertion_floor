@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-16627
+16707
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1195,3 +1195,12 @@
 # client issuing a link that anon then signs with), and a new reset
 # policy restarting from 1 in document_numbering.sql. Measured:
 # `all SQL assertions passed (388 files, 16627 assertions executed)`.
+#
+# 16627 -> 16707, 10 October: 0793, a share link is the database's
+# (document_share.sql's share-link section), and the sweeps of
+# corp_request_signatures, the two declines, the three link functions,
+# record_departure, set_expense_split, set_org_payment_settlement and
+# set_group_ownership (secretarial.sql, decline_and_lodge.sql,
+# departures.sql, expense_split.sql, shared_invoice_payment.sql,
+# group_consolidation.sql). Measured: `all SQL assertions passed (388
+# files, 16707 assertions executed)`.

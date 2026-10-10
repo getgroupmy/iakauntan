@@ -232,4 +232,168 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- =====================================================================
+-- A share link is the database's (0793)
+--
+-- The update policy was there so members could revoke. It allowed
+-- every column, and on 10 October a revoked link that had gone to the
+-- wrong address was revived, given fifty years, pointed at another
+-- customer's invoice and given a made-up opened record -- under the
+-- client role, as a member who may write. Everything below runs as
+-- that client.
+-- =====================================================================
+create temporary table t_share (
+  org uuid, clerk uuid, doc_a uuid, doc_b uuid,
+  revoked uuid, live uuid, live_tok text, fn_tok text);
+grant select, update on t_share to authenticated, anon;
+
+do $$
+declare
+  v_org uuid := pg_temp.test_org('Kongsi Beku Sdn Bhd');
+  v_ca uuid; v_cb uuid; v_a uuid; v_b uuid; v_clerk uuid;
+  v_revoked uuid; v_live uuid; v_tok text;
+begin
+  perform pg_temp.open_years(v_org, pg_temp.today());
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-A', 'Pelanggan A Bhd', 'customer') returning id into v_ca;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-B', 'Pelanggan B Bhd', 'customer') returning id into v_cb;
+  insert into public.sales_documents (org_id, doc_type, doc_no, doc_date,
+    contact_id, currency, exchange_rate, status)
+  values (v_org, 'invoice', 'INV-A', pg_temp.today(), v_ca, 'MYR', 1, 'draft')
+  returning id into v_a;
+  insert into public.sales_document_lines (org_id, document_id, line_no,
+    description, quantity, unit_price)
+  values (v_org, v_a, 1, 'Kerja A', 1, 100);
+  insert into public.sales_documents (org_id, doc_type, doc_no, doc_date,
+    contact_id, currency, exchange_rate, status)
+  values (v_org, 'invoice', 'INV-B', pg_temp.today(), v_cb, 'MYR', 1, 'draft')
+  returning id into v_b;
+  insert into public.sales_document_lines (org_id, document_id, line_no,
+    description, quantity, unit_price)
+  values (v_org, v_b, 1, 'Kerja B', 1, 900);
+  perform public.post_sales_document(v_a);
+  perform public.post_sales_document(v_b);
+
+  -- One sent to the wrong address and revoked; one live.
+  perform public.share_document(v_a, 7, 'salah@example.test');
+  select id into v_revoked from public.document_share_links where document_id = v_a;
+  perform public.revoke_document_share(v_a);
+  v_tok := public.share_document(v_a, 7, 'betul@example.test');
+  select id into v_live from public.document_share_links
+   where document_id = v_a and revoked_at is null;
+  perform public.open_shared_document(v_tok);
+
+  v_clerk := pg_temp.another_user('kerani-kongsi@example.test');
+  insert into public.org_members (org_id, user_id, role, status)
+  values (v_org, v_clerk, 'accountant', 'active');
+  insert into t_share values (v_org, v_clerk, v_a, v_b, v_revoked, v_live, v_tok, null);
+end $$;
+
+select set_config('request.jwt.claims',
+  json_build_object('sub', (select clerk from t_share),
+                    'role', 'authenticated')::text, true);
+set local role authenticated;
+
+do $$
+declare c record;
+begin
+  select * into c from t_share;
+  perform pg_temp.check_eq('the share links are asked as a client',
+    current_user, 'authenticated');
+  perform pg_temp.check_true('and the live link really was opened',
+    (select opened_at is not null and open_count = 1
+       from public.document_share_links where id = c.live));
+
+  perform pg_temp.check_refused('a revoked link is not brought back',
+    format('update public.document_share_links set revoked_at = null where id = %L', c.revoked),
+    'A revoked share link stays revoked.%', '42501');
+  perform pg_temp.check_refused('nor its revocation re-dated',
+    format('update public.document_share_links set revoked_at = %L where id = %L',
+           '2030-01-01', c.revoked),
+    'A revoked share link stays revoked.%', '42501');
+  perform pg_temp.check_refused('a link is not pointed at another customer''s invoice',
+    format('update public.document_share_links set document_id = %L where id = %L',
+           c.doc_b, c.live),
+    'The document on a share link%', '42501');
+  perform pg_temp.check_refused('nor its life extended',
+    format('update public.document_share_links set expires_at = now() + interval %L where id = %L',
+           '50 years', c.live),
+    'The expiry on a share link%', '42501');
+  perform pg_temp.check_refused('nor its token replaced',
+    format('update public.document_share_links set token_hash = %L where id = %L',
+           'chosen', c.live),
+    'The token on a share link%', '42501');
+  perform pg_temp.check_refused('nor its first opening re-dated',
+    format('update public.document_share_links set opened_at = %L where id = %L',
+           '2026-01-02', c.live),
+    'The first opening on a share link%', '42501');
+  perform pg_temp.check_refused('nor its last',
+    format('update public.document_share_links set last_opened_at = %L where id = %L',
+           '2026-01-02', c.live),
+    'The last opening on a share link%', '42501');
+  perform pg_temp.check_refused('nor its count of openings',
+    format('update public.document_share_links set open_count = 7 where id = %L', c.live),
+    'The count of openings on a share link%', '42501');
+  perform pg_temp.check_refused('nor the address it was opened from',
+    format('update public.document_share_links set ip_address = %L where id = %L',
+           '198.51.100.9', c.live),
+    'The opening address on a share link%', '42501');
+  perform pg_temp.check_refused('nor the browser',
+    format('update public.document_share_links set user_agent = %L where id = %L',
+           'forged', c.live),
+    'The opening browser on a share link%', '42501');
+  perform pg_temp.check_refused('nor who issued it',
+    format('update public.document_share_links set created_by = null where id = %L', c.live),
+    'The author on a share link%', '42501');
+  perform pg_temp.check_refused('nor when',
+    format('update public.document_share_links set created_at = %L where id = %L',
+           '2024-01-01', c.live),
+    'The issue time on a share link%', '42501');
+  -- Refused by the guard before any key is asked: it runs first.
+  perform pg_temp.check_refused('nor which company it is',
+    format('update public.document_share_links set org_id = %L where id = %L',
+           gen_random_uuid(), c.live),
+    'The company on a share link%', '42501');
+
+  -- What is still the company's.
+  update public.document_share_links set sent_to_email = 'betul.sekali@example.test'
+   where id = c.live;
+  perform pg_temp.check_eq('the address a link went to can be corrected',
+    (select sent_to_email from public.document_share_links where id = c.live),
+    'betul.sekali@example.test');
+  update public.document_share_links set revoked_at = now() where id = c.live;
+  perform pg_temp.check_true('and a live link can be revoked by hand',
+    (select revoked_at is not null from public.document_share_links where id = c.live));
+
+  -- And the functions, called by this same client.
+  update t_share set fn_tok = public.share_document(c.doc_a, 7, 'baru@example.test');
+  perform pg_temp.check_true('sharing through the function still works',
+    (select fn_tok is not null from t_share));
+end $$;
+
+reset role;
+select set_config('request.jwt.claims', '', true);
+set local role anon;
+
+do $$
+begin
+  perform pg_temp.check_eq('and a customer with no login still opens it',
+    public.open_shared_document((select fn_tok from t_share)) ->> 'state', 'open');
+end $$;
+
+reset role;
+
+do $$
+begin
+  perform pg_temp.check_true('which still records that they did',
+    (select open_count = 1 and opened_at is not null
+       from public.document_share_links
+      where token_hash = app.corp_token_hash((select fn_tok from t_share))));
+  perform pg_temp.check_eq('the rule is on the share links',
+    (select count(*)::integer from pg_trigger
+      where tgname = 'share_link_is_the_databases'
+        and tgrelid = 'public.document_share_links'::regclass), 1);
+end $$;
+
 rollback;
