@@ -1240,7 +1240,12 @@ page and renumbering would quietly break the reference.
     policy or view reads it, and `client_address.sql` asserts it stays
     so. Restated from `0047` (production hash 8e1d0d3c..., identical).
     Rows already written keep the address they recorded. Swept 10 / 10.
-    **Still to read back.**
+    **Applied, and read back** (9 October, read-only, after run
+    37953260239 on `5c1e280`): recorded; the live `app.request_header`
+    hashes to 79d6780a..., the same as the migration's own body; not a
+    definer, executable by its owner only (`0165` strips PUBLIC, and
+    every caller is a definer owned by that role); the comment names
+    `0785`.
 53. ~~A disconnected bank feed cannot be reconnected, and resuming it
     says connected with no key.~~ **Raised and answered 9 October: fix
     now. Built in `0786`.** Dormant -- no connector exists and
