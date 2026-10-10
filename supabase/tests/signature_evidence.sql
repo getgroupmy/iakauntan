@@ -289,4 +289,200 @@ begin
   perform pg_temp.check_eq('the rule is on both tables', v_n, 2);
 end $$;
 
+-- =====================================================================
+-- The signing links (0792)
+--
+-- A link is how a director with no account signs, and for a signature
+-- made that way the link IS the attribution. On 10 October a link
+-- retired for going to the wrong address was revived, given a
+-- hundred-year life and a forged "opened" record, and then signed the
+-- director's line with no login. The same client, the same role.
+-- =====================================================================
+create temporary table t_link (
+  org uuid, other_org uuid, clerk uuid,
+  retired uuid, live uuid, used uuid, spare uuid, sig_fn uuid,
+  tok_fn text);
+grant select, update on t_link to authenticated, anon;
+
+do $$
+declare
+  v_org uuid; v_other uuid; v_e uuid; v_doc uuid; v_req uuid;
+  p uuid[]; v_sig uuid[]; v_clerk uuid; v_tok text; i integer;
+  v_retired uuid; v_live uuid; v_used uuid; v_spare uuid;
+begin
+  v_org := pg_temp.test_org('Pautan Tandatangan Sdn Bhd');
+  v_other := pg_temp.test_org('Syarikat Lain Sdn Bhd');
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  values (v_org, 'secretarial', true), (v_other, 'secretarial', true)
+  on conflict do nothing;
+  insert into public.corp_entities (org_id, name, registration_no,
+    entity_type, incorporated_on, financial_year_end_day,
+    financial_year_end_month, registered_office)
+  values (v_org, 'Pautan Sdn Bhd', '202401018888', 'sdn_bhd',
+          date '2024-03-12', 31, 12, 'Level 5, Menara Pautan, KL')
+  returning id into v_e;
+  for i in 1 .. 4 loop
+    insert into public.corp_persons (org_id, kind, full_name, nric)
+    values (v_org, 'individual', 'Pengarah ' || i, '90010101000' || i)
+    returning id into v_tok;
+    p := p || v_tok::uuid;
+    insert into public.corp_officers (org_id, entity_id, person_id, role, appointed_on)
+    values (v_org, v_e, v_tok::uuid, 'director', date '2024-03-12');
+  end loop;
+  v_doc := public.corp_generate_document(v_e, 'sec_particulars');
+  v_req := public.corp_request_signatures(v_doc, p, null, null, null);
+  for i in 1 .. 4 loop
+    v_sig := v_sig || (select id from public.corp_signatures
+                        where request_id = v_req and person_id = p[i]);
+  end loop;
+
+  -- One sent to the wrong address and opened there, then replaced.
+  v_tok := public.corp_create_signing_link(v_sig[1], 14, 'salah@example.test');
+  perform public.corp_open_signing_link(v_tok);
+  select id into v_retired from public.corp_signing_links
+   where signature_id = v_sig[1];
+  perform public.corp_create_signing_link(v_sig[1], 14, 'betul@example.test');
+  select id into v_live from public.corp_signing_links
+   where signature_id = v_sig[1] and revoked_at is null;
+  -- One used to sign.
+  v_tok := public.corp_create_signing_link(v_sig[2], 14, 'dua@example.test');
+  perform public.corp_sign_with_link(v_tok, 'Pengarah 2');
+  select id into v_used from public.corp_signing_links
+   where signature_id = v_sig[2];
+  -- One issued and never touched.
+  perform public.corp_create_signing_link(v_sig[4], 14, 'empat@example.test');
+  select id into v_spare from public.corp_signing_links
+   where signature_id = v_sig[4];
+
+  v_clerk := pg_temp.another_user('kerani-pautan@example.test');
+  insert into public.org_members (org_id, user_id, role, status)
+  values (v_org, v_clerk, 'accountant', 'active');
+
+  insert into t_link values (v_org, v_other, v_clerk, v_retired, v_live,
+    v_used, v_spare, v_sig[3], null);
+end $$;
+
+select set_config('request.jwt.claims',
+  json_build_object('sub', (select clerk from t_link),
+                    'role', 'authenticated')::text, true);
+set local role authenticated;
+
+do $$
+declare c record;
+begin
+  select * into c from t_link;
+  perform pg_temp.check_eq('the links are asked as a client too',
+    current_user, 'authenticated');
+  perform pg_temp.check_true('the retired link really was opened',
+    (select opened_at is not null and revoked_at is not null
+       from public.corp_signing_links where id = c.retired));
+
+  perform pg_temp.check_refused('a retired link is not brought back',
+    format('update public.corp_signing_links set revoked_at = null where id = %L',
+           c.retired),
+    'A retired signing link stays retired.%', '42501');
+  perform pg_temp.check_refused('nor its retirement re-dated',
+    format('update public.corp_signing_links set revoked_at = %L where id = %L',
+           '2030-01-01', c.retired),
+    'A retired signing link stays retired.%', '42501');
+  perform pg_temp.check_refused('a link''s life is not extended',
+    format('update public.corp_signing_links set expires_at = now() + interval %L where id = %L',
+           '100 years', c.live),
+    'The expiry on a signing link%', '42501');
+  perform pg_temp.check_refused('nor its token replaced',
+    format('update public.corp_signing_links set token_hash = %L where id = %L',
+           'chosen', c.live),
+    'The token on a signing link%', '42501');
+  perform pg_temp.check_refused('nor pointed at another signature',
+    format('update public.corp_signing_links set signature_id = %L where id = %L',
+           c.sig_fn, c.live),
+    'The signature on a signing link%', '42501');
+  perform pg_temp.check_refused('nor moved to another company',
+    format('update public.corp_signing_links set org_id = %L where id = %L',
+           c.other_org, c.live),
+    'The company on a signing link%', '42501');
+  perform pg_temp.check_refused('a used link is not made unused',
+    format('update public.corp_signing_links set used_at = null where id = %L',
+           c.used),
+    'The time of use on a signing link%', '42501');
+  perform pg_temp.check_refused('the opening is not re-dated',
+    format('update public.corp_signing_links set opened_at = %L where id = %L',
+           '2024-01-01', c.retired),
+    'The opening time on a signing link%', '42501');
+  perform pg_temp.check_refused('nor its address made up',
+    format('update public.corp_signing_links set ip_address = %L where id = %L',
+           '198.51.100.7', c.retired),
+    'The opening address on a signing link%', '42501');
+  perform pg_temp.check_refused('nor its browser',
+    format('update public.corp_signing_links set user_agent = %L where id = %L',
+           'forged', c.retired),
+    'The opening browser on a signing link%', '42501');
+  perform pg_temp.check_refused('nor who issued it',
+    format('update public.corp_signing_links set created_by = null where id = %L',
+           c.live),
+    'The author on a signing link%', '42501');
+  perform pg_temp.check_refused('nor when',
+    format('update public.corp_signing_links set created_at = %L where id = %L',
+           '2024-01-01', c.live),
+    'The issue time on a signing link%', '42501');
+  perform pg_temp.check_refused('a link is not issued by hand',
+    format($q$insert into public.corp_signing_links
+                (org_id, signature_id, token_hash, expires_at)
+              values (%L, %L, 'chosen', now() + interval '100 years')$q$,
+           c.org, c.sig_fn),
+    'Signing links are issued with corp_create_signing_link%', '42501');
+  perform pg_temp.check_refused('a link used to sign is not deleted',
+    format('delete from public.corp_signing_links where id = %L', c.used),
+    'A link that was used to sign is the record of it%', '42501');
+  perform pg_temp.check_refused('nor one that was opened',
+    format('delete from public.corp_signing_links where id = %L', c.retired),
+    'A link that was opened is the record of it%', '42501');
+
+  -- What is still the company's.
+  update public.corp_signing_links set sent_to_email = 'betul.sekali@example.test'
+   where id = c.live;
+  perform pg_temp.check_eq('the address a link went to can be corrected',
+    (select sent_to_email from public.corp_signing_links where id = c.live),
+    'betul.sekali@example.test');
+  update public.corp_signing_links set revoked_at = now() where id = c.spare;
+  perform pg_temp.check_true('a live link can be retired by hand',
+    (select revoked_at is not null from public.corp_signing_links where id = c.spare));
+  delete from public.corp_signing_links where id = c.spare;
+  perform pg_temp.check_eq('and one nobody opened can be deleted',
+    (select count(*)::integer from public.corp_signing_links where id = c.spare), 0);
+
+  -- And the function road, issued by this same client.
+  update t_link set tok_fn = public.corp_create_signing_link(c.sig_fn, 14,
+    'tiga@example.test');
+  perform pg_temp.check_true('a client still issues links through the function',
+    (select tok_fn is not null from t_link));
+end $$;
+
+reset role;
+select set_config('request.jwt.claims', '', true);
+set local role anon;
+
+do $$
+begin
+  perform pg_temp.check_eq('and with no login, the link it issued opens',
+    (select o.state from public.corp_open_signing_link((select tok_fn from t_link)) o),
+    'open');
+  perform pg_temp.check_eq('and signs',
+    public.corp_sign_with_link((select tok_fn from t_link), 'Pengarah 3'),
+    'signed');
+end $$;
+
+reset role;
+
+do $$
+begin
+  perform pg_temp.check_eq('and the signature it made is recorded as signed',
+    (select status::text from public.corp_signatures
+      where id = (select sig_fn from t_link)), 'signed');
+  perform pg_temp.check_eq('the rule is on the links',
+    (select count(*)::integer from pg_trigger
+      where tgname = 'signing_link_is_the_databases'
+        and tgrelid = 'public.corp_signing_links'::regclass), 1);
+end $$;
+
 rollback;

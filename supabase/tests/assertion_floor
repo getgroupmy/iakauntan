@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-16601
+16627
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1188,3 +1188,10 @@
 # secretarial.sql, and ensure_pay_period swept with nothing to add.
 # Measured: `all SQL assertions passed (388 files, 16601 assertions
 # executed)`.
+#
+# 16601 -> 16627, 10 October: 0792, a signing link is the database's
+# (signature_evidence.sql's links section: every guarded column, the
+# retirement, inserts and deletes, the tidying still allowed, and a
+# client issuing a link that anon then signs with), and a new reset
+# policy restarting from 1 in document_numbering.sql. Measured:
+# `all SQL assertions passed (388 files, 16627 assertions executed)`.

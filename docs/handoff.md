@@ -1370,6 +1370,24 @@ page and renumbering would quietly break the reference.
     raising it with `corp_request_signatures` is the road), though two
     messages still say "withdraw the signature request".
     **Still to read back.**
+59. ~~A retired signing link can be revived and used to sign.~~
+    **Raised and answered 10 October: guard it too. Built in `0792`.**
+    The links beside `0791`'s tables had the same `ALL` policy. Measured,
+    as a member with the accountant's role: a link retired for going to
+    the wrong address revived (`revoked_at` cleared), given a
+    hundred-year life (the function caps links at ninety days), and its
+    "opened" record set to a date and address of the member's choosing --
+    then, with no login, that link signed the director's line. Now the
+    same rule as `0791`: a client cannot issue a link by hand, write its
+    signature, token, expiry, use, opening record, author or issue time,
+    bring a retired one back or re-date its retirement, or delete one
+    that was opened or used. Retiring a live link and correcting the
+    address it went to stay allowed; the three link functions are
+    definers and pass. The app writes links only through the functions.
+    Production held no link. Asserted in `signature_evidence.sql`, down
+    to a client issuing a link through the function and `anon` signing
+    with it. Swept 16 / 16, the definer flip by hand.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -1585,6 +1603,7 @@ function:
 | `claim_pos_sale` | `0226` | 10 / 11 | 1 | `pos_fnb.sql` (four before its assertions; equivalent: a bill already on this till moved again -- a parked bill's shift is always open) |
 | `pos_scan_serial` | `0546` | 11 / 13 | 2 | `pos_serial_sale.sql` (eight before its assertions: a missing line, a stranger, an outlet with no shelf, another company's basket; equivalent: `items` forbids serial tracking on an item not kept, and `v_lot_balances` keeps no zero row) |
 | `move_pos_sale` | `0213` | 8 / 8 | -- | `pos_fnb.sql` (three before its assertions; noted: a table out of service is not refused, and the floor plan hides it -- the bill stays on the open-bills list) |
+| `app.signing_link_is_the_databases` | `0792` | 16 / 16 | -- | `signature_evidence.sql` (links section new in `0792`; SECURITY DEFINER flipped by hand) |
 | `set_document_numbering` | `0480` | 22 / 22 | -- | `document_numbering.sql` (21 before; a new reset policy restarting from 1 added; noted: a prefix switched away and back with a low number re-issues numbers, and the save then fails on the unique key) |
 | `corp_sign_document` | `0069` | 14 / 14 | -- | `secretarial.sql` (six before its assertions: the evidence -- time, name, address, browser, login -- had never been read back; found `0791`) |
 | `app.signature_evidence_is_the_databases` | `0791` | 24 / 24 | -- | `signature_evidence.sql` (new in `0791`; a bare 'signed' insert added; SECURITY DEFINER flipped by hand) |
