@@ -861,4 +861,82 @@ begin
 end $$;
 
 
+-- ---------------------------------------------------------------------
+-- `shared_payment_options`, rule by rule
+--
+-- A mutation sweep (`mutants/shared_payment_options.py`) left five of
+-- nine rules with nothing here to tell them from their absence: a link
+-- revoked or expired, and a document deleted, void or rejected, are each
+-- offered no way to pay. Every one is asked with the acquirer set up and
+-- able to bank, so the answer it gives is the rule's and not the
+-- missing acquirer's -- and the same link is asked first, as a control,
+-- with nothing wrong with it.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid;
+  v_cust  uuid;
+  v_item  uuid;
+  v_bank  uuid;
+  v_doc   uuid;
+  v_tok   text;
+  v_case  text;
+  v_n     integer;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_org := pg_temp.test_org('Satu Persatu Bayar Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date_trunc('year', pg_temp.today())::date);
+  insert into public.contacts (org_id, code, name, contact_type, email)
+  values (v_org, 'CUST', 'Puan Aminah', 'customer', 'aminah@example.test')
+  returning id into v_cust;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, unit_price)
+  values (v_org, 'SVC', 'Khidmat', 'service', false, 'C62', 300.00)
+  returning id into v_item;
+  v_bank := pg_temp.test_bank_account(v_org, 'CIMB current');
+  perform public.set_org_payment_gateway(
+    v_org, 'billplz', 'sandbox', 'sk_test', 'col_1', 'xsig', true);
+  perform public.set_org_payment_settlement(
+    v_org, 'billplz', 'sandbox', v_bank, '03');
+
+  foreach v_case in array array['control', 'revoked', 'expired', 'deleted', 'void', 'rejected'] loop
+    insert into public.sales_documents
+      (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+       exchange_rate, status)
+    values (v_org, 'invoice', 'INV-' || v_case, pg_temp.today(), pg_temp.today(),
+            v_cust, 'MYR', 1, 'draft')
+    returning id into v_doc;
+    insert into public.sales_document_lines
+      (org_id, document_id, line_no, line_type, item_id, description,
+       quantity, uom_code, unit_price)
+    values (v_org, v_doc, 1, 'item', v_item, 'Khidmat', 1, 'C62', 300.00);
+    perform app.post_sales_document_internal(v_doc);
+    v_tok := public.share_document(v_doc);
+
+    case v_case
+      when 'revoked' then
+        update public.document_share_links set revoked_at = now() where document_id = v_doc;
+      when 'expired' then
+        update public.document_share_links set expires_at = now() - interval '1 minute'
+         where document_id = v_doc;
+      when 'deleted' then
+        update public.sales_documents set deleted_at = now() where id = v_doc;
+      when 'void' then
+        update public.sales_documents set status = 'void' where id = v_doc;
+      when 'rejected' then
+        update public.sales_documents set status = 'rejected' where id = v_doc;
+      else null;
+    end case;
+
+    select count(*) into v_n from public.shared_payment_options(v_tok);
+    if v_case = 'control' then
+      perform pg_temp.check_eq('a live link to an invoice owing money is offered the acquirer',
+        v_n, 1);
+    else
+      perform pg_temp.check_eq('a link ' || v_case || ' is offered no way to pay',
+        v_n, 0);
+    end if;
+  end loop;
+end $$;
+
 rollback;
