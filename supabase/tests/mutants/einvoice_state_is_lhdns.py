@@ -15,9 +15,11 @@
 # `einvoice_columns.sql`, new in `0803`. Two of the void's -- dropping
 # `org_id` and dropping `source_table` -- survived the first draft,
 # which had no e-Invoice carrying the invoice's id that was not its own.
-# Reachable: `source_id` has no foreign key and `einvoice_documents`
-# takes a client's insert. The file now makes two, another company's
-# and one for a bill, both valid, and voids the invoice beside them.
+# Reachable then: `source_id` has no foreign key and
+# `einvoice_documents` took a client's insert, which `0804` ended; a
+# function can still write one wrong. The file makes two, another
+# company's and one for a bill, both valid, and voids the invoice
+# beside them.
 #
 # SECURITY DEFINER flipped by hand on the guard: the file fails on its
 # first refusal ("an accepted invoice's status is not set back: it was

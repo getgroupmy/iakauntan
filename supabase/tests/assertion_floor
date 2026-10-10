@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17075
+17106
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1276,3 +1276,12 @@
 # e-Invoice itself, beside valid e-Invoices that carry the invoice's id
 # without being its own). Measured: `all SQL assertions passed (392
 # files, 17075 assertions executed)`.
+#
+# 17075 -> 17106, 10 October: 0804, LHDN's record is written by its
+# functions (new einvoice_records.sql, 31: the five e-Invoice tables
+# read by a member and refusing a client's insert, update and delete by
+# name; the accepted e-Invoice not cancelled by hand nor its invoice
+# voided under it, its figures not rewritten, a withdrawn one not
+# re-queued, a receipt not taken out of a consolidation; the functions
+# and the service role still writing). Measured: `all SQL assertions
+# passed (393 files, 17106 assertions executed)`.

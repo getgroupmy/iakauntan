@@ -1674,13 +1674,36 @@ page and renumbering would quietly break the reference.
     bill owing one. New `einvoice_columns.sql`, added to `ci.yml`. Swept
     22 / 22, the definer flip by hand. `posted_document_is_frozen.sql`'s
     control "LHDN's answer still reaches it" wrote the copy as a client,
-    which the full suite caught; it now prepares the e-Invoice and has
-    the service role write the answer, as MyInvois does.
-    NOTED, TO RAISE NEXT: `einvoice_documents` itself takes a client's
-    insert, update and delete (`can_write` and the e-Invoice module),
-    and only the MyInvois function, as the service role, writes it -- so
-    LHDN's own copy is client-writable too, and `source_id` has no
-    foreign key.
+    which the full suite caught; it now prepares the e-Invoice and
+    writes the answer onto it, where MyInvois does -- as the session,
+    not `service_role`, after CI run 38100240247 went red on that: the
+    CLI stack does not grant `service_role` the table, and
+    `_local_stack.sql` no longer grants it any table by default.
+    `einvoice_documents` itself was client-writable, and is item 71.
+    **Still to read back.**
+71. ~~LHDN's own record -- the e-Invoices, their lines, submissions and
+    the monthly consolidations -- is client-writable.~~ **Raised and
+    answered 10 October: read-only to clients. Built in `0804`.**
+    `authenticated` held insert, update and delete on
+    `einvoice_documents`, `einvoice_lines`, `einvoice_submissions`,
+    `einvoice_consolidations` and `einvoice_consolidation_items`, the
+    policies asking only `can_write` and the e-Invoice module. The app
+    only reads `einvoice_documents`; every write is a SECURITY DEFINER
+    function or the MyInvois function as the service role. Measured with
+    `0803` applied, as the owner with the role `authenticated`: an
+    e-Invoice LHDN had accepted marked 'cancelled' by hand -- copied onto
+    the invoice -- and the void went through, `0803`'s case by the other
+    table; its figures rewritten to RM1.00; a voided invoice's withdrawn
+    e-Invoice re-queued for the bulk sweep; the accepted record deleted.
+    Now, as `0740` did for the client account ledger, the grants are
+    revoked and the write policies dropped on all five; reading stays.
+    Production held no row in any of them. New `einvoice_records.sql`,
+    added to `ci.yml`: every table refuses insert, update and delete by
+    name, each measured case is refused, the functions still prepare and
+    withdraw, and LHDN's answer is still written. No function
+    to sweep; instead each of the fifteen doors was restored by hand,
+    grant and policy and then grant alone (30 / 30 fail the file), and a
+    policy restored without its grant fails the file's last assertion.
     **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
@@ -1917,6 +1940,7 @@ function:
 | `open_tax_detail_request` | `0627` | 11 / 11 | -- | `tax_details.sql` (nine only after its rule-by-rule block: a deleted customer's form, its openings, what it shows of what is held, the state order, and whether it was answered) |
 | `app.a_draft_is_what_is_discarded` | `0802` | 6 / 6 | -- | `document_discard.sql` (new in `0802`; SECURITY DEFINER flipped by hand) |
 | `app.einvoice_state_is_lhdns`, `void_sales_document` (the valid check) | `0803` | 22 / 22 | -- | `einvoice_columns.sql` (new in `0803`; two of the void's only after two valid e-Invoices that carry the invoice's id without being its own, another company's and a bill's; SECURITY DEFINER flipped by hand) |
+| (the write grants and policies on the five e-Invoice tables) | `0804` | 30 / 30 restored by hand | -- | `einvoice_records.sql` (new in `0804`; each table's insert, update and delete restored with its policy and then alone; a policy alone fails its last assertion) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |

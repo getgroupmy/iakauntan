@@ -142,10 +142,10 @@ begin
   -- Two e-Invoices that are valid and carry INV-E3's id without being
   -- its own: another company's, and one of this company's for a bill.
   -- `source_id` has no foreign key -- it names a row in whichever table
-  -- `source_table` says -- and `einvoice_documents` takes a client's
-  -- insert. Made valid first, so `sync_einvoice_status` copies the
-  -- answer onto their own documents, and moved after, which it does not
-  -- copy.
+  -- `source_table` says -- and until `0804` `einvoice_documents` took a
+  -- client's insert. Asked still: a function can write one wrong. Made
+  -- valid first, so `sync_einvoice_status` copies the answer onto their
+  -- own documents, and moved after, which it does not copy.
   insert into public.contacts (org_id, code, name, contact_type, country_code, tin)
   values (r.other_org, 'C-1', 'Pembeli Lain Sdn Bhd', 'customer', 'MYS', 'C77777777777')
   returning id into v_c;
