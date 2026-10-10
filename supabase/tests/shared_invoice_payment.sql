@@ -126,19 +126,49 @@ begin
   perform pg_temp.sign_in_as(v_owner);
   v_other_bank := pg_temp.test_bank_account(v_other, 'Their account');
 
-  begin
-    perform public.set_org_payment_settlement(
-      v_org, 'billplz', 'sandbox', v_other_bank, '03');
-    raise exception
-      'FAIL: another company''s bank account was accepted for settlement';
-  exception when sqlstate '23503' then
-    raise notice 'ok   and the settlement account has to be this company''s';
-  end;
+  -- Read by its words: the table's same-company key refuses this too,
+  -- with the same SQLSTATE, so asking only for 23503 could not tell the
+  -- function's check from its absence.
+  perform pg_temp.check_refused('and the settlement account has to be this company''s',
+    format('select public.set_org_payment_settlement(%L, %L, %L, %L, %L)',
+           v_org, 'billplz', 'sandbox', v_other_bank, '03'),
+    'That bank account does not belong to this company.', '23503');
 
   perform pg_temp.check_true('so the takings still land where they were sent',
     (select settlement_bank_account_id from public.org_payment_gateways
       where org_id = v_org and gateway_code = 'billplz'
         and mode = 'sandbox') = v_bank);
+
+  -- `set_org_payment_settlement`, rule by rule. A mutation sweep
+  -- (`mutants/set_org_payment_settlement.py`) left these with nothing
+  -- to tell them from their absence.
+  perform pg_temp.sign_in_as(pg_temp.another_user('tunai-luar@example.test'));
+  perform pg_temp.check_refused('only an administrator says where the takings land',
+    format('select public.set_org_payment_settlement(%L, %L, %L, %L, %L)',
+           v_org, 'billplz', 'sandbox', v_bank, '03'),
+    'Only an administrator can say where this company''s takings land', '42501');
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_refused('an acquirer not set up is said so',
+    format('select public.set_org_payment_settlement(%L, %L, %L, %L, %L)',
+           v_org, 'toyyibpay', 'sandbox', v_bank, '03'),
+    'Set the toyyibpay credentials up before saying where its takings land.', 'P0002');
+  perform pg_temp.check_refused('and so is the other mode of one that is',
+    format('select public.set_org_payment_settlement(%L, %L, %L, %L, %L)',
+           v_org, 'billplz', 'production', v_bank, '03'),
+    'Set the billplz credentials up before saying where its takings land.', 'P0002');
+  -- What is left out is kept; what is given is trimmed.
+  -- Asked after EACH call: the second one sets the account again, so
+  -- asking only at the end cannot see the first one clearing it.
+  perform public.set_org_payment_settlement(v_org, 'billplz', 'sandbox', null, '  04  ');
+  perform pg_temp.check_true('an account left out is kept, and a mode is trimmed',
+    (select settlement_bank_account_id = v_bank and payment_mode_code = '04'
+       from public.org_payment_gateways
+      where org_id = v_org and gateway_code = 'billplz' and mode = 'sandbox'));
+  perform public.set_org_payment_settlement(v_org, 'billplz', 'sandbox', v_bank, null);
+  perform pg_temp.check_eq('and a mode left out is kept',
+    (select payment_mode_code from public.org_payment_gateways
+      where org_id = v_org and gateway_code = 'billplz' and mode = 'sandbox'), '04');
+  perform public.set_org_payment_settlement(v_org, 'billplz', 'sandbox', v_bank, '03');
 
   -- ------------------------------------------------------------------
   -- The pending payment
