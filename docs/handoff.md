@@ -1587,7 +1587,12 @@ page and renumbering would quietly break the reference.
     identical), still its owner's alone. Production held thirteen
     tickets, none deleted, and no ticket link. Swept 6 / 6 in
     `ticket_share.sql`.
-    **Still to read back.**
+    **Applied, and read back** (10 October, read-only, after run
+    38062940838 on `3774087` had applied the migrations): recorded; the
+    live `app.ticket_link_state` hashes to 41ace5dc..., the same as the
+    migration's own body; SECURITY DEFINER; still its owner's alone
+    (neither `anon` nor `authenticated` may execute it); the comment
+    names `0799`.
 67. ~~A reprinted receipt states the outlet's service charge rate today,
     not the bill's, and every receipt writes it "10.%".~~ **Raised and
     answered 10 October: store the rate on the bill. Built in `0800`.**
