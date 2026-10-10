@@ -578,4 +578,143 @@ begin
     'W10-9999-31000009');
 end $$;
 
+-- ---------------------------------------------------------------------
+-- `submit_tax_details`, rule by rule
+--
+-- A mutation sweep (`mutants/submit_tax_details.py`) left eighteen of
+-- twenty-six rules with nothing here to tell them from their absence:
+-- the deleted contact, every part of the record of who answered and
+-- from where, three of the four spellings that can differ, the link's
+-- own count, when an answer was taken, what the form is told, and
+-- which earlier answers a correction supersedes.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_owner uuid := pg_temp.test_user();
+  v_org   uuid := pg_temp.test_org('Rekod Jawapan Sdn Bhd');
+  v_buyer uuid;
+  v_token text;
+  v_res   jsonb;
+  v_first uuid;
+  s       public.tax_detail_submissions;
+  l       public.tax_detail_requests;
+begin
+  v_buyer := pg_temp.a_contact(v_org, 'B100', 'Siapa Jawab Sdn Bhd');
+  -- The fields the form fills here are blank, so whatever is typed is
+  -- taken, and nothing disagrees -- but the country, which a contact
+  -- always has ('MYS'), so the one typed in lower case below is an echo
+  -- only if it is upper-cased.
+  update public.contacts
+     set email = null, phone = null, sst_registration_no = null,
+         state_code = null
+   where id = v_buyer;
+  v_token := pg_temp.a_link(v_buyer);
+
+  -- As PostgREST hands them over: a client behind one proxy.
+  perform set_config('request.headers', json_build_object(
+    'x-forwarded-for', '203.0.113.7, 10.0.0.1',
+    'user-agent', 'Pelayar/1.0')::text, true);
+
+  v_res := public.submit_tax_details(v_token, jsonb_build_object(
+    'tin', 'C1010101010',
+    'sst_registration_no', ' w10-1808-31000001 ',
+    'email', ' Akaun@Pembeli.TEST ',
+    'phone', '  03-1234 5678  ',
+    'state_code', '10',
+    'country_code', 'mys',
+    'submitted_by_name', '  Aminah  ',
+    'submitted_by_email', ' aminah@pembeli.test '));
+
+  perform pg_temp.check_eq('the form is told its answer was received',
+    v_res ->> 'state', 'received');
+  -- Every field was blank: filling a blank is not a disagreement.
+  perform pg_temp.check_true('and that nothing waits for review',
+    not (v_res ->> 'awaiting_review')::boolean);
+
+  select * into s from public.tax_detail_submissions where contact_id = v_buyer;
+  v_first := s.id;
+  perform pg_temp.check_eq('the address it came from is kept, the client''s and not the proxy''s',
+    host(s.ip_address), '203.0.113.7');
+  perform pg_temp.check_eq('and the browser', s.user_agent, 'Pelayar/1.0');
+  perform pg_temp.check_eq('and who said they were answering', s.submitted_by_name, 'Aminah');
+  perform pg_temp.check_eq('and their address', s.submitted_by_email, 'aminah@pembeli.test');
+  perform pg_temp.check_eq('an SST number is kept upper case and trimmed',
+    s.sst_registration_no, 'W10-1808-31000001');
+  perform pg_temp.check_eq('an email lower case', s.email, 'akaun@pembeli.test');
+  perform pg_temp.check_eq('a phone trimmed', s.phone, '03-1234 5678');
+  perform pg_temp.check_eq('a country code upper case', s.country_code, 'MYS');
+  perform pg_temp.check_true('and when what it took was taken', s.applied_at is not null);
+
+  select * into l from public.tax_detail_requests where contact_id = v_buyer;
+  perform pg_temp.check_true('the link records that it was answered', l.submitted_at is not null);
+  perform pg_temp.check_eq('and counts it', l.submission_count, 1);
+
+  -- The same answer again: everything echoed, nothing to take.
+  perform public.submit_tax_details(v_token, jsonb_build_object(
+    'tin', 'C1010101010', 'country_code', 'MYS', 'state_code', '10'));
+  perform pg_temp.check_eq('the link counts every answer',
+    (select submission_count from public.tax_detail_requests where id = l.id), 2);
+  perform pg_temp.check_true('an answer that took nothing is not stamped as taken',
+    (select applied_at is null from public.tax_detail_submissions
+      where contact_id = v_buyer and id <> v_first));
+
+  -- The state code's upper() is not asked: every code `ref_states`
+  -- holds is two digits, and the foreign key refuses any other, so a
+  -- code upper-cased and one kept as typed are the same code.
+end $$;
+
+-- A correction supersedes the answers still waiting -- not one the
+-- company already set aside, and not one already superseded, whose
+-- time is the record of when it stopped being the customer's answer.
+do $$
+declare
+  v_owner uuid := pg_temp.test_user();
+  v_org   uuid;
+  v_buyer uuid;
+  v_token text;
+  v_one   uuid;
+  v_two   uuid;
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  v_org := pg_temp.test_org('Ganti Jawapan Sdn Bhd');
+  v_buyer := pg_temp.a_contact(v_org, 'B102', 'Tukar Fikiran Sdn Bhd');
+  update public.contacts set city = 'Ipoh' where id = v_buyer;
+  v_token := pg_temp.a_link(v_buyer);
+
+  perform public.submit_tax_details(v_token, jsonb_build_object('city', 'Taiping'));
+  select id into v_one from public.tax_detail_submissions where contact_id = v_buyer;
+  perform public.dismiss_tax_submission(v_one);
+
+  perform public.submit_tax_details(v_token, jsonb_build_object('city', 'Kampar'));
+  select id into v_two from public.tax_detail_submissions
+   where contact_id = v_buyer and id <> v_one;
+  perform pg_temp.check_true('an answer the company set aside is not superseded',
+    (select superseded_at is null from public.tax_detail_submissions where id = v_one));
+
+  -- Superseded an hour ago, as far as the record goes.
+  update public.tax_detail_submissions
+     set superseded_at = now() - interval '1 hour'
+   where id = v_two;
+  perform public.submit_tax_details(v_token, jsonb_build_object('city', 'Gopeng'));
+  perform pg_temp.check_true('a superseded answer keeps the time it was superseded',
+    (select superseded_at = now() - interval '1 hour'
+       from public.tax_detail_submissions where id = v_two));
+end $$;
+
+-- A contact deleted after its link went out takes no answer through it.
+do $$
+declare
+  v_org   uuid := pg_temp.test_org('Kenalan Dibuang Sdn Bhd');
+  v_buyer uuid;
+  v_token text;
+begin
+  v_buyer := pg_temp.a_contact(v_org, 'B103', 'Sudah Dibuang Sdn Bhd');
+  v_token := pg_temp.a_link(v_buyer);
+  update public.contacts set deleted_at = now() where id = v_buyer;
+  perform pg_temp.check_refused('a deleted contact takes no answer',
+    format('select public.submit_tax_details(%L, %L::jsonb)',
+           v_token, '{"tin": "C3030303030"}'),
+    'This link is no longer open', '42501');
+end $$;
+
 rollback;
