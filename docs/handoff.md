@@ -2039,7 +2039,12 @@ page and renumbering would quietly break the reference.
     Each of the three doors restored by hand, grant and policy and then
     grant alone, fails the file (6 / 6); a policy alone fails its last
     assertion.
-    **Still to read back.**
+    **Applied, and read back** (11 October, read-only, after run
+    38122513259 on `c6023a7` had applied the migrations): recorded;
+    `authenticated` holds SELECT on `payment_allocations` and no INSERT,
+    UPDATE or DELETE, the only policy left is
+    `payment_allocations_select`, the comment names `0815`, and the
+    seventy-six allocations are there.
 83. ~~An SSM filing nobody lodged can be typed in as lodged, and leave
     the overdue list.~~ **Raised and answered 11 October: read-only to
     clients. Built in `0816`.** `corp_filings` holds each SSM filing
