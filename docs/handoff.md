@@ -1952,7 +1952,16 @@ page and renumbering would quietly break the reference.
     SECURITY DEFINER flipped by hand fails the file; each of the three
     doors on the balance restored by hand fails it (6 / 6), as do a
     policy alone and an insert opened on the log.
-    **Still to read back.**
+    **Applied, and read back** (11 October, read-only, after run
+    38117952571 on `06f5a39` had applied the migrations): recorded;
+    `adjust_leave_balance`'s body matches the migration (md5 `685c7e9f`),
+    a definer, executable by `authenticated` and `service_role` and
+    not `anon`; `leave_balance_adjustments` is there with RLS on, SELECT
+    and nothing else for `authenticated`, `leave_balance_adjustments_select`
+    its only policy, its three `live_change_` triggers and a comment
+    naming `0812`, and no row; `leave_balances` has no INSERT, UPDATE or
+    DELETE for `authenticated`, `leave_balances_select` its only policy,
+    the comment naming `0812`, and the twelve balances are there.
 80. ~~A stock item's cost can be written by hand, and the next sale
     costed at it.~~ **Raised and answered 11 October: guard and close.
     Built in `0813`.** A sale's cost of goods sold is `items.average_cost`
