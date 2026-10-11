@@ -1929,6 +1929,31 @@ page and renumbering would quietly break the reference.
     doors on the balance restored by hand fails it (6 / 6), as do a
     policy alone and an insert opened on the log.
     **Still to read back.**
+80. ~~A stock item's cost can be written by hand, and the next sale
+    costed at it.~~ **Raised and answered 11 October: guard and close.
+    Built in `0813`.** A sale's cost of goods sold is `items.average_cost`
+    when it posts; `app.apply_stock_movement` keeps that and
+    `quantity_on_hand` from `stock_levels`; `stock_movements`,
+    `stock_levels` and `stock_lots` are written only by definers. The app
+    never sends the two item columns and never writes the three tables,
+    and a client could write all of them. Measured as the owner with the
+    role `authenticated`: fifty on hand at RM10, the cost set to RM0.01
+    by hand, and ten sold posted RM0.10 to cost of sales. Now a trigger,
+    `a_stock_figures_are_the_stocks`, refuses a client's own statement
+    that changes an item's cost or quantity on hand, or creates an item
+    with either set (not a definer; the stock functions write the item
+    one trigger down and pass); and the three tables are read-only to
+    clients, `stock_movements`' restrictive `module_gate_` write
+    policies dropped with the rest. Production held twenty-three stock
+    items, twenty-three levels and ninety-four movements, every quantity
+    agreeing with its levels. New `stock_figures.sql`, added to `ci.yml`:
+    the item editor still edits and creates, a sale costs at the stock's
+    own cost, a stocktake posts. Swept 9 / 9 -- one only after the file
+    had the database set a cost at the top level -- with SECURITY DEFINER
+    flipped by hand; each of the nine doors restored by hand fails it
+    (18 / 18, five only after the file asked every door by name), as
+    does a policy alone.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -2173,6 +2198,7 @@ function:
 | (the write grants and policies on `tax_filings` and `tax_estimate_payments`) | `0810` | 12 / 12 restored by hand | -- | `tax_records.sql` (new in `0810`; each table's insert, update and delete restored with its policy and then alone; a policy alone fails its last assertion) |
 | (the write grants and policy on `attendance_records`) | `0811` | 6 / 6 restored by hand | -- | `attendance_adjust.sql` (its `0811` block; insert, update and delete each restored with the policy and then alone; a policy alone fails its last assertion) |
 | `adjust_leave_balance`; (the write grants and policy on `leave_balances`) | `0812` | 13 / 13; 6 / 6 restored by hand | -- | `leave_adjustments.sql` (new in `0812`; SECURITY DEFINER flipped by hand; a policy alone and an opened log each fail it) |
+| `app.stock_figures_are_the_stocks`; (the write grants and policies on `stock_movements`, `stock_levels`, `stock_lots`) | `0813` | 9 / 9; 18 / 18 restored by hand | -- | `stock_figures.sql` (new in `0813`; one guard mutant only after the database set a cost at the top level; five doors only after every door was asked by name; SECURITY DEFINER flipped by hand) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |

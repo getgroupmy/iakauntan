@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17212
+17240
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1340,3 +1340,12 @@
 # new year's balance made, its refusals in its own words, and the
 # employee reading why and not adjusting). Measured: `all SQL
 # assertions passed (397 files, 17212 assertions executed)`.
+#
+# 17212 -> 17240, 11 October: 0813, the stock figures are the stock's
+# (new stock_figures.sql, 28: an item's cost and quantity on hand
+# refused to a client's update and insert, the item editor still
+# editing and creating, every door on the three stock tables refused by
+# name, a sale costed at the stock's own cost and a stocktake posted
+# through their functions, the database setting a cost itself).
+# Measured: `all SQL assertions passed (398 files, 17240 assertions
+# executed)`.
