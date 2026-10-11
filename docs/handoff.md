@@ -1634,7 +1634,11 @@ page and renumbering would quietly break the reference.
     self-billed e-Invoice and no bill owing one. Swept 8 / 9 (one
     equivalent: `sync_einvoice_status` makes a valid document's bill
     'valid', which is refused first).
-    **Still to read back.**
+    **Applied, and read back** (10 October, read-only, after run
+    38072947740 on `ededab3` had applied the migrations): recorded; the
+    live `set_requires_self_billed` hashes to 0e5c67e1..., the same as
+    the migration's own body; SECURITY DEFINER, `authenticated` and the
+    service role may still execute it; the comment names `0801`.
 69. ~~A posted invoice or bill can be discarded through the API, its
     journal left in the ledger and its e-Invoice left queued.~~
     **Raised and answered 10 October: only a draft is deleted. Built in
