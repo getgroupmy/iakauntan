@@ -1791,7 +1791,11 @@ page and renumbering would quietly break the reference.
     `leave_balances` (item 79, `0812`),
     `attendance_records` (item 78, `0811`) and `expense_lines` (item
     76, `0809`).
-    **Still to read back.**
+    **Applied, and read back** (11 October, read-only, after run
+    38107660346 on `b4c7c1f` had applied the migrations): recorded; on
+    all four tables `authenticated` holds SELECT and no INSERT, UPDATE
+    or DELETE, the only policies left are each table's SELECT one and
+    `module_gate_select`, and each table's comment names `0806`.
 74. ~~The payroll year to date, which every later month's PCB is worked
     against, can be edited by hand.~~ **Raised and answered 11 October:
     read-only to clients. Built in `0807`.** `payroll_ytd` is written by
