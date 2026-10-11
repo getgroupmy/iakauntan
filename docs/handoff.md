@@ -1921,7 +1921,12 @@ page and renumbering would quietly break the reference.
     marked, signed and explained. Each of the three doors restored by
     hand, grant and policy and then grant alone, fails the file (6 / 6);
     a policy alone fails its last assertion.
-    **Still to read back.**
+    **Applied, and read back** (11 October, read-only, after run
+    38116677960 on `500e1f3` had applied the migrations): recorded;
+    `authenticated` holds SELECT on `attendance_records` and no INSERT,
+    UPDATE or DELETE, the only policy left is
+    `attendance_records_select`, the comment names `0811`, and there is
+    still no attendance record.
 79. ~~Leave already taken can be set back to nought by hand, and taken
     again.~~ **Raised and answered 11 October: a function with a reason.
     Built in `0812`.** `adjustment_days` has been in the balance
