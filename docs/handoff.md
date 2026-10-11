@@ -1842,7 +1842,11 @@ page and renumbering would quietly break the reference.
     the functions. Each of the three doors restored by hand, grant and
     policy and then grant alone, fails the file (6 / 6); a policy alone
     fails its last assertion.
-    **Still to read back.**
+    **Applied, and read back** (11 October, read-only, after run
+    38110327156 on `abb7753` had applied the migrations): recorded;
+    `authenticated` holds SELECT on `bank_transactions` and no INSERT,
+    UPDATE or DELETE, the only policy left is the SELECT one, the
+    comment names `0808`, and the thirty-two lines are untouched.
 76. ~~An expense's split lines can be written directly, and post
     something other than what they say.~~ **Raised and answered 11
     October: read-only to clients. Built in `0809`.** The app writes
