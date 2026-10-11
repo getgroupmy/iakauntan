@@ -1659,7 +1659,12 @@ page and renumbering would quietly break the reference.
     NOTED, NOT RAISED: nothing voids a bill (`void_sales_document` has
     no purchase twin); a posted bill is reversed with a purchase credit
     note.
-    **Still to read back.**
+    **Applied, and read back** (11 October, read-only, after run
+    38098478319 on `f0dbe0e` had applied the migrations): recorded; the
+    live `app.a_draft_is_what_is_discarded` hashes to 955761aa..., the
+    same as the migration's own body; not a definer, its owner's alone;
+    the trigger enabled, BEFORE UPDATE for each row, on both
+    `sales_documents` and `purchase_documents`; the comment names `0802`.
 70. ~~A document's e-Invoice status, its e-Invoice and a bill's
     self-billed obligation are client-writable, and the void read the
     copy.~~ **Raised and answered 10 October: guard the columns and ask
