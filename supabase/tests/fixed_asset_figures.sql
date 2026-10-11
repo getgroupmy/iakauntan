@@ -19,7 +19,7 @@ begin;
 
 \i supabase/tests/_helpers.sql
 
-create temporary table t_fa (org uuid, van uuid, entry uuid);
+create temporary table t_fa (org uuid, van uuid, entry uuid, bank uuid);
 grant select, update on t_fa to authenticated;
 
 -- What the ledger has charged: the debits to depreciation expense.
@@ -41,7 +41,11 @@ begin
   v_org := pg_temp.test_org('Susut Nilai Sdn Bhd', array['fixed_assets']);
   perform public.create_fiscal_year(v_org, date '2026-01-01');
   perform pg_temp.open_years(v_org, date '2026-01-01');
-  insert into t_fa (org) values (v_org);
+  -- The bank the van's proceeds go into. Made here, as the session:
+  -- since `0823` a client sets one up only through
+  -- `upsert_bank_account`.
+  insert into t_fa (org, bank)
+  values (v_org, pg_temp.test_bank_account(v_org, 'Maybank current', 'current', 'MYR', 0, 0, '1234'));
 end $$;
 
 select set_config('request.jwt.claims',
@@ -128,8 +132,7 @@ begin
   perform pg_temp.check_eq('to June: RM1,200, register and ledger',
     (select accumulated_depreciation || '/' || pg_temp.fa_charged(d.org)
        from public.fixed_assets where id = d.van), '1200.00/1200.00');
-  perform public.dispose_fixed_asset(d.van, date '2026-06-30', 10000,
-    pg_temp.test_bank_account(d.org, 'Maybank current', 'current', 'MYR', 0, 0, '1234'));
+  perform public.dispose_fixed_asset(d.van, date '2026-06-30', 10000, d.bank);
   perform pg_temp.check_true('and disposed of by disposing of it, with its journal',
     (select status = 'disposed' and disposal_proceeds = 10000
             and disposal_entry_id is not null

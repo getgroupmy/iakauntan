@@ -2225,6 +2225,30 @@ page and renumbering would quietly break the reference.
     equivalent mutant -- every writer of the table is a definer -- and
     the file says so beside the owner's assertion.
     **Still to read back.**
+90. ~~A bank account can be pointed at an expense by hand, and money
+    received is booked as one.~~ **Raised and answered 11 October:
+    read-only to clients. Built in `0823`.** The app reads
+    `bank_accounts` and writes it only through functions --
+    `upsert_bank_account`, which refuses a ledger account that is not a
+    bank or cash account of the company, and the sixteen posting and
+    setup functions, every one a definer, that keep and rebuild
+    `current_balance`. But `0010`'s policies left insert, update and
+    delete to anybody who may post. Measured as the owner with the role
+    `authenticated`: the setup refused to point a bank account at 6400
+    Depreciation and a direct update did it; a RM500 receipt into that
+    bank then posted Dr 6400, Cr Receivables. And a balance typed in as
+    RM1,000,000 went straight onto the dashboard's bank balance, which
+    the cash forecast starts from. Now the grants are revoked and the
+    three write policies dropped; reading stays. Production held
+    twenty-nine bank accounts across sixteen companies, all on bank or
+    cash accounts. `fixed_asset_figures.sql` (`0822`) made its disposal
+    bank account inside its client block, which the full suite caught;
+    it is made in the setup now, as the session. New
+    `bank_accounts_kept.sql`, added to `ci.yml`. Each
+    of the three doors restored by hand, grant and policy and then grant
+    alone, fails the file (6 / 6) with a no-op control passing; a policy
+    alone fails its last assertion.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -2479,6 +2503,7 @@ function:
 | (five CHECK constraints on `corp_resolutions`) | `0820` | 12 / 12 by hand | -- | `corp_resolution_checks.sql` (new in `0820`; each constraint dropped and each boundary loosened; the nobody-listed exemption only after the file sent an empty list, a NULL one passing a CHECK by itself) |
 | (five CHECK constraints on `employees` and `employee_dependants`) | `0821` | 18 / 18 by hand | -- | `statutory_inputs_in_range.sql` (new in `0821`; each constraint dropped, each bound opened or pulled in by the column's smallest step; the engine's EPF and PCB asserted at figures in range) |
 | `app.fixed_asset_figures_are_the_runs` | `0822` | 15 / 16 | 1 (the depth clause: every writer of `fixed_assets` is a definer, so nothing writes it one trigger down as a client; said beside the owner's assertion) | `fixed_asset_figures.sql` (new in `0822`; each of the six columns asked alone on update and on insert; the owner at the top let through) |
+| (the write grants and policies on `bank_accounts`) | `0823` | 6 / 6 restored by hand | -- | `bank_accounts_kept.sql` (new in `0823`; insert, update and delete each restored with its policy and then alone; a policy alone fails its last assertion) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |

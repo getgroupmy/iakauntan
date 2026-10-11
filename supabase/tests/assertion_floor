@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17371
+17382
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1426,3 +1426,11 @@
 # disposal, through the functions; the owner at the top let through).
 # Measured: `all SQL assertions passed (406 files, 17371 assertions
 # executed)`.
+#
+# 17371 -> 17382, 11 October: 0823, a bank account is set up by its
+# setup (bank_accounts_kept.sql, 11: one set up on a bank account of the
+# chart; the setup refusing an expense account, and the row not pointed
+# there, its balance not typed, none typed in or deleted by hand; a
+# RM500 receipt a debit to the bank and the cached balance what was
+# posted; renamed through the setup; no write policy left). Measured:
+# `all SQL assertions passed (407 files, 17382 assertions executed)`.
