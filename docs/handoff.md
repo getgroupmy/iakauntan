@@ -2192,7 +2192,11 @@ page and renumbering would quietly break the reference.
     left out of the count -- and the exemption for nobody listed, killed
     only after the file sent an empty list rather than none, since a
     NULL list passes a CHECK on its own.
-    **Still to read back.**
+    **Applied, and read back** (11 October, read-only, after run
+    38132062731 on `fcb1e6c` had applied the migrations): recorded; the
+    five constraints are on `corp_resolutions`, validated, each with its
+    comment naming `0820`, and each definition matches the one this
+    branch builds (md5 of `pg_get_constraintdef`, all five equal).
 88. ~~The payroll engine's statutory inputs are kept in range only on
     their screens.~~ **Raised and answered 11 October: check
     constraints. Built in `0821`.** `cp38_monthly`, `zakat_monthly` and
