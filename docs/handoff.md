@@ -1958,6 +1958,23 @@ page and renumbering would quietly break the reference.
     (18 / 18, five only after the file asked every door by name), as
     does a policy alone.
     **Still to read back.**
+81. ~~A posted stocktake can be rewritten and deleted, leaving its
+    movement and journal unexplained.~~ **Raised and answered 11
+    October: freeze once posted. Built in `0814`.** The app drafts a
+    stock adjustment and its lines and `post_stock_adjustment` posts it;
+    `refuse_reposting` stopped a second posting and nothing else kept the
+    posted record. Measured as the owner with the role `authenticated`: a
+    stocktake posted two short (RM20 written off), its line rewritten to
+    "counted 50, difference 0", the adjustment deleted -- the movement
+    and journal left behind with no document. Now
+    `a_posted_adjustment_is_kept`, on both tables, refuses a client's own
+    statement that changes or deletes an adjustment past draft or a line
+    under one (or moves a line under one), creates an adjustment other
+    than as a draft, or marks a draft posted without posting it. Drafts
+    are as before. Production held no stock adjustment. Asserted in
+    `stock_figures.sql`'s `0814` block, as a client. Swept 11 / 11;
+    SECURITY DEFINER flipped by hand fails the file.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -2203,6 +2220,7 @@ function:
 | (the write grants and policy on `attendance_records`) | `0811` | 6 / 6 restored by hand | -- | `attendance_adjust.sql` (its `0811` block; insert, update and delete each restored with the policy and then alone; a policy alone fails its last assertion) |
 | `adjust_leave_balance`; (the write grants and policy on `leave_balances`) | `0812` | 13 / 13; 6 / 6 restored by hand | -- | `leave_adjustments.sql` (new in `0812`; SECURITY DEFINER flipped by hand; a policy alone and an opened log each fail it) |
 | `app.stock_figures_are_the_stocks`; (the write grants and policies on `stock_movements`, `stock_levels`, `stock_lots`) | `0813` | 9 / 9; 18 / 18 restored by hand | -- | `stock_figures.sql` (new in `0813`; one guard mutant only after the database set a cost at the top level; five doors only after every door was asked by name; SECURITY DEFINER flipped by hand) |
+| `app.a_posted_adjustment_is_kept` | `0814` | 11 / 11 | -- | `stock_figures.sql` (its `0814` block, as a client; the database's own note on a posted stocktake passes; SECURITY DEFINER flipped by hand) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |

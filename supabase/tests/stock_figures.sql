@@ -180,7 +180,82 @@ begin
     (select quantity_on_hand from public.items where id = d.item), 38::numeric);
 end $$;
 
+-- =====================================================================
+-- A posted stocktake is kept as it was posted  (0814)
+--
+-- A stocktake two short was posted, its line rewritten to "no
+-- difference" and the adjustment deleted: the movement and the journal
+-- stayed with nothing to say why.
+-- =====================================================================
+do $$
+declare
+  d       t_sf;
+  v_post  uuid;
+  v_draft uuid;
+  v_line  uuid;
+begin
+  select * into d from t_sf;
+  select id into v_post from public.stock_adjustments
+   where org_id = d.org and adjustment_no = 'ADJ-1';
+  perform pg_temp.check_eq('the stocktake above is posted',
+    (select status::text from public.stock_adjustments where id = v_post), 'posted');
+
+  perform pg_temp.check_refused('its line is not rewritten',
+    format('update public.stock_adjustment_lines set counted_quantity = 40, difference = 0 where adjustment_id = %L', v_post),
+    'ADJ-1 is posted, and its lines are kept as they were posted.%', '42501');
+  perform pg_temp.check_refused('nor deleted',
+    format('delete from public.stock_adjustment_lines where adjustment_id = %L', v_post),
+    'ADJ-1 is posted, and its lines are kept%', '42501');
+  perform pg_temp.check_refused('nor added to',
+    format($q$insert into public.stock_adjustment_lines
+                (org_id, adjustment_id, line_no, item_id, system_quantity, counted_quantity, difference, unit_cost, total_cost)
+              values (%L, %L, 2, %L, 38, 30, -8, 10, -80)$q$, d.org, v_post, d.item),
+    'ADJ-1 is posted, and its lines are kept%', '42501');
+  perform pg_temp.check_refused('the stocktake itself is not changed',
+    format('update public.stock_adjustments set reason = %L where id = %L', 'Recount', v_post),
+    'ADJ-1 is posted, and a stock adjustment is kept as it was posted:%', '42501');
+  perform pg_temp.check_refused('nor deleted',
+    format('delete from public.stock_adjustments where id = %L', v_post),
+    'ADJ-1 is posted, and a stock adjustment is kept%', '42501');
+  perform pg_temp.check_refused('nor one created already posted',
+    format($q$insert into public.stock_adjustments
+                (org_id, adjustment_no, adjustment_date, warehouse_id, reason, adjustment_type, status)
+              values (%L, 'ADJ-X', date '2026-03-03', %L, 'Typed', 'write_off', 'posted')$q$, d.org, d.wh),
+    'A stock adjustment is created as a draft (this one said posted).%', '42501');
+
+  -- A draft is the company's to edit, as before.
+  insert into public.stock_adjustments
+    (org_id, adjustment_no, adjustment_date, warehouse_id, reason, adjustment_type, status)
+  values (d.org, 'ADJ-2', date '2026-03-04', d.wh, 'Breakage', 'write_off', 'draft')
+  returning id into v_draft;
+  insert into public.stock_adjustment_lines
+    (org_id, adjustment_id, line_no, item_id, system_quantity, counted_quantity, difference, unit_cost, total_cost)
+  values (d.org, v_draft, 1, d.item, 38, 37, -1, 10, -10)
+  returning id into v_line;
+  update public.stock_adjustment_lines set counted_quantity = 36, difference = -2, total_cost = -20
+   where id = v_line;
+  update public.stock_adjustments set reason = 'Breakage, two' where id = v_draft;
+  perform pg_temp.check_true('a draft and its lines are edited as before',
+    (select reason = 'Breakage, two' from public.stock_adjustments where id = v_draft)
+    and (select difference = -2 from public.stock_adjustment_lines where id = v_line));
+  perform pg_temp.check_refused('but not marked posted without being posted',
+    format('update public.stock_adjustments set status = ''posted'' where id = %L', v_draft),
+    'ADJ-2 becomes posted by posting it%', '42501');
+  perform pg_temp.check_refused('and a line is not moved under a posted one',
+    format('update public.stock_adjustment_lines set adjustment_id = %L where id = %L', v_post, v_line),
+    'ADJ-1 is posted, and its lines are kept%', '42501');
+  delete from public.stock_adjustments where id = v_draft;
+  perform pg_temp.check_eq('and a draft is deleted with its lines',
+    (select count(*)::integer from public.stock_adjustment_lines where adjustment_id = v_draft), 0);
+end $$;
+
 reset role;
+
+-- The database's own statements pass: here the session, which owns the
+-- tables, notes the posted stocktake as a function running as its owner
+-- would.
+update public.stock_adjustments set notes = 'Counted by the night shift'
+ where org_id = (select org from t_sf) and adjustment_no = 'ADJ-1';
 
 -- The database's own statement passes: here the session, which owns the
 -- table, sets an item's cost as a function running as its owner would.
@@ -189,6 +264,10 @@ update public.items set average_cost = 3
 
 do $$
 begin
+  perform pg_temp.check_eq('the database writes on a posted stocktake',
+    (select notes from public.stock_adjustments
+      where org_id = (select org from t_sf) and adjustment_no = 'ADJ-1'),
+    'Counted by the night shift');
   perform pg_temp.check_eq('the database sets the figures it keeps',
     (select average_cost from public.items
       where org_id = (select org from t_sf) and code = 'Z'), 3::numeric);
