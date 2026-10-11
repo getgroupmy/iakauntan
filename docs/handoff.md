@@ -1868,7 +1868,12 @@ page and renumbering would quietly break the reference.
     it says, a posted line neither changed nor deleted. Each of the three
     doors restored by hand, grant and policy and then grant alone, fails
     the file (6 / 6); a policy alone fails its last assertion.
-    **Still to read back.**
+    **Applied, and read back** (11 October, read-only, after run
+    38112241568 on `6900b38` had applied the migrations): recorded;
+    `authenticated` holds SELECT on `expense_lines` and no INSERT,
+    UPDATE or DELETE, the only policies left are `expense_lines_select`
+    and the restrictive `module_gate_select`, the comment names `0809`,
+    and there is still no split line.
 77. ~~A late tax filing can be made to read on time by hand.~~
     **Raised and answered 11 October: read-only to clients. Built in
     `0810`.** `tax_filings` holds each LHDN filing's statutory due date
@@ -1890,7 +1895,13 @@ page and renumbering would quietly break the reference.
     the six doors restored by hand, grant and policy and then grant
     alone, fails the file (12 / 12); a policy alone fails its last
     assertion.
-    **Still to read back.**
+    **Applied, and read back** (11 October, read-only, after run
+    38114613172 on `63d2984` had applied the migrations): recorded;
+    `authenticated` holds SELECT on `tax_filings` and
+    `tax_estimate_payments` and no INSERT, UPDATE or DELETE on either,
+    the only policies left are `tax_filings_select` and
+    `tax_estimate_payments_select`, both comments name `0810`, and both
+    tables are still empty.
 78. ~~Overtime can be typed into a timesheet, unmarked and unexplained,
     and paid.~~ **Raised and answered 11 October: read-only to clients.
     Built in `0811`.** `calculate_payroll_run` pays overtime from
