@@ -1753,7 +1753,11 @@ page and renumbering would quietly break the reference.
     caught `einvoice_records.sql` (`0804`) putting into its consolidation
     the very invoice its client then prepares; the consolidation now
     holds an invoice of its own.
-    **Still to read back.**
+    **Applied, and read back** (11 October, read-only, after run
+    38106160750 on `ebf8b75` had applied the migrations): recorded; the
+    live `prepare_einvoice` hashes to e58f778d..., the same as the
+    migration's own body; SECURITY DEFINER, `authenticated` and the
+    service role may still execute it; the comment names `0805`.
 73. ~~A rent or strata billing run can be stamped void by hand, and the
     period billed again.~~ **Raised and answered 10 October: read-only
     to clients. Built in `0806`.** `raise_rent_invoices` and
