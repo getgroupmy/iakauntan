@@ -1695,7 +1695,15 @@ page and renumbering would quietly break the reference.
     CLI stack does not grant `service_role` the table, and
     `_local_stack.sql` no longer grants it any table by default.
     `einvoice_documents` itself was client-writable, and is item 71.
-    **Still to read back.**
+    **Applied, and read back** (11 October, read-only, after run
+    38102555746 on `059b1b3` -- the fix to run 38100240247, which went
+    red on `0803`'s own test files and deployed nothing -- had applied
+    the migrations): recorded; `app.einvoice_state_is_lhdns` hashes to
+    053f607b..., not a definer, its owner's alone, its trigger enabled
+    BEFORE INSERT OR UPDATE on both document tables;
+    `void_sales_document` hashes to 560d2ec8..., SECURITY DEFINER with
+    its grants as before; both the migration's own bodies, and both
+    comments name `0803`.
 71. ~~LHDN's own record -- the e-Invoices, their lines, submissions and
     the monthly consolidations -- is client-writable.~~ **Raised and
     answered 10 October: read-only to clients. Built in `0804`.**
