@@ -1789,7 +1789,8 @@ page and renumbering would quietly break the reference.
     `tax_estimate_payments` (item 77, `0810`), `bank_transactions`
     (item 75, `0808`),
     `leave_balances`,
-    `attendance_records` and `expense_lines` (item 76, `0809`).
+    `attendance_records` (item 78, `0811`) and `expense_lines` (item
+    76, `0809`).
     **Still to read back.**
 74. ~~The payroll year to date, which every later month's PCB is worked
     against, can be edited by hand.~~ **Raised and answered 11 October:
@@ -1877,6 +1878,26 @@ page and renumbering would quietly break the reference.
     the six doors restored by hand, grant and policy and then grant
     alone, fails the file (12 / 12); a policy alone fails its last
     assertion.
+    **Still to read back.**
+78. ~~Overtime can be typed into a timesheet, unmarked and unexplained,
+    and paid.~~ **Raised and answered 11 October: read-only to clients.
+    Built in `0811`.** `calculate_payroll_run` pays overtime from
+    `attendance_records`; `clock_in`, `clock_out`, the terminal punch,
+    the day's close and `adjust_attendance` write it, all definers, and
+    the app only reads it. `adjust_attendance` asks why, refuses a closed
+    pay period, recomputes the minutes and marks the day adjusted and by
+    whom -- but an `ALL` policy let HR write the table directly. Measured
+    as the owner with the role `authenticated`: `adjust_attendance`
+    refused a change with no reason, and 3,000 overtime minutes typed
+    into the same day, unmarked, paid fifty hours, RM937.50, on a RM2,600
+    employee's January payslip. Now the grants are revoked and the write
+    policy dropped; `attendance_records_select` reads (HR, the employee,
+    their manager). Production held no attendance record. Asserted in
+    `attendance_adjust.sql`'s `0811` block, as a client: overtime, a
+    day, a delete each refused, a correction through `adjust_attendance`
+    marked, signed and explained. Each of the three doors restored by
+    hand, grant and policy and then grant alone, fails the file (6 / 6);
+    a policy alone fails its last assertion.
     **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
@@ -2120,6 +2141,7 @@ function:
 | (the write grants and policies on `bank_transactions`) | `0808` | 6 / 6 restored by hand | -- | `bank_reconciliation.sql` (its `0808` block; insert, update and delete each restored with its policy and then alone; a policy alone fails its last assertion) |
 | (the write grants and policies on `expense_lines`) | `0809` | 6 / 6 restored by hand | -- | `expense_split.sql` (its `0809` block; insert, update and delete each restored with the policy and then alone; a policy alone fails its last assertion) |
 | (the write grants and policies on `tax_filings` and `tax_estimate_payments`) | `0810` | 12 / 12 restored by hand | -- | `tax_records.sql` (new in `0810`; each table's insert, update and delete restored with its policy and then alone; a policy alone fails its last assertion) |
+| (the write grants and policy on `attendance_records`) | `0811` | 6 / 6 restored by hand | -- | `attendance_adjust.sql` (its `0811` block; insert, update and delete each restored with the policy and then alone; a policy alone fails its last assertion) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |

@@ -345,4 +345,89 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- =====================================================================
+-- Corrected with a reason, or not at all  (0811)
+--
+-- The three refusals above were HR's to step round: an `ALL` policy let
+-- whoever may manage HR write the table, and 3,000 overtime minutes
+-- typed into a day -- not marked adjusted, no reason -- were paid as
+-- fifty hours. Asked as the owner, with the role `authenticated`.
+-- =====================================================================
+create temporary table t_aa (org uuid, emp uuid, rec uuid, hr uuid);
+grant select on t_aa to authenticated;
+
+do $$
+declare
+  v_org uuid; v_shift uuid; v_emp uuid; v_rec uuid;
+  v_day date := date '2026-06-03';
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_org := pg_temp.test_org('Kilang Sebab Sdn Bhd');
+  insert into public.work_shifts
+    (org_id, code, name, start_time, end_time, break_minutes,
+     grace_minutes, work_days, is_default)
+  values (v_org, 'DAY', 'Nine to six', '09:00', '18:00', 60, 10,
+          array[1,2,3,4,5], true)
+  returning id into v_shift;
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, employment_status)
+  values (v_org, 'E-1', 'Siti', v_day - 90, 'active') returning id into v_emp;
+  insert into public.employee_shifts (org_id, employee_id, shift_id, effective_from)
+  values (v_org, v_emp, v_shift, v_day - 90);
+  insert into public.attendance_records
+    (org_id, employee_id, work_date, shift_id, clock_in, status)
+  values (v_org, v_emp, v_day, v_shift,
+          (v_day + time '09:00') at time zone 'Asia/Kuala_Lumpur', 'incomplete')
+  returning id into v_rec;
+  insert into t_aa values (v_org, v_emp, v_rec, pg_temp.test_user());
+end $$;
+
+select set_config('request.jwt.claims',
+  json_build_object('sub', pg_temp.test_user(), 'role', 'authenticated')::text, true);
+set local role authenticated;
+
+do $$
+declare
+  d t_aa;
+  v_day date := date '2026-06-03';
+begin
+  select * into d from t_aa;
+  perform pg_temp.check_eq('HR asks as a client', current_user, 'authenticated');
+  perform pg_temp.check_eq('and reads the day',
+    (select count(*)::integer from public.attendance_records where id = d.rec), 1);
+
+  perform pg_temp.check_refused('overtime is not typed into a day',
+    format('update public.attendance_records set ot_normal_minutes = 3000 where id = %L', d.rec),
+    'permission denied for table attendance_records', '42501');
+  perform pg_temp.check_refused('nor a day typed in that nobody clocked',
+    format($q$insert into public.attendance_records (org_id, employee_id, work_date, status)
+              values (%L, %L, date '2026-06-04', 'present')$q$, d.org, d.emp),
+    'permission denied for table attendance_records', '42501');
+  perform pg_temp.check_refused('nor a day deleted',
+    format('delete from public.attendance_records where id = %L', d.rec),
+    'permission denied for table attendance_records', '42501');
+
+  -- The road, with its reason.
+  perform public.adjust_attendance(d.rec,
+    (v_day + time '09:00') at time zone 'Asia/Kuala_Lumpur',
+    (v_day + time '19:00') at time zone 'Asia/Kuala_Lumpur',
+    'Stayed for the stock count; confirmed by the supervisor');
+  perform pg_temp.check_true(
+    'a correction through adjust_attendance is marked, signed and explained',
+    (select is_adjusted and adjusted_by = d.hr
+            and adjustment_reason like 'Stayed for the stock count%'
+            and ot_normal_minutes > 0
+       from public.attendance_records where id = d.rec));
+end $$;
+
+reset role;
+
+do $$
+begin
+  perform pg_temp.check_eq('no write policy is left on the timesheet',
+    (select count(*)::integer from pg_policies
+      where schemaname = 'public' and tablename = 'attendance_records'
+        and cmd <> 'SELECT'), 0);
+end $$;
+
 rollback;

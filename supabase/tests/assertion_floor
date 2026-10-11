@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17179
+17186
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1326,3 +1326,9 @@
 # either table refused, an instalment cleared through its function).
 # Measured: `all SQL assertions passed (396 files, 17179 assertions
 # executed)`.
+#
+# 17179 -> 17186, 11 October: 0811, a timesheet is corrected with a
+# reason (attendance_adjust.sql, 7: as a client, overtime typed into a
+# day, a day typed in and a day deleted each refused; a correction
+# through adjust_attendance marked, signed and explained). Measured:
+# `all SQL assertions passed (396 files, 17186 assertions executed)`.
