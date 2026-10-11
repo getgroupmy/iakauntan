@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17186
+17212
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1332,3 +1332,11 @@
 # day, a day typed in and a day deleted each refused; a correction
 # through adjust_attendance marked, signed and explained). Measured:
 # `all SQL assertions passed (396 files, 17186 assertions executed)`.
+#
+# 17186 -> 17212, 11 October: 0812, a leave balance is adjusted with a
+# reason (new leave_adjustments.sql, 26: the balance refusing a
+# client's hand edits and inserts, the adjustment log refusing them
+# too; adjust_leave_balance adding and taking days with who and why, a
+# new year's balance made, its refusals in its own words, and the
+# employee reading why and not adjusting). Measured: `all SQL
+# assertions passed (397 files, 17212 assertions executed)`.

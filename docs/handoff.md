@@ -1788,7 +1788,7 @@ page and renumbering would quietly break the reference.
     `tax_filings` and
     `tax_estimate_payments` (item 77, `0810`), `bank_transactions`
     (item 75, `0808`),
-    `leave_balances`,
+    `leave_balances` (item 79, `0812`),
     `attendance_records` (item 78, `0811`) and `expense_lines` (item
     76, `0809`).
     **Still to read back.**
@@ -1898,6 +1898,32 @@ page and renumbering would quietly break the reference.
     marked, signed and explained. Each of the three doors restored by
     hand, grant and policy and then grant alone, fails the file (6 / 6);
     a policy alone fails its last assertion.
+    **Still to read back.**
+79. ~~Leave already taken can be set back to nought by hand, and taken
+    again.~~ **Raised and answered 11 October: a function with a reason.
+    Built in `0812`.** `adjustment_days` has been in the balance
+    arithmetic since `0037` and nothing wrote it, so HR adjusted a
+    balance by writing `leave_balances` -- through an `ALL` policy that
+    let every column be written. Measured as the owner with the role
+    `authenticated`: eight days entitled and taken, a ninth refused;
+    `taken_days` set back to nought by hand, and eight more approved --
+    sixteen paid days on an entitlement of eight, a balance saying
+    eight. Now `adjust_leave_balance(employee, leave type, year, days,
+    reason)` -- HR only, a reason required, days more or fewer -- adds to
+    `adjustment_days`, creating the year's balance if there is none, and
+    keeps who, when, how many and why in the new
+    `leave_balance_adjustments`, which HR, the employee and their manager
+    read and nobody writes but the function, and which is on the
+    realtime feed like every table with an `org_id` (the full suite's
+    `live_change_feed.sql` caught a first draft without it).
+    `leave_balances` is
+    read-only to clients. Production held twelve balances, none
+    adjusted, and no leave request. NOT IN THE APP YET: there is no
+    screen that calls `adjust_leave_balance`; it is reachable by RPC.
+    New `leave_adjustments.sql`, added to `ci.yml`. Swept 13 / 13;
+    SECURITY DEFINER flipped by hand fails the file; each of the three
+    doors on the balance restored by hand fails it (6 / 6), as do a
+    policy alone and an insert opened on the log.
     **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
@@ -2142,6 +2168,7 @@ function:
 | (the write grants and policies on `expense_lines`) | `0809` | 6 / 6 restored by hand | -- | `expense_split.sql` (its `0809` block; insert, update and delete each restored with the policy and then alone; a policy alone fails its last assertion) |
 | (the write grants and policies on `tax_filings` and `tax_estimate_payments`) | `0810` | 12 / 12 restored by hand | -- | `tax_records.sql` (new in `0810`; each table's insert, update and delete restored with its policy and then alone; a policy alone fails its last assertion) |
 | (the write grants and policy on `attendance_records`) | `0811` | 6 / 6 restored by hand | -- | `attendance_adjust.sql` (its `0811` block; insert, update and delete each restored with the policy and then alone; a policy alone fails its last assertion) |
+| `adjust_leave_balance`; (the write grants and policy on `leave_balances`) | `0812` | 13 / 13; 6 / 6 restored by hand | -- | `leave_adjustments.sql` (new in `0812`; SECURITY DEFINER flipped by hand; a policy alone and an opened log each fail it) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |
