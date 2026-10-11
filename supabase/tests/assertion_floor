@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17351
+17371
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1416,4 +1416,13 @@
 # either side; CP38 RM300 beside the PCB; a child's share of 400 or -50
 # refused, PCB RM413.65 with the whole of it and RM445.30 with none).
 # Measured: `all SQL assertions passed (405 files, 17351 assertions
+# executed)`.
+#
+# 17351 -> 17371, 11 October: 0822, an asset is depreciated by
+# depreciating it (fixed_asset_figures.sql, 20: RM600 in register and
+# ledger after March; the depreciation reset, and each of the six
+# columns alone, refused on an update and on an insert; March run again
+# charging nothing more; the editor's fields still its own; June, and a
+# disposal, through the functions; the owner at the top let through).
+# Measured: `all SQL assertions passed (406 files, 17371 assertions
 # executed)`.

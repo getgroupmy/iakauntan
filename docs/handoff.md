@@ -2198,6 +2198,29 @@ page and renumbering would quietly break the reference.
     hand, 18 / 18 with a control: each constraint dropped, each bound
     opened or pulled in by its column's smallest step.
     **Still to read back.**
+89. ~~An asset's depreciation can be reset by hand and charged again,
+    and an asset marked disposed with no journal.~~ **Raised and
+    answered 11 October: guard the six columns. Built in `0822`.**
+    `run_depreciation` charges each asset from the day after its
+    `depreciated_to` and moves it on with `accumulated_depreciation`;
+    `dispose_fixed_asset` posts a disposal and then sets `status`, the
+    date, the proceeds and the entry. The asset editor sends none of
+    these, but the table's policies let a client write them all.
+    Measured as the owner with the role `authenticated`: an RM12,000
+    van over sixty months depreciated to 31 March, RM600 in register and
+    ledger; reset by hand and March run again -- RM1,200 in the ledger
+    against RM600 in the register; and marked disposed by hand, with no
+    journal, gone from the register screen with its cost still in the
+    ledger. Now `a_fixed_asset_figures_are_the_runs`, as `0813` did for
+    an item's cost, refuses a client's own statement that writes any of
+    the six or creates an asset with any of them other than as new; the
+    functions pass. NOT security definer. Production held seven assets,
+    all depreciated, none disposed. New `fixed_asset_figures.sql`, added
+    to `ci.yml`, asks each column on its own, on an update and an
+    insert. Swept 15 / 16; the survivor, the guard's depth clause, is an
+    equivalent mutant -- every writer of the table is a definer -- and
+    the file says so beside the owner's assertion.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -2451,6 +2474,7 @@ function:
 | (the write grants and policies on `number_sequences`) | `0819` | 6 / 6 restored by hand | -- | `document_numbering_kept.sql` (new in `0819`; insert, update and delete each restored with its policy and then alone; a policy alone fails its last assertion) |
 | (five CHECK constraints on `corp_resolutions`) | `0820` | 12 / 12 by hand | -- | `corp_resolution_checks.sql` (new in `0820`; each constraint dropped and each boundary loosened; the nobody-listed exemption only after the file sent an empty list, a NULL one passing a CHECK by itself) |
 | (five CHECK constraints on `employees` and `employee_dependants`) | `0821` | 18 / 18 by hand | -- | `statutory_inputs_in_range.sql` (new in `0821`; each constraint dropped, each bound opened or pulled in by the column's smallest step; the engine's EPF and PCB asserted at figures in range) |
+| `app.fixed_asset_figures_are_the_runs` | `0822` | 15 / 16 | 1 (the depth clause: every writer of `fixed_assets` is a definer, so nothing writes it one trigger down as a client; said beside the owner's assertion) | `fixed_asset_figures.sql` (new in `0822`; each of the six columns asked alone on update and on insert; the owner at the top let through) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |
