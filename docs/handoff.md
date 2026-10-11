@@ -1986,7 +1986,16 @@ page and renumbering would quietly break the reference.
     flipped by hand; each of the nine doors restored by hand fails it
     (18 / 18, five only after the file asked every door by name), as
     does a policy alone.
-    **Still to read back.**
+    **Applied, and read back** (11 October, read-only, after run
+    38119212800 on `ebde58d` had applied the migrations): recorded;
+    `app.stock_figures_are_the_stocks`'s body matches the migration (md5
+    `672e5151`), not a definer, executable by its owner alone, and
+    `a_stock_figures_are_the_stocks` is on `items` before insert or
+    update; `stock_movements`, `stock_levels` and `stock_lots` have no
+    INSERT, UPDATE or DELETE for `authenticated`, only their SELECT
+    policies (and `stock_movements`' `module_gate_select`), comments
+    naming `0813`; the ninety-four movements are there and no tracked
+    item's quantity disagrees with its levels.
 81. ~~A posted stocktake can be rewritten and deleted, leaving its
     movement and journal unexplained.~~ **Raised and answered 11
     October: freeze once posted. Built in `0814`.** The app drafts a
