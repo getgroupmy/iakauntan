@@ -1767,11 +1767,31 @@ page and renumbering would quietly break the reference.
     ten already guarded by a trigger that asks the caller. Of the rest,
     the configuration lists are written by `saveSetupRow` with the table
     in a variable, so that scan cannot tell them apart; the records
-    worth the same question next are `payroll_ytd` (only
-    `post_payroll_run` writes it; the policy is `can_run_payroll`, and
-    the YTD feeds the next month's PCB), `tax_filings` and
+    worth the same question next were `payroll_ytd` (item 74, `0807`),
+    `tax_filings` and
     `tax_estimate_payments`, `bank_transactions`, `leave_balances`,
     `attendance_records` and `expense_lines`.
+    **Still to read back.**
+74. ~~The payroll year to date, which every later month's PCB is worked
+    against, can be edited by hand.~~ **Raised and answered 11 October:
+    read-only to clients. Built in `0807`.** `payroll_ytd` is written by
+    `post_payroll_run` alone and read by `app.calc_pcb`; the EA form
+    reads the payslips, and a previous employer's figures go in
+    `employee_ytd_opening`, which the app writes. Its `ALL` policy let
+    anybody who may run payroll write it. Measured as the owner with the
+    role `authenticated`: January posted at RM8,000 (PCB RM508.65);
+    February computes RM508.60, and with the year to date edited by hand
+    (RM3,000 more tax paid, RM5,000 less taxable) RM149.55 -- RM359 a
+    month under-deducted for the rest of the year, on payslips and an EA
+    form that each look right. Now the grants are revoked and the write
+    policy dropped; `payroll_ytd_select` already lets a payroll runner
+    read every employee's and an employee their own. Production held four
+    rows from nine posted runs, each agreeing with its payslips. New
+    `payroll_ytd.sql`, added to `ci.yml`: the edit refused, February
+    worked to RM508.60 and posted into the year to date by the same
+    client. Each of the three doors restored by hand, grant and policy
+    and then grant alone, fails the file (6 / 6); a policy alone fails
+    its last assertion.
     **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
@@ -2011,6 +2031,7 @@ function:
 | (the write grants and policies on the five e-Invoice tables) | `0804` | 30 / 30 restored by hand | -- | `einvoice_records.sql` (new in `0804`; each table's insert, update and delete restored with its policy and then alone; a policy alone fails its last assertion) |
 | `prepare_einvoice` (the consolidation check) | `0805` | 4 / 4 | -- | `pos_einvoice_consolidation.sql` (its `0805` block, as a client: a consolidated sale refused in `request_einvoice_for_sale`'s words, a sale outside the return prepared beside it) |
 | (the write grants and policies on the four billing run tables) | `0806` | 24 / 24 restored by hand | -- | `billing_runs.sql` (new in `0806`; each table's insert, update and delete restored with its policy and then alone; a policy alone fails its last assertion) |
+| (the write grants and policy on `payroll_ytd`) | `0807` | 6 / 6 restored by hand | -- | `payroll_ytd.sql` (new in `0807`; insert, update and delete each restored with the policy and then alone; a policy alone fails its last assertion) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |

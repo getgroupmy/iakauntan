@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17136
+17145
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1298,4 +1298,11 @@
 # a run not stamped void by hand, so neither period is raised twice; the
 # void functions still undo a run and the period is raised once more).
 # Measured: `all SQL assertions passed (394 files, 17136 assertions
+# executed)`.
+#
+# 17136 -> 17145, 11 October: 0807, the year to date is what was paid
+# (new payroll_ytd.sql, 9: the year to date read, and refusing a
+# client's insert, the measured edit and a delete; February worked to
+# RM508.60 against January and posted into it by the same client).
+# Measured: `all SQL assertions passed (395 files, 17145 assertions
 # executed)`.
