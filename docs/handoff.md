@@ -2070,7 +2070,11 @@ page and renumbering would quietly break the reference.
     doors restored by hand, grant and policy and then grant alone, fails
     the file (6 / 6) with a no-op control passing; a policy alone fails
     its last assertion.
-    **Still to read back.**
+    **Applied, and read back** (11 October, read-only, after run
+    38123800779 on `3918fc1` had applied the migrations): recorded;
+    `authenticated` holds SELECT on `corp_filings` and no INSERT, UPDATE
+    or DELETE, the only policy left is `corp_filings_select`, the
+    comment names `0816`, and the one filing is there.
 84. ~~A posted payroll run can be set back, edited and set posted again:
     the bank file pays more than the journal and the EA form loses the
     tax.~~ **Raised and answered 11 October: read-only to clients, and
