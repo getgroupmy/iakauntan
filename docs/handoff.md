@@ -2168,7 +2168,11 @@ page and renumbering would quietly break the reference.
     doors restored by hand, grant and policy and then grant alone, fails
     the file (6 / 6) with a no-op control passing; a policy alone fails
     its last assertion.
-    **Still to read back.**
+    **Applied, and read back** (11 October, read-only, after run
+    38130147603 on `0c371de` had applied the migrations): recorded;
+    `authenticated` holds SELECT on `number_sequences` and no INSERT,
+    UPDATE or DELETE, the only policy left is `number_sequences_select`,
+    the comment names `0819`, and the 111 series are there.
 87. ~~The minute book takes resolutions that could not have happened.~~
     **Raised and answered 11 October: check constraints. Built in
     `0820`.** The resolution screen refuses four things before it saves
