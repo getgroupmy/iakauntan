@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17252
+17262
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1357,3 +1357,11 @@
 # moved under a posted one; a draft edited and deleted as before; the
 # database noting a posted one). Measured: `all SQL assertions passed
 # (398 files, 17252 assertions executed)`.
+#
+# 17252 -> 17262, 11 October: 0815, a payment is applied by applying it
+# (payment_allocations.sql, 10: a receipt settling RM1,000 with RM50
+# off read as a client; its allocation not deleted, its amount or
+# discount not changed and none typed in; the invoice still settled; a
+# second receipt applied through allocate_with_discount; no write policy
+# left). Measured: `all SQL assertions passed (399 files, 17262
+# assertions executed)`.

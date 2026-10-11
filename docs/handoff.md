@@ -1979,6 +1979,27 @@ page and renumbering would quietly break the reference.
     `stock_figures.sql`'s `0814` block, as a client. Swept 11 / 11;
     SECURITY DEFINER flipped by hand fails the file.
     **Still to read back.**
+82. ~~A receipt's allocation can be deleted by hand, and the documents
+    stop agreeing with the ledger.~~ **Raised and answered 11 October:
+    read-only to clients. Built in `0815`.** `payment_allocations` ties a
+    receipt or payment to what it settled, and `apply_allocation` moves
+    the documents' figures. The app writes every allocation through
+    `allocate_with_discount` and its siblings (credit notes, deposits,
+    contras, cheques, the till), all definers -- "one path means the
+    discount cannot be written by a route that forgets the journal" --
+    but clients could write the table. Measured as the owner with the
+    role `authenticated`: RM950 with a RM50 settlement discount settled
+    a RM1,000 invoice; its allocation deleted by hand, the invoice owed
+    RM1,000 and the receipt had RM950 unapplied, while the ledger said
+    nothing was owed -- RM50 apart. Now the grants are revoked and the
+    write policies dropped; reading stays. `posted_document_is_frozen.sql`
+    allocated as a client and now allocates through
+    `allocate_with_discount`. Production held seventy-six allocations,
+    none discounted. New `payment_allocations.sql`, added to `ci.yml`.
+    Each of the three doors restored by hand, grant and policy and then
+    grant alone, fails the file (6 / 6); a policy alone fails its last
+    assertion.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -2225,6 +2246,7 @@ function:
 | `adjust_leave_balance`; (the write grants and policy on `leave_balances`) | `0812` | 13 / 13; 6 / 6 restored by hand | -- | `leave_adjustments.sql` (new in `0812`; SECURITY DEFINER flipped by hand; a policy alone and an opened log each fail it) |
 | `app.stock_figures_are_the_stocks`; (the write grants and policies on `stock_movements`, `stock_levels`, `stock_lots`) | `0813` | 9 / 9; 18 / 18 restored by hand | -- | `stock_figures.sql` (new in `0813`; one guard mutant only after the database set a cost at the top level; five doors only after every door was asked by name; SECURITY DEFINER flipped by hand) |
 | `app.a_posted_adjustment_is_kept` | `0814` | 11 / 11 | -- | `stock_figures.sql` (its `0814` block, as a client; the database's own note on a posted stocktake passes; SECURITY DEFINER flipped by hand) |
+| (the write grants and policies on `payment_allocations`) | `0815` | 6 / 6 restored by hand | -- | `payment_allocations.sql` (new in `0815`; insert, update and delete each restored with its policy and then alone; a policy alone fails its last assertion) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |
