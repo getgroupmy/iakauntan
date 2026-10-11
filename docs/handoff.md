@@ -2011,6 +2011,32 @@ page and renumbering would quietly break the reference.
     grant alone, fails the file (6 / 6); a policy alone fails its last
     assertion.
     **Still to read back.**
+83. ~~An SSM filing nobody lodged can be typed in as lodged, and leave
+    the overdue list.~~ **Raised and answered 11 October: read-only to
+    clients. Built in `0816`.** `corp_filings` holds each SSM filing
+    taken up for a company and whether and when it was lodged;
+    `corp_upcoming_filings` computes every deadline from the entity and
+    the Act and drops the ones whose row says `lodged`, `approved` or
+    `not_applicable`. The app writes the table only through
+    `corp_open_filing` and `corp_mark_lodged`, which refuses a lodgement
+    in the future, before its event, or recorded twice; but
+    `corp_filings_write`, an `ALL` policy asking `can_write`, let any
+    member who may write do it directly. Measured as the owner with the
+    role `authenticated`: an Annual Return due 11 April 2025, never
+    lodged, typed in as lodged on 1 January 2099 with the reference
+    "MADE-UP", left the overdue list; a lodgement recorded properly on
+    30 September 2026 was rewritten by hand to 1 January 2025, before
+    the anniversary it reports, under another reference, and deleted.
+    Now the grants are revoked and the write policy dropped; reading
+    stays. Nothing in the app sets `approved`, `rejected` or
+    `not_applicable`, and now no client can; each wants its own
+    function, with a reason, when the app needs it. Production held one
+    filing, lodged through `corp_mark_lodged`. New
+    `corp_filings_recorded.sql`, added to `ci.yml`. Each of the three
+    doors restored by hand, grant and policy and then grant alone, fails
+    the file (6 / 6) with a no-op control passing; a policy alone fails
+    its last assertion.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -2258,6 +2284,7 @@ function:
 | `app.stock_figures_are_the_stocks`; (the write grants and policies on `stock_movements`, `stock_levels`, `stock_lots`) | `0813` | 9 / 9; 18 / 18 restored by hand | -- | `stock_figures.sql` (new in `0813`; one guard mutant only after the database set a cost at the top level; five doors only after every door was asked by name; SECURITY DEFINER flipped by hand) |
 | `app.a_posted_adjustment_is_kept` | `0814` | 11 / 11 | -- | `stock_figures.sql` (its `0814` block, as a client; the database's own note on a posted stocktake passes; SECURITY DEFINER flipped by hand) |
 | (the write grants and policies on `payment_allocations`) | `0815` | 6 / 6 restored by hand | -- | `payment_allocations.sql` (new in `0815`; insert, update and delete each restored with its policy and then alone; a policy alone fails its last assertion) |
+| (the write grant and policy on `corp_filings`) | `0816` | 6 / 6 restored by hand | -- | `corp_filings_recorded.sql` (new in `0816`; insert, update and delete each restored with the `ALL` policy and then alone; a policy alone fails its last assertion) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |

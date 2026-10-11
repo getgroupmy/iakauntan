@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17262
+17276
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1365,3 +1365,11 @@
 # second receipt applied through allocate_with_discount; no write policy
 # left). Measured: `all SQL assertions passed (399 files, 17262
 # assertions executed)`.
+#
+# 17262 -> 17276, 11 October: 0816, a lodgement is recorded as it
+# happened (corp_filings_recorded.sql, 14: an overdue Annual Return not
+# typed in as lodged and still on the list; one opened and lodged
+# through the functions and off the list; its date, reference and row
+# not rewritten or deleted, an open one not marked not applicable, the
+# function refusing it twice; no write policy left). Measured: `all
+# SQL assertions passed (400 files, 17276 assertions executed)`.
