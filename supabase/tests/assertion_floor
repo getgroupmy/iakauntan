@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17313
+17323
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1391,3 +1391,11 @@
 # once paid, the run named; a month not yet run, and an employee entered
 # after the run, still corrected). Measured: `all SQL assertions passed
 # (402 files, 17313 assertions executed)`.
+#
+# 17313 -> 17323, 11 October: 0819, a series is set through its
+# setting (document_numbering_kept.sql, 10: three invoices issued; the
+# setting refusing to wind the series back, and the row not wound back,
+# deleted or typed in by hand; the fourth invoice numbered after the
+# third; a new shape set through the setting and drawn; no write policy
+# left). Measured: `all SQL assertions passed (403 files, 17323
+# assertions executed)`.

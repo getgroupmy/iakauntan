@@ -2122,6 +2122,27 @@ page and renumbering would quietly break the reference.
     New `attendance_paid.sql`, added to `ci.yml`. Swept 9 / 9, the first
     time; SECURITY DEFINER flipped by hand fails the file.
     **Still to read back.**
+86. ~~An admin can wind a number series back by hand, and every invoice
+    after it fails on the unique index.~~ **Raised and answered 11
+    October: read-only to clients. Built in `0819`.** `0480` gave
+    `number_sequences` a setting, `set_document_numbering`, which the
+    settings screen calls and which refuses a next number below the
+    last one issued -- the draw would otherwise "refuse ... with the
+    index's message, on somebody else's screen". But `0010`'s admin
+    insert, update and delete policies stayed. Measured as the owner
+    with the role `authenticated`: INV-2026-00001 to 00003 issued; the
+    setting refused a next number of 1; the row updated directly to 1
+    was accepted, and the next invoice failed with `duplicate key value
+    violates unique constraint` -- the failed draw rolls back with it,
+    so every invoice after it fails the same way until somebody mends
+    the row. Deleting the row did the same. Now the grants are revoked
+    and the three write policies dropped; reading stays. Production held
+    111 series across fifteen companies. New
+    `document_numbering_kept.sql`, added to `ci.yml`. Each of the three
+    doors restored by hand, grant and policy and then grant alone, fails
+    the file (6 / 6) with a no-op control passing; a policy alone fails
+    its last assertion.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -2372,6 +2393,7 @@ function:
 | (the write grant and policy on `corp_filings`) | `0816` | 6 / 6 restored by hand | -- | `corp_filings_recorded.sql` (new in `0816`; insert, update and delete each restored with the `ALL` policy and then alone; a policy alone fails its last assertion) |
 | (the write grants and policies on `payroll_runs`, `payslips`, `payslip_lines`, `pay_periods`) | `0817` | 24 / 24 restored by hand | -- | `payroll_records.sql` (new in `0817`; each table's insert, update and delete restored with its policies and then alone; the write policy alone and a restrictive gate alone each fail its last assertion) |
 | `adjust_attendance` (a day paid on a posted or paid run) | `0818` | 9 / 9 | -- | `attendance_paid.sql` (new in `0818`; the period's first and last days and one between, a month not yet run, a run calculated and then paid, an employee entered after the run; SECURITY DEFINER flipped by hand) |
+| (the write grants and policies on `number_sequences`) | `0819` | 6 / 6 restored by hand | -- | `document_numbering_kept.sql` (new in `0819`; insert, update and delete each restored with its policy and then alone; a policy alone fails its last assertion) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |
