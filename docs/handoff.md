@@ -2264,6 +2264,33 @@ page and renumbering would quietly break the reference.
     alone, fails the file (6 / 6) with a no-op control passing; a policy
     alone fails its last assertion.
     **Still to read back.**
+91. ~~A posted expense can be rewritten, set back to draft and deleted,
+    its journal left behind.~~ **Raised and answered 11 October: freeze
+    once posted. Built in `0824`.** The app records an expense as a
+    draft and posts it with `post_expense`; it never updates or deletes
+    one after, and attachments live in their own table. `0238` freezes a
+    posted invoice or bill to the columns its journal was built from and
+    refuses deleting one; an expense had only `refuse_reposting`.
+    Measured as the owner with the role `authenticated`: a posted RM500
+    expense of 4 March rewritten to RM50 on 1 May, set back to draft and
+    deleted, each accepted, the RM500 out of the bank left in the
+    ledger. Now `a_posted_expense_is_kept`, as `0814` did for a
+    stocktake, refuses a client's own statement that changes a posted
+    expense's twenty-one journalled columns (figures, accounts, dates,
+    dimensions, state, journal link, deletion mark) or deletes it; that
+    creates an expense other than as a draft; or that moves a draft's
+    state. The description and reference stay editable (the receipt is
+    in the attachments module); drafts are as before; the functions
+    pass. NOT security definer. Production held one expense, posted.
+    `posted_link_is_immutable.sql` asked a client to clear a posted
+    expense's journal link and expected `0403`'s sentence, which the
+    full suite caught: the client is refused by this guard first now,
+    and `0403`'s sentence is asked of the owner, where it is the one
+    that answers. New `posted_expense_kept.sql`, added to `ci.yml`, asks
+    every frozen column on its own. Swept 33 / 34; the survivor, the
+    depth clause, is equivalent -- the only two writers are definers --
+    and the file says so.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -2519,6 +2546,7 @@ function:
 | (five CHECK constraints on `employees` and `employee_dependants`) | `0821` | 18 / 18 by hand | -- | `statutory_inputs_in_range.sql` (new in `0821`; each constraint dropped, each bound opened or pulled in by the column's smallest step; the engine's EPF and PCB asserted at figures in range) |
 | `app.fixed_asset_figures_are_the_runs` | `0822` | 15 / 16 | 1 (the depth clause: every writer of `fixed_assets` is a definer, so nothing writes it one trigger down as a client; said beside the owner's assertion) | `fixed_asset_figures.sql` (new in `0822`; each of the six columns asked alone on update and on insert; the owner at the top let through) |
 | (the write grants and policies on `bank_accounts`) | `0823` | 6 / 6 restored by hand | -- | `bank_accounts_kept.sql` (new in `0823`; insert, update and delete each restored with its policy and then alone; a policy alone fails its last assertion) |
+| `app.a_posted_expense_is_kept` | `0824` | 33 / 34 | 1 (the depth clause: the only writers of `expenses` are two definers; said beside the owner's assertion) | `posted_expense_kept.sql` (new in `0824`; every one of the twenty-one frozen columns asked alone; eight answered first by a key, a policy, the branch check or `refuse_reposting`, killed because the guard's own sentence is asked for) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |

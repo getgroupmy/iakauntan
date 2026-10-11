@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17382
+17418
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1434,3 +1434,12 @@
 # RM500 receipt a debit to the bank and the cached balance what was
 # posted; renamed through the setup; no write policy left). Measured:
 # `all SQL assertions passed (407 files, 17382 assertions executed)`.
+#
+# 17382 -> 17418, 11 October: 0824, an expense is kept as it was posted
+# (posted_expense_kept.sql, 36: a draft corrected and deleted as before;
+# a draft's state, posting time and journal not moved by hand; none
+# created posted; EXP-1 posted through post_expense; rewritten to RM50
+# or deleted refused, and each of the twenty-one journalled columns
+# refused on its own; the description and reference still put right;
+# the owner at the top let through). Measured: `all SQL assertions
+# passed (408 files, 17418 assertions executed)`.

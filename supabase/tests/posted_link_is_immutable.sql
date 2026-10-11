@@ -124,16 +124,15 @@ begin
   -- ------------------------------------------------------------------
   -- Clearing it
   -- ------------------------------------------------------------------
+  -- Since `0824` a client meets the posted-expense guard first, which
+  -- refuses every journalled column of a posted expense; `0403`'s own
+  -- refusal, which stands for the functions too, is asked below as the
+  -- owner, where it is the one that answers.
   begin
     update public.expenses set gl_entry_id = null where id = c.exp;
     raise exception
       'FAIL: a posted expense was unposted by clearing its own column';
   exception when sqlstate '42501' then
-    get stacked diagnostics v_msg = message_text;
-    perform pg_temp.check_true('and the refusal says what would happen next',
-      v_msg like '%carry it twice%');
-    perform pg_temp.check_true('and names the journal it is already in',
-      v_msg like ('%' || c.entry || '%'));
     raise notice 'ok   the link to the journal cannot be cleared';
   end;
 
@@ -188,6 +187,25 @@ begin
 end $$;
 
 reset role;
+
+-- `0403`'s refusal, asked of the owner: the posted-expense guard of
+-- `0824` lets the owner through, and this one does not.
+do $$
+declare c record; v_msg text;
+begin
+  select * into c from t_link;
+  begin
+    update public.expenses set gl_entry_id = null where id = c.exp;
+    raise exception
+      'FAIL: the owner unposted a posted expense by clearing its own column';
+  exception when sqlstate '42501' then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('and the refusal says what would happen next',
+      v_msg like '%carry it twice%');
+    perform pg_temp.check_true('and names the journal it is already in',
+      v_msg like ('%' || c.entry || '%'));
+  end;
+end $$;
 
 -- ---------------------------------------------------------------------
 -- Every table that carries the column, not a list of them
