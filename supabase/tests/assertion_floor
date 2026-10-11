@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17334
+17351
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1407,3 +1407,13 @@
 # by constraint name; five that could have happened minuted, one with
 # an empty list of those present; an edit held to the same). Measured:
 # `all SQL assertions passed (404 files, 17334 assertions executed)`.
+#
+# 17334 -> 17351, 11 October: 0821, the statutory inputs are in range
+# (statutory_inputs_in_range.sql, 17: EPF RM880/RM960 and PCB RM445.30
+# on RM8,000; voluntary rates below nothing or past a hundred, a
+# negative CP38 or zakat, and an employee made with one, refused;
+# RM1,040/RM1,040 at two and one per cent above; a hundred, the edge,
+# either side; CP38 RM300 beside the PCB; a child's share of 400 or -50
+# refused, PCB RM413.65 with the whole of it and RM445.30 with none).
+# Measured: `all SQL assertions passed (405 files, 17351 assertions
+# executed)`.

@@ -2169,6 +2169,30 @@ page and renumbering would quietly break the reference.
     only after the file sent an empty list rather than none, since a
     NULL list passes a CHECK on its own.
     **Still to read back.**
+88. ~~The payroll engine's statutory inputs are kept in range only on
+    their screens.~~ **Raised and answered 11 October: check
+    constraints. Built in `0821`.** `cp38_monthly`, `zakat_monthly` and
+    the two voluntary EPF rates on `employees`, and
+    `employee_dependants.relief_claim_percent`, go straight into
+    `calculate_payroll_run`; `standing_deductions.dart` and
+    `employee_records.dart` refuse a negative amount, a rate above 100
+    and a share outside 0 to 100, and the second said "the database will
+    take 150, or -50, without a word". Measured as the owner with the
+    role `authenticated`, on an RM8,000 employee: voluntary rates of -11
+    and -13 accepted, EPF RM880 and RM960 becoming RM0.00 and -RM80.00;
+    a CP38 of -RM300 accepted onto the payslip; a child's share of 400
+    per cent accepted, PCB RM413.65 becoming RM318.65. Now five named
+    constraints with their sentences as comments. The screen's fraction
+    warning (a rate between 0 and 1) stays the screen's. Production held
+    four employees, no dependant, none out of range. New
+    `statutory_inputs_in_range.sql`, added to `ci.yml`: the EPF and PCB
+    the engine makes of figures in range are asserted -- RM880/RM960 and
+    RM445.30, RM1,040/RM1,040 at two and one per cent above, CP38 RM300
+    beside the PCB, RM413.65 with one child and RM445.30 with none of
+    the relief -- so a bound that moved a number would show. Swept by
+    hand, 18 / 18 with a control: each constraint dropped, each bound
+    opened or pulled in by its column's smallest step.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -2421,6 +2445,7 @@ function:
 | `adjust_attendance` (a day paid on a posted or paid run) | `0818` | 9 / 9 | -- | `attendance_paid.sql` (new in `0818`; the period's first and last days and one between, a month not yet run, a run calculated and then paid, an employee entered after the run; SECURITY DEFINER flipped by hand) |
 | (the write grants and policies on `number_sequences`) | `0819` | 6 / 6 restored by hand | -- | `document_numbering_kept.sql` (new in `0819`; insert, update and delete each restored with its policy and then alone; a policy alone fails its last assertion) |
 | (five CHECK constraints on `corp_resolutions`) | `0820` | 12 / 12 by hand | -- | `corp_resolution_checks.sql` (new in `0820`; each constraint dropped and each boundary loosened; the nobody-listed exemption only after the file sent an empty list, a NULL one passing a CHECK by itself) |
+| (five CHECK constraints on `employees` and `employee_dependants`) | `0821` | 18 / 18 by hand | -- | `statutory_inputs_in_range.sql` (new in `0821`; each constraint dropped, each bound opened or pulled in by the column's smallest step; the engine's EPF and PCB asserted at figures in range) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |
