@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17323
+17334
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1399,3 +1399,11 @@
 # third; a new shape set through the setting and drawn; no write policy
 # left). Measured: `all SQL assertions passed (403 files, 17323
 # assertions executed)`.
+#
+# 17323 -> 17334, 11 October: 0820, a minute says what could have
+# happened (corp_resolution_checks.sql, 11: a written resolution at a
+# meeting, an effect before the passing, an undated signature, votes
+# and abstentions past those present and negative ones each refused,
+# by constraint name; five that could have happened minuted, one with
+# an empty list of those present; an edit held to the same). Measured:
+# `all SQL assertions passed (404 files, 17334 assertions executed)`.

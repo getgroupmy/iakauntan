@@ -2149,6 +2149,26 @@ page and renumbering would quietly break the reference.
     the file (6 / 6) with a no-op control passing; a policy alone fails
     its last assertion.
     **Still to read back.**
+87. ~~The minute book takes resolutions that could not have happened.~~
+    **Raised and answered 11 October: check constraints. Built in
+    `0820`.** The resolution screen refuses four things before it saves
+    -- a written resolution (circulated under s.297) recorded as passed
+    at a meeting, an effect before the passing, a signature with no
+    date, more votes than people present -- and `resolution_sheet.dart`
+    said of the last, "Nothing in the database checks it". Nothing did,
+    for any of them: `corp_resolutions` had no check at all, and took
+    negative votes too. Measured: each written straight into the table
+    as the owner with the role `authenticated`, and accepted. Now five
+    named constraints, each with its sentence as a comment; a count
+    minuted without the people present, or with an empty list of them,
+    is still accepted, as is a bare draft. Production held no
+    resolution. New `corp_resolution_checks.sql`, added to `ci.yml`.
+    Swept by hand, 12 / 12 with a control: each constraint dropped, each
+    boundary loosened by one, each vote column let negative, abstentions
+    left out of the count -- and the exemption for nobody listed, killed
+    only after the file sent an empty list rather than none, since a
+    NULL list passes a CHECK on its own.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -2400,6 +2420,7 @@ function:
 | (the write grants and policies on `payroll_runs`, `payslips`, `payslip_lines`, `pay_periods`) | `0817` | 24 / 24 restored by hand | -- | `payroll_records.sql` (new in `0817`; each table's insert, update and delete restored with its policies and then alone; the write policy alone and a restrictive gate alone each fail its last assertion) |
 | `adjust_attendance` (a day paid on a posted or paid run) | `0818` | 9 / 9 | -- | `attendance_paid.sql` (new in `0818`; the period's first and last days and one between, a month not yet run, a run calculated and then paid, an employee entered after the run; SECURITY DEFINER flipped by hand) |
 | (the write grants and policies on `number_sequences`) | `0819` | 6 / 6 restored by hand | -- | `document_numbering_kept.sql` (new in `0819`; insert, update and delete each restored with its policy and then alone; a policy alone fails its last assertion) |
+| (five CHECK constraints on `corp_resolutions`) | `0820` | 12 / 12 by hand | -- | `corp_resolution_checks.sql` (new in `0820`; each constraint dropped and each boundary loosened; the nobody-listed exemption only after the file sent an empty list, a NULL one passing a CHECK by itself) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |
