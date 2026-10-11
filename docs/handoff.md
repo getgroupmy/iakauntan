@@ -1816,7 +1816,11 @@ page and renumbering would quietly break the reference.
     client. Each of the three doors restored by hand, grant and policy
     and then grant alone, fails the file (6 / 6); a policy alone fails
     its last assertion.
-    **Still to read back.**
+    **Applied, and read back** (11 October, read-only, after run
+    38109030186 on `b93be7b` had applied the migrations): recorded;
+    `authenticated` holds SELECT on `payroll_ytd` and no INSERT, UPDATE
+    or DELETE, the only policy left is `payroll_ytd_select`, the comment
+    names `0807`, and the four rows are untouched.
 75. ~~A reconciled bank statement line can be freed of its
     reconciliation by hand.~~ **Raised and answered 11 October: read-only
     to clients. Built in `0808`.** `bank_transactions` is written by six
