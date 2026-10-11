@@ -2117,7 +2117,14 @@ page and renumbering would quietly break the reference.
     write policy alone, and a restrictive gate alone, each fail its last
     assertion. `pay_periods.is_closed` is set by nothing, before this
     and after; `adjust_attendance` asks it.
-    **Still to read back.**
+    **Applied, and read back** (11 October, read-only, after run
+    38125440298 on `89fb0a0` had applied the migrations): recorded;
+    `authenticated` holds SELECT and no INSERT, UPDATE or DELETE on
+    `payroll_runs`, `payslips`, `payslip_lines` and `pay_periods`; the
+    only policies left are their SELECT ones and the restrictive
+    `module_gate_select` on runs and payslips; all four comments name
+    `0817`; and the nine runs, thirty-six payslips, 325 lines and nine
+    periods are there.
 85. ~~A day already paid can have its overtime rewritten, and nothing
     says the timesheet and the payslip disagree.~~ **Raised and answered
     11 October: refuse days already paid. Built in `0818`.**
