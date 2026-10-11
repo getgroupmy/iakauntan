@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17145
+17156
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1306,3 +1306,10 @@
 # RM508.60 against January and posted into it by the same client).
 # Measured: `all SQL assertions passed (395 files, 17145 assertions
 # executed)`.
+#
+# 17145 -> 17156, 11 October: 0808, a statement line is the bank's
+# (bank_reconciliation.sql, 11: as a client, a line read and not
+# inserted, freed of its reconciliation, rewritten or deleted; still not
+# unmatchable, March still agreeing; an import and a reopen through the
+# functions). Measured: `all SQL assertions passed (395 files, 17156
+# assertions executed)`.

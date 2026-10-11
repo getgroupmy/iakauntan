@@ -1769,7 +1769,8 @@ page and renumbering would quietly break the reference.
     in a variable, so that scan cannot tell them apart; the records
     worth the same question next were `payroll_ytd` (item 74, `0807`),
     `tax_filings` and
-    `tax_estimate_payments`, `bank_transactions`, `leave_balances`,
+    `tax_estimate_payments`, `bank_transactions` (item 75, `0808`),
+    `leave_balances`,
     `attendance_records` and `expense_lines`.
     **Still to read back.**
 74. ~~The payroll year to date, which every later month's PCB is worked
@@ -1792,6 +1793,28 @@ page and renumbering would quietly break the reference.
     client. Each of the three doors restored by hand, grant and policy
     and then grant alone, fails the file (6 / 6); a policy alone fails
     its last assertion.
+    **Still to read back.**
+75. ~~A reconciled bank statement line can be freed of its
+    reconciliation by hand.~~ **Raised and answered 11 October: read-only
+    to clients. Built in `0808`.** `bank_transactions` is written by six
+    SECURITY DEFINER functions -- import, match, unmatch, post, and
+    complete or reopen a reconciliation -- and the app only reads it;
+    `authenticated` held insert, update and delete behind `can_post`.
+    `0761` closed `bank_reconciliations` against a silent reopen; the
+    lines were the other half of that door. Measured as the owner with
+    the role `authenticated`: a line matched to a RM1,000 receipt and
+    reconciled for March; `unmatch_bank_transaction` refused it until
+    its `reconciliation_id` was cleared by hand, then unmatched it, and
+    March read RM1,000 out against a reconciliation still 'completed'.
+    Now the grants are revoked and the three write policies dropped;
+    reading stays; the bank feed and statement scans import through
+    `import_bank_transactions`. Production held thirty-two lines, three
+    matched, none reconciled. Asserted in `bank_reconciliation.sql`'s
+    `0808` block, as a client: every write refused, the line still not
+    unmatchable, March still agreeing, an import and a reopen through
+    the functions. Each of the three doors restored by hand, grant and
+    policy and then grant alone, fails the file (6 / 6); a policy alone
+    fails its last assertion.
     **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
@@ -2032,6 +2055,7 @@ function:
 | `prepare_einvoice` (the consolidation check) | `0805` | 4 / 4 | -- | `pos_einvoice_consolidation.sql` (its `0805` block, as a client: a consolidated sale refused in `request_einvoice_for_sale`'s words, a sale outside the return prepared beside it) |
 | (the write grants and policies on the four billing run tables) | `0806` | 24 / 24 restored by hand | -- | `billing_runs.sql` (new in `0806`; each table's insert, update and delete restored with its policy and then alone; a policy alone fails its last assertion) |
 | (the write grants and policy on `payroll_ytd`) | `0807` | 6 / 6 restored by hand | -- | `payroll_ytd.sql` (new in `0807`; insert, update and delete each restored with the policy and then alone; a policy alone fails its last assertion) |
+| (the write grants and policies on `bank_transactions`) | `0808` | 6 / 6 restored by hand | -- | `bank_reconciliation.sql` (its `0808` block; insert, update and delete each restored with its policy and then alone; a policy alone fails its last assertion) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |

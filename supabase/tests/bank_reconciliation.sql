@@ -2062,4 +2062,71 @@ begin
     (select count(*) from public.bank_reconciliations where id = v_mar), 1);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The lines are the functions' too  (0808)
+--
+-- `0761` closed the reconciliations; their lines stayed writable, and a
+-- reconciled line with its `reconciliation_id` cleared by hand came
+-- free of a reconciliation still 'completed' -- the silent reopen
+-- `0761` was written against, by the other table. Asked as the owner,
+-- with the role `authenticated`.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.br_org('Baris Bank Sdn Bhd');
+  v_bank uuid; v_rcp uuid; v_line uuid; v_mar uuid; r jsonb;
+begin
+  select bank_id, receipt_id into v_bank, v_rcp
+    from pg_temp.bank_with_receipt(v_org, 1000);
+  perform public.import_bank_transactions(v_bank, jsonb_build_array(
+    jsonb_build_object('transaction_date','2026-03-06','description','Transfer in',
+                       'reference','RCP-1','amount',1000)));
+  select id into v_line from public.bank_transactions where bank_account_id = v_bank;
+  perform public.match_bank_transaction(v_line, 'receipts', v_rcp);
+  v_mar := public.complete_bank_reconciliation(v_bank, date '2026-03-31', 1000);
+
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', pg_temp.test_user(), 'role', 'authenticated')::text, true);
+  set local role authenticated;
+  perform pg_temp.check_eq('the owner asks as a client', current_user::text, 'authenticated');
+
+  perform pg_temp.check_eq('a member still reads the lines',
+    (select count(*)::integer from public.bank_transactions where bank_account_id = v_bank), 1);
+  perform pg_temp.check_refused('a line is not written into the statement by hand',
+    format($q$insert into public.bank_transactions
+                (org_id, bank_account_id, transaction_date, amount)
+              values (%L, %L, date '2026-03-07', 5000)$q$, v_org, v_bank),
+    'permission denied for table bank_transactions', '42501');
+  perform pg_temp.check_refused('nor a reconciled line freed of its reconciliation',
+    format('update public.bank_transactions set reconciliation_id = null, is_reconciled = false where id = %L',
+           v_line),
+    'permission denied for table bank_transactions', '42501');
+  perform pg_temp.check_refused('nor its amount rewritten',
+    format('update public.bank_transactions set amount = 1 where id = %L', v_line),
+    'permission denied for table bank_transactions', '42501');
+  perform pg_temp.check_refused('nor deleted',
+    format('delete from public.bank_transactions where id = %L', v_line),
+    'permission denied for table bank_transactions', '42501');
+  perform pg_temp.check_refused('so it still cannot be unmatched',
+    format('select public.unmatch_bank_transaction(%L)', v_line),
+    'That line belongs to a reconciliation that has been completed.', '23514');
+  perform pg_temp.check_eq('and March still agrees',
+    (public.bank_reconciliation_status(v_bank, date '2026-03-31', 1000)->>'difference')::numeric, 0);
+
+  -- The functions are the road, and still run for a client.
+  r := public.import_bank_transactions(v_bank, jsonb_build_array(
+    jsonb_build_object('transaction_date','2026-04-02','description','Charges','amount',-12)));
+  perform pg_temp.check_eq('a client imports a statement through the function',
+    (r->>'imported')::numeric, 1);
+  perform public.reopen_bank_reconciliation(v_mar);
+  perform pg_temp.check_true('and reopens March through its function, which frees the line',
+    (select reconciliation_id is null from public.bank_transactions where id = v_line));
+  reset role;
+
+  perform pg_temp.check_eq('no write policy is left on the lines',
+    (select count(*)::integer from pg_policies
+      where schemaname = 'public' and tablename = 'bank_transactions'
+        and cmd <> 'SELECT'), 0);
+end $$;
+
 rollback;
