@@ -2012,7 +2012,13 @@ page and renumbering would quietly break the reference.
     are as before. Production held no stock adjustment. Asserted in
     `stock_figures.sql`'s `0814` block, as a client. Swept 11 / 11;
     SECURITY DEFINER flipped by hand fails the file.
-    **Still to read back.**
+    **Applied, and read back** (11 October, read-only, after run
+    38120879552 on `7956052` had applied the migrations): recorded;
+    `app.a_posted_adjustment_is_kept`'s body matches the migration (md5
+    `081420aa`), not a definer, executable by its owner alone, and
+    `a_posted_adjustment_is_kept` is on `stock_adjustments` and
+    `stock_adjustment_lines` before insert, update or delete; there is
+    still no stock adjustment.
 82. ~~A receipt's allocation can be deleted by hand, and the documents
     stop agreeing with the ledger.~~ **Raised and answered 11 October:
     read-only to clients. Built in `0815`.** `payment_allocations` ties a
