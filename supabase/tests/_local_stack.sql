@@ -79,8 +79,14 @@ alter default privileges for role postgres in schema public
 -- so three tables with read policies and no grants passed every local
 -- run and were caught by CI instead -- which is the wrong way round,
 -- and is the same trap the note above records 0496 falling into.
-alter default privileges for role postgres in schema public
-  grant all on tables to service_role;
+-- And NOT `service_role` on tables either, though the hosted project
+-- grants it everything. CI does not run on the hosted project: it runs
+-- on the CLI stack, and there CI run 38100240247 refused `service_role`
+-- an UPDATE on `einvoice_documents`. Two test files had written LHDN's
+-- answer as `service_role`, passed here because this line granted it,
+-- and went red there. Of the two databases this file could copy, it
+-- copies the stricter: a test that passes with no grant passes with
+-- one, and the reverse is the trap the two notes above record.
 alter default privileges for role postgres in schema public
   grant all on sequences to anon, authenticated, service_role;
 -- ---------------------------------------------------------------------

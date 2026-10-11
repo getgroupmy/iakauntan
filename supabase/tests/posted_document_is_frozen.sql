@@ -360,12 +360,16 @@ begin
       where id = c.inv), '400.00/partial');
 
   -- LHDN's answer, the way it arrives: an e-Invoice prepared by the
-  -- client, its answer written by the MyInvois function as the service
-  -- role, and copied onto the invoice by `sync_einvoice_status`. Until
-  -- `0803` this control wrote the copy directly, which is the write
-  -- `0803` now refuses a client.
+  -- client, its answer written onto the e-Invoice by the database's own
+  -- side -- the MyInvois function, as the service role -- and copied
+  -- onto the invoice by `sync_einvoice_status`. Until `0803` this
+  -- control wrote the copy directly, which is the write `0803` now
+  -- refuses a client. Written here as the session, which owns the
+  -- table, and not as `service_role`: the CLI stack CI runs on refused
+  -- `service_role` an UPDATE on `einvoice_documents` (run 38100240247)
+  -- that the hosted project grants it.
   perform public.prepare_einvoice(c.inv);
-  execute 'set local role service_role';
+  execute 'reset role';
   update public.einvoice_documents
      set status = 'valid', myinvois_uuid = 'LHDN-UUID-BEKU', validated_at = now()
    where source_table = 'sales_documents' and source_id = c.inv;

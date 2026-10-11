@@ -64,7 +64,7 @@ create temporary table t_ec (
   inv_new uuid,                       -- posted, for the client to prepare
   bill_local uuid, bill_foreign uuid, bill_draft uuid,
   other_org uuid);
-grant select on t_ec to authenticated, service_role;
+grant select on t_ec to authenticated;
 
 do $$
 declare
@@ -360,13 +360,14 @@ end $$;
 
 reset role;
 
--- LHDN's answer, as the MyInvois function writes it: the service role,
--- onto the e-Invoice, and copied by `sync_einvoice_status` one trigger
--- down.
-set local role service_role;
+-- LHDN's answer, as the MyInvois function writes it: onto the
+-- e-Invoice, and copied by `sync_einvoice_status` one trigger down.
+-- Written as the session, which owns the table: the function runs as
+-- `service_role`, which the hosted project grants the table and the CLI
+-- stack CI runs on does not (run 38100240247). What is asked is that
+-- the copy follows a write that is not a client's.
 update public.einvoice_documents set status = 'submitted'
  where source_id = (select inv_new from t_ec);
-reset role;
 
 do $$
 begin
