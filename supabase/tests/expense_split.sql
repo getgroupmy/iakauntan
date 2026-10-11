@@ -974,4 +974,57 @@ begin
     pg_temp.leg(v_entry, '6260'), 33.36);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- A split is what the split function wrote  (0809)
+--
+-- `set_expense_split` refuses a posted expense and rewrites the
+-- expense's totals from its lines. The lines themselves were writable
+-- by any member who may write, and two lines typed straight into the
+-- table on a RM500 expense -- RM100 and RM50 -- posted RM450 to the
+-- first. Asked as the owner, with the role `authenticated`.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.split_org('Pecahan Sah Sdn Bhd');
+  v_bank uuid; v_exp uuid; v_entry uuid;
+begin
+  v_bank := pg_temp.a_bank(v_org, '1191', 'Company card', 10000);
+  v_exp := pg_temp.an_expense(v_org, 'EXP-S', '6100', 500, 0, 500, v_bank);
+
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', pg_temp.test_user(), 'role', 'authenticated')::text, true);
+  set local role authenticated;
+  perform pg_temp.check_eq('the owner asks as a client', current_user::text, 'authenticated');
+
+  perform pg_temp.check_refused('a split line is not typed into the table',
+    format($q$insert into public.expense_lines (org_id, expense_id, line_no, account_id, amount)
+              values (%L, %L, 1, %L, 100)$q$, v_org, v_exp, pg_temp.acct(v_org, '6100')),
+    'permission denied for table expense_lines', '42501');
+
+  -- The road: the function writes the lines and the expense follows.
+  perform public.set_expense_split(v_exp, jsonb_build_array(
+    jsonb_build_object('account_id', pg_temp.acct(v_org, '6100'), 'amount', 100),
+    jsonb_build_object('account_id', pg_temp.acct(v_org, '6200'), 'amount', 50)));
+  perform pg_temp.check_eq('split by its function, the expense comes to what its lines do',
+    (select total_amount from public.expenses where id = v_exp), 150::numeric);
+  v_entry := public.post_expense(v_exp);
+  perform pg_temp.check_true('and the journal says what the split says',
+    pg_temp.leg(v_entry, '6100') = 100 and pg_temp.leg(v_entry, '6200') = 50);
+
+  perform pg_temp.check_eq('a member reads the lines',
+    (select count(*)::integer from public.expense_lines where expense_id = v_exp), 2);
+  perform pg_temp.check_refused('a posted expense''s line is not changed after the journal',
+    format('update public.expense_lines set amount = 120 where expense_id = %L and line_no = 1', v_exp),
+    'permission denied for table expense_lines', '42501');
+  perform pg_temp.check_refused('nor deleted',
+    format('delete from public.expense_lines where expense_id = %L', v_exp),
+    'permission denied for table expense_lines', '42501');
+  reset role;
+
+  perform pg_temp.check_eq('no write policy is left on the lines',
+    (select count(*)::integer from pg_policies
+      where schemaname = 'public' and tablename = 'expense_lines'
+        and cmd <> 'SELECT'), 0);
+end $$;
+
 rollback;

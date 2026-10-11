@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17156
+17164
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1313,3 +1313,9 @@
 # unmatchable, March still agreeing; an import and a reopen through the
 # functions). Measured: `all SQL assertions passed (395 files, 17156
 # assertions executed)`.
+#
+# 17156 -> 17164, 11 October: 0809, a split is what the split function
+# wrote (expense_split.sql, 8: as a client, a typed line refused, the
+# function's split totalling the expense and posting as it says, a
+# posted line neither changed nor deleted). Measured: `all SQL
+# assertions passed (395 files, 17164 assertions executed)`.

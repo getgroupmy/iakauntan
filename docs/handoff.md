@@ -1779,7 +1779,7 @@ page and renumbering would quietly break the reference.
     `tax_filings` and
     `tax_estimate_payments`, `bank_transactions` (item 75, `0808`),
     `leave_balances`,
-    `attendance_records` and `expense_lines`.
+    `attendance_records` and `expense_lines` (item 76, `0809`).
     **Still to read back.**
 74. ~~The payroll year to date, which every later month's PCB is worked
     against, can be edited by hand.~~ **Raised and answered 11 October:
@@ -1823,6 +1823,28 @@ page and renumbering would quietly break the reference.
     the functions. Each of the three doors restored by hand, grant and
     policy and then grant alone, fails the file (6 / 6); a policy alone
     fails its last assertion.
+    **Still to read back.**
+76. ~~An expense's split lines can be written directly, and post
+    something other than what they say.~~ **Raised and answered 11
+    October: read-only to clients. Built in `0809`.** The app writes
+    `expense_lines` only through `set_expense_split`, which refuses a
+    posted or deleted expense, checks each line's amount and account, and
+    rewrites the expense's totals from the lines; `post_expense` gives
+    the largest line whatever is left. An `ALL` policy asking
+    `can_write` let any member who may write the lines directly.
+    Measured as the owner with the role `authenticated`: RM100 to 6100
+    and RM50 to 6200 written straight onto a RM500 expense; posting put
+    RM450 to 6100 while the split still said RM100. Lines summing past
+    the expense failed at posting on a bare `gl_lines` check instead,
+    and a posted expense's lines could be changed after the journal.
+    Now the grants are revoked and the write policies dropped, the
+    restrictive `module_gate_` ones with them; `expense_lines_select`
+    reads. Production held one expense and no split line. Asserted in
+    `expense_split.sql`'s `0809` block, as a client: a typed line
+    refused, the function's split totalling the expense and posting as
+    it says, a posted line neither changed nor deleted. Each of the three
+    doors restored by hand, grant and policy and then grant alone, fails
+    the file (6 / 6); a policy alone fails its last assertion.
     **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
@@ -2064,6 +2086,7 @@ function:
 | (the write grants and policies on the four billing run tables) | `0806` | 24 / 24 restored by hand | -- | `billing_runs.sql` (new in `0806`; each table's insert, update and delete restored with its policy and then alone; a policy alone fails its last assertion) |
 | (the write grants and policy on `payroll_ytd`) | `0807` | 6 / 6 restored by hand | -- | `payroll_ytd.sql` (new in `0807`; insert, update and delete each restored with the policy and then alone; a policy alone fails its last assertion) |
 | (the write grants and policies on `bank_transactions`) | `0808` | 6 / 6 restored by hand | -- | `bank_reconciliation.sql` (its `0808` block; insert, update and delete each restored with its policy and then alone; a policy alone fails its last assertion) |
+| (the write grants and policies on `expense_lines`) | `0809` | 6 / 6 restored by hand | -- | `expense_split.sql` (its `0809` block; insert, update and delete each restored with the policy and then alone; a policy alone fails its last assertion) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |
