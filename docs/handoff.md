@@ -2143,7 +2143,11 @@ page and renumbering would quietly break the reference.
     employee -- somebody entered after the run -- is still correctable.
     New `attendance_paid.sql`, added to `ci.yml`. Swept 9 / 9, the first
     time; SECURITY DEFINER flipped by hand fails the file.
-    **Still to read back.**
+    **Applied, and read back** (11 October, read-only, after run
+    38128306608 on `c2d5c5f` had applied the migrations): recorded;
+    `adjust_attendance`'s body matches the migration (md5 `8ed6715a`),
+    still a definer, executable by `authenticated` and `service_role`
+    and not `anon`.
 86. ~~An admin can wind a number series back by hand, and every invoice
     after it fails on the unique index.~~ **Raised and answered 11
     October: read-only to clients. Built in `0819`.** `0480` gave
