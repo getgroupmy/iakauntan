@@ -169,23 +169,30 @@ end $$;
 -- ---------------------------------------------------------------------
 -- And the gate is on the tables it is supposed to be on
 -- ---------------------------------------------------------------------
+-- On every command a client may run there, and no other. This said
+-- "all four commands" until `0817` made `payslips` the payroll
+-- functions' to write: a client only reads it now, so reading is the
+-- door the gate has to be on, and `table_grants.sql` refuses a policy
+-- for a command nobody is granted.
 do $$
 declare
   v_table text;
-  v_policies int;
 begin
   foreach v_table in array array[
     'sales_documents', 'purchase_documents', 'items', 'contacts',
     'employees', 'expense_claims', 'payslips', 'leads'
   ]
   loop
-    select count(*) into v_policies
-      from pg_policies
-     where schemaname = 'public' and tablename = v_table
-       and policyname like 'module_gate_%'
-       and permissive = 'RESTRICTIVE';
     perform pg_temp.check_eq(
-      format('%s is gated for all four commands', v_table), v_policies, 4);
+      format('%s is gated for every command a client may run on it', v_table),
+      (select string_agg(cmd, ',' order by cmd)
+         from pg_policies
+        where schemaname = 'public' and tablename = v_table
+          and policyname like 'module_gate_%'
+          and permissive = 'RESTRICTIVE'),
+      (select string_agg(c, ',' order by c)
+         from unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE']) c
+        where has_table_privilege('authenticated', format('public.%I', v_table), c)));
   end loop;
 end $$;
 

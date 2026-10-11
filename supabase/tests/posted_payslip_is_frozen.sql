@@ -25,6 +25,14 @@
 -- only meaningful under the real role. So the role is changed and then
 -- asserted.
 --
+-- Since `0817` an ordinary caller may do none of it. The posted run's
+-- status was a client's to write, so a run could be set back, edited
+-- and set posted again; all four payroll tables became the functions',
+-- and an unposted run is corrected by recalculating it. So the client
+-- is asserted refused on both runs, and the trigger -- which is what
+-- still stands between the functions and a posted payslip -- is asked
+-- as the owner, with its positive control.
+--
 -- Nothing is written; the file rolls back.
 -- =====================================================================
 \set ON_ERROR_STOP on
@@ -110,7 +118,7 @@ select set_config('request.jwt.claims',
 set local role authenticated;
 
 do $$
-declare c record; v_msg text;
+declare c record;
 begin
   select * into c from t_pay;
 
@@ -123,20 +131,57 @@ begin
     'posted');
 
   -- ------------------------------------------------------------------
-  -- The posted run
+  -- Since `0817` a client writes none of the payroll tables
   -- ------------------------------------------------------------------
+  -- `0400` left an unposted run editable by hand, as the ordinary
+  -- business of running one, and froze a posted one by its status. But
+  -- the status was a client's to write too: a posted run set back to
+  -- calculated, edited and set posted again. So `0817` made all four
+  -- tables the functions', and a run is corrected before posting by
+  -- correcting what it is worked out from and recalculating it, which
+  -- rebuilds the payslips. The refusal is the grant, for both runs.
+  perform pg_temp.check_refused('a line on a posted payslip is not rewritten by hand',
+    format('update public.payslip_lines set amount = 1 where id = %L', c.posted_line),
+    'permission denied for table payslip_lines', '42501');
+  perform pg_temp.check_refused('nor the header it is summed into',
+    format('update public.payslips set epf_employee = 1, pcb = 0 where id = %L', c.posted_slip),
+    'permission denied for table payslips', '42501');
+  perform pg_temp.check_refused('nor a line taken off it',
+    format('delete from public.payslip_lines where id = %L', c.posted_line),
+    'permission denied for table payslip_lines', '42501');
+  perform pg_temp.check_refused('nor the payslip itself',
+    format('delete from public.payslips where id = %L', c.posted_slip),
+    'permission denied for table payslips', '42501');
+  perform pg_temp.check_refused('and an unposted run is recalculated, not edited by hand',
+    format('update public.payslip_lines set amount = 600 where id = %L', c.open_line),
+    'permission denied for table payslip_lines', '42501');
+  perform pg_temp.check_eq('so the statutory figure is unchanged',
+    (select amount from public.payslip_lines where id = c.posted_line), 550);
+end $$;
+
+reset role;
+
+-- ---------------------------------------------------------------------
+-- The trigger, for what the grant does not stop
+-- ---------------------------------------------------------------------
+-- The functions run as the table's owner, and so does this session now.
+-- A posted payslip is still refused to them; an unposted one is still
+-- theirs -- `calculate_payroll_run` rebuilds it.
+do $$
+declare c record; v_msg text;
+begin
+  select * into c from t_pay;
+
   begin
     update public.payslip_lines set amount = 1 where id = c.posted_line;
     raise exception
-      'FAIL: a line on a posted payslip was rewritten by hand';
+      'FAIL: a line on a posted payslip was rewritten by its owner';
   exception when sqlstate '42501' then
     get stacked diagnostics v_msg = message_text;
     perform pg_temp.check_true('and the refusal names the run and its state',
       v_msg like '%PR-POSTED is posted%');
     raise notice 'ok   a posted payslip line cannot be rewritten';
   end;
-  perform pg_temp.check_eq('so the statutory figure is unchanged',
-    (select amount from public.payslip_lines where id = c.posted_line), 550);
 
   begin
     update public.payslips set epf_employee = 1, pcb = 0
@@ -164,14 +209,9 @@ begin
     raise notice 'ok   nor the payslip itself';
   end;
 
-  -- ------------------------------------------------------------------
-  -- The run still being worked on
-  -- ------------------------------------------------------------------
-  -- The positive control, and the reason this is a trigger on the
-  -- status rather than a revoked grant: correcting a payroll before it
-  -- is posted is the ordinary business of running one.
+  -- The run still being worked on: the trigger leaves it alone.
   update public.payslip_lines set amount = 600 where id = c.open_line;
-  perform pg_temp.check_eq('an unposted run is still HR''s to correct',
+  perform pg_temp.check_eq('an unposted run is still the functions'' to correct',
     (select amount from public.payslip_lines where id = c.open_line), 600);
   update public.payslips set epf_employee = 600 where id = c.open_slip;
   perform pg_temp.check_eq('header and all',
@@ -180,8 +220,6 @@ begin
   perform pg_temp.check_eq('and a line may still be taken off it',
     (select count(*) from public.payslip_lines where id = c.open_line), 0);
 end $$;
-
-reset role;
 
 -- ---------------------------------------------------------------------
 -- The rule follows the run's status, so it has to be checked at each one

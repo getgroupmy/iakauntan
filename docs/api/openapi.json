@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0816",
+    "version": "0817",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -12646,7 +12646,7 @@
       "get": {
         "operationId": "select_pay_periods",
         "summary": "Read pay_periods",
-        "description": "Row-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "description": "A payroll month and its pay date, which picks the statutory schedules a run is worked out under. WRITTEN ONLY BY FUNCTION -- 0817 revoked insert, update and delete from clients and dropped the write policy; ensure_pay_period raises it and does not move it.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
         "tags": [
           "tables"
         ],
@@ -13030,7 +13030,7 @@
       "get": {
         "operationId": "select_payroll_runs",
         "summary": "Read payroll_runs",
-        "description": "Row-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "description": "A month's payroll: its state and its totals. WRITTEN ONLY BY FUNCTION -- 0817 revoked insert, update and delete from clients and dropped the write policies; create_payroll_run raises it, calculate_payroll_run works it out, post_payroll_run posts it and mark_payroll_paid records the bank took it. The posted-payslip guard reads its status, so the status is not a client's to write.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
         "tags": [
           "tables"
         ],
@@ -13350,7 +13350,7 @@
       "get": {
         "operationId": "select_payslip_lines",
         "summary": "Read payslip_lines",
-        "description": "Row-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "description": "The earnings and deductions on a payslip. WRITTEN ONLY BY FUNCTION -- 0817 revoked insert, update and delete from clients and dropped the write policy; calculate_payroll_run writes it.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
         "tags": [
           "tables"
         ],
@@ -13414,7 +13414,7 @@
       "get": {
         "operationId": "select_payslips",
         "summary": "Read payslips",
-        "description": "Row-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
+        "description": "One employee's pay in a run, and the figures the EPF, SOCSO and LHDN submissions, the EA form and the bank file are built from. WRITTEN ONLY BY FUNCTION -- 0817 revoked insert, update and delete from clients and dropped the write policies; calculate_payroll_run writes it.\n\nRow-level security is on: a request returns the rows this caller is allowed to see, and an empty list is a real answer rather than an error.",
         "tags": [
           "tables"
         ],

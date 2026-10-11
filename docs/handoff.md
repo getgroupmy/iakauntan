@@ -2051,6 +2051,49 @@ page and renumbering would quietly break the reference.
     the file (6 / 6) with a no-op control passing; a policy alone fails
     its last assertion.
     **Still to read back.**
+84. ~~A posted payroll run can be set back, edited and set posted again:
+    the bank file pays more than the journal and the EA form loses the
+    tax.~~ **Raised and answered 11 October: read-only to clients, and
+    asked again once `0400`'s reasoning was on the table. Built in
+    `0817`.** A run is raised, calculated, posted and marked paid by
+    five definers, and the app writes none of `payroll_runs`,
+    `payslips`, `payslip_lines` or `pay_periods`. `0400` froze a posted
+    run's payslips by asking the run's `status` -- and left an unposted
+    run hand-editable on purpose, "the ordinary business of running
+    one". But `authenticated` held insert, update and delete on all four
+    behind `ALL` policies asking `can_run_payroll`, the status with
+    them. Measured as the owner with the role `authenticated`: January
+    posted, RM6,569.35 net, RM508.65 PCB, a RM9,077 journal; a direct
+    edit of the payslip refused, as `0400` meant; then the run set back
+    to `calculated`, the net pay raised RM1,000 and the PCB set to
+    nought, and the run set `posted` again -- all accepted. The bank
+    instruction paid RM7,569.35 and the EA form said MTD RM0.00 under a
+    journal that said otherwise; a posted run could be deleted with its
+    payslips; a period's pay date, which picks the statutory schedules
+    and which `ensure_pay_period` will not move, could be moved by hand.
+    The question was put twice: first plainly, then with `0400`'s
+    decision -- unposted payslips editable by hand -- set against a
+    narrower guard on the status alone. Both times: read-only. Now the
+    grants are revoked and the write policies dropped on all four, the
+    restrictive `module_gate_` ones with them; reading stays. A run is
+    corrected before posting by correcting its inputs and recalculating,
+    which rebuilds the payslips. `posted_payslip_is_frozen.sql`'s
+    client block now asserts the client refused on both runs, and asks
+    the trigger -- still what stands between the functions and a posted
+    payslip -- as the owner, with its positive control. `access_types.sql`
+    said `payslips` is module-gated for all four commands, which the full
+    suite caught; it now says every command a client may run there is
+    gated and no other, and still fails on a gate removed, a gate left on
+    a command nobody holds, and a grant restored without its gate.
+    Production held
+    nine runs, all paid, thirty-six payslips, 325 lines and nine
+    periods. New `payroll_records.sql`, added to `ci.yml`. Each of the
+    twelve doors restored by hand, grant and its policies and then grant
+    alone, fails the file (24 / 24) with a no-op control passing; the
+    write policy alone, and a restrictive gate alone, each fail its last
+    assertion. `pay_periods.is_closed` is set by nothing, before this
+    and after; `adjust_attendance` asks it.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -2299,6 +2342,7 @@ function:
 | `app.a_posted_adjustment_is_kept` | `0814` | 11 / 11 | -- | `stock_figures.sql` (its `0814` block, as a client; the database's own note on a posted stocktake passes; SECURITY DEFINER flipped by hand) |
 | (the write grants and policies on `payment_allocations`) | `0815` | 6 / 6 restored by hand | -- | `payment_allocations.sql` (new in `0815`; insert, update and delete each restored with its policy and then alone; a policy alone fails its last assertion) |
 | (the write grant and policy on `corp_filings`) | `0816` | 6 / 6 restored by hand | -- | `corp_filings_recorded.sql` (new in `0816`; insert, update and delete each restored with the `ALL` policy and then alone; a policy alone fails its last assertion) |
+| (the write grants and policies on `payroll_runs`, `payslips`, `payslip_lines`, `pay_periods`) | `0817` | 24 / 24 restored by hand | -- | `payroll_records.sql` (new in `0817`; each table's insert, update and delete restored with its policies and then alone; the write policy alone and a restrictive gate alone each fail its last assertion) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |
