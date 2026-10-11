@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17301
+17313
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1383,3 +1383,11 @@
 # +5: the client refused on both runs, the trigger asked as the owner
 # with its positive control). Measured: `all SQL assertions passed (401
 # files, 17301 assertions executed)`.
+#
+# 17301 -> 17313, 11 October: 0818, a paid day is kept as it was paid
+# (attendance_paid.sql, 12: a day corrected before its run is worked
+# out and while it is calculated; January posted paying the hour; the
+# day, and the period's first and last days, refused once posted and
+# once paid, the run named; a month not yet run, and an employee entered
+# after the run, still corrected). Measured: `all SQL assertions passed
+# (402 files, 17313 assertions executed)`.

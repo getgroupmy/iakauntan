@@ -2103,6 +2103,25 @@ page and renumbering would quietly break the reference.
     assertion. `pay_periods.is_closed` is set by nothing, before this
     and after; `adjust_attendance` asks it.
     **Still to read back.**
+85. ~~A day already paid can have its overtime rewritten, and nothing
+    says the timesheet and the payslip disagree.~~ **Raised and answered
+    11 October: refuse days already paid. Built in `0818`.**
+    `adjust_attendance` has refused "a day inside a closed pay period"
+    since `0363`, by asking `pay_periods.is_closed` -- which nothing has
+    ever set; production held nine periods with paid runs and none
+    closed, and since `0817` no client can set it either. Measured as
+    the owner with the role `authenticated`: January posted, paying one
+    hour's overtime on 7 January (RM18.75); the day then adjusted to five
+    hours, "Afterthought", and accepted; February's run, reading its own
+    month, paid none of it. Now `adjust_attendance` also refuses a day
+    the employee has a payslip for on a posted or paid run whose period
+    the day falls in, and names the run -- asked of the runs, so every
+    period already paid is covered without a row changed. The
+    `is_closed` check stays. A day in a period that was run without this
+    employee -- somebody entered after the run -- is still correctable.
+    New `attendance_paid.sql`, added to `ci.yml`. Swept 9 / 9, the first
+    time; SECURITY DEFINER flipped by hand fails the file.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -2352,6 +2371,7 @@ function:
 | (the write grants and policies on `payment_allocations`) | `0815` | 6 / 6 restored by hand | -- | `payment_allocations.sql` (new in `0815`; insert, update and delete each restored with its policy and then alone; a policy alone fails its last assertion) |
 | (the write grant and policy on `corp_filings`) | `0816` | 6 / 6 restored by hand | -- | `corp_filings_recorded.sql` (new in `0816`; insert, update and delete each restored with the `ALL` policy and then alone; a policy alone fails its last assertion) |
 | (the write grants and policies on `payroll_runs`, `payslips`, `payslip_lines`, `pay_periods`) | `0817` | 24 / 24 restored by hand | -- | `payroll_records.sql` (new in `0817`; each table's insert, update and delete restored with its policies and then alone; the write policy alone and a restrictive gate alone each fail its last assertion) |
+| `adjust_attendance` (a day paid on a posted or paid run) | `0818` | 9 / 9 | -- | `attendance_paid.sql` (new in `0818`; the period's first and last days and one between, a month not yet run, a run calculated and then paid, an employee entered after the run; SECURITY DEFINER flipped by hand) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |
