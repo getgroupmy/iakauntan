@@ -722,11 +722,9 @@ begin
    where id = c.legacy;
   update public.time_entries set description = 'Open job, renamed'
    where id = c.moving;
-  -- An invoiced hour on the closed job is still somebody's to annotate,
-  -- and the hour left behind is still somebody's to invoice.
+  -- An invoiced hour on the closed job is still somebody's to annotate.
   update public.time_entries set description = 'Invoiced, on INV-9'
    where id = c.billed;
-  update public.time_entries set is_billed = true where id = c.legacy;
 end $$;
 
 reset role;
@@ -735,6 +733,11 @@ do $$
 declare c record;
 begin
   select * into c from t_tc;
+  -- And the hour left behind is still somebody's to invoice: the closed
+  -- job's guard lets it be marked billed. Marked here as the owner, the
+  -- way the billing functions mark it -- since `0825` a client does not
+  -- mark time billed by hand.
+  update public.time_entries set is_billed = true where id = c.legacy;
   perform pg_temp.check_eq('the closed job holds nothing to bill',
     (select count(*)::integer from public.time_entries
       where project_id = c.shut and is_billable and not is_billed), 0);

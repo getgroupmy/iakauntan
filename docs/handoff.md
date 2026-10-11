@@ -2295,6 +2295,36 @@ page and renumbering would quietly break the reference.
     depth clause, is equivalent -- the only two writers are definers --
     and the file says so.
     **Still to read back.**
+92. ~~Billed time can be marked unbilled by hand and billed again, and a
+    billed entry's hours changed after the invoice.~~ **Raised and
+    answered 11 October: freeze once billed. Built in `0825`.**
+    `bill_project_time` and `bill_matter_time` invoice the billable time
+    in a range and mark each entry billed with its invoice; the next run
+    reads `is_billed` and nothing else. The timesheet editor never sends
+    `is_billed` or `invoice_id`, but the table's policies let a client
+    write every column. Measured as the owner with the role
+    `authenticated`: two hours at RM300 billed on INV-2026-00001, RM600;
+    the entry raised to eight hours by hand, marked unbilled, and billed
+    again as INV-2026-00002, RM2,400 -- the customer invoiced twice for
+    one day; and the billed entry deleted after. Now
+    `z_billed_time_is_kept` refuses a client's own statement that writes
+    `is_billed` or `invoice_id`, changes a billed entry's minutes, rate,
+    date, project, matter, person or billable flag, deletes a billed
+    entry, or logs one billed. Unbilled time is edited as before, a
+    billed entry's description and activity can be put right, and the
+    functions pass. NOT security definer. It fires LAST, because
+    `apply_billing_rate` and `calc_amount` rewrite the rate and the
+    amount in the same statement. `amount` is not frozen on its own --
+    `calc_amount` works it out on every write, and the file asserts a
+    typed one never reaches the row. Production held twenty-eight
+    entries, twelve billed, all on invoices. New `billed_time_kept.sql`,
+    added to `ci.yml`, asks every frozen column on its own. Swept 20 /
+    21; the survivor, the depth clause, is equivalent, and the file says
+    so.
+    `project_budget.sql` (`0783`) marked a left-behind hour billed as a
+    client, which the full suite caught; it is marked as the owner now,
+    the way the billing functions mark it.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -2551,6 +2581,7 @@ function:
 | `app.fixed_asset_figures_are_the_runs` | `0822` | 15 / 16 | 1 (the depth clause: every writer of `fixed_assets` is a definer, so nothing writes it one trigger down as a client; said beside the owner's assertion) | `fixed_asset_figures.sql` (new in `0822`; each of the six columns asked alone on update and on insert; the owner at the top let through) |
 | (the write grants and policies on `bank_accounts`) | `0823` | 6 / 6 restored by hand | -- | `bank_accounts_kept.sql` (new in `0823`; insert, update and delete each restored with its policy and then alone; a policy alone fails its last assertion) |
 | `app.a_posted_expense_is_kept` | `0824` | 33 / 34 | 1 (the depth clause: the only writers of `expenses` are two definers; said beside the owner's assertion) | `posted_expense_kept.sql` (new in `0824`; every one of the twenty-one frozen columns asked alone; eight answered first by a key, a policy, the branch check or `refuse_reposting`, killed because the guard's own sentence is asked for) |
+| `app.billed_time_is_kept` | `0825` | 20 / 21 | 1 (the depth clause: every writer of `time_entries` but the app is a definer; said beside the owner's assertion) | `billed_time_kept.sql` (new in `0825`; each of the eight frozen columns asked alone; `amount` asserted to be worked out again rather than frozen) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |

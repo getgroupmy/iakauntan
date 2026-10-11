@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17418
+17441
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1443,3 +1443,13 @@
 # refused on its own; the description and reference still put right;
 # the owner at the top let through). Measured: `all SQL assertions
 # passed (408 files, 17418 assertions executed)`.
+#
+# 17418 -> 17441, 11 October: 0825, billed time is kept as it was
+# billed (billed_time_kept.sql, 23: unbilled time corrected and deleted
+# as before; the billed mark and invoice not written by hand on unbilled
+# or billed time, nor time logged billed; two hours billed for RM600;
+# the billed entry not deleted and each of its eight frozen columns
+# refused alone; a typed amount worked out again from the hours; its
+# description and activity put right; the day invoiced once; the owner
+# at the top let through). Measured: `all SQL assertions passed (409
+# files, 17441 assertions executed)`.
