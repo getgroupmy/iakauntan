@@ -1727,7 +1727,12 @@ page and renumbering would quietly break the reference.
     to sweep; instead each of the fifteen doors was restored by hand,
     grant and policy and then grant alone (30 / 30 fail the file), and a
     policy restored without its grant fails the file's last assertion.
-    **Still to read back.**
+    **Applied, and read back** (11 October, read-only, after run
+    38105099853 on `2649bb7` had applied the migrations): recorded; on
+    all five tables `authenticated` holds SELECT and no INSERT, UPDATE
+    or DELETE, the only policy left is the SELECT one, and each table's
+    comment names `0804`; `service_role` still holds UPDATE, so the
+    MyInvois function writes as before.
 72. ~~A counter sale already in the month's consolidated e-Invoice can
     be given one of its own.~~ **Raised and answered 10 October: refuse
     it, in the same words. Built in `0805`.** Consolidating marks nothing
