@@ -1782,7 +1782,8 @@ page and renumbering would quietly break the reference.
     in a variable, so that scan cannot tell them apart; the records
     worth the same question next were `payroll_ytd` (item 74, `0807`),
     `tax_filings` and
-    `tax_estimate_payments`, `bank_transactions` (item 75, `0808`),
+    `tax_estimate_payments` (item 77, `0810`), `bank_transactions`
+    (item 75, `0808`),
     `leave_balances`,
     `attendance_records` and `expense_lines` (item 76, `0809`).
     **Still to read back.**
@@ -1850,6 +1851,28 @@ page and renumbering would quietly break the reference.
     it says, a posted line neither changed nor deleted. Each of the three
     doors restored by hand, grant and policy and then grant alone, fails
     the file (6 / 6); a policy alone fails its last assertion.
+    **Still to read back.**
+77. ~~A late tax filing can be made to read on time by hand.~~
+    **Raised and answered 11 October: read-only to clients. Built in
+    `0810`.** `tax_filings` holds each LHDN filing's statutory due date
+    and the date it was filed, and `tax_filing_history` reports
+    `was_late` from them -- "the thing a penalty is assessed on";
+    `record_tax_filing` takes the due date from the obligation itself.
+    `tax_estimate_payments` holds CP204 instalments, and
+    `record_tax_instalment` asks the schedule has the instalment and
+    something was paid. The app writes both through those functions and
+    their `clear_` twins; `authenticated` held insert, update and delete
+    behind `can_post`. Measured as the owner with the role
+    `authenticated`: a Form C due 31 January 2027 recorded as filed 2
+    March 2027, late; its due date set to the filing date by hand, and
+    it read on time. Now the grants are revoked and the write policies
+    dropped on both. Production held no filing and no instalment. New
+    `tax_records.sql`, added to `ci.yml`: the late Form C and a CP204
+    instalment paid ten days late each stay late, every hand edit
+    refused, and an instalment cleared through its function. Each of
+    the six doors restored by hand, grant and policy and then grant
+    alone, fails the file (12 / 12); a policy alone fails its last
+    assertion.
     **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
@@ -2092,6 +2115,7 @@ function:
 | (the write grants and policy on `payroll_ytd`) | `0807` | 6 / 6 restored by hand | -- | `payroll_ytd.sql` (new in `0807`; insert, update and delete each restored with the policy and then alone; a policy alone fails its last assertion) |
 | (the write grants and policies on `bank_transactions`) | `0808` | 6 / 6 restored by hand | -- | `bank_reconciliation.sql` (its `0808` block; insert, update and delete each restored with its policy and then alone; a policy alone fails its last assertion) |
 | (the write grants and policies on `expense_lines`) | `0809` | 6 / 6 restored by hand | -- | `expense_split.sql` (its `0809` block; insert, update and delete each restored with the policy and then alone; a policy alone fails its last assertion) |
+| (the write grants and policies on `tax_filings` and `tax_estimate_payments`) | `0810` | 12 / 12 restored by hand | -- | `tax_records.sql` (new in `0810`; each table's insert, update and delete restored with its policy and then alone; a policy alone fails its last assertion) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |

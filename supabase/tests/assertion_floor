@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17164
+17179
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1319,3 +1319,10 @@
 # function's split totalling the expense and posting as it says, a
 # posted line neither changed nor deleted). Measured: `all SQL
 # assertions passed (395 files, 17164 assertions executed)`.
+#
+# 17164 -> 17179, 11 October: 0810, a filing is recorded as it was (new
+# tax_records.sql, 15: a Form C filed a month late and a CP204
+# instalment paid ten days late each stay late, every hand edit to
+# either table refused, an instalment cleared through its function).
+# Measured: `all SQL assertions passed (396 files, 17179 assertions
+# executed)`.
