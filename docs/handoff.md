@@ -2992,7 +2992,11 @@ page and renumbering would quietly break the reference.
     before. NOT security definer. Production held no expense claim. New
     `claim_lines_kept.sql`, added to `ci.yml`. Swept 7 / 9; the two
     survivors, the depth clause and a rejected step, are equivalent.
-    **Still to read back.**
+    **Applied, and read back** (12 October, read-only, after run
+    38275833404 on `4f4d88c` had applied the migrations): recorded;
+    `app.a_claim_is_what_was_decided` is there with the body this branch
+    builds (md5 `3593b78d`), not a definer and not executable by
+    `authenticated`; its trigger is enabled on `expense_claim_lines`.
 114. ~~A posted manufacturing order's operations can be rewritten or
     deleted after the labour was costed from them.~~ **Raised and
     answered 12 October: book minutes only, unposted. Built in
