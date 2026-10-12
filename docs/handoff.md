@@ -2944,7 +2944,11 @@ page and renumbering would quietly break the reference.
     New `account_balance_is_the_ledgers.sql`, added to `ci.yml`. Swept
     4 / 6; the two survivors, the depth clauses, are equivalent while
     no road to `gl_lines` runs as a client.
-    **Still to read back.**
+    **Applied, and read back** (12 October, read-only, after run
+    38265522497 on `e38e713` had applied the migrations): recorded;
+    `app.accounts_opening_balance_is_not_writable` is there with the
+    body this branch builds (md5 `1b968ed1`), not a definer, and its
+    trigger is enabled on `accounts`; the 104 balances are as they were.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
