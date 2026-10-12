@@ -2344,7 +2344,13 @@ page and renumbering would quietly break the reference.
     `project_budget.sql` (`0783`) marked a left-behind hour billed as a
     client, which the full suite caught; it is marked as the owner now,
     the way the billing functions mark it.
-    **Still to read back.**
+    **Applied, and read back** (12 October, read-only, after run
+    38204791655 on `c85b73c` had applied the migrations): recorded;
+    `app.billed_time_is_kept()` is there, not a definer, executable by
+    its owner alone, with the body this branch builds (md5 `d11e39bb`),
+    and `z_billed_time_is_kept` is enabled on `time_entries`. The
+    twenty-eight entries, twelve billed and every billed one on an
+    invoice, are as they were.
 93. ~~A company's own admin can take it off the platform's monthly
     bill.~~ **Raised and answered 11 October: guard the platform
     columns. Built in `0826`.** `app.bill_the_month` bills a company
