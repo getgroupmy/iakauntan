@@ -2515,7 +2515,14 @@ page and renumbering would quietly break the reference.
     thirteen tickets, all in the demonstration company. New
     `ticket_late_answer.sql`, added to `ci.yml`. Swept 14 / 14; two
     survived the first run for want of a fixture and the file has both.
-    **Still to read back.**
+    **Applied, and read back** (12 October, read-only, after run
+    38213804317 on `105d4c7` had applied the migrations): recorded; both
+    functions are there with the bodies this branch builds
+    (`add_ticket_comment` `b558dd05`, `app.transition_ticket_internal`
+    `3ea7b167`), both definers as before. The run's first attempt
+    failed only at the Android build, Gradle unable to fetch
+    `kotlin-stdlib` 2.2.21 from plugins.gradle.org, after every deploy
+    job had succeeded; the failed job alone was re-run and passed.
 98. ~~A ticket's SLA clock can be moved by hand.~~ **Raised and
     answered 12 October, with 97: both. Built in `0831`.** The workflow
     functions and the sweep, every one a definer, move a ticket's
