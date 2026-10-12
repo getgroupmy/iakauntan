@@ -2277,7 +2277,12 @@ page and renumbering would quietly break the reference.
     of the three doors restored by hand, grant and policy and then grant
     alone, fails the file (6 / 6) with a no-op control passing; a policy
     alone fails its last assertion.
-    **Still to read back.**
+    **Applied, and read back** (12 October, read-only, after run
+    38199871883 on `d99e5ef` had applied the migrations): recorded;
+    `authenticated` and `anon` hold no insert, update or delete on
+    `bank_accounts`, reading stays, the only policy left is
+    `bank_accounts_select`, and the table comment names `0823`. The
+    twenty-nine accounts across sixteen companies are as they were.
 91. ~~A posted expense can be rewritten, set back to draft and deleted,
     its journal left behind.~~ **Raised and answered 11 October: freeze
     once posted. Built in `0824`.** The app records an expense as a
