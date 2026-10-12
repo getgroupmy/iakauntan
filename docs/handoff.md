@@ -2546,7 +2546,11 @@ page and renumbering would quietly break the reference.
     and resolves. Swept 19 / 20; the survivor, the depth clause, is
     equivalent. The insert grant restored by hand fails the file, with
     a control.
-    **Still to read back.**
+    **Applied, and read back** (12 October, read-only, after run
+    38219132230 on `97e615d` had applied the migrations): recorded;
+    `app.a_ticket_keeps_its_own_time` is there with the body this branch
+    builds (md5 `61df5d01`), not a definer, its trigger enabled on
+    `tickets`; neither `authenticated` nor `anon` may insert a ticket.
 99. ~~Money not in the books settles a document, and a document not in
     the books is settled.~~ **Raised 12 October; answered "refuse
     unposted", then -- when that answer was found to break the
