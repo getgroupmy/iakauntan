@@ -2597,7 +2597,17 @@ page and renumbering would quietly break the reference.
     dated after today" (`demo_practice.py`) is killed only on the first
     six days of a month -- it survived on 12 October and was killed on a
     copy of the database with its clock at 5 January; said in the file.
-    **Still to read back.**
+    **Applied, and read back** (12 October, read-only, after run
+    38221241159 on `1ef38e6` had applied the migrations): recorded; all
+    eight functions are there with the bodies this branch builds
+    (`app.allocate_with_discount_internal` `cf66381a`,
+    `app.allocate_payment_with_discount_internal` `ab520884`, the two
+    five-argument doors `f269b4e6` and `ddea2f82`, `record_group_payment`
+    `67532803`, `settle_from_client_account` `af33ba04`,
+    `app.demo_practice_books` `91c32b30`, `record_settlement` `c3c5e835`),
+    the two bodies not executable by `authenticated`. The idempotent
+    six-argument doors (`0734`), which the app reaches through
+    `callRpcOnce`, call the five-argument ones and so refuse as they do.
 100. ~~A share movement backdated before one already recorded leaves
     the register short, and a client can edit or delete any movement.~~
     **Raised and answered 12 October: every date, and append-only.
