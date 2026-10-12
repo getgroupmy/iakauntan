@@ -324,6 +324,99 @@ begin
     raise notice 'ok   nothing may follow the band that runs to the top';
   end;
 
+  -- Each edge of those rules, asked on its own. A sweep of
+  -- `assert_statutory_bands` on 12 October 2026 found the gap above a
+  -- thousand ringgit wide and the overlap five hundred, so a gap of
+  -- fifty sen, two bands meeting on the same sen, and a category that
+  -- stops while another follows were all accepted by its mutants.
+  begin
+    perform public.platform_publish_statutory_schedule(
+      'eis', 'Fifty sen missing', 'table', date '2033-05-01',
+      jsonb_build_array(
+        jsonb_build_object('category','default','wage_from',0,'wage_to',3000,
+                           'employee_rate',0.2,'employer_rate',0.2),
+        jsonb_build_object('category','default','wage_from',3000.50,'wage_to',null,
+                           'employee_rate',0.2,'employer_rate',0.2)),
+      null, null, null, 'nearest_5sen', true);
+    raise exception 'FAIL: a table with fifty sen missing was published';
+  exception when check_violation then
+    get stacked diagnostics v_said = message_text;
+    perform pg_temp.check_true('a gap of fifty sen is a gap',
+      v_said like '%jumps from 3000.00 to 3000.50%');
+  end;
+
+  begin
+    perform public.platform_publish_statutory_schedule(
+      'eis', 'Two bands meeting on one sen', 'table', date '2033-06-01',
+      jsonb_build_array(
+        jsonb_build_object('category','default','wage_from',0,'wage_to',3000,
+                           'employee_rate',0.2,'employer_rate',0.2),
+        jsonb_build_object('category','default','wage_from',3000,'wage_to',null,
+                           'employee_rate',0.4,'employer_rate',0.4)),
+      null, null, null, 'nearest_5sen', true);
+    raise exception 'FAIL: two bands sharing RM3,000.00 were published';
+  exception when check_violation then
+    get stacked diagnostics v_said = message_text;
+    perform pg_temp.check_true('two bands that both cover RM3,000.00 are an overlap',
+      v_said like '%two bands covering 3000.00%');
+  end;
+
+  begin
+    perform public.platform_publish_statutory_schedule(
+      'eis', 'One category stopping short of the next', 'table', date '2033-07-01',
+      jsonb_build_array(
+        jsonb_build_object('category','default','wage_from',0,'wage_to',3000,
+                           'employee_rate',0.2,'employer_rate',0.2),
+        jsonb_build_object('category','foreign','wage_from',0,'wage_to',null,
+                           'employee_rate',0.2,'employer_rate',0.2)),
+      null, null, null, 'nearest_5sen', true);
+    raise exception 'FAIL: a category stopping short of the top was published';
+  exception when check_violation then
+    get stacked diagnostics v_said = message_text;
+    perform pg_temp.check_true('a category that stops is refused though another follows it',
+      v_said like '%stops at 3000.00 for default%');
+  end;
+
+  -- And the next sen is NOT a gap: bands meeting at RM3,000.00 and
+  -- RM3,000.01 are the shape every shipped table has. Published and
+  -- then undone, so it closes no table the rest of this file reads.
+  declare v_published boolean := false;
+  begin
+    begin
+      perform public.platform_publish_statutory_schedule(
+        'eis', 'Bands a sen apart', 'table', date '2033-08-01',
+        jsonb_build_array(
+          jsonb_build_object('category','default','wage_from',0,'wage_to',3000,
+                             'employee_rate',0.2,'employer_rate',0.2),
+          jsonb_build_object('category','default','wage_from',3000.01,'wage_to',null,
+                             'employee_rate',0.2,'employer_rate',0.2)),
+        null, null, null, 'nearest_5sen', true);
+      v_published := true;
+      raise exception using errcode = 'P0001', message = 'undo the publication';
+    exception when raise_exception then
+      null;
+    end;
+    perform pg_temp.check_true('bands a sen apart are complete, and published',
+      v_published);
+  end;
+
+  -- A schedule with no bands at all. The publisher refuses one before
+  -- this check is reached ("would calculate nothing"), so it is asked of
+  -- the check directly -- which is how `statutory_bands.sql` runs it
+  -- over every shipped table.
+  declare v_empty uuid;
+  begin
+    insert into public.statutory_schedules
+      (body, name, method, effective_from, effective_to, result_rounding, is_verified)
+    values ('eis', 'Nothing in it', 'table', date '2033-09-01', date '2033-09-30',
+            'nearest_5sen', false)
+    returning id into v_empty;
+    perform pg_temp.check_refused('a schedule with no bands at all is not complete',
+      format('select app.assert_statutory_bands(%L)', v_empty),
+      'The eis schedule has no bands at all', '23514');
+    delete from public.statutory_schedules where id = v_empty;
+  end;
+
   -- So the fixture is put in directly, as the owner, which is honest
   -- about what it is: three bands of a table, kept incomplete on
   -- purpose so the rest of this section has a gap to ask about.
