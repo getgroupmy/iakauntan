@@ -2923,7 +2923,9 @@ page and renumbering would quietly break the reference.
     ones; the twelve components are all still there. That run's
     "Deploy the workspace proxy" failed again on Cloudflare -- a 504 on
     the worker's subdomain lookup after the worker had uploaded -- and
-    the failed job was re-run.
+    re-run, failed once more, a 504 on the routes. Three Cloudflare
+    failures in forty minutes on three endpoints, none of them touched
+    by this branch; the next push's run deploys the proxy again.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
