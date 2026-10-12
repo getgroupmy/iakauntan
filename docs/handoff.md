@@ -2776,7 +2776,11 @@ page and renumbering would quietly break the reference.
     demonstration companies. New `fs_filing_workflow_kept.sql`, added to
     `ci.yml`. Swept 6 / 7; the survivor, the depth clause, is
     equivalent.
-    **Still to read back.**
+    **Applied, and read back** (12 October, read-only, after run
+    38239587936 on `0c75f8b` had applied the migrations): recorded;
+    `app.a_filing_is_lodged_by_lodging_it` is there with the body this
+    branch builds (md5 `cccb3f43`), not a definer; its trigger is
+    enabled on `fs_filings`.
 106. ~~An admin can make a second account of theirs an owner by
     inserting it.~~ **Raised and answered 12 October: revoke client
     insert. Built in `0839`.** Members join by `invite_member` (which
