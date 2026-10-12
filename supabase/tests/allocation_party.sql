@@ -63,17 +63,23 @@ begin
   return v_id;
 end $$;
 
+-- Posted, as the receipt screen posts one before any of it is applied:
+-- since `0832` money is applied only once it is in the books.
 create or replace function pg_temp.ap_receipt(
   p_org uuid, p_no text, p_contact uuid, p_amt numeric)
-returns uuid language sql as $$
+returns uuid language plpgsql as $$
+declare v_id uuid;
+begin
   insert into public.receipts
     (org_id, receipt_no, receipt_date, contact_id, bank_account_id,
      currency, exchange_rate, amount, unapplied_amount)
   values (p_org, p_no, pg_temp.today(), p_contact,
           (select id from public.bank_accounts where org_id = p_org limit 1),
           'MYR', 1, p_amt, p_amt)
-  returning id;
-$$;
+  returning id into v_id;
+  perform public.post_receipt(v_id);
+  return v_id;
+end $$;
 
 -- ---------------------------------------------------------------------
 -- Two customers
@@ -213,6 +219,8 @@ begin
           (select id from public.bank_accounts where org_id = v_org limit 1),
           'MYR', 1, 300, 300)
   returning id into v_pay;
+  -- Posted first: since `0832` money is applied once it is in the books.
+  perform public.post_purchase_payment(v_pay);
 
   begin
     perform public.allocate_payment_with_discount(v_pay, v_bill, 300, null,

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0831",
+    "version": "0832",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -57149,6 +57149,115 @@
                 "required": [
                   "p_org_id",
                   "p_attachment_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/record_settlement": {
+      "post": {
+        "operationId": "record_settlement",
+        "summary": "Records a customer receipt or a supplier payment, applies it to the documents given and posts it, all or\u2026",
+        "description": "Records a customer receipt or a supplier payment, applies it to the documents given and posts it, all or nothing (0832). The receipt and payment screens' one call; a refused posting leaves nothing applied.\n\n`public.record_settlement(p_org_id uuid, p_is_receipt boolean, p_contact_id uuid, p_amount numeric, p_date date, p_allocations jsonb, p_bank_account_id uuid, p_payment_mode_code text, p_payment_method_id uuid, p_reference text, p_bank_charges numeric, p_currency text, p_exchange_rate numeric, p_idempotency_key text)` Writes. Requires a signed-in user.",
+        "tags": [
+          "general"
+        ],
+        "x-volatility": "volatile",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_is_receipt": {
+                    "type": "boolean"
+                  },
+                  "p_contact_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_amount": {
+                    "type": "number"
+                  },
+                  "p_date": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "p_allocations": {},
+                  "p_bank_account_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_payment_mode_code": {
+                    "type": "string"
+                  },
+                  "p_payment_method_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_reference": {
+                    "type": "string"
+                  },
+                  "p_bank_charges": {
+                    "type": "number"
+                  },
+                  "p_currency": {
+                    "type": "string"
+                  },
+                  "p_exchange_rate": {
+                    "type": "number"
+                  },
+                  "p_idempotency_key": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "p_org_id",
+                  "p_is_receipt",
+                  "p_contact_id",
+                  "p_amount",
+                  "p_date",
+                  "p_allocations",
+                  "p_bank_account_id",
+                  "p_payment_mode_code",
+                  "p_payment_method_id",
+                  "p_reference",
+                  "p_bank_charges",
+                  "p_currency",
+                  "p_exchange_rate",
+                  "p_idempotency_key"
                 ]
               }
             }

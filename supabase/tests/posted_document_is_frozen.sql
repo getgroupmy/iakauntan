@@ -345,18 +345,15 @@ begin
   -- control wrote those figures directly, which is the write `0781`
   -- now refuses a client -- and which is why it was standing in for a
   -- payment rather than being one. The allocation is made through
-  -- `allocate_with_discount`, as the app's own payment dialog makes it:
-  -- since `0815` that is the only road, and a client's insert straight
-  -- into `payment_allocations` is refused.
-  insert into public.receipts
-    (org_id, receipt_no, receipt_date, contact_id, amount,
-     unapplied_amount, currency, exchange_rate, bank_account_id)
-  values (c.org, 'RCP-1', pg_temp.today(),
-          (select contact_id from public.sales_documents where id = c.inv),
-          400, 400, 'MYR', 1, pg_temp.a_bank_account(c.org))
-  returning id into v_rcp;
-  perform public.allocate_with_discount(v_rcp, c.inv, 400);
-  perform public.post_receipt(v_rcp);
+  -- the knock-off body, as the app's own payment dialog makes it: since
+  -- `0815` that is the only road, and a client's insert straight into
+  -- `payment_allocations` is refused. Since `0832` the dialog records,
+  -- applies and posts the receipt in one call, `record_settlement`.
+  v_rcp := public.record_settlement(c.org, true,
+    (select contact_id from public.sales_documents where id = c.inv),
+    400, pg_temp.today(),
+    jsonb_build_array(jsonb_build_object('document_id', c.inv, 'amount', 400)),
+    pg_temp.a_bank_account(c.org), null, null, null, 0, 'MYR', 1, null);
   perform pg_temp.check_eq('a payment still lands on a posted invoice',
     (select paid_amount || '/' || status from public.sales_documents
       where id = c.inv), '400.00/partial');

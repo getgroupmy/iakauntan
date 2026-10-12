@@ -4660,8 +4660,21 @@ class Repo {
   // ------------------------------------------------------------------
 
   /// Records a customer receipt or a supplier payment, allocates it
-  /// against open documents and posts it. The two flows differ only in
-  /// which table and column names are used, so they share one method.
+  /// against open documents and posts it -- in ONE call, all or nothing.
+  ///
+  /// This was three requests until `0832`: insert a draft, allocate it
+  /// through `allocate_with_discount`, then post it. Nothing undid the
+  /// second if the third was refused -- a closed period, a dropped
+  /// connection -- so an invoice could be left marked paid against a
+  /// receipt that never reached the ledger. `record_settlement` does
+  /// the three in one transaction, in the same order (posting reads
+  /// what was applied to work out any exchange difference), and the
+  /// knock-off functions now refuse money that is not yet posted.
+  ///
+  /// Every allocation still goes through the knock-off body, discounted
+  /// or not, so a discount cannot be written by a route that forgets
+  /// the journal. Every parameter is named, an explicit null where
+  /// there is nothing -- see [callRpcOnce].
   Future<void> recordSettlement({
     required DocKind kind,
     required String contactId,
@@ -4681,64 +4694,34 @@ class Repo {
     String currency = 'MYR',
     double exchangeRate = 1,
   }) async {
-    final isReceipt = kind.isSales;
-    final table = isReceipt ? 'receipts' : 'purchase_payments';
-    final numberField = isReceipt ? 'receipt_no' : 'payment_no';
-    final dateField = isReceipt ? 'receipt_date' : 'payment_date';
-    final docType = isReceipt ? 'receipt' : 'payment';
-
-    final row = await client
-        .from(table)
-        .insert({
-          'org_id': orgId,
-          numberField: await nextDocumentNumber(docType),
-          dateField: Fmt.iso(date),
-          'contact_id': contactId,
-          'amount': amount,
-          'unapplied_amount': amount,
-          // Both are in the currency of the documents being settled;
-          // post_receipt multiplies them by the rate. A receipt in a
-          // currency other than its invoices is refused by
-          // app.realised_fx_on_settlement, so the dialog never sends one.
-          'currency': currency,
-          'exchange_rate': exchangeRate,
-          'bank_charges': bankCharges,
-          'bank_account_id': bankAccountId,
-          'payment_mode_code': paymentModeCode,
-          'payment_method_id': paymentMethodId,
-          'reference': reference,
-        })
-        .select()
-        .single();
-
-    final settlementId = row['id'] as String;
-
-    // Every allocation goes through the function, discounted or not.
-    // Writing them straight into `payment_allocations` was the path
-    // that could carry a discount nothing posted — `0385`'s guard
-    // refuses that now, and one path means the discount cannot be
-    // written by a route that forgets the journal.
-    for (final a in allocations) {
-      if (isReceipt) {
-        await allocateWithDiscount(
-          receiptId: settlementId,
-          invoiceId: a.documentId,
-          amount: a.amount,
-          discount: a.discount > 0 ? a.discount : null,
-        );
-      } else {
-        await allocatePaymentWithDiscount(
-          paymentId: settlementId,
-          billId: a.documentId,
-          amount: a.amount,
-          discount: a.discount > 0 ? a.discount : null,
-        );
-      }
-    }
-
-    await callRpc(
-      isReceipt ? 'post_receipt' : 'post_purchase_payment',
-      params: {'p_id': settlementId},
+    await callRpcOnce(
+      'record_settlement',
+      params: {
+        'p_org_id': orgId,
+        'p_is_receipt': kind.isSales,
+        'p_contact_id': contactId,
+        'p_amount': amount,
+        'p_date': Fmt.iso(date),
+        'p_allocations': [
+          for (final a in allocations)
+            {
+              'document_id': a.documentId,
+              'amount': a.amount,
+              'discount': a.discount > 0 ? a.discount : null,
+            },
+        ],
+        'p_bank_account_id': bankAccountId,
+        'p_payment_mode_code': paymentModeCode,
+        'p_payment_method_id': paymentMethodId,
+        'p_reference': reference,
+        'p_bank_charges': bankCharges,
+        // Both are in the currency of the documents being settled;
+        // post_receipt multiplies them by the rate. A receipt in a
+        // currency other than its invoices is refused by
+        // app.realised_fx_on_settlement, so the dialog never sends one.
+        'p_currency': currency,
+        'p_exchange_rate': exchangeRate,
+      },
     );
   }
 

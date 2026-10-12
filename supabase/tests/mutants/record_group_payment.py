@@ -4,9 +4,19 @@
 # currency), allocates every document, and posts each one.
 #
 #     python3 scripts/mutate_sql.py \
-#       supabase/migrations/0462_one_payment_across_several_companies.sql \
+#       supabase/migrations/0832_money_is_applied_once_it_is_in_the_books.sql \
 #       supabase/tests/group_payment.sql \
 #       supabase/tests/mutants/record_group_payment.py
+#
+# Re-run 12 October against `0832`, which restates this function to
+# apply its money through `app.allocate_with_discount_internal` and
+# `app.allocate_payment_with_discount_internal` -- the public doors now
+# refuse a receipt or payment that is not posted, and this one posts
+# below, in the same transaction. Across the three files only the two
+# documented equivalents survive, control alive. Two mutants added, one
+# for each side: applied through the public door instead, as a draft --
+# both killed by group_payment.sql, the door refusing RCP-2026-00001 and
+# PAY-2026-00001 as not yet posted.
 #
 # Run it against each of the three files that call it in turn -- a
 # per-file score understates the suite, and that nearly produced three
@@ -216,6 +226,18 @@ m("a zero discount is passed as zero rather than as nothing",
   "  -- nullif dropped\n      end loop;\n\n"
   "      perform public.post_receipt(v_id);",
   "-- nullif dropped")
+
+m("a group receipt is applied through the door, as a draft",
+  "record_group_payment",
+  "        perform app.allocate_with_discount_internal(  -- 0832: posted below, in this transaction",
+  "        perform public.allocate_with_discount(  -- through the door",
+  "-- through the door")
+
+m("a group payment is applied through the door, as a draft",
+  "record_group_payment",
+  "        perform app.allocate_payment_with_discount_internal(  -- 0832: posted below, in this transaction",
+  "        perform public.allocate_payment_with_discount(  -- through the door",
+  "-- through the door")
 
 m("CONTROL -- a comment inside the function block",
   "record_group_payment",

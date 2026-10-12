@@ -2547,6 +2547,53 @@ page and renumbering would quietly break the reference.
     equivalent. The insert grant restored by hand fails the file, with
     a control.
     **Still to read back.**
+99. ~~Money not in the books settles a document, and a document not in
+    the books is settled.~~ **Raised 12 October; answered "refuse
+    unposted", then -- when that answer was found to break the
+    receipt screen -- "one transaction". Built in `0832`.**
+    `allocate_with_discount` and `allocate_payment_with_discount` never
+    asked whether either side was posted, and the receipt and payment
+    screens recorded a settlement as three requests -- insert a draft,
+    apply it, post it -- with nothing to undo the second if the third
+    was refused. Measured as the owner with the role `authenticated`: a
+    draft receipt settled a posted RM1,000 invoice, `completed` with the
+    ledger still carrying the receivable; a draft supplier payment did
+    the same to a RM700 bill; a posted RM400 receipt settled a DRAFT
+    invoice, which then could never be posted. **The first question
+    rested on a wrong premise** -- that refusing unposted money at the
+    door would leave the app's own flow alone. The screens apply first
+    -- `post_receipt` and
+    `post_purchase_payment` work out the realised exchange difference
+    from what has been applied -- so refusing unposted money at the door
+    would have refused every receipt the app records, and
+    `record_group_payment`, `settle_from_client_account` and the demo
+    practice the same. Re-asked before anything was pushed. Now:
+    1. `record_settlement` records a receipt or payment, applies it and
+       posts it in one call, all or nothing -- applied before posted,
+       inside the transaction, so the exchange difference is as before.
+       `recordSettlement` in `repository.dart` is one `callRpcOnce` to
+       it; the insert, the per-allocation calls and the post are gone.
+    2. The knock-off bodies are `app.allocate_with_discount_internal`
+       and `app.allocate_payment_with_discount_internal`, unchanged and
+       revoked from clients. The three SQL flows apply through them.
+    3. The public doors refuse money not yet posted, a document not yet
+       posted, and a voided one, then call the body. The apply-on-account
+       dialog lists only posted, live documents (`outstandingFor`) and
+       is as before.
+    **An app build from before `0832` is refused at the second of its
+    three requests**: its draft receipt is left unposted and unapplied
+    -- what a failed posting always left, minus the invoice marked paid
+    -- until the app is updated. Production held 56 receipt and 20
+    payment allocations, every one between posted documents. New
+    `settlement_in_one_go.sql`, added to `ci.yml`. Five files that
+    applied a draft as a fixture post it first now, or go through
+    `record_settlement`. Swept 17 / 17; each caller's switch back to the
+    public door added to its own mutants file and killed, and the older
+    sweeps of the three callers re-run and holding. "An invoice can be
+    dated after today" (`demo_practice.py`) is killed only on the first
+    six days of a month -- it survived on 12 October and was killed on a
+    copy of the database with its clock at 5 January; said in the file.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -2810,6 +2857,7 @@ function:
 | `app.a_ledger_account_is_closed_by_closing_it` | `0829` | 11 / 12 | 1 (the depth clause: every writer of the two columns is a definer; said in the file) | `ledger_account_closed_by_closing.sql` (new in `0829`; closing, each half alone, reopening, a closed insert and a delete refused; the chart's own writes and an open insert as before; the delete door restored by hand, 3 / 3 with a control) |
 | `add_ticket_comment`, `app.transition_ticket_internal` | `0830` | 14 / 14 | -- | `ticket_late_answer.sql` (new in `0830`; late and in-time reply and resolution, an internal note, a sweep's breach not marked twice, paused time, a cancellation, closing after resolving in time) |
 | `app.a_ticket_keeps_its_own_time` | `0831` | 19 / 20 | 1 (the depth clause: every function that moves the clock is a definer; said in the file) | `ticket_clock_kept.sql` (new in `0831`; each of the fifteen clock columns alone; insert refused; the screen's own fields and the workflow as before; the insert grant restored by hand fails it, with a control) |
+| `allocate_with_discount`, `allocate_payment_with_discount`, `record_settlement` | `0832` | 17 / 17 | -- | `settlement_in_one_go.sql` (new in `0832`; draft money, a draft and a voided document refused on both sides; two invoices settled and posted in one call; a retry; a refused posting leaving nothing; an exchange difference; a viewer refused). The three restated callers' switch back to the door: `group_payment.sql`, `client_money_crossing.sql`, `demo_practice.sql`, each 1 / 1 or 2 / 2 |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |

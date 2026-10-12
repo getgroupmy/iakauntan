@@ -61,8 +61,11 @@ begin
   return v_id;
 end $$;
 
+-- Posted: since `0832` money is applied once it is in the books.
 create or replace function pg_temp.oa_receipt(p_org uuid, p_no text, p_amt numeric)
-returns uuid language sql as $$
+returns uuid language plpgsql as $$
+declare v_id uuid;
+begin
   insert into public.receipts
     (org_id, receipt_no, receipt_date, contact_id, bank_account_id,
      currency, exchange_rate, amount, unapplied_amount)
@@ -70,8 +73,10 @@ returns uuid language sql as $$
           (select id from public.contacts where org_id = p_org and code = 'C'),
           (select id from public.bank_accounts where org_id = p_org limit 1),
           'MYR', 1, p_amt, p_amt)
-  returning id;
-$$;
+  returning id into v_id;
+  perform public.post_receipt(v_id);
+  return v_id;
+end $$;
 
 -- ---------------------------------------------------------------------
 -- The invoice
@@ -288,6 +293,8 @@ begin
           (select id from public.bank_accounts where org_id = v_org limit 1),
           'MYR', 1, 900, 900)
   returning id into v_pay;
+  -- Posted first (0832).
+  perform public.post_purchase_payment(v_pay);
 
   begin
     perform public.allocate_payment_with_discount(v_pay, v_bill, 900, null,

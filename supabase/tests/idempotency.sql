@@ -768,17 +768,22 @@ begin
   return v_id;
 end $$;
 
+-- Posted: since `0832` money is applied once it is in the books.
 create or replace function pg_temp.a_receipt(
   p_org uuid, p_contact uuid, p_no text, p_amount numeric)
-returns uuid language sql as $$
+returns uuid language plpgsql as $$
+declare v_id uuid;
+begin
   insert into public.receipts
     (org_id, receipt_no, receipt_date, contact_id, bank_account_id,
      currency, exchange_rate, amount, unapplied_amount)
   values (p_org, p_no, pg_temp.today(), p_contact,
           (select id from public.bank_accounts where org_id = p_org limit 1),
           'MYR', 1, p_amount, p_amount)
-  returning id;
-$$;
+  returning id into v_id;
+  perform public.post_receipt(v_id);
+  return v_id;
+end $$;
 
 -- ---------------------------------------------------------------------
 -- allocate_with_discount: the measurement that started this migration
@@ -861,6 +866,8 @@ begin
           (select id from public.bank_accounts where org_id = v_org limit 1),
           'MYR', 1, 1000, 1000)
   returning id into v_pay;
+  -- Posted first (0832).
+  perform public.post_purchase_payment(v_pay);
 
   perform public.allocate_payment_with_discount(v_pay, v_bill, 300, 0,
     pg_temp.today());

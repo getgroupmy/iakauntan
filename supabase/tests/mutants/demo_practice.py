@@ -10,6 +10,27 @@
 #       supabase/tests/demo_practice.sql \
 #       supabase/tests/mutants/demo_practice.py
 #
+# `0765` restates `demo_legal_guaman` and `0832` restates
+# `demo_practice_books` -- applying the settling receipt through
+# `app.allocate_with_discount_internal`, since the public door now
+# refuses a receipt that is not posted and this one is posted on the
+# next line. So a whole run names one migration and refuses the other
+# function: take one function's mutants at a time. Re-run 12 October
+# against `0832`: demo_practice_books' seven hold as below, and one is
+# added -- applied through the public door instead, as a draft --
+# killed by demo_practice.sql.
+#
+# "An invoice can be dated after today" is killed ONLY on the first six
+# days of a month. It drops the `least(..., today)` from the seventh of
+# the month each invoice is dated, and from the seventh to the end of
+# the month the seventh of THIS month is not in the future either, so
+# the mutated builder writes exactly what the real one does. Swept on 6
+# October it was killed; on 12 October it survived both files; on a
+# copy of the database with its clock at 5 January 2027 demo_rebuild.sql
+# killed it again ("no demo invoice, receipt or payment is dated after
+# today"). Nothing is missing from the test: on those days there is no
+# difference to assert.
+#
 # RESULT, 6 October: 14 mutants, 13 killed, 1 EQUIVALENT, control alive.
 # Against the demo files as they were: 5 killed. New assertions:
 #
@@ -64,7 +85,7 @@ m("the settling receipt is never posted",
 
 m("the receipt is never applied to the invoice it pays",
   "demo_practice_books",
-  "      perform public.allocate_with_discount(v_rcp, v_doc, p_fee, null,\n"
+  "      perform app.allocate_with_discount_internal(v_rcp, v_doc, p_fee, null,  -- 0832\n"
   "                                            v_date + 30);",
   "      -- receipt left unapplied",
   "-- receipt left unapplied")
@@ -120,6 +141,12 @@ m("the corporate matter has no agreed fee to run over",
   "    v_c3, null, 'corporate', p_owner, p_owner,\n    6000, v_rate, null);",
   "    v_c3, null, 'corporate', p_owner, p_owner,\n    null, v_rate, null);  -- no agreed fee",
   "-- no agreed fee")
+
+m("the demo practice applies through the door, as a draft",
+  "demo_practice_books",
+  "      perform app.allocate_with_discount_internal(v_rcp, v_doc, p_fee, null,  -- 0832",
+  "      perform public.allocate_with_discount(v_rcp, v_doc, p_fee, null,  -- through the door",
+  "-- through the door")
 
 m("CONTROL -- a comment inside the function block",
   "demo_practice_books",

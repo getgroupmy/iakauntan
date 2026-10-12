@@ -104,15 +104,11 @@ begin
   perform pg_temp.check_eq('so INV-1 is still settled',
     (select balance_amount from public.sales_documents where id = d.inv), 0::numeric);
 
-  -- The road: a second receipt applied through the function, by the
-  -- same client.
-  insert into public.receipts
-    (org_id, receipt_no, receipt_date, contact_id, amount, unapplied_amount,
-     currency, exchange_rate, bank_account_id)
-  values (d.org, 'RCP-2', date '2026-03-06', d.cust, 400, 400, 'MYR', 1, d.bank)
-  returning id into v_rc2;
-  perform public.allocate_with_discount(v_rc2, d.inv2, 400);
-  perform public.post_receipt(v_rc2);
+  -- The road: a second receipt recorded, applied and posted in one
+  -- call, as the receipt screen does since `0832`, by the same client.
+  v_rc2 := public.record_settlement(d.org, true, d.cust, 400, date '2026-03-06',
+    jsonb_build_array(jsonb_build_object('document_id', d.inv2, 'amount', 400)),
+    d.bank, null, null, null, 0, 'MYR', 1, null);
   perform pg_temp.check_eq('a payment is applied through its function',
     (select paid_amount || '/' || status from public.sales_documents where id = d.inv2),
     '400.00/partial');

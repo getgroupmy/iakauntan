@@ -6,6 +6,16 @@
 #       supabase/tests/client_money_crossing.sql \
 #       supabase/tests/mutants/client_money_crossing.py
 #
+# `0832` restates `settle_from_client_account` to apply its receipt
+# through `app.allocate_with_discount_internal` -- the public door now
+# refuses a receipt that is not posted, and this one posts it straight
+# after, in the same transaction. Its mutants run against `0832` now and
+# the other two functions' against `0549`, so a whole run names one and
+# refuses the other: take one function's mutants at a time. Re-run 12
+# October: settle_from_client_account's seven, 7 killed by
+# client_money_crossing.sql; and one added -- applied through the
+# public door instead, as a draft -- killed by the same file.
+#
 # Then again against `supabase/tests/client_account.sql`, which is the
 # only other file that reaches any of them: a per-file score understates
 # the suite, and running one file nearly produced three false alarms
@@ -215,6 +225,12 @@ m("the crossing lands back in the CLIENT account, moving nothing",
   "     where b.org_id = v_org and b.is_client_account and b.is_active"
   "  -- office destination inverted",
   "-- office destination inverted")
+
+m("a client-account settlement is applied through the door, as a draft",
+  "settle_from_client_account",
+  "  perform app.allocate_with_discount_internal(v_receipt, p_invoice, p_amount, null,",
+  "  perform public.allocate_with_discount(v_receipt, p_invoice, p_amount, null,  /* door */",
+  "/* door */")
 
 m("CONTROL -- a comment inside the function block",
   "pay_from_client_account",
