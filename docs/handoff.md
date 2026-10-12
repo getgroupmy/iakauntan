@@ -2635,7 +2635,14 @@ page and renumbering would quietly break the reference.
     demonstration companies, none short. New `share_register_kept.sql`,
     added to `ci.yml`. Swept 15 / 15; the update and delete doors
     restored by hand fail the file 3 of 3, with a control.
-    **Still to read back.**
+    **Applied, and read back** (12 October, read-only, after run
+    38225422549 on `95761ea` had applied the migrations): recorded;
+    `app.corp_check_share_event` is there with the body this branch
+    builds (md5 `76167460`), not a definer; neither `authenticated` nor
+    `anon` may update or delete a movement, `authenticated` may still
+    insert one, and the table's policies are
+    `corp_share_events_insert` and `corp_share_events_select` alone. The
+    eight movements are as they were.
 101. ~~A previous employer's figures typed with a minus sign, or with a
     two-digit year, move PCB.~~ **Raised and answered 12 October: check
     constraints. Built in `0834`.** `employee_ytd_opening` holds what a
