@@ -2967,6 +2967,27 @@ page and renumbering would quietly break the reference.
     `order_status_by_its_functions.sql`, added to `ci.yml`. Swept 6 / 7;
     the survivor, the depth clause, is equivalent.
     **Still to read back.**
+113. ~~A claimant can rewrite an approved expense claim's lines -- what
+    was spent on, the amount, the category and so the account -- add to
+    them or delete them.~~ **Raised and answered 12 October: freeze once
+    anybody decides. Built in `0846`.** What a claim posts and pays is
+    the approver's `approved_amount`, spread across expense accounts by
+    `claim_expense_allocation` in the proportions of its lines; `0795`
+    kept the claim's own state to its functions, but its lines kept a
+    policy for all commands. Measured as the claimant with the role
+    `authenticated`, on a claim approved through its chain at RM500: its
+    line rewritten to RM5,000 and moved from Travel to Client
+    entertainment, a line added, and the only line deleted --
+    leaving an approved claim with nothing to post -- were all accepted.
+    The money paid was safe throughout. Now `a_claim_is_what_was_decided`
+    refuses a client's own insert, update or delete of a claim's lines
+    once the claim has left draft or submitted, or once any step has
+    been approved or rejected; HR and the claim functions pass, and the
+    app's own write -- lines inserted as it makes the claim -- is as
+    before. NOT security definer. Production held no expense claim. New
+    `claim_lines_kept.sql`, added to `ci.yml`. Swept 7 / 9; the two
+    survivors, the depth clause and a rejected step, are equivalent.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -3248,6 +3269,7 @@ function:
 | `app.assert_statutory_bands` | `0404` | 10 / 10 | -- | `statutory_schedules.sql` (five new on 12 October: fifty sen missing, two bands meeting on one sen, a category stopping short of the next, a sen-apart table published, a schedule with no bands -- `statutory_bands.sql` alone killed 1 of 10, since every shipped table is well formed) |
 | `app.accounts_opening_balance_is_not_writable` (the `current_balance` refusals) | `0844` | 4 / 6 | 2 (the depth clauses: no road to `gl_lines` runs as a client; said in the file) | `account_balance_is_the_ledgers.sql` (new in `0844`; a typed balance and an account made with one refused; renaming, making and posting as before; the owner at the top passes) |
 | `app.an_order_moves_by_its_functions` | `0845` | 6 / 7 | 1 (the depth clause: confirming and posting are definers; said in the file) | `order_status_by_its_functions.sql` (new in `0845`; a posted order refused cancelling and going back to draft, a confirmed one refused being marked done, one made confirmed refused; confirming, posting and cancelling a draft or a confirmed order as before; a cancelled one not brought back; the owner at the top passes) |
+| `app.a_claim_is_what_was_decided` | `0846` | 7 / 9 | 2 (the depth clause, and a rejected step -- `decide_claim_step` rejects the claim with it; both said in the file) | `claim_lines_kept.sql` (new in `0846`; an approved claim's line refused rewriting, adding and deleting, a claim one approver has passed and a withdrawn one refused, a line moved either way between a decided and an open claim refused; an open claim and a draft written as before; HR still corrects; the owner at the top passes) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |

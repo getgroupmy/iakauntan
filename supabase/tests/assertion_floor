@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17778
+17790
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1649,3 +1649,12 @@
 # confirmed order as before; a cancelled one not brought back; the owner
 # at the top passes). Measured: `all SQL assertions passed (429 files,
 # 17778 assertions executed)`.
+#
+# 12 October 2026, `0846`: 17778 -> 17790. Twelve in
+# `claim_lines_kept.sql` (new: as the claimant with the role
+# `authenticated`, an approved claim's line refused rewriting, adding and
+# deleting; a claim one approver has passed and a withdrawn one refused;
+# a line moved either way between a decided and an open claim refused;
+# an open claim and a draft written as before; HR still corrects; the
+# owner at the top passes). Measured: `all SQL assertions passed (430
+# files, 17790 assertions executed)`.
