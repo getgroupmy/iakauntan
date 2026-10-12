@@ -2248,7 +2248,12 @@ page and renumbering would quietly break the reference.
     insert. Swept 15 / 16; the survivor, the guard's depth clause, is an
     equivalent mutant -- every writer of the table is a definer -- and
     the file says so beside the owner's assertion.
-    **Still to read back.**
+    **Applied, and read back** (12 October, read-only, after run
+    38193127837 on `11a8e43` had applied the migrations): recorded;
+    `app.fixed_asset_figures_are_the_runs()` is there, not a definer,
+    executable by its owner alone, with the body this branch builds
+    (md5 `0cbd930c`), and `a_fixed_asset_figures_are_the_runs` is
+    enabled on `fixed_assets`. The seven assets are as they were.
 90. ~~A bank account can be pointed at an expense by hand, and money
     received is booked as one.~~ **Raised and answered 11 October:
     read-only to clients. Built in `0823`.** The app reads
