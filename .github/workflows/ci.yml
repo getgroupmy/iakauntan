@@ -1273,7 +1273,8 @@ jobs:
                    supabase/tests/billed_time_kept.sql \
                    supabase/tests/company_billing_columns.sql \
                    supabase/tests/tax_estimate_chain.sql \
-                   supabase/tests/closed_account_in_books.sql; do
+                   supabase/tests/closed_account_in_books.sql \
+                   supabase/tests/ledger_account_closed_by_closing.sql; do
             echo "== $f"
             # Captured, NOT piped. This step runs under `bash -e` with no
             # `pipefail`, so `psql ... | grep` would hand the shell grep's

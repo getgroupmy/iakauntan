@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17504
+17521
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1485,3 +1485,14 @@
 # chart_of_accounts.sql and account_closure.sql restated, one for one.
 # Measured: `all SQL assertions passed (412 files, 17504 assertions
 # executed)`.
+#
+# 17504 -> 17521, 12 October: 0829, a ledger account is closed by
+# closing it (ledger_account_closed_by_closing.sql, 17: retire_account
+# will not close 1210, nor is it closed by hand, marked deleted or
+# switched off alone, nor deleted; an account closed through
+# retire_account is not reopened or switched back on by hand; an account
+# is not made closed or switched off; the chart's tax treatment and name
+# and an open account as before; an invoice on an open 1210 and the
+# trial balance balanced; the owner at the top let through; no delete
+# policy left). Measured: `all SQL assertions passed (413 files, 17521
+# assertions executed)`.

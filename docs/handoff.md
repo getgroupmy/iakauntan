@@ -2453,6 +2453,29 @@ page and renumbering would quietly break the reference.
     `mutate_sql.py`'s `arity`, which now skips comments, with a
     self-test that fails without it.
     **Still to read back.**
+96. ~~A client can close a ledger account by hand that retire_account
+    refuses, and delete one.~~ **Raised and answered 12 October, with
+    95: reports and refuse. Built in `0829`.** `retire_account` is the
+    door -- it checks what an account holds and writes the closure the
+    console reopens it from -- and `0619` said "nothing in this product
+    deletes an account any more"; the chart screen writes only
+    `tax_treatment` on the row. But `0459`'s policies let anybody who
+    may post update any column and delete. Measured as the owner with
+    the role `authenticated`: `retire_account` refused 1210 Accounts
+    Receivable and a direct update closed it, and the next RM100 invoice
+    posted to the closed account and left the trial balance short; and
+    1210, before anything had posted to it, could be deleted, after
+    which an invoice did not post at all. Now client delete is revoked
+    and its policy dropped, and `a_ledger_account_is_closed_by_closing_it`
+    refuses a client's own statement that closes or reopens an account
+    (`deleted_at`, `is_active`) or makes one already closed; the
+    functions pass. NOT security definer. Production held 1,566
+    accounts in eighteen companies, three closed, every one through
+    `retire_account`. New `ledger_account_closed_by_closing.sql`, added
+    to `ci.yml`. Swept 11 / 12; the survivor, the depth clause, is
+    equivalent. The delete door restored by hand fails the file 3 of 3,
+    with a control.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -2713,6 +2736,7 @@ function:
 | `app.a_company_is_billed_as_the_platform_says` | `0826` | 12 / 13 | 1 (the depth clause: every writer of the four columns is a definer; said in the file) | `company_billing_columns.sql` (new in `0826`; each column alone on update and insert; `firm_member_role` with 'admin', since 'owner' is refused by a constraint; February's run asserted to bill both) |
 | `app.a_tax_estimate_is_kept` | `0827` | 16 / 17 | 1 (the depth clause: both writers of the table are definers; said in the file) | `tax_estimate_chain.sql` (new in `0827`; the superseded estimate refused any change, each chain column alone on the live one, insert and delete refused, the schedule asserted unchanged; insert and delete restored by hand, 6 / 6 with a control) |
 | `report_trial_balance`, `report_balance_sheet`, `report_general_ledger`, `report_changes_in_equity`, `report_matter_trial_balance`, `report_cash_flow`, `retire_account` | `0828` | 24 / 24 | -- | `closed_account_in_books.sql` (new in `0828`; production's state remade, every report asked, both refusals; a draft and a bank account out of use as what must not count) |
+| `app.a_ledger_account_is_closed_by_closing_it` | `0829` | 11 / 12 | 1 (the depth clause: every writer of the two columns is a definer; said in the file) | `ledger_account_closed_by_closing.sql` (new in `0829`; closing, each half alone, reopening, a closed insert and a delete refused; the chart's own writes and an open insert as before; the delete door restored by hand, 3 / 3 with a control) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |
