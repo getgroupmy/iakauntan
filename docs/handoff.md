@@ -2949,6 +2949,24 @@ page and renumbering would quietly break the reference.
     `app.accounts_opening_balance_is_not_writable` is there with the
     body this branch builds (md5 `1b968ed1`), not a definer, and its
     trigger is enabled on `accounts`; the 104 balances are as they were.
+112. ~~A manufacturing order's status can be set by hand: a posted one
+    cancelled or put back to draft, a confirmed one marked done.~~
+    **Raised and answered 12 October: guard the status. Built in
+    `0845`.** `confirm_manufacturing_order` and `post_manufacturing_
+    order` move an order, and the screen's one direct write cancels an
+    order not yet started; `0837` kept the posting columns but not the
+    status. Measured as the owner with the role `authenticated`: a
+    posted order marked cancelled with its journal and movements
+    standing, a confirmed order marked done with nothing issued -- and
+    then refused by posting for good -- and a posted order put back to
+    draft were all accepted. Now `an_order_moves_by_its_functions`
+    refuses a client's own statement that moves the status anywhere but
+    to cancelled, cancels a posted order, or makes one other than as a
+    draft. NOT security definer. Production held three orders, all
+    consistent, in demonstration companies. New
+    `order_status_by_its_functions.sql`, added to `ci.yml`. Swept 6 / 7;
+    the survivor, the depth clause, is equivalent.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -3229,6 +3247,7 @@ function:
 | `public.open_tax_computation`, `public.tax_computation_misfiled` | `0665` | 9 / 9 | -- | `tax_computation.sql` (five assertions new on 12 October: a July-to-June year assessed in the year it ends, another company's year refused, and the misfiled list leaving out a deleted account, another company's, and a non-member -- the first run left all five alive) |
 | `app.assert_statutory_bands` | `0404` | 10 / 10 | -- | `statutory_schedules.sql` (five new on 12 October: fifty sen missing, two bands meeting on one sen, a category stopping short of the next, a sen-apart table published, a schedule with no bands -- `statutory_bands.sql` alone killed 1 of 10, since every shipped table is well formed) |
 | `app.accounts_opening_balance_is_not_writable` (the `current_balance` refusals) | `0844` | 4 / 6 | 2 (the depth clauses: no road to `gl_lines` runs as a client; said in the file) | `account_balance_is_the_ledgers.sql` (new in `0844`; a typed balance and an account made with one refused; renaming, making and posting as before; the owner at the top passes) |
+| `app.an_order_moves_by_its_functions` | `0845` | 6 / 7 | 1 (the depth clause: confirming and posting are definers; said in the file) | `order_status_by_its_functions.sql` (new in `0845`; a posted order refused cancelling and going back to draft, a confirmed one refused being marked done, one made confirmed refused; confirming, posting and cancelling a draft or a confirmed order as before; a cancelled one not brought back; the owner at the top passes) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |

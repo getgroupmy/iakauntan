@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17767
+17778
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1640,3 +1640,12 @@
 # journal as before, on both sides of it; the owner at the top passes).
 # Measured: `all SQL assertions passed (428 files, 17767 assertions
 # executed)`.
+#
+# 12 October 2026, `0845`: 17767 -> 17778. Eleven in
+# `order_status_by_its_functions.sql` (new: a posted manufacturing order
+# refused cancelling and going back to draft, a confirmed one refused
+# being marked done, one made confirmed refused -- as the owner with the
+# role `authenticated`; confirming, posting and cancelling a draft or a
+# confirmed order as before; a cancelled one not brought back; the owner
+# at the top passes). Measured: `all SQL assertions passed (429 files,
+# 17778 assertions executed)`.
