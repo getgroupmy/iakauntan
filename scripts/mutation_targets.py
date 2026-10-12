@@ -211,7 +211,11 @@ def fired_by(bare: str, called_by: dict[str, set[str]],
     return hit
 
 
-STRING = re.compile(r'"((?:[^"\\]|\\.)*)"')
+# Either quote. The files written by hand use double quotes; the ones
+# generated with `repr` (0830 on) use single, and a pattern that read
+# only the first reported `record_settlement` as never swept straight
+# after 17 mutants had been run against it.
+STRING = re.compile(r'"((?:[^"\\]|\\.)*)"|\'((?:[^\'\\]|\\.)*)\'')
 
 
 def measured(known: frozenset[str]) -> set[str]:
@@ -249,7 +253,7 @@ def measured(known: frozenset[str]) -> set[str]:
     for path in MUTANTS.glob("*.py"):
         text = path.read_text()
         for chunk in text.split("\nm(")[1:]:
-            found = STRING.findall(chunk)
+            found = [a or b for a, b in STRING.findall(chunk)]
             if len(found) >= 2:
                 names.add(found[1])
         # The stem too, for a file named after its one function.
