@@ -2887,6 +2887,28 @@ page and renumbering would quietly break the reference.
     added to `ci.yml`. The door restored by hand -- grant with policy,
     grant alone, policy alone -- fails the file 3 of 3, with a control.
     **Still to read back.**
+110. ~~A posted manufacturing order's components can be rewritten away
+    from the stock it moved, deleted or added to.~~ **Raised and
+    answered 12 October: revoke client writes. Built in `0843`.**
+    `confirm_manufacturing_order` writes an order's components from the
+    bill of materials and `post_manufacturing_order` records on each
+    the quantity issued and its cost, from the movement it made; both
+    are definers, and the order screen only reads them. But
+    `mo_components_write` let anybody who can post insert, update or
+    delete them. Measured as the owner with the role `authenticated`:
+    on a posted order whose movement issued 20 kg of flour at RM40, its
+    component rewritten to 2 kg at RM4, deleted, and added to -- all
+    accepted; on a confirmed order, the flour cut from 20 kg to 1 kg,
+    and posting then costed each loaf at RM0.20 rather than RM4.00.
+    Now insert, update and delete are revoked from `authenticated` and
+    `anon` and the policy dropped, with the module gates for writing
+    (`table_grants.sql` refuses a policy no privilege reaches).
+    Production held three orders, two posted, and twelve components,
+    all in demonstration companies, none disagreeing with its movement.
+    New `order_components_by_posting.sql`, added to `ci.yml`. The door
+    restored by hand -- grant with policy, grant alone, policy alone --
+    fails the file 3 of 3, with a control.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -3161,6 +3183,7 @@ function:
 | `app.what_is_in_the_books_stays` | `0840` | 8 / 9 | 1 (the depth clause: every function that deletes one is a definer, and a cascade runs as the owner; said in the file) | `books_kept_on_delete.sql` (new in `0840`; a posted order, a depreciated van and a lodged filing refused, their journal, depreciation and figures still there; a forklift disposed of with no depreciation entry refused; a draft order, an undepreciated laptop and an unlodged filing still deleted; the owner at the top passes) |
 | `app.a_company_always_has_an_owner` | `0841` | 18 / 19 | 1 (the depth clause: every function that writes a membership is a definer; said in the file) | `company_keeps_its_owner.sql` (new in `0841`; the sole owner refused stepping down, suspending themselves, repointing their seat and moving a member to their other company; an admin refused seating another account on an invitation and each invitation column alone; a role and a suspension still changed; an invitation still accepted; a co-owner still steps down, a suspended one does not count; `transfer_company` still hands over; the owner at the top passes) |
 | (the write grants and policy on `loyalty_accounts`) | `0842` | 3 / 3 restored by hand | -- | `loyalty_account_by_enrolment.sql` (new in `0842`; a cashier refused moving a card to another customer, deleting an account and making one by hand, the balance where it was; enrolling and a new card number at the counter as before; no write grant or policy; grants and policy restored with and without each other, with a control) |
+| (the write grants and policy on `mo_components`) | `0843` | 3 / 3 restored by hand | -- | `order_components_by_posting.sql` (new in `0843`; a posted order's component refused rewriting, deleting and adding to, still agreeing with its movement; a confirmed order's flour refused cutting, and posting issuing what the bill of materials says; confirming and posting still write them; no write grant or policy; grants and policy restored with and without each other, with a control) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |
