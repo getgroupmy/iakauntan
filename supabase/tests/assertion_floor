@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17455
+17477
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1461,3 +1461,14 @@
 # still writes the row; February's run bills both companies; the owner
 # at the top let through). Measured: `all SQL assertions passed (410
 # files, 17455 assertions executed)`.
+#
+# 17455 -> 17477, 12 October: 0827, a revision leaves the estimate it
+# replaced (tax_estimate_chain.sql, 22: the revised schedule as it was;
+# the replaced estimate not rewritten, its prior figure not changed, nor
+# set live again; each of the eight columns opening and revising decide
+# refused alone on the live one; an estimate not inserted or deleted by
+# hand; instalments one to seven still RM10,000 and the RM10,000 paid
+# against RM10,000 due; the dialog's six fields as before; revised again
+# through the function and the newest handed back; the owner at the top
+# let through; no insert or delete policy left). Measured: `all SQL
+# assertions passed (411 files, 17477 assertions executed)`.

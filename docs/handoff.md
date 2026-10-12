@@ -2368,6 +2368,37 @@ page and renumbering would quietly break the reference.
     'owner' is refused already by `firm_role_is_not_owner`, which killed
     the first sweep's mutant for the wrong reason.
     **Still to read back.**
+94. ~~A CP204 estimate's history can be rewritten by hand.~~ **Raised
+    and answered 12 October: guard the chain. Built in `0827`.**
+    `open_tax_estimate` makes an estimate, deciding its form from the
+    entity type and its year of assessment from the basis period;
+    `revise_tax_estimate` makes a CP204A as a new row and marks the one
+    it replaces superseded. `tax_estimate_schedule` reads the whole
+    chain -- each instalment is payable at what the estimate in force on
+    its due date said -- so a superseded estimate is still the record of
+    what was payable before the revision. The "change the estimate"
+    dialog writes six fields on the live estimate and nothing else, but
+    `0667`'s policies let a client write every column of every row.
+    Measured as the owner with the role `authenticated`: RM120,000
+    revised to RM240,000 in the ninth month, RM10,000 paid on the first
+    instalment. The superseded original rewritten to RM0 put
+    instalments one to seven at RM0, and the tax tile's overdue figure
+    fell from seven instalments and RM94,000 to one and RM48,000; the
+    form typed CP500 on a Sdn Bhd gave it six instalments for twelve;
+    the revision month moved from nine to two rewrote seven that had
+    fallen due; and one could be inserted already superseded, on the
+    wrong form, for 2031. Now client insert and delete are revoked and
+    their policies dropped, and `a_tax_estimate_is_kept` refuses a
+    client's own change to a superseded estimate, or to `org_id`,
+    `fiscal_year_id`, `year_of_assessment`, `form`, `revises_id`,
+    `revision_month`, `status` or `created_by` on any; the functions
+    pass. NOT security definer. `status` 'submitted' was set by nothing
+    before and is set by nothing now. Production held no estimates. New
+    `tax_estimate_chain.sql`, added to `ci.yml`, asks each column on its
+    own and that the schedule is unchanged. Swept 16 / 17; the survivor,
+    the depth clause, is equivalent. The revoked doors restored by hand
+    fail the file 6 of 6, with a control.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -2626,6 +2657,7 @@ function:
 | `app.a_posted_expense_is_kept` | `0824` | 33 / 34 | 1 (the depth clause: the only writers of `expenses` are two definers; said beside the owner's assertion) | `posted_expense_kept.sql` (new in `0824`; every one of the twenty-one frozen columns asked alone; eight answered first by a key, a policy, the branch check or `refuse_reposting`, killed because the guard's own sentence is asked for) |
 | `app.billed_time_is_kept` | `0825` | 20 / 21 | 1 (the depth clause: every writer of `time_entries` but the app is a definer; said beside the owner's assertion) | `billed_time_kept.sql` (new in `0825`; each of the eight frozen columns asked alone; `amount` asserted to be worked out again rather than frozen) |
 | `app.a_company_is_billed_as_the_platform_says` | `0826` | 12 / 13 | 1 (the depth clause: every writer of the four columns is a definer; said in the file) | `company_billing_columns.sql` (new in `0826`; each column alone on update and insert; `firm_member_role` with 'admin', since 'owner' is refused by a constraint; February's run asserted to bill both) |
+| `app.a_tax_estimate_is_kept` | `0827` | 16 / 17 | 1 (the depth clause: both writers of the table are definers; said in the file) | `tax_estimate_chain.sql` (new in `0827`; the superseded estimate refused any change, each chain column alone on the live one, insert and delete refused, the schedule asserted unchanged; insert and delete restored by hand, 6 / 6 with a control) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |
