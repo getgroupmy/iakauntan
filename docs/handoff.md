@@ -2916,7 +2916,14 @@ page and renumbering would quietly break the reference.
     New `order_components_by_posting.sql`, added to `ci.yml`. The door
     restored by hand -- grant with policy, grant alone, policy alone --
     fails the file 3 of 3, with a control.
-    **Still to read back.**
+    **Applied, and read back** (12 October, read-only, after run
+    38253526165 on `1e0b0fb` had applied the migrations): recorded;
+    neither `authenticated` nor `anon` holds insert, update or delete on
+    `mo_components`, select stands, and its policies are the two read
+    ones; the twelve components are all still there. That run's
+    "Deploy the workspace proxy" failed again on Cloudflare -- a 504 on
+    the worker's subdomain lookup after the worker had uploaded -- and
+    the failed job was re-run.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
