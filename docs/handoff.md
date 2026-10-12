@@ -2491,7 +2491,12 @@ page and renumbering would quietly break the reference.
     to `ci.yml`. Swept 11 / 12; the survivor, the depth clause, is
     equivalent. The delete door restored by hand fails the file 3 of 3,
     with a control.
-    **Still to read back.**
+    **Applied, and read back** (12 October, read-only, after run
+    38211972718 on `3e8ad00` had applied the migrations): recorded;
+    `app.a_ledger_account_is_closed_by_closing_it` is there with the
+    body this branch builds (md5 `c86f2f1f`), not a definer, its trigger
+    enabled on `accounts`; neither `authenticated` nor `anon` holds
+    delete on the table, and `accounts_delete` is gone.
 97. ~~A ticket answered or resolved late, between two sweeps, is never
     marked late.~~ **Raised and answered 12 October: both. Built in
     `0830`; the client's own writes to the clock are `0831`.**
