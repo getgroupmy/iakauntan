@@ -2803,6 +2803,30 @@ page and renumbering would quietly break the reference.
     restored by hand -- grant with policy, grant alone, policy alone --
     fails the file 3 of 3, with a control.
     **Still to read back.**
+107. ~~A posted manufacturing order, a depreciated asset and a lodged
+    set of accounts can be deleted, and what stands on them is left
+    with nothing behind it.~~ **Raised and answered 12 October: refuse
+    deleting what's in the books. Built in `0840`.** Their delete
+    policies ask only whether the member may write. Measured as the
+    owner with the role `authenticated`: a posted order deleted, its
+    journal and both stock movements left standing; a van depreciated
+    RM600 deleted, its depreciation entries cascading away while the
+    ledger kept the RM600; a lodged filing deleted with its frozen
+    figures. The app deletes none of the three. Now
+    `what_is_in_the_books_stays` refuses a client's delete -- role
+    `authenticated` or `anon`, at the top trigger depth -- of a posted
+    order, an asset with a depreciation entry or a disposal, and a
+    lodged filing; a draft order, an asset never depreciated and a
+    filing not lodged are deletable as before, and the owner's teardown
+    and a company's cascade pass. NOT security definer. Production held
+    two posted orders, seven depreciated assets and two lodged filings,
+    all in demonstration companies. New `books_kept_on_delete.sql`,
+    added to `ci.yml`. Swept 8 / 9; the survivor, the depth clause, is
+    equivalent. The disposal is asked of a forklift whose residual value
+    is its cost: an asset disposed of part-way through a period is
+    depreciated to the day first, so the first draft's disposed asset
+    was refused for its depreciation and the disposal went unasked.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -3074,6 +3098,7 @@ function:
 | `app.posting_is_the_posting_functions` | `0837` | 9 / 10 | 1 (the depth clause: every function that posts, voids or reverses is a definer; said in the file) | `posting_is_the_posting_functions.sql` (new in `0837`; each posting column on each of the five tables alone, a receipt's and payment's status, each born posted on insert; `0832`'s door still seeing the draft; a draft edited, an order cancelled, an invoice posted and money settled by their functions) |
 | `app.a_filing_is_lodged_by_lodging_it` | `0838` | 6 / 7 | 1 (the depth clause: the three filing functions are definers; said in the file) | `fs_filing_workflow_kept.sql` (new in `0838`; lodged by hand and each workflow column alone refused, born lodged, frozen or signed refused; frozen and lodged by the functions; put back to draft by hand refused as `fs_unfreeze` refuses; the figures as lodged; the reference and date still open) |
 | (the insert grant and policy on `org_members`) | `0839` | 3 / 3 restored by hand | -- | `org_members_by_invitation.sql` (new in `0839`; an admin refused inserting an owner or anybody uninvited, and promoting themselves; an invitation and a role change as before; one owner; insert grant and policy restored with and without each other, with a control) |
+| `app.what_is_in_the_books_stays` | `0840` | 8 / 9 | 1 (the depth clause: every function that deletes one is a definer, and a cascade runs as the owner; said in the file) | `books_kept_on_delete.sql` (new in `0840`; a posted order, a depreciated van and a lodged filing refused, their journal, depreciation and figures still there; a forklift disposed of with no depreciation entry refused; a draft order, an undepreciated laptop and an unlodged filing still deleted; the owner at the top passes) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |

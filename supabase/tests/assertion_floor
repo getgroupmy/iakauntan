@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17692
+17705
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1587,3 +1587,12 @@
 # a role still changed by an admin; one owner; no client insert grant or
 # policy). Measured: `all SQL assertions passed (423 files, 17692
 # assertions executed)`.
+#
+# 12 October 2026, `0840`: 17692 -> 17705. Thirteen in
+# `books_kept_on_delete.sql` (new: a posted manufacturing order, a
+# depreciated van and a lodged filing refused deletion as the owner with
+# the role `authenticated`, and what stands on each still there; a
+# forklift disposed of with no depreciation entry refused; a draft order,
+# an undepreciated laptop and an unlodged filing still deleted; the
+# owner at the top passes). Measured: `all SQL assertions passed (424
+# files, 17705 assertions executed)`.
