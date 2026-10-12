@@ -162,6 +162,51 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- 2b. A table for a season, and the standing one it lapses back to
+-- ---------------------------------------------------------------------
+--
+-- KWSP cut the employee's share to 9% for 2021 alone and then went back
+-- to the standing rate: a table with an end, laid over one without. On
+-- the day after the season the season's table is still the LATEST to
+-- have started, so `(effective_to is null or effective_to >= p_date)` is
+-- all that keeps it from being charged for ever. With every table
+-- open-ended that clause decided nothing, and a sweep of this function
+-- on 12 October 2026 found it could be dropped unseen.
+do $$
+declare
+  v_standing uuid; v_season uuid; v_amount numeric;
+begin
+  insert into public.statutory_schedules
+    (body, name, method, effective_from, effective_to, result_rounding,
+     is_verified)
+  values ('hrdf', 'The standing rate', 'percentage',
+          date '2034-01-01', null, 'nearest_cent', true)
+  returning id into v_standing;
+  insert into public.statutory_rates
+    (schedule_id, category, wage_from, employer_rate)
+  values (v_standing, 'default', 0, 1.50);
+
+  insert into public.statutory_schedules
+    (body, name, method, effective_from, effective_to, result_rounding,
+     is_verified)
+  values ('hrdf', 'For 2035 only', 'percentage',
+          date '2035-01-01', date '2035-12-31', 'nearest_cent', true)
+  returning id into v_season;
+  insert into public.statutory_rates
+    (schedule_id, category, wage_from, employer_rate)
+  values (v_season, 'default', 0, 0.50);
+
+  perform pg_temp.check_true('a table for a season applies in its season',
+    (app.statutory_schedule_on('hrdf', date '2035-06-01')).id = v_season);
+  perform pg_temp.check_true('and once it has lapsed, the standing table applies again',
+    (app.statutory_schedule_on('hrdf', date '2036-03-01')).id = v_standing);
+  select employer_amount into v_amount
+    from app.calc_statutory('hrdf', 'default', 10000, date '2036-03-01');
+  perform pg_temp.check_eq('so the levy goes back to the standing rate',
+    v_amount, 150.00);
+end $$;
+
+-- ---------------------------------------------------------------------
 -- 3. The PCB table is read for the year, at the end of it
 -- ---------------------------------------------------------------------
 --

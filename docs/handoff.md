@@ -2894,7 +2894,7 @@ page and renumbering would quietly break the reference.
     workspace proxy" failed on wrangler's "Received a malformed
     response from the API" -- a 200 from Cloudflare's deployments
     endpoint it could not parse, with nothing under `cloudflare/` in
-    the push -- and the failed job was re-run.
+    the push -- and the failed job, re-run, passed.
 110. ~~A posted manufacturing order's components can be rewritten away
     from the stock it moved, deleted or added to.~~ **Raised and
     answered 12 October: revoke client writes. Built in `0843`.**
@@ -3192,6 +3192,7 @@ function:
 | `app.a_company_always_has_an_owner` | `0841` | 18 / 19 | 1 (the depth clause: every function that writes a membership is a definer; said in the file) | `company_keeps_its_owner.sql` (new in `0841`; the sole owner refused stepping down, suspending themselves, repointing their seat and moving a member to their other company; an admin refused seating another account on an invitation and each invitation column alone; a role and a suspension still changed; an invitation still accepted; a co-owner still steps down, a suspended one does not count; `transfer_company` still hands over; the owner at the top passes) |
 | (the write grants and policy on `loyalty_accounts`) | `0842` | 3 / 3 restored by hand | -- | `loyalty_account_by_enrolment.sql` (new in `0842`; a cashier refused moving a card to another customer, deleting an account and making one by hand, the balance where it was; enrolling and a new card number at the counter as before; no write grant or policy; grants and policy restored with and without each other, with a control) |
 | (the write grants and policy on `mo_components`) | `0843` | 3 / 3 restored by hand | -- | `order_components_by_posting.sql` (new in `0843`; a posted order's component refused rewriting, deleting and adding to, still agreeing with its movement; a confirmed order's flour refused cutting, and posting issuing what the bill of materials says; confirming and posting still write them; no write grant or policy; grants and policy restored with and without each other, with a control) |
+| `app.statutory_schedule_on` | `0029` | 7 / 7 | -- | `statutory_changeover.sql` (section 2b new on 12 October: a table for a season laid over a standing one -- the first run left "a closed table applies for ever" alive, every fixture's table being open-ended or closed by a successor the next day) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |
