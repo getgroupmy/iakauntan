@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17724
+17734
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1606,3 +1606,11 @@
 # still steps down and a suspended one does not count; transfer_company
 # still hands over; the owner at the top passes). Measured: `all SQL
 # assertions passed (425 files, 17724 assertions executed)`.
+#
+# 12 October 2026, `0842`: 17724 -> 17734. Ten in
+# `loyalty_account_by_enrolment.sql` (new: a cashier whom
+# adjust_loyalty_points refuses also refused moving a card to another
+# customer, deleting an account and making one by hand, the balance where
+# it was; enrolling and a new card number at the counter as before; no
+# client write grant or policy). Measured: `all SQL assertions passed
+# (426 files, 17734 assertions executed)`.
