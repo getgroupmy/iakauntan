@@ -2927,6 +2927,24 @@ page and renumbering would quietly break the reference.
     failures in forty minutes on three endpoints, none of them touched
     by this branch. The next push's run, 38256398421 on `ca2bea0`,
     deployed it cleanly.
+111. ~~An account's running balance can be typed by a client, with no
+    line in the ledger behind it.~~ **Raised and answered 12 October:
+    guard it with the opening balance. Built in `0844`.**
+    `app.apply_account_balance`, a trigger on `gl_lines`, keeps
+    `accounts.current_balance`; the chart export prints it and
+    `unregistered_bank_accounts` lists it. `0643` took `opening_balance`
+    off the client surface and left this one. Measured as the owner with
+    the role `authenticated`: an asset account set to RM1,000,000 by a
+    direct update was accepted with nothing posted to it. Now `0643`'s
+    guard also refuses a client's own statement that changes
+    `current_balance` and an account inserted with one -- at the top
+    trigger depth only, because `apply_account_balance` is not a
+    definer. Renaming and making accounts, and posting, are as before.
+    Production held 1,333 accounts, none disagreeing with its lines.
+    New `account_balance_is_the_ledgers.sql`, added to `ci.yml`. Swept
+    4 / 6; the two survivors, the depth clauses, are equivalent while
+    no road to `gl_lines` runs as a client.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -3206,6 +3224,7 @@ function:
 | `public.tax_computation_lines` | `0665` | 9 / 10 | 1 (a line of nothing: `report_profit_loss` drops an empty account and every fraction is a whole or a half; said in the file) | `tax_computation.sql` ("the basis period, to the day" new on 12 October: a penalty on each end of the year and on each day outside it -- the first run left both ends of the period free, every journal being dated 30 June) |
 | `public.open_tax_computation`, `public.tax_computation_misfiled` | `0665` | 9 / 9 | -- | `tax_computation.sql` (five assertions new on 12 October: a July-to-June year assessed in the year it ends, another company's year refused, and the misfiled list leaving out a deleted account, another company's, and a non-member -- the first run left all five alive) |
 | `app.assert_statutory_bands` | `0404` | 10 / 10 | -- | `statutory_schedules.sql` (five new on 12 October: fifty sen missing, two bands meeting on one sen, a category stopping short of the next, a sen-apart table published, a schedule with no bands -- `statutory_bands.sql` alone killed 1 of 10, since every shipped table is well formed) |
+| `app.accounts_opening_balance_is_not_writable` (the `current_balance` refusals) | `0844` | 4 / 6 | 2 (the depth clauses: no road to `gl_lines` runs as a client; said in the file) | `account_balance_is_the_ledgers.sql` (new in `0844`; a typed balance and an account made with one refused; renaming, making and posting as before; the owner at the top passes) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |
