@@ -2378,7 +2378,13 @@ page and renumbering would quietly break the reference.
     clause, is equivalent. `firm_member_role` is asked with 'admin':
     'owner' is refused already by `firm_role_is_not_owner`, which killed
     the first sweep's mutant for the wrong reason.
-    **Still to read back.**
+    **Applied, and read back** (12 October, read-only, after run
+    38206414631 on `85253d0` had applied the migrations): recorded;
+    `app.a_company_is_billed_as_the_platform_says()` is there, not a
+    definer, executable by its owner alone, with the body this branch
+    builds (md5 `7e5fd232`), and its trigger is enabled on
+    `organizations`. The nineteen companies, thirteen of them
+    demonstrations, every one active, are as they were.
 94. ~~A CP204 estimate's history can be rewritten by hand.~~ **Raised
     and answered 12 October: guard the chain. Built in `0827`.**
     `open_tax_estimate` makes an estimate, deciding its form from the
