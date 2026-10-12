@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17537
+17562
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1506,3 +1506,12 @@
 # breach and one in time is not, nor closing either after; paused time
 # moves the deadline; a cancellation is no breach). Measured: `all SQL
 # assertions passed (414 files, 17537 assertions executed)`.
+#
+# 17537 -> 17562, 12 October: 0831, a ticket keeps its own time
+# (ticket_clock_kept.sql, 25: a late ticket's breaches not cleared by
+# hand, nor it closed by hand with its first response backdated; each of
+# the fifteen clock columns refused alone; a ticket not made by hand;
+# the screen's subject, description, tags and assignee as before; the
+# workflow answers, escalates and resolves; the late ticket still late;
+# the owner at the top let through; no client insert). Measured: `all
+# SQL assertions passed (415 files, 17562 assertions executed)`.

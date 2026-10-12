@@ -2501,6 +2501,30 @@ page and renumbering would quietly break the reference.
     `ticket_late_answer.sql`, added to `ci.yml`. Swept 14 / 14; two
     survived the first run for want of a fixture and the file has both.
     **Still to read back.**
+98. ~~A ticket's SLA clock can be moved by hand.~~ **Raised and
+    answered 12 October, with 97: both. Built in `0831`.** The workflow
+    functions and the sweep, every one a definer, move a ticket's
+    status, deadlines, response and resolution times, breaches and
+    counters; the ticket screens call them and write `custom_fields` on
+    the row. But `0192`'s policy let anybody who may work tickets write
+    every column. Measured as the owner with the role `authenticated`,
+    on three P1 tickets: one answered late and its breaches cleared by
+    hand -- the sweep never looked at it again; one closed by hand with
+    its breaches cleared and its first response backdated to the minute
+    it was raised; and one inside its deadline with the deadline pushed
+    a week out. Now `a_ticket_keeps_its_own_time` refuses a client's own
+    statement that changes the status, priority, SLA policy, opened,
+    due, first-response, resolved or closed times, breach flags, pause
+    or escalation counters; subject, description, tags, custom fields,
+    team and assignee are as before. Client insert is revoked:
+    `create_ticket` makes a ticket. NOT security definer. Production held
+    thirteen tickets, all in the demonstration company. New
+    `ticket_clock_kept.sql`, added to `ci.yml`, asks each of the fifteen
+    columns on its own and that the workflow still answers, escalates
+    and resolves. Swept 19 / 20; the survivor, the depth clause, is
+    equivalent. The insert grant restored by hand fails the file, with
+    a control.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -2763,6 +2787,7 @@ function:
 | `report_trial_balance`, `report_balance_sheet`, `report_general_ledger`, `report_changes_in_equity`, `report_matter_trial_balance`, `report_cash_flow`, `retire_account` | `0828` | 24 / 24 | -- | `closed_account_in_books.sql` (new in `0828`; production's state remade, every report asked, both refusals; a draft and a bank account out of use as what must not count) |
 | `app.a_ledger_account_is_closed_by_closing_it` | `0829` | 11 / 12 | 1 (the depth clause: every writer of the two columns is a definer; said in the file) | `ledger_account_closed_by_closing.sql` (new in `0829`; closing, each half alone, reopening, a closed insert and a delete refused; the chart's own writes and an open insert as before; the delete door restored by hand, 3 / 3 with a control) |
 | `add_ticket_comment`, `app.transition_ticket_internal` | `0830` | 14 / 14 | -- | `ticket_late_answer.sql` (new in `0830`; late and in-time reply and resolution, an internal note, a sweep's breach not marked twice, paused time, a cancellation, closing after resolving in time) |
+| `app.a_ticket_keeps_its_own_time` | `0831` | 19 / 20 | 1 (the depth clause: every function that moves the clock is a definer; said in the file) | `ticket_clock_kept.sql` (new in `0831`; each of the fifteen clock columns alone; insert refused; the screen's own fields and the workflow as before; the insert grant restored by hand fails it, with a control) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |
