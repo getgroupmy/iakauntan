@@ -2220,7 +2220,12 @@ page and renumbering would quietly break the reference.
     the relief -- so a bound that moved a number would show. Swept by
     hand, 18 / 18 with a control: each constraint dropped, each bound
     opened or pulled in by its column's smallest step.
-    **Still to read back.**
+    **Applied, and read back** (11 October, read-only, after run
+    38135954137 on `ad9f2da` had applied the migrations): recorded; the
+    four constraints on `employees` and the one on `employee_dependants`
+    are there, validated, each with its comment naming `0821`, and each
+    definition matches the one this branch builds (md5 of
+    `pg_get_constraintdef`, all five equal).
 89. ~~An asset's depreciation can be reset by hand and charged again,
     and an asset marked disposed with no journal.~~ **Raised and
     answered 11 October: guard the six columns. Built in `0822`.**
