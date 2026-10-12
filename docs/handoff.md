@@ -2830,7 +2830,12 @@ page and renumbering would quietly break the reference.
     is its cost: an asset disposed of part-way through a period is
     depreciated to the day first, so the first draft's disposed asset
     was refused for its depreciation and the disposal went unasked.
-    **Still to read back.**
+    **Applied, and read back** (12 October, read-only, after run
+    38245474484 on `92f8837` had applied the migrations): recorded;
+    `app.what_is_in_the_books_stays` is there with the body this branch
+    builds (md5 `ed632f86`), not a definer and not executable by
+    `authenticated`; its trigger is enabled on `manufacturing_orders`,
+    `fixed_assets` and `fs_filings`.
 108. ~~The sole owner can demote or suspend themselves, or point their
     seat at another account; an admin can seat an account on somebody
     else's invitation.~~ **Raised and answered 12 October: guard the
