@@ -2861,7 +2861,12 @@ page and renumbering would quietly break the reference.
     nothing suspended and no stretched invitation. New
     `company_keeps_its_owner.sql`, added to `ci.yml`. Swept 18 / 19;
     the survivor, the depth clause, is equivalent.
-    **Still to read back.**
+    **Applied, and read back** (12 October, read-only, after run
+    38247731466 on `8bb730d` had applied the migrations): recorded;
+    `app.a_company_always_has_an_owner` is there with the body this
+    branch builds (md5 `b2282c0c`), not a definer and not executable by
+    `authenticated`; its trigger is enabled on `org_members`, and every
+    company still has an active owner.
 109. ~~A cashier who may not adjust points can move a customer's whole
     balance to somebody else, or erase it.~~ **Raised and answered 12
     October: revoke client writes. Built in `0842`.** `0212` made
