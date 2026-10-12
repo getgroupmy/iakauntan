@@ -2688,7 +2688,12 @@ page and renumbering would quietly break the reference.
     function moves a class, and production held none under another
     company. New `share_class_company_kept.sql`, added to `ci.yml`.
     Swept 3 / 3.
-    **Still to read back.**
+    **Applied, and read back** (12 October, read-only, after run
+    38231829075 on `9f0f9ca` had applied the migrations): recorded;
+    `app.a_share_class_stays_with_its_company` is there with the body
+    this branch builds (md5 `646fe42d`), not a definer and not
+    executable by `authenticated`, its trigger enabled on
+    `corp_share_classes`.
 103. ~~A Form B relief claimed over its ceiling, or claimed twice, is
     taken as typed.~~ **Raised and answered 12 October: cap each
     relief's total. Built in `0836`.** `tax_computation_individual`
