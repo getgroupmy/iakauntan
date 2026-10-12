@@ -2993,6 +2993,25 @@ page and renumbering would quietly break the reference.
     `claim_lines_kept.sql`, added to `ci.yml`. Swept 7 / 9; the two
     survivors, the depth clause and a rejected step, are equivalent.
     **Still to read back.**
+114. ~~A posted manufacturing order's operations can be rewritten or
+    deleted after the labour was costed from them.~~ **Raised and
+    answered 12 October: book minutes only, unposted. Built in
+    `0847`.** `confirm_manufacturing_order` copies the operations from
+    the bill of materials and `post_manufacturing_order` costs the
+    labour from them, booked minutes where there are any; the screen's
+    one write books those minutes before posting. `0843` locked the
+    components but not these. Measured as the owner with the role
+    `authenticated`, on a posted order baked for thirty minutes at RM60
+    an hour (RM7.00 a loaf): its operation rewritten to 600 minutes and
+    deleted -- both accepted, the journal and the stock's cost standing.
+    Now `minutes_are_booked_before_posting` refuses a client's own
+    statement that makes or removes an operation, changes anything but
+    `actual_minutes`, or books minutes on a posted order; booking them
+    beforehand is as before. NOT security definer. Production held five
+    operations, none with minutes booked, in demonstration companies.
+    New `operation_minutes_booked.sql`, added to `ci.yml`. Swept 6 / 7;
+    the survivor, the depth clause, is equivalent.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -3275,6 +3294,7 @@ function:
 | `app.accounts_opening_balance_is_not_writable` (the `current_balance` refusals) | `0844` | 4 / 6 | 2 (the depth clauses: no road to `gl_lines` runs as a client; said in the file) | `account_balance_is_the_ledgers.sql` (new in `0844`; a typed balance and an account made with one refused; renaming, making and posting as before; the owner at the top passes) |
 | `app.an_order_moves_by_its_functions` | `0845` | 6 / 7 | 1 (the depth clause: confirming and posting are definers; said in the file) | `order_status_by_its_functions.sql` (new in `0845`; a posted order refused cancelling and going back to draft, a confirmed one refused being marked done, one made confirmed refused; confirming, posting and cancelling a draft or a confirmed order as before; a cancelled one not brought back; the owner at the top passes) |
 | `app.a_claim_is_what_was_decided` | `0846` | 7 / 9 | 2 (the depth clause, and a rejected step -- `decide_claim_step` rejects the claim with it; both said in the file) | `claim_lines_kept.sql` (new in `0846`; an approved claim's line refused rewriting, adding and deleting, a claim one approver has passed and a withdrawn one refused, a line moved either way between a decided and an open claim refused; an open claim and a draft written as before; HR still corrects; the owner at the top passes) |
+| `app.minutes_are_booked_before_posting` | `0847` | 6 / 7 | 1 (the depth clause: confirming and posting are definers; said in the file) | `operation_minutes_booked.sql` (new in `0847`; a posted order's minutes refused rebooking and its operation refused deleting; an operation refused adding and its planned minutes refused cutting; minutes booked before posting and costed, twice; the owner at the top passes) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |

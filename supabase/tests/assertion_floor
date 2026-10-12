@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17790
+17798
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1658,3 +1658,11 @@
 # an open claim and a draft written as before; HR still corrects; the
 # owner at the top passes). Measured: `all SQL assertions passed (430
 # files, 17790 assertions executed)`.
+#
+# 12 October 2026, `0847`: 17790 -> 17798. Eight in
+# `operation_minutes_booked.sql` (new: a posted order's minutes refused
+# rebooking and its operation refused deleting, as the owner with the
+# role `authenticated`; an operation refused adding and its planned
+# minutes refused cutting; minutes booked before posting and costed,
+# twice; the owner at the top passes). Measured: `all SQL assertions
+# passed (431 files, 17798 assertions executed)`.
