@@ -182,6 +182,30 @@ begin
     (pg_temp.tax_comp(v_org) = v_comp)::text, 'true');
 end $$;
 
+-- A year that is not the calendar's is assessed in the year it ENDS:
+-- July 2025 to June 2026 is year of assessment 2026. Every other
+-- company in this file closes on 31 December, where the year it starts
+-- and the year it ends are the same, so a sweep on 12 October 2026 could
+-- read the year of assessment off the start of the period unseen. And a
+-- financial year is opened only by the company whose year it is.
+do $$
+declare v_org uuid; v_other uuid; v_fy uuid; v_comp uuid;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_org := pg_temp.test_org('Kedai Tahun Julai Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date '2025-07-01');
+  select id into v_fy from public.fiscal_years
+   where org_id = v_org and start_date = date '2025-07-01';
+  v_comp := public.open_tax_computation(v_org, v_fy);
+  perform pg_temp.check_eq('a year from July to June is assessed in the year it ends',
+    pg_temp.tax_figure(v_comp, 'year_of_assessment'), 2026);
+
+  v_other := pg_temp.tax_org('Kedai Lain Sdn Bhd');
+  perform pg_temp.check_refused('and nobody opens a computation on another company''s year',
+    format('select public.open_tax_computation(%L, %L)', v_other, v_fy),
+    'No such financial year', 'P0002');
+end $$;
+
 -- ---------------------------------------------------------------------
 -- Add-backs come off the chart of accounts
 -- ---------------------------------------------------------------------
@@ -295,6 +319,36 @@ begin
   select count(*) into v_rows
     from public.tax_computation_misfiled(v_org) where account_id = v_rev;
   perform pg_temp.check_eq('but it is reported as misfiled', v_rows, 1);
+
+  -- What the list leaves out, each asked once: an account taken off the
+  -- chart, a misfiled account in another company, and a reader who is
+  -- not a member. The first sweep of this function found all three
+  -- unasked.
+  declare v_gone uuid; v_other uuid; v_their uuid;
+  begin
+    select id into v_gone from public.accounts
+     where org_id = v_org and account_type = 'revenue' and not is_group
+       and id <> v_rev order by code limit 1;
+    update public.accounts set tax_treatment = 'penalties', deleted_at = now()
+     where id = v_gone;
+    perform pg_temp.check_eq('an account taken off the chart is not reported',
+      (select count(*)::integer from public.tax_computation_misfiled(v_org)
+        where account_id = v_gone), 0);
+
+    v_other := pg_temp.tax_org('Kedai Silap Lain Sdn Bhd');
+    select id into v_their from public.accounts
+     where org_id = v_other and account_type = 'revenue' and not is_group
+     order by code limit 1;
+    update public.accounts set tax_treatment = 'penalties' where id = v_their;
+    perform pg_temp.check_eq('nor another company''s',
+      (select count(*)::integer from public.tax_computation_misfiled(v_org)
+        where account_id = v_their), 0);
+
+    perform pg_temp.sign_in_as(pg_temp.another_user('orang.luar@silap.test'));
+    perform pg_temp.check_eq('and somebody outside the company is told nothing',
+      (select count(*)::integer from public.tax_computation_misfiled(v_org)), 0);
+    perform pg_temp.sign_in_as(pg_temp.test_user());
+  end;
 end $$;
 
 -- ---------------------------------------------------------------------
