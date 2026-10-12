@@ -2966,7 +2966,12 @@ page and renumbering would quietly break the reference.
     consistent, in demonstration companies. New
     `order_status_by_its_functions.sql`, added to `ci.yml`. Swept 6 / 7;
     the survivor, the depth clause, is equivalent.
-    **Still to read back.**
+    **Applied, and read back** (12 October, read-only, after run
+    38271677040 on `98b7af1` had applied the migrations): recorded;
+    `app.an_order_moves_by_its_functions` is there with the body this
+    branch builds (md5 `46be22a3`), not a definer and not executable by
+    `authenticated`; its trigger is enabled on `manufacturing_orders`,
+    and the three orders are as they were.
 113. ~~A claimant can rewrite an approved expense claim's lines -- what
     was spent on, the amount, the category and so the account -- add to
     them or delete them.~~ **Raised and answered 12 October: freeze once
