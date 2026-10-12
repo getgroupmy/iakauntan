@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17626
+17638
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1550,3 +1550,12 @@
 # amendment as before; both companies' issued capital and register
 # agreeing; the owner refused across tenants). Measured: `all SQL
 # assertions passed (419 files, 17626 assertions executed)`.
+#
+# 17626 -> 17638, 12 October: 0836, a relief is claimed within its
+# ceiling (relief_ceiling_on_form_b.sql, 12: each relief at its ceiling
+# taken; lifestyle typed as 25,000 and the individual relief claimed
+# twice refused; a sen over by the claim and by a second one refused; a
+# claim amended back to its ceiling counted once; two claims up to it
+# taken; uncoded and uncapped claims as typed; the computation's figure
+# and another company's apart; the owner held to it). Measured: `all
+# SQL assertions passed (420 files, 17638 assertions executed)`.

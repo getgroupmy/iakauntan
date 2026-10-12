@@ -2689,6 +2689,28 @@ page and renumbering would quietly break the reference.
     company. New `share_class_company_kept.sql`, added to `ci.yml`.
     Swept 3 / 3.
     **Still to read back.**
+103. ~~A Form B relief claimed over its ceiling, or claimed twice, is
+    taken as typed.~~ **Raised and answered 12 October: cap each
+    relief's total. Built in `0836`.** `tax_computation_individual`
+    (`0666`) takes the reliefs in `tax_relief_claims` off total income
+    as typed; the claim dialog showed each relief's ceiling under the
+    box and nothing refused more -- `0408`'s "relief ceiling that was
+    only a helper text", in the other place a relief is claimed.
+    Measured as the owner with the role `authenticated`, on a Form B
+    with RM120,000 of statutory income: individual, EPF and lifestyle at
+    their ceilings give a tax of RM10,525; lifestyle typed as 25,000
+    gave RM5,980; lifestyle and individual each claimed twice, RM8,070.
+    Now `a_relief_claimed_within_its_ceiling` refuses a claim that takes
+    a relief's total on the computation over its ceiling in the PCB
+    schedule in force at the basis period's end -- the one the dialog
+    offers from. Uncoded claims ("something else") and reliefs without a
+    ceiling (the children's) are taken as typed; with no schedule for
+    the year it stands aside, as `0408`'s does. A definer, so it reads
+    the computation's year whoever writes. Production held no
+    computation and no claim. New `relief_ceiling_on_form_b.sql`, added
+    to `ci.yml`. Swept 8 / 9; the survivor is equivalent and the file
+    says why.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -2956,6 +2978,7 @@ function:
 | `app.corp_check_share_event` | `0833` | 15 / 15 | -- | `share_register_kept.sql` (new in `0833`; a transfer and a cancellation backdated before one already recorded, short for a month and made up after, the same day counted together, history out of order where it fits, a movement to oneself, a second class of shares and another company's; update and delete refused, restored by hand 3 / 3 with a control; the module still asked) |
 | (six CHECK constraints on `employee_ytd_opening`) | `0834` | 16 / 16 by hand | -- | `ytd_opening_in_range.sql` (new in `0834`; each figure a cent below nothing refused and nothing taken, the year at 26, 1999 and 2101 refused and 2000 and 2100 taken; July's PCB on the EA form's figures; the owner held to it too) |
 | `app.a_share_class_stays_with_its_company` | `0835` | 3 / 3 | -- | `share_class_company_kept.sql` (new in `0835`; a class with shares and one without refused another company, the owner refused across tenants; the sheet's own amendment and both companies' books as before) |
+| `app.a_relief_claimed_within_its_ceiling` | `0836` | 8 / 9 | 1 (a relief without a ceiling: a total compared with a null ceiling is never over it; said in the file) | `relief_ceiling_on_form_b.sql` (new in `0836`; over the ceiling and claimed twice, a sen over by the claim and by a second one, a claim amended back to its ceiling, two claims up to it, uncoded and uncapped claims as typed, another company's computation apart, the owner held to it) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |
