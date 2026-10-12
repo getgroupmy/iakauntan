@@ -217,6 +217,54 @@ begin
     from public.tax_computation_lines(v_comp)
    where kind = 'add_back' and source like '%6100%';
   perform pg_temp.check_eq('and the working says which account', v_rows, 1);
+  -- `tax_computation_lines` also drops a line that comes to nothing
+  -- (`round(amount * fraction, 2) <> 0`). Its mutant survives as an
+  -- equivalent one: `report_profit_loss` already leaves out an account
+  -- with nothing on it, and every treatment's fraction is a whole or a
+  -- half, so no sen of an account rounds to nothing.
+end $$;
+
+-- ---------------------------------------------------------------------
+-- The basis period, to the day
+-- ---------------------------------------------------------------------
+--
+-- Every other journal in this file is dated 30 June, so the basis
+-- period's two ends were never asked: a sweep of
+-- `tax_computation_lines` on 12 October 2026 started the period a day
+-- late and ended it a day early, and both came back unseen. Those are a
+-- New Year's Day bill and a 31 December one -- dropped from the year
+-- they belong to. Four penalties, in amounts no two of which add to a
+-- third: two on the year's first and last days, and two on the days
+-- either side of it.
+do $$
+declare v_org uuid; v_comp uuid; v_bank uuid; v_fine uuid;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_org := pg_temp.tax_org('Kedai Hujung Tahun Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date '2025-01-01');
+  perform public.create_fiscal_year(v_org, date '2027-01-01');
+  select id into v_bank from public.accounts
+   where org_id = v_org and account_subtype = 'bank'
+     and not is_group order by code limit 1;
+  select id into v_fine from public.accounts
+   where org_id = v_org and code = '6100';
+  update public.accounts set tax_treatment = 'penalties' where id = v_fine;
+
+  perform public.post_manual_journal(v_org, date '2025-12-31',
+    pg_temp.two_lines(v_fine, v_bank, 4000), 'Fine, the year before', 'F-0');
+  perform public.post_manual_journal(v_org, date '2026-01-01',
+    pg_temp.two_lines(v_fine, v_bank, 1000), 'Fine, New Year''s Day', 'F-1');
+  perform public.post_manual_journal(v_org, date '2026-12-31',
+    pg_temp.two_lines(v_fine, v_bank, 2000), 'Fine, the last day', 'F-2');
+  perform public.post_manual_journal(v_org, date '2027-01-01',
+    pg_temp.two_lines(v_fine, v_bank, 8000), 'Fine, the year after', 'F-3');
+
+  v_comp := pg_temp.tax_comp(v_org);
+  perform pg_temp.check_eq('a penalty on each end of the basis period is added back, and none outside it',
+    pg_temp.tax_figure(v_comp, 'add_backs'), 3000);
+  perform pg_temp.check_eq('and the working shows the year''s two and no other',
+    (select sum(amount) from public.tax_computation_lines(v_comp)
+      where kind = 'add_back'), 3000);
 end $$;
 
 -- ---------------------------------------------------------------------
