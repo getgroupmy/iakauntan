@@ -2886,7 +2886,15 @@ page and renumbering would quietly break the reference.
     demonstration company. New `loyalty_account_by_enrolment.sql`,
     added to `ci.yml`. The door restored by hand -- grant with policy,
     grant alone, policy alone -- fails the file 3 of 3, with a control.
-    **Still to read back.**
+    **Applied, and read back** (12 October, read-only, after run
+    38250142833 on `1f9124d` had applied the migrations): recorded;
+    neither `authenticated` nor `anon` holds insert, update or delete on
+    `loyalty_accounts`, select stands, and its one policy is the read
+    one; the one account is still there. That run's "Deploy the
+    workspace proxy" failed on wrangler's "Received a malformed
+    response from the API" -- a 200 from Cloudflare's deployments
+    endpoint it could not parse, with nothing under `cloudflare/` in
+    the push -- and the failed job was re-run.
 110. ~~A posted manufacturing order's components can be rewritten away
     from the stock it moved, deleted or added to.~~ **Raised and
     answered 12 October: revoke client writes. Built in `0843`.**
