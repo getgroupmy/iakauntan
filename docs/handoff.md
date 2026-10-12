@@ -2663,7 +2663,11 @@ page and renumbering would quietly break the reference.
     its edge and July's PCB on the EA form's figures. Each constraint
     dropped, each bound loosened by its smallest step and three
     tightened, by hand: 16 / 16 fail the file, with a control.
-    **Still to read back.**
+    **Applied, and read back** (12 October, read-only, after run
+    38228587991 on `97cb0c3` had applied the migrations): recorded; the
+    six constraints are on `employee_ytd_opening` as this branch writes
+    them -- each figure `>= 0`, the year between 2000 and 2100 -- and
+    every one validated.
 102. ~~A class of shares can be moved to another company, and the two
     companies' registers and issued capital then disagree.~~ **Raised
     and answered 12 October, after 100: fix a class's company. Built in
