@@ -2664,6 +2664,27 @@ page and renumbering would quietly break the reference.
     dropped, each bound loosened by its smallest step and three
     tightened, by hand: 16 / 16 fail the file, with a control.
     **Still to read back.**
+102. ~~A class of shares can be moved to another company, and the two
+    companies' registers and issued capital then disagree.~~ **Raised
+    and answered 12 October, after 100: fix a class's company. Built in
+    `0835`.** `0833` refuses a movement in another company's class; the
+    same disagreement could be made from the class's side, because
+    `0067`'s policy lets a client update any column of a class.
+    `corp_issued_capital` counts a class under the company it names now,
+    `corp_register_of_members` reads movements under the company they
+    were recorded in. Measured as the owner with the role
+    `authenticated`: Saham's Ordinary class with 100 allotted, moved to
+    Lain by an update, was accepted -- Saham's register still showed the
+    100 and its issued capital nothing; Lain's issued capital showed 100
+    and its register nobody. Now `a_share_class_stays_with_its_company`
+    refuses any change to a class's `entity_id`, from any writer; the
+    rest of the class is as editable as before, and the share class
+    sheet sends the class's own company back. `org_id` needs nothing of
+    its own: `0519`'s same-tenant key ties it to the company. No
+    function moves a class, and production held none under another
+    company. New `share_class_company_kept.sql`, added to `ci.yml`.
+    Swept 3 / 3.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -2930,6 +2951,7 @@ function:
 | `allocate_with_discount`, `allocate_payment_with_discount`, `record_settlement` | `0832` | 17 / 17 | -- | `settlement_in_one_go.sql` (new in `0832`; draft money, a draft and a voided document refused on both sides; two invoices settled and posted in one call; a retry; a refused posting leaving nothing; an exchange difference; a viewer refused). The three restated callers' switch back to the door: `group_payment.sql`, `client_money_crossing.sql`, `demo_practice.sql`, each 1 / 1 or 2 / 2 |
 | `app.corp_check_share_event` | `0833` | 15 / 15 | -- | `share_register_kept.sql` (new in `0833`; a transfer and a cancellation backdated before one already recorded, short for a month and made up after, the same day counted together, history out of order where it fits, a movement to oneself, a second class of shares and another company's; update and delete refused, restored by hand 3 / 3 with a control; the module still asked) |
 | (six CHECK constraints on `employee_ytd_opening`) | `0834` | 16 / 16 by hand | -- | `ytd_opening_in_range.sql` (new in `0834`; each figure a cent below nothing refused and nothing taken, the year at 26, 1999 and 2101 refused and 2000 and 2100 taken; July's PCB on the EA form's figures; the owner held to it too) |
+| `app.a_share_class_stays_with_its_company` | `0835` | 3 / 3 | -- | `share_class_company_kept.sql` (new in `0835`; a class with shares and one without refused another company, the owner refused across tenants; the sheet's own amendment and both companies' books as before) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |

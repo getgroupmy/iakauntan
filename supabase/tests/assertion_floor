@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17618
+17626
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1543,3 +1543,10 @@
 # at 26, 1999 and 2101 refused and 2000 and 2100 taken; the owner held
 # to it). Measured: `all SQL assertions passed (418 files, 17618
 # assertions executed)`.
+#
+# 17618 -> 17626, 12 October: 0835, a class of shares stays with its
+# company (share_class_company_kept.sql, 8: a class with shares and one
+# without refused another company; the share class sheet's own
+# amendment as before; both companies' issued capital and register
+# agreeing; the owner refused across tenants). Measured: `all SQL
+# assertions passed (419 files, 17626 assertions executed)`.
