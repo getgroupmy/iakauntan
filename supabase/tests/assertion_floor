@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17745
+17760
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1623,3 +1623,12 @@
 # says; confirming and posting still write them; no client write grant
 # or policy). Measured: `all SQL assertions passed (427 files, 17745
 # assertions executed)`.
+#
+# 12 October 2026, test-only: 17745 -> 17760. Fifteen added by sweeping
+# four statutory functions nothing had swept with a kept mutants file:
+# three in `statutory_changeover.sql` (a table for a season lapsing back
+# to the standing one), two in `tax_computation.sql` (the basis period,
+# to the day), five more there (a July-to-June year of assessment,
+# another company's year, and the misfiled list's three filters), and
+# five in `statutory_schedules.sql` (each edge of the bands). Measured:
+# `all SQL assertions passed (427 files, 17760 assertions executed)`.
