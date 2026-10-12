@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17603
+17618
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1535,3 +1535,11 @@
 # shares and the issued capital as recorded; no client update, delete
 # or policy for either; the module still asked). Measured: `all SQL
 # assertions passed (417 files, 17603 assertions executed)`.
+#
+# 17603 -> 17618, 12 October: 0834, the year an employee brings with
+# them (ytd_opening_in_range.sql, 15: July's PCB with nothing brought in
+# and on the EA form's figures; each of the five figures a cent below
+# nothing refused, on update and on insert, and nothing taken; the year
+# at 26, 1999 and 2101 refused and 2000 and 2100 taken; the owner held
+# to it). Measured: `all SQL assertions passed (418 files, 17618
+# assertions executed)`.
