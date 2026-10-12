@@ -2750,7 +2750,13 @@ page and renumbering would quietly break the reference.
     and the posted-row guards: the first build's `a_posting_...` fired
     first, and `posted_document_is_frozen.sql`, which asks for
     `refuse_reposting`'s own sentence on a posted invoice, caught it.
-    **Still to read back.**
+    **Applied, and read back** (12 October, read-only, after run
+    38236782858 on `3f6e525` had applied the migrations): recorded;
+    `app.posting_is_the_posting_functions` is there with the body this
+    branch builds (md5 `6555f16e`), not a definer and not executable by
+    `authenticated`; `the_posting_is_the_posting_functions` is enabled
+    on all five tables, and no trigger of the first build's name
+    exists.
 105. ~~A set of accounts can be marked lodged by hand, and a lodged set
     put back to draft and rewritten.~~ **Raised and answered 12
     October: guard the workflow columns. Built in `0838`.** `fs_freeze`
