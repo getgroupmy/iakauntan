@@ -2458,7 +2458,17 @@ page and renumbering would quietly break the reference.
     with an apostrophe in `0687`'s argument list had crashed
     `mutate_sql.py`'s `arity`, which now skips comments, with a
     self-test that fails without it.
-    **Still to read back.**
+    **Applied, and read back** (12 October, read-only, after run
+    38210185705 on `a76e249` had applied the migrations): recorded; all
+    seven functions are there with the bodies this branch builds (md5s
+    of `report_trial_balance` `5ecb3ef1`, `report_balance_sheet`
+    `0ba4cf07`, `report_general_ledger` `c2f3e980`,
+    `report_changes_in_equity` `85bfea01`, `report_matter_trial_balance`
+    `e09511cd`, `report_cash_flow` `5c28cec3`, `retire_account`
+    `2dd06c68`). **That company's trial balance balances again**: the
+    same sums the report now makes come to RM1,732.50 a side, with
+    `1120-M001` on it. Its account is still closed and its bank account
+    still posts to it; reviving it is the company's to decide.
 96. ~~A client can close a ledger account by hand that retire_account
     refuses, and delete one.~~ **Raised and answered 12 October, with
     95: reports and refuse. Built in `0829`.** `retire_account` is the
