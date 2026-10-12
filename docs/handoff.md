@@ -3015,7 +3015,11 @@ page and renumbering would quietly break the reference.
     operations, none with minutes booked, in demonstration companies.
     New `operation_minutes_booked.sql`, added to `ci.yml`. Swept 6 / 7;
     the survivor, the depth clause, is equivalent.
-    **Still to read back.**
+    **Applied, and read back** (12 October, read-only, after run
+    38278859591 on `b5150de` had applied the migrations): recorded;
+    `app.minutes_are_booked_before_posting` is there with the body this
+    branch builds (md5 `08d5b908`), not a definer and not executable by
+    `authenticated`; its trigger is enabled on `mo_operations`.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
