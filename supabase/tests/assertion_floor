@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17682
+17692
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1578,4 +1578,12 @@
 # refuses; its figures kept; the reference and lodgement date still
 # open; the screen's own fields as before; the owner at the top let
 # through). Measured: `all SQL assertions passed (422 files, 17682
+# assertions executed)`.
+#
+# 17682 -> 17692, 12 October: 0839, a member is invited
+# (org_members_by_invitation.sql, 10: an admin who is not the owner
+# refused inserting an owner, inserting anybody uninvited, and promoting
+# themselves; an invitation still recorded and still refusing an owner;
+# a role still changed by an admin; one owner; no client insert grant or
+# policy). Measured: `all SQL assertions passed (423 files, 17692
 # assertions executed)`.

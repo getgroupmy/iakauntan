@@ -2777,6 +2777,28 @@ page and renumbering would quietly break the reference.
     `ci.yml`. Swept 6 / 7; the survivor, the depth clause, is
     equivalent.
     **Still to read back.**
+106. ~~An admin can make a second account of theirs an owner by
+    inserting it.~~ **Raised and answered 12 October: revoke client
+    insert. Built in `0839`.** Members join by `invite_member` (which
+    refuses an owner: "Ownership is transferred, not invited") and
+    `accept_invitation`; the creator, a handover and the firm and
+    platform paths have definer functions of their own; the app never
+    inserts a member. But `0010`'s `org_members_insert` let anybody who
+    passes `app.can_admin` insert any row, nothing asked of the role --
+    and the update policy, which does refuse a non-owner making an
+    owner, is not the door an insert uses. Measured with the role
+    `authenticated`, as an admin who is not the owner: promoting
+    themselves by update was refused; inserting a second account as an
+    owner was accepted, and the company had two owners. An owner alone
+    may `close_organization` and `transfer_company`. The same door
+    added any existing user with no invitation. Now insert is revoked
+    from `authenticated` and `anon` and the policy dropped; an admin's
+    role changes through the update policy are as before. Production
+    held nineteen companies, each with exactly one owner. New
+    `org_members_by_invitation.sql`, added to `ci.yml`. The door
+    restored by hand -- grant with policy, grant alone, policy alone --
+    fails the file 3 of 3, with a control.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -3047,6 +3069,7 @@ function:
 | `app.a_relief_claimed_within_its_ceiling` | `0836` | 8 / 9 | 1 (a relief without a ceiling: a total compared with a null ceiling is never over it; said in the file) | `relief_ceiling_on_form_b.sql` (new in `0836`; over the ceiling and claimed twice, a sen over by the claim and by a second one, a claim amended back to its ceiling, two claims up to it, uncoded and uncapped claims as typed, another company's computation apart, the owner held to it) |
 | `app.posting_is_the_posting_functions` | `0837` | 9 / 10 | 1 (the depth clause: every function that posts, voids or reverses is a definer; said in the file) | `posting_is_the_posting_functions.sql` (new in `0837`; each posting column on each of the five tables alone, a receipt's and payment's status, each born posted on insert; `0832`'s door still seeing the draft; a draft edited, an order cancelled, an invoice posted and money settled by their functions) |
 | `app.a_filing_is_lodged_by_lodging_it` | `0838` | 6 / 7 | 1 (the depth clause: the three filing functions are definers; said in the file) | `fs_filing_workflow_kept.sql` (new in `0838`; lodged by hand and each workflow column alone refused, born lodged, frozen or signed refused; frozen and lodged by the functions; put back to draft by hand refused as `fs_unfreeze` refuses; the figures as lodged; the reference and date still open) |
+| (the insert grant and policy on `org_members`) | `0839` | 3 / 3 restored by hand | -- | `org_members_by_invitation.sql` (new in `0839`; an admin refused inserting an owner or anybody uninvited, and promoting themselves; an invitation and a role change as before; one owner; insert grant and policy restored with and without each other, with a control) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |

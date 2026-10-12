@@ -1,0 +1,33 @@
+-- =====================================================================
+-- iAkauntan :: 0839 a member is invited
+--
+-- Somebody joins a company by invitation: `invite_member` records them
+-- -- and refuses an owner, "Ownership is transferred, not invited" --
+-- and `accept_invitation` lets them in. The creator is enrolled by
+-- `add_creator_as_owner`, a company is handed over by `transfer_company`
+-- and `hand_company_over`, and the firm and platform paths have their
+-- own functions. Every one is a definer. The app never inserts a member
+-- itself. But `0010`'s `org_members_insert` let anybody who passes
+-- `app.can_admin` insert any row, with nothing asked of the role -- and
+-- the update policy, which does ask (a non-owner cannot make an owner),
+-- is not the door an insert uses.
+--
+-- Measured on 12 October 2026, locally, with the role `authenticated`,
+-- signed in as an admin who is not the owner: promoting themselves by
+-- update was refused by the policy; inserting a second account of
+-- theirs as an owner was accepted, and the company had two owners. An
+-- owner alone may `close_organization` and `transfer_company`. The same
+-- door adds any existing user as a member with no invitation at all.
+--
+-- Answered "revoke client insert": insert is revoked from
+-- `authenticated` and `anon` and `org_members_insert` dropped. Members
+-- arrive by invitation and the other definer functions, as the app
+-- already has them. An admin changing a member's role through the
+-- update policy is as before.
+--
+-- Production held nineteen companies on 12 October, each with exactly
+-- one owner.
+-- =====================================================================
+
+revoke insert on public.org_members from authenticated, anon;
+drop policy if exists org_members_insert on public.org_members;
