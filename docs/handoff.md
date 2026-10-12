@@ -2309,7 +2309,12 @@ page and renumbering would quietly break the reference.
     every frozen column on its own. Swept 33 / 34; the survivor, the
     depth clause, is equivalent -- the only two writers are definers --
     and the file says so.
-    **Still to read back.**
+    **Applied, and read back** (12 October, read-only, after run
+    38203088011 on `403dbd6` had applied the migrations): recorded;
+    `app.a_posted_expense_is_kept()` is there, not a definer,
+    executable by its owner alone, with the body this branch builds
+    (md5 `2a34a995`), and `a_posted_expense_is_kept` is enabled on
+    `expenses`. The one expense, posted, is as it was.
 92. ~~Billed time can be marked unbilled by hand and billed again, and a
     billed entry's hours changed after the invoice.~~ **Raised and
     answered 11 October: freeze once billed. Built in `0825`.**
