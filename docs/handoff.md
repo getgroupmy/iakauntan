@@ -2598,6 +2598,34 @@ page and renumbering would quietly break the reference.
     six days of a month -- it survived on 12 October and was killed on a
     copy of the database with its clock at 5 January; said in the file.
     **Still to read back.**
+100. ~~A share movement backdated before one already recorded leaves
+    the register short, and a client can edit or delete any movement.~~
+    **Raised and answered 12 October: every date, and append-only.
+    Built in `0833`.** The register of members is computed from
+    `corp_share_events`; `0061` keeps it as events so it cannot drift
+    from the returns already lodged, and `0064`'s trigger refuses a
+    movement out of a holding that is not there -- but counted the
+    holding only up to the movement's own date, and `0067`'s policy let
+    a client update and delete any movement. Measured as the owner with
+    the role `authenticated`: A allotted 100 on 1 January and giving all
+    100 to B on 1 March; a transfer of 100 from A to C dated 1 February
+    was accepted and the register showed A at minus 100. The movement
+    sheet takes any past date, so a secretary keying history in out of
+    order does this through the screen. The allotment edited from 100
+    to 10 left A at minus 190 and the issued capital at 10 against 200
+    held; deleted, minus 200. And a movement named another company's
+    class of shares: one company's issued capital said 600 while the 500
+    sat in the other's register. Now `app.corp_check_share_event` refuses
+    a movement that leaves the holder short on its own date or on any
+    later date the holder's shares moved, and a class that is not the
+    company's own; a holder's movement to themselves moves nothing (it
+    had counted as shares gained). Client update and delete are revoked
+    and `corp_share_events_write` is replaced by an insert policy with
+    the same test. Production held eight movements, all allotments in
+    demonstration companies, none short. New `share_register_kept.sql`,
+    added to `ci.yml`. Swept 15 / 15; the update and delete doors
+    restored by hand fail the file 3 of 3, with a control.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -2862,6 +2890,7 @@ function:
 | `add_ticket_comment`, `app.transition_ticket_internal` | `0830` | 14 / 14 | -- | `ticket_late_answer.sql` (new in `0830`; late and in-time reply and resolution, an internal note, a sweep's breach not marked twice, paused time, a cancellation, closing after resolving in time) |
 | `app.a_ticket_keeps_its_own_time` | `0831` | 19 / 20 | 1 (the depth clause: every function that moves the clock is a definer; said in the file) | `ticket_clock_kept.sql` (new in `0831`; each of the fifteen clock columns alone; insert refused; the screen's own fields and the workflow as before; the insert grant restored by hand fails it, with a control) |
 | `allocate_with_discount`, `allocate_payment_with_discount`, `record_settlement` | `0832` | 17 / 17 | -- | `settlement_in_one_go.sql` (new in `0832`; draft money, a draft and a voided document refused on both sides; two invoices settled and posted in one call; a retry; a refused posting leaving nothing; an exchange difference; a viewer refused). The three restated callers' switch back to the door: `group_payment.sql`, `client_money_crossing.sql`, `demo_practice.sql`, each 1 / 1 or 2 / 2 |
+| `app.corp_check_share_event` | `0833` | 15 / 15 | -- | `share_register_kept.sql` (new in `0833`; a transfer and a cancellation backdated before one already recorded, short for a month and made up after, the same day counted together, history out of order where it fits, a movement to oneself, a second class of shares and another company's; update and delete refused, restored by hand 3 / 3 with a control; the module still asked) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |

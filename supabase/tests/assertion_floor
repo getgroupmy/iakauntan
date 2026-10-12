@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17584
+17603
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1525,3 +1525,13 @@
 # exchange difference as posting reads it; a supplier settlement; a
 # viewer refused). Measured: `all SQL assertions passed (416 files,
 # 17584 assertions executed)`.
+#
+# 17584 -> 17603, 12 October: 0833, the register is never short
+# (share_register_kept.sql, 19: a transfer and a cancellation backdated
+# before one already recorded, short for a month and made up after, the
+# same day counted together, history out of order where it fits, a
+# movement to oneself on its own day and later, another company's class
+# of shares, update and delete refused; the register, the preference
+# shares and the issued capital as recorded; no client update, delete
+# or policy for either; the module still asked). Measured: `all SQL
+# assertions passed (417 files, 17603 assertions executed)`.
