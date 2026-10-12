@@ -2802,7 +2802,11 @@ page and renumbering would quietly break the reference.
     `org_members_by_invitation.sql`, added to `ci.yml`. The door
     restored by hand -- grant with policy, grant alone, policy alone --
     fails the file 3 of 3, with a control.
-    **Still to read back.**
+    **Applied, and read back** (12 October, read-only, after run
+    38242500497 on `09e6188` had applied the migrations): recorded;
+    neither `authenticated` nor `anon` holds insert on `org_members`,
+    and its policies are the select, update and delete ones alone; every
+    company has exactly one owner.
 107. ~~A posted manufacturing order, a depreciated asset and a lodged
     set of accounts can be deleted, and what stands on them is left
     with nothing behind it.~~ **Raised and answered 12 October: refuse
