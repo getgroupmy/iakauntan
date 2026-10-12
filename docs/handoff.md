@@ -3044,7 +3044,14 @@ page and renumbering would quietly break the reference.
     evidence, every file present; the bucket is not versioned. New
     `evidence_stays_filed.sql`, added to `ci.yml`. Swept 17 / 19; the
     two survivors, the depth clauses, are equivalent.
-    **Still to read back.**
+    **Applied, and read back** (12 October, read-only, after run
+    38289211335 on `eb12fc0` had applied the migrations): recorded;
+    `app.evidence_stays_as_filed` (md5 `8a174baf`) and
+    `app.an_evidence_file_stays` (md5 `9f25c7d3`) are there with the
+    bodies this branch builds, neither a definer nor executable by
+    `authenticated`; their triggers are enabled on `attachments` and on
+    `storage.objects`. The seven attachments are as they were, three of
+    them evidence, every file present.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
