@@ -2831,6 +2831,32 @@ page and renumbering would quietly break the reference.
     depreciated to the day first, so the first draft's disposed asset
     was refused for its depreciation and the disposal went unasked.
     **Still to read back.**
+108. ~~The sole owner can demote or suspend themselves, or point their
+    seat at another account; an admin can seat an account on somebody
+    else's invitation.~~ **Raised and answered 12 October: guard the
+    seat and the owner. Built in `0841`.** `0720` names the invariant,
+    "a company always has an owner", and `0451` says the policies keep
+    it; both hold for the functions, not for `0284`'s update policy,
+    which lets an owner update their own row and an admin anybody's but
+    the owner's, asking nothing of the columns -- and `0839` shut only
+    the insert. Measured with the role `authenticated`: as the sole
+    owner, demoting themselves left no owner, suspending themselves no
+    active one, and pointing their row at another account handed the
+    company over with no `company_transfers` row; as an admin, a
+    pending invitation's row pointed at their own second account and
+    made active, and an invitation's fortnight stretched to ten years
+    -- all accepted. Now `a_company_always_has_an_owner` refuses a
+    client's own statement that changes `org_id`, `user_id`,
+    `invited_email`, `invited_by`, `invite_token`, `invite_expires_at`,
+    `joined_at` or `via_firm_id`, and one that leaves a company with no
+    active owner; a role, a status and an access type change as before,
+    a co-owner may step down, and `transfer_company`, the invitations
+    and the firm's access are definers and pass. NOT security definer.
+    Production held nineteen companies, each with an active owner,
+    nothing suspended and no stretched invitation. New
+    `company_keeps_its_owner.sql`, added to `ci.yml`. Swept 18 / 19;
+    the survivor, the depth clause, is equivalent.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -3103,6 +3129,7 @@ function:
 | `app.a_filing_is_lodged_by_lodging_it` | `0838` | 6 / 7 | 1 (the depth clause: the three filing functions are definers; said in the file) | `fs_filing_workflow_kept.sql` (new in `0838`; lodged by hand and each workflow column alone refused, born lodged, frozen or signed refused; frozen and lodged by the functions; put back to draft by hand refused as `fs_unfreeze` refuses; the figures as lodged; the reference and date still open) |
 | (the insert grant and policy on `org_members`) | `0839` | 3 / 3 restored by hand | -- | `org_members_by_invitation.sql` (new in `0839`; an admin refused inserting an owner or anybody uninvited, and promoting themselves; an invitation and a role change as before; one owner; insert grant and policy restored with and without each other, with a control) |
 | `app.what_is_in_the_books_stays` | `0840` | 8 / 9 | 1 (the depth clause: every function that deletes one is a definer, and a cascade runs as the owner; said in the file) | `books_kept_on_delete.sql` (new in `0840`; a posted order, a depreciated van and a lodged filing refused, their journal, depreciation and figures still there; a forklift disposed of with no depreciation entry refused; a draft order, an undepreciated laptop and an unlodged filing still deleted; the owner at the top passes) |
+| `app.a_company_always_has_an_owner` | `0841` | 18 / 19 | 1 (the depth clause: every function that writes a membership is a definer; said in the file) | `company_keeps_its_owner.sql` (new in `0841`; the sole owner refused stepping down, suspending themselves, repointing their seat and moving a member to their other company; an admin refused seating another account on an invitation and each invitation column alone; a role and a suspension still changed; an invitation still accepted; a co-owner still steps down, a suspended one does not count; `transfer_company` still hands over; the owner at the top passes) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |

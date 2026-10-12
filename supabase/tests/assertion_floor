@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17705
+17724
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1596,3 +1596,13 @@
 # an undepreciated laptop and an unlodged filing still deleted; the
 # owner at the top passes). Measured: `all SQL assertions passed (424
 # files, 17705 assertions executed)`.
+#
+# 12 October 2026, `0841`: 17705 -> 17724. Nineteen in
+# `company_keeps_its_owner.sql` (new: the sole owner refused stepping
+# down, suspending themselves, repointing their seat and moving a member
+# to their other company; an admin refused seating another account on an
+# invitation and each invitation column alone; a role and a suspension
+# still changed by an admin; an invitation still accepted; a co-owner
+# still steps down and a suspended one does not count; transfer_company
+# still hands over; the owner at the top passes). Measured: `all SQL
+# assertions passed (425 files, 17724 assertions executed)`.
