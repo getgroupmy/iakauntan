@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17666
+17682
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1569,3 +1569,13 @@
 # settled by their functions; the owner at the top let through).
 # Measured: `all SQL assertions passed (421 files, 17666 assertions
 # executed)`.
+#
+# 17666 -> 17682, 12 October: 0838, a filing is lodged by lodging it
+# (fs_filing_workflow_kept.sql, 16: a draft refused lodged by hand, and
+# each of status, frozen_at and frozen_by alone; a filing refused born
+# lodged, stamped frozen or signed as frozen; fs_freeze and fs_lodge
+# moving it; a lodged set refused back to draft by hand as fs_unfreeze
+# refuses; its figures kept; the reference and lodgement date still
+# open; the screen's own fields as before; the owner at the top let
+# through). Measured: `all SQL assertions passed (422 files, 17682
+# assertions executed)`.

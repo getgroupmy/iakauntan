@@ -2751,6 +2751,26 @@ page and renumbering would quietly break the reference.
     first, and `posted_document_is_frozen.sql`, which asks for
     `refuse_reposting`'s own sentence on a posted invoice, caught it.
     **Still to read back.**
+105. ~~A set of accounts can be marked lodged by hand, and a lodged set
+    put back to draft and rewritten.~~ **Raised and answered 12
+    October: guard the workflow columns. Built in `0838`.** `fs_freeze`
+    snapshots the statements and stamps `frozen_at`, `fs_lodge` asks for
+    a frozen filing, the MBRS reference and a recorded circulation, and
+    `fs_unfreeze` refuses a lodged one ("cannot be reopened");
+    `fs_refuse_lodged_edit` keeps a lodged filing's figures but not its
+    status. Measured as the owner with the role `authenticated`: a draft
+    set to lodged by hand was accepted, never frozen and with no
+    circulation; a lodged set put back to draft, its opinion rewritten
+    from unmodified to qualified, and lodged again -- all accepted. Now
+    `a_filing_is_lodged_by_lodging_it` refuses a client's own statement
+    that changes `status`, `frozen_at` or `frozen_by`, or makes a filing
+    other than as a draft; the three functions are definers and pass.
+    `lodged_on` and `mbrs_reference` stay open, as the filing screen's
+    comment intends. Production held seven filings, all in
+    demonstration companies. New `fs_filing_workflow_kept.sql`, added to
+    `ci.yml`. Swept 6 / 7; the survivor, the depth clause, is
+    equivalent.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -3020,6 +3040,7 @@ function:
 | `app.a_share_class_stays_with_its_company` | `0835` | 3 / 3 | -- | `share_class_company_kept.sql` (new in `0835`; a class with shares and one without refused another company, the owner refused across tenants; the sheet's own amendment and both companies' books as before) |
 | `app.a_relief_claimed_within_its_ceiling` | `0836` | 8 / 9 | 1 (a relief without a ceiling: a total compared with a null ceiling is never over it; said in the file) | `relief_ceiling_on_form_b.sql` (new in `0836`; over the ceiling and claimed twice, a sen over by the claim and by a second one, a claim amended back to its ceiling, two claims up to it, uncoded and uncapped claims as typed, another company's computation apart, the owner held to it) |
 | `app.posting_is_the_posting_functions` | `0837` | 9 / 10 | 1 (the depth clause: every function that posts, voids or reverses is a definer; said in the file) | `posting_is_the_posting_functions.sql` (new in `0837`; each posting column on each of the five tables alone, a receipt's and payment's status, each born posted on insert; `0832`'s door still seeing the draft; a draft edited, an order cancelled, an invoice posted and money settled by their functions) |
+| `app.a_filing_is_lodged_by_lodging_it` | `0838` | 6 / 7 | 1 (the depth clause: the three filing functions are definers; said in the file) | `fs_filing_workflow_kept.sql` (new in `0838`; lodged by hand and each workflow column alone refused, born lodged, frozen or signed refused; frozen and lodged by the functions; put back to draft by hand refused as `fs_unfreeze` refuses; the figures as lodged; the reference and date still open) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |
