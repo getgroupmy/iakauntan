@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17521
+17537
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1496,3 +1496,13 @@
 # trial balance balanced; the owner at the top let through; no delete
 # policy left). Measured: `all SQL assertions passed (413 files, 17521
 # assertions executed)`.
+#
+# 17521 -> 17537, 12 October: 0830, a late answer is late when it is
+# given (ticket_late_answer.sql, 16: a reply three minutes late before
+# any sweep is a response breach, on the history once and saying so; one
+# in time is not; an internal note is no first response and the public
+# reply after it is late; a breach the sweep marked, response and
+# resolution, is not marked again; a resolution three minutes late is a
+# breach and one in time is not, nor closing either after; paused time
+# moves the deadline; a cancellation is no breach). Measured: `all SQL
+# assertions passed (414 files, 17537 assertions executed)`.

@@ -2476,6 +2476,25 @@ page and renumbering would quietly break the reference.
     equivalent. The delete door restored by hand fails the file 3 of 3,
     with a control.
     **Still to read back.**
+97. ~~A ticket answered or resolved late, between two sweeps, is never
+    marked late.~~ **Raised and answered 12 October: both. Built in
+    `0830`; the client's own writes to the clock are `0831`.**
+    `ticket_sla_sweep` runs every five minutes (`0356`) and marks a
+    breach only while a ticket is still waiting; `add_ticket_comment`
+    and `transition_ticket` never asked the deadline. Measured locally:
+    a P1 with a fifteen-minute promise answered three minutes late,
+    before the next sweep, was never marked, and one resolved three
+    minutes late the same -- the SLA board and its figures said both
+    were on time. Now `add_ticket_comment` marks the response breached,
+    with the sweep's `sla_breach` event, when the first public reply
+    lands after its deadline, and `transition_ticket` does the same for
+    a resolution after its deadline -- moved on by any paused time as
+    the transition moves it. Not twice, and a cancelled ticket is no
+    breach. Both restated from `pg_get_functiondef`. Production held
+    thirteen tickets, all in the demonstration company. New
+    `ticket_late_answer.sql`, added to `ci.yml`. Swept 14 / 14; two
+    survived the first run for want of a fixture and the file has both.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -2737,6 +2756,7 @@ function:
 | `app.a_tax_estimate_is_kept` | `0827` | 16 / 17 | 1 (the depth clause: both writers of the table are definers; said in the file) | `tax_estimate_chain.sql` (new in `0827`; the superseded estimate refused any change, each chain column alone on the live one, insert and delete refused, the schedule asserted unchanged; insert and delete restored by hand, 6 / 6 with a control) |
 | `report_trial_balance`, `report_balance_sheet`, `report_general_ledger`, `report_changes_in_equity`, `report_matter_trial_balance`, `report_cash_flow`, `retire_account` | `0828` | 24 / 24 | -- | `closed_account_in_books.sql` (new in `0828`; production's state remade, every report asked, both refusals; a draft and a bank account out of use as what must not count) |
 | `app.a_ledger_account_is_closed_by_closing_it` | `0829` | 11 / 12 | 1 (the depth clause: every writer of the two columns is a definer; said in the file) | `ledger_account_closed_by_closing.sql` (new in `0829`; closing, each half alone, reopening, a closed insert and a delete refused; the chart's own writes and an open insert as before; the delete door restored by hand, 3 / 3 with a control) |
+| `add_ticket_comment`, `app.transition_ticket_internal` | `0830` | 14 / 14 | -- | `ticket_late_answer.sql` (new in `0830`; late and in-time reply and resolution, an internal note, a sweep's breach not marked twice, paused time, a cancellation, closing after resolving in time) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |
