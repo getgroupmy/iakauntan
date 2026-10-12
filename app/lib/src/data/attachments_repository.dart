@@ -294,13 +294,18 @@ extension RepoAttachments on Repo {
         .eq('id', id)
         .maybeSingle();
     if (row == null) return;
-    await client.storage.from(bucket).remove([row['storage_path'].toString()]);
     await client.from('attachments').delete().eq('id', id);
+    await client.storage.from(bucket).remove([row['storage_path'].toString()]);
   }
 
+  /// The row before the object, and the order is the point. `0708`
+  /// refuses deleting the row of a file a posting or a reading was built
+  /// from; removed object-first, that refusal arrived after the file was
+  /// already gone, leaving a row naming nothing. Row-first, a refusal
+  /// keeps the file. `0848` refuses the object too, from either end.
   Future<void> deleteAttachment(Attachment attachment) async {
-    await client.storage.from(bucket).remove([attachment.storagePath]);
     await client.from('attachments').delete().eq('id', attachment.id);
+    await client.storage.from(bucket).remove([attachment.storagePath]);
   }
 }
 

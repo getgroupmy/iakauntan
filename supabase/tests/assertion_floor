@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17798
+17814
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1666,3 +1666,13 @@
 # minutes refused cutting; minutes booked before posting and costed,
 # twice; the owner at the top passes). Measured: `all SQL assertions
 # passed (431 files, 17798 assertions executed)`.
+#
+# 12 October 2026, `0848`: 17798 -> 17814. Sixteen in
+# `evidence_stays_filed.sql` (new: a posted invoice's page refused
+# repointing, moving and any other change, as the owner with the role
+# `authenticated`, a no-op passing; its file refused deleting, renaming,
+# moving bucket, a new version and new bytes, a timestamp passing; a
+# capture refiled from its placeholder, a file nothing was built from
+# deleted, and another bucket's same-named file deleted, as before; the
+# owner at the top passes). Measured: `all SQL assertions passed (432
+# files, 17814 assertions executed)`.

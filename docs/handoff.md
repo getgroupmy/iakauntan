@@ -3020,6 +3020,31 @@ page and renumbering would quietly break the reference.
     `app.minutes_are_booked_before_posting` is there with the body this
     branch builds (md5 `08d5b908`), not a definer and not executable by
     `authenticated`; its trigger is enabled on `mo_operations`.
+115. ~~An evidence file's row can be repointed or moved, and the file
+    itself renamed or deleted in storage.~~ **Raised and answered 12
+    October: guard the row and the file. Built in `0848`.** `0708` made
+    a file evidence -- its record posted, or a reading of it filled the
+    record in -- and refused deleting the row; only the row, only a
+    delete. Measured as the owner with the role `authenticated`, on a
+    posted invoice's signed purchase order: the row pointed at another
+    file, and moved off the invoice onto a draft, were accepted; the
+    object renamed and deleted in storage were accepted, the row still
+    naming a file that was gone. The app removed the object before the
+    row, so a refused row delete had already lost the file. Now
+    `evidence_stays_as_filed` refuses a client's change to any column of
+    an evidence attachment, and `an_evidence_file_stays`, on
+    `storage.objects` in the `attachments` bucket, refuses a client's
+    delete of an evidence file and an update that changes its bucket,
+    name, version or eTag; a timestamp passes. Refiling a capture from
+    its placeholder -- the app's one update -- moves a file whose record
+    does not exist yet, which is never evidence. The app now deletes the
+    row before the object. Both NOT security definer. The Storage API
+    path is argued from the SQL, not watched: the local stack stubs
+    `storage.objects`. Production held seven attachments, three of them
+    evidence, every file present; the bucket is not versioned. New
+    `evidence_stays_filed.sql`, added to `ci.yml`. Swept 17 / 19; the
+    two survivors, the depth clauses, are equivalent.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -3303,6 +3328,7 @@ function:
 | `app.an_order_moves_by_its_functions` | `0845` | 6 / 7 | 1 (the depth clause: confirming and posting are definers; said in the file) | `order_status_by_its_functions.sql` (new in `0845`; a posted order refused cancelling and going back to draft, a confirmed one refused being marked done, one made confirmed refused; confirming, posting and cancelling a draft or a confirmed order as before; a cancelled one not brought back; the owner at the top passes) |
 | `app.a_claim_is_what_was_decided` | `0846` | 7 / 9 | 2 (the depth clause, and a rejected step -- `decide_claim_step` rejects the claim with it; both said in the file) | `claim_lines_kept.sql` (new in `0846`; an approved claim's line refused rewriting, adding and deleting, a claim one approver has passed and a withdrawn one refused, a line moved either way between a decided and an open claim refused; an open claim and a draft written as before; HR still corrects; the owner at the top passes) |
 | `app.minutes_are_booked_before_posting` | `0847` | 6 / 7 | 1 (the depth clause: confirming and posting are definers; said in the file) | `operation_minutes_booked.sql` (new in `0847`; a posted order's minutes refused rebooking and its operation refused deleting; an operation refused adding and its planned minutes refused cutting; minutes booked before posting and costed, twice; the owner at the top passes) |
+| `app.evidence_stays_as_filed`, `app.an_evidence_file_stays` | `0848` | 17 / 19 | 2 (the depth clauses: nothing writes either table from inside a trigger as a client; said in the file) | `evidence_stays_filed.sql` (new in `0848`; a posted invoice's page refused repointing, moving and any other change, a no-op passing; its file refused deleting, renaming, moving bucket, a new version and new bytes, a timestamp passing; a capture refiled from its placeholder, a file nothing was built from deleted, and another bucket's same-named file deleted, as before; the owner at the top passes) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |
