@@ -2715,7 +2715,11 @@ page and renumbering would quietly break the reference.
     computation and no claim. New `relief_ceiling_on_form_b.sql`, added
     to `ci.yml`. Swept 8 / 9; the survivor is equivalent and the file
     says why.
-    **Still to read back.**
+    **Applied, and read back** (12 October, read-only, after run
+    38234182622 on `88c6417` had applied the migrations): recorded;
+    `app.a_relief_claimed_within_its_ceiling` is there with the body
+    this branch builds (md5 `d94c6910`), a definer not executable by
+    `authenticated`, its trigger enabled on `tax_relief_claims`.
 104. ~~A client can give a draft another document's journal, and it
     then reads as posted.~~ **Raised and answered 12 October: guard the
     posting columns. Built in `0837`.** Everything that asks "is this in
