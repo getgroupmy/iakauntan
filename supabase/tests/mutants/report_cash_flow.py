@@ -4,9 +4,13 @@
 # against the bank and cash accounts.
 #
 #     python3 scripts/mutate_sql.py \
-#       supabase/migrations/0100_cash_flow_and_equity.sql \
+#       supabase/migrations/0828_a_closed_account_is_still_in_the_books.sql \
 #       supabase/tests/financial_statements.sql \
 #       supabase/tests/mutants/report_cash_flow.py
+#
+# Re-run 12 October against `0828`, which restates this function with
+# a closed account's opening balance counted where it has posted lines:
+# 27 of 27 killed, control alive. Two mutants' text moved with it.
 #
 # RESULT, 6 October: 27 mutants, ALL 27 KILLED, control alive, on
 # financial_statements.sql. 12 died before "The cash flow statement,
@@ -108,8 +112,8 @@ m("cash brought forward includes the first day of the period",
 
 m("cash brought forward forgets the opening balances",
   "report_cash_flow",
-  "                   and e.entry_date < p_from), 0)\n    + coalesce((select sum(a.opening_balance) from public.accounts a",
-  "                   and e.entry_date < p_from), 0)\n    + 0 * coalesce((select sum(a.opening_balance) from public.accounts a  -- no ob",
+  "    -- never asked whether an account was open.\n    + coalesce((select sum(a.opening_balance) from public.accounts a",
+  "    -- never asked whether an account was open.\n    + 0 * coalesce((select sum(a.opening_balance) from public.accounts a  -- no ob",
   "-- no ob")
 
 m("cash carried forward forgets the opening balances",
@@ -138,8 +142,8 @@ m("cash brought forward reads another company",
 
 m("a deleted bank account's opening balance is cash",
   "report_cash_flow",
-  "                 where a.org_id = p_org_id and a.deleted_at is null\n                   and not a.is_group\n                   and a.account_subtype in ('bank', 'cash')), 0) as opening,",
-  "                 where a.org_id = p_org_id\n                   and not a.is_group  -- deleted ob\n                   and a.account_subtype in ('bank', 'cash')), 0) as opening,",
+  "                   and (a.deleted_at is null\n                        or exists (select 1 from public.gl_lines ol",
+  "                   and (true  -- deleted ob\n                        or exists (select 1 from public.gl_lines ol",
   "-- deleted ob")
 
 m("the depreciation line shows at nil",

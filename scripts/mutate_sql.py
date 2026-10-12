@@ -333,6 +333,15 @@ def arity(statement: str, at: int = 0) -> int:
     depth, i, parts, cur, quoted = 0, start, [], "", False
     while True:
         ch = statement[i]
+        if not quoted and statement.startswith("--", i):
+            # A comment inside the argument list, as `0687` writes one
+            # for `report_matter_trial_balance`: its "yesterday's" read
+            # as an opening quote, and the walk ran off the end of the
+            # file looking for the close.
+            i = statement.find("\n", i)
+            if i < 0:
+                i = len(statement)
+            continue
         if ch == "'":
             # A default of 'x, y' is one argument: commas inside a string
             # are not boundaries ('' inside one toggles twice, harmlessly).

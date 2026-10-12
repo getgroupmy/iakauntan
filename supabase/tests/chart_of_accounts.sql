@@ -236,7 +236,8 @@ begin
 
   -- Posted to: kept, switched off. Deleting it would take a balance
   -- out of the trial balance, which is how a set of books stops
-  -- balancing.
+  -- balancing -- and since `0828` so would closing it holding one, so
+  -- it is journalled back to nothing first.
   v_used := public.upsert_account(
     '6370', 'Used once', 'expense', 'operating_expense', p_org_id => v_org);
   perform public.post_manual_journal(v_org, date '2026-05-01',
@@ -246,8 +247,15 @@ begin
       jsonb_build_object('account_id', pg_temp.acct(v_org, '1120'),
                          'debit', 0, 'credit', 90, 'description', 'A cost')),
     'One cost');
+  perform public.post_manual_journal(v_org, date '2026-05-02',
+    jsonb_build_array(
+      jsonb_build_object('account_id', pg_temp.acct(v_org, '6100'),
+                         'debit', 90, 'credit', 0, 'description', 'Moved'),
+      jsonb_build_object('account_id', v_used,
+                         'debit', 0, 'credit', 90, 'description', 'Moved')),
+    'Moved to 6100');
 
-  perform pg_temp.check_eq('an account with history is closed',
+  perform pg_temp.check_eq('an account with history, and nothing left in it, is closed',
     public.retire_account(v_used), 'closed');
   perform pg_temp.check_true('and keeps its postings',
     exists (select 1 from public.gl_lines where account_id = v_used));
@@ -257,7 +265,9 @@ begin
   -- An account with an opening balance and no postings. Nothing in the
   -- database refuses deleting this one -- `gl_lines` has no row to
   -- restrict on -- so the guard is the only thing standing between a
-  -- company and a trial balance that stops balancing.
+  -- company and a trial balance that stops balancing. Until `0828` it
+  -- closed, and the reports then left the RM250 out; now the balance
+  -- keeps it open.
   declare v_opened uuid;
   begin
     v_opened := public.upsert_account(
@@ -265,9 +275,10 @@ begin
       p_org_id => v_org);
     update public.accounts set opening_balance = 250 where id = v_opened;
 
-    perform pg_temp.check_eq(
-      'an account carrying an opening balance is closed too',
-      public.retire_account(v_opened), 'closed');
+    perform pg_temp.check_refused(
+      'an account carrying an opening balance is not closed',
+      format('select public.retire_account(%L)', v_opened),
+      'Account 6375 still carries a balance of 250.00 debit.%', '23514');
     perform pg_temp.check_true('and keeps the balance it carried',
       (select opening_balance from public.accounts where id = v_opened) = 250);
   end;
@@ -584,7 +595,8 @@ begin
     p_is_group => true, p_org_id => v_org);
   v_kid := public.upsert_account('6391', 'Bekas Anak', 'expense', 'operating_expense',
     p_parent_id => v_gone, p_org_id => v_org);
-  update public.accounts set opening_balance = 10 where id = v_kid;
+  -- It carried an opening balance of RM10 until `0828`, which will not
+  -- close an account holding one; closing keeps the row either way.
   perform pg_temp.check_eq('the child is closed, not deleted',
     public.retire_account(v_kid), 'closed');
   perform public.upsert_account('6390', 'Bekas', 'expense', 'operating_expense',

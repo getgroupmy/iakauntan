@@ -5,9 +5,15 @@
 # but kept.
 #
 #     python3 scripts/mutate_sql.py \
-#       supabase/migrations/0619_gone_from_the_product_not_from_the_record.sql \
+#       supabase/migrations/0828_a_closed_account_is_still_in_the_books.sql \
 #       supabase/tests/account_closure.sql \
 #       supabase/tests/mutants/retire_account.py
+#
+# Re-run 12 October against `0828`, which restates the function with a
+# balance and a live bank account refused: the same eleven, all killed
+# across the same two files (7 by `account_closure.sql`, 6 by
+# `chart_of_accounts.sql`), control alive. `0828`'s own two rules are
+# swept in `mutants/a_closed_account_is_still_in_the_books.py`.
 #
 # RESULT: 11 mutants and a control, all killed across two files, the
 # control surviving. `account_closure.sql` kills seven, three of them only

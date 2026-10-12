@@ -335,11 +335,20 @@ begin
                                          where org_id = v_org and code = '3100'),
                          'debit', 0, 'credit', 100)),
     'Once');
+  -- And journalled back out: since `0828` an account is not closed
+  -- holding a balance, so the closure records two lines, not one.
+  perform public.post_manual_journal(v_org, pg_temp.today(),
+    jsonb_build_array(
+      jsonb_build_object('account_id', (select id from public.accounts
+                                         where org_id = v_org and code = '3100'),
+                         'debit', 100, 'credit', 0),
+      jsonb_build_object('account_id', v_used, 'debit', 0, 'credit', 100)),
+    'Back');
   update public.accounts set is_active = false where id = v_used;
   perform public.retire_account(v_used);
   perform pg_temp.check_eq('the closure keeps how many lines were posted to it',
     (select (c.detail ->> 'posted_lines')::integer from public.account_closures c
-      where c.subject_kind = 'ledger_account' and c.subject_id = v_used), 1);
+      where c.subject_kind = 'ledger_account' and c.subject_id = v_used), 2);
   perform pg_temp.check_eq('and that it was already switched off',
     (select c.detail ->> 'was_active' from public.account_closures c
       where c.subject_kind = 'ledger_account' and c.subject_id = v_used), 'false');

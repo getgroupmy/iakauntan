@@ -2410,6 +2410,43 @@ page and renumbering would quietly break the reference.
     the depth clause, is equivalent. The revoked doors restored by hand
     fail the file 6 of 6, with a control.
     **Still to read back.**
+95. ~~A closed account leaves the trial balance out by what it held
+    -- found in production.~~ **Raised and answered 12 October: reports
+    and refuse. Built in `0828`; the client's own door is `0829`.**
+    `retire_account` refused only a posting code and an account with
+    open accounts under it, and the trial balance, balance sheet,
+    general ledger, changes in equity and matter trial balance left a
+    closed account out whatever it held, as did the cash flow's
+    opening-balance sums. Read-only in production: one live company's
+    trial balance showed RM832.50 of debits against RM922.50 of credits,
+    its ledger balancing at RM1,732.50 a side -- a bank sub-account,
+    `1120-M001`, was retired through `retire_account` on 30 September
+    carrying a RM90.00 debit, and the bank account it belongs to is
+    still active and still posts to it. Locally, a client closing 1210
+    Accounts Receivable by hand (which `retire_account` refuses) and
+    then posting a RM100 invoice left the trial balance RM100 out. Now
+    the six reports show a closed account that carries posted lines --
+    one with only a typed opening balance stays out, as
+    `general_ledger.sql` and `financial_statements.sql` already asserted
+    -- and `retire_account` refuses an account carrying a balance
+    (posted lines and the opening balance, signed as the trial balance
+    signs it) or one an active bank account posts to. That company's
+    RM90 is back in both reports with no row of its data touched; its
+    account stays closed, and **the company may want to know and to
+    revive it** (`revive_account`). Each function is restated from
+    `pg_get_functiondef` with only the marked lines changed. New
+    `closed_account_in_books.sql`, added to `ci.yml`, makes production's
+    state and asks every report and both refusals, with a draft and a
+    bank account out of use as the cases that must not count. Swept
+    24 / 24. `chart_of_accounts.sql` and `account_closure.sql` closed
+    accounts holding RM90, RM100 and opening balances of RM250 and
+    RM10; each is journalled back to nothing first, or asserted refused,
+    now. The older sweeps of `report_cash_flow`, `report_general_ledger`
+    and `retire_account` were re-run against `0828` and hold; a comment
+    with an apostrophe in `0687`'s argument list had crashed
+    `mutate_sql.py`'s `arity`, which now skips comments, with a
+    self-test that fails without it.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -2565,7 +2602,7 @@ function:
 | `match_bank_transaction` | `0772` | 17 / 17 | -- | `bank_reconciliation.sql` (four only after its `0772` block: the line that does not exist and another company's payment, expense or journal) |
 | `suggest_bank_matches` (0772's account filter) | `0772` | 4 / 4 | -- | `bank_reconciliation.sql` |
 | `resync_bank_balance` | `0175` | 7 / 8 | 1 (the `posted` filter: nothing writes a journal that is not posted, as the test file's header already said) | `bank_balance_resync.sql` (the not-found message only after it was asserted) |
-| `retire_account` | `0619` | 11 / 11 | -- | `account_closure.sql` (7; three only after its rule-by-rule assertions) + `chart_of_accounts.sql` (4) |
+| `retire_account` | `0619`, re-run on `0828` | 11 / 11 | -- | `account_closure.sql` (7; three only after its rule-by-rule assertions) + `chart_of_accounts.sql` (4) |
 | `close_pos_shift` | `0206` | 20 / 20 | -- | `pos_drawer_shapes.sql` (two only after they were asserted: who closed it, a closing note replacing the morning's) |
 | `cancel_stock_transfer` | `0265` | 6 / 6 | -- | `stock_transfers.sql` (one only after a second draft stood beside it) |
 | `cancel_landed_cost_run` | `0271` | 6 / 6 | -- | `landed_cost.sql` (one only after a second draft stood beside it) |
@@ -2669,6 +2706,7 @@ function:
 | `app.billed_time_is_kept` | `0825` | 20 / 21 | 1 (the depth clause: every writer of `time_entries` but the app is a definer; said beside the owner's assertion) | `billed_time_kept.sql` (new in `0825`; each of the eight frozen columns asked alone; `amount` asserted to be worked out again rather than frozen) |
 | `app.a_company_is_billed_as_the_platform_says` | `0826` | 12 / 13 | 1 (the depth clause: every writer of the four columns is a definer; said in the file) | `company_billing_columns.sql` (new in `0826`; each column alone on update and insert; `firm_member_role` with 'admin', since 'owner' is refused by a constraint; February's run asserted to bill both) |
 | `app.a_tax_estimate_is_kept` | `0827` | 16 / 17 | 1 (the depth clause: both writers of the table are definers; said in the file) | `tax_estimate_chain.sql` (new in `0827`; the superseded estimate refused any change, each chain column alone on the live one, insert and delete refused, the schedule asserted unchanged; insert and delete restored by hand, 6 / 6 with a control) |
+| `report_trial_balance`, `report_balance_sheet`, `report_general_ledger`, `report_changes_in_equity`, `report_matter_trial_balance`, `report_cash_flow`, `retire_account` | `0828` | 24 / 24 | -- | `closed_account_in_books.sql` (new in `0828`; production's state remade, every report asked, both refusals; a draft and a bank account out of use as what must not count) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |

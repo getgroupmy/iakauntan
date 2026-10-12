@@ -106,6 +106,15 @@ class Overloads(unittest.TestCase):
     def test_no_arguments_is_none(self):
         self.assertEqual(mutate_sql.arity("create function f() returns void"), 0)
 
+    def test_a_comment_in_the_arguments_is_not_a_quote(self):
+        # 0687's report_matter_trial_balance: an apostrophe in a comment
+        # between two arguments opened a "string" that never closed, and
+        # the walk ran off the end of the file.
+        self.assertEqual(mutate_sql.arity(
+            "create function f(\n  a uuid,\n  -- yesterday's, not today's\n"
+            "  b date default null, -- the last, (1, 2)\n  c int)\n"
+            "returns void"), 3)
+
     def test_a_wrapper_with_more_arguments_does_not_supersede(self):
         # 0507 holds the 10-argument submit_leave_request; 0737 adds an
         # 11-argument idempotent wrapper and redefines nothing of 0507's.

@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17477
+17504
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1472,3 +1472,16 @@
 # through the function and the newest handed back; the owner at the top
 # let through; no insert or delete policy left). Measured: `all SQL
 # assertions passed (411 files, 17477 assertions executed)`.
+#
+# 17477 -> 17504, 12 October: 0828, a closed account is still in the
+# books (closed_account_in_books.sql, 27: retire_account refuses an
+# account carrying a debit, a credit or only an opening balance, and an
+# empty one a live bank account posts to, and closes one with only a
+# draft or a bank out of use, or once journalled out; then, with
+# accounts closed holding something, the trial balance balances and
+# shows them, the balance sheet, general ledger, changes in equity,
+# matter trial balance and cash flow carry what they hold, and a closed
+# account with only a typed opening balance stays out of each).
+# chart_of_accounts.sql and account_closure.sql restated, one for one.
+# Measured: `all SQL assertions passed (412 files, 17504 assertions
+# executed)`.

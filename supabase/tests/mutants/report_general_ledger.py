@@ -4,9 +4,15 @@
 # above it.
 #
 #     python3 scripts/mutate_sql.py \
-#       supabase/migrations/0458_the_ledger_itself.sql \
+#       supabase/migrations/0828_a_closed_account_is_still_in_the_books.sql \
 #       supabase/tests/general_ledger.sql \
 #       supabase/tests/mutants/report_general_ledger.py
+#
+# Re-run 12 October against `0828`, which restates this function with
+# closed accounts listed where they have posted lines: 27 killed, the
+# same equivalent surviving, control alive. Two mutants' text moved
+# with it, and one marker (`-- le`) is now `/* le */`, because `0828`'s
+# own comments say "leaves".
 #
 # RESULT, 6 October: 28 mutants, 27 KILLED, 1 equivalent, control
 # alive, on general_ledger.sql alone. 15 died before "The ledger, rule
@@ -29,14 +35,14 @@ m("with no end date the ledger stops a year ago",
 
 m("another company's accounts are listed",
   "report_general_ledger",
-  "     where a.org_id = p_org_id\n       and a.deleted_at is null",
-  "     where true  -- any org account\n       and a.deleted_at is null",
+  "      from public.accounts a\n     where a.org_id = p_org_id\n",
+  "      from public.accounts a\n     where true  -- any org account\n",
   "-- any org account")
 
 m("a deleted account is listed",
   "report_general_ledger",
-  "     where a.org_id = p_org_id\n       and a.deleted_at is null",
-  "     where a.org_id = p_org_id\n       and true  -- deleted account",
+  "       and (a.deleted_at is null\n            or exists (select 1 from public.gl_lines pl",
+  "       and (true  -- deleted account\n            or exists (select 1 from public.gl_lines pl",
   "-- deleted account")
 
 m("group headings are listed as accounts",
@@ -60,8 +66,8 @@ m("the brought-forward balance leaves out unposted entries' absence: drafts coun
 m("the brought-forward balance includes the first day of the period",
   "report_general_ledger",
   "                and e.entry_date < p_from), 0)",
-  "                and e.entry_date <= p_from), 0)  -- le",
-  "-- le")
+  "                and e.entry_date <= p_from), 0)  /* le */",
+  "/* le */")
 
 m("nothing is brought forward from earlier entries",
   "report_general_ledger",
