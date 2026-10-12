@@ -2415,7 +2415,13 @@ page and renumbering would quietly break the reference.
     own and that the schedule is unchanged. Swept 16 / 17; the survivor,
     the depth clause, is equivalent. The revoked doors restored by hand
     fail the file 6 of 6, with a control.
-    **Still to read back.**
+    **Applied, and read back** (12 October, read-only, after run
+    38208367223 on `389546d` had applied the migrations): recorded;
+    `app.a_tax_estimate_is_kept()` is there, not a definer, executable
+    by its owner alone, with the body this branch builds (md5
+    `48e05f7f`), and its trigger is enabled on `tax_estimates`;
+    `authenticated` holds no insert or delete there, and the select and
+    update policies are the only two left. No estimates, as before.
 95. ~~A closed account leaves the trial balance out by what it held
     -- found in production.~~ **Raised and answered 12 October: reports
     and refuse. Built in `0828`; the client's own door is `0829`.**
