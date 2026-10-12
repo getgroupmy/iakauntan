@@ -2340,6 +2340,34 @@ page and renumbering would quietly break the reference.
     client, which the full suite caught; it is marked as the owner now,
     the way the billing functions mark it.
     **Still to read back.**
+93. ~~A company's own admin can take it off the platform's monthly
+    bill.~~ **Raised and answered 11 October: guard the platform
+    columns. Built in `0826`.** `app.bill_the_month` bills a company
+    whose `status` is active and that is not `is_demo`, and `firm_id`
+    and `firm_member_role` are set by the firm functions, which is how a firm consents to taking a
+    company on. Every one of their writers is a definer. But
+    `organizations_update` lets a company's admin write any column --
+    the settings screen writes the row directly, which is what it is
+    for. Measured as the owner with the role `authenticated`: two
+    companies holding the multi-company module the whole of January, one
+    set `is_demo` and the other `status` 'trial' to 2046 by their
+    owners, and the run on 1 February billed neither -- the status did
+    it. `trial_ends_at` is NOT guarded: nothing has read it since
+    `0548`, `check_orphan_columns.py` lists it to be dropped, and the
+    first build's guard on it failed that gate for reaching it. Now
+    `a_company_is_billed_as_the_platform_says` refuses a client's own
+    statement that changes any of the four, or makes a company with any
+    of them other than as new; the functions pass. NOT security definer.
+    A company made directly is refused today a step later, by a trigger
+    reading `auth.users` -- the guard answers first and stays if that
+    changes. Production held six companies and thirteen demonstration
+    ones, all active. New `company_billing_columns.sql`, added to
+    `ci.yml`, asks each column on its own on an update and an insert,
+    and that February bills both. Swept 12 / 13; the survivor, the depth
+    clause, is equivalent. `firm_member_role` is asked with 'admin':
+    'owner' is refused already by `firm_role_is_not_owner`, which killed
+    the first sweep's mutant for the wrong reason.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -2597,6 +2625,7 @@ function:
 | (the write grants and policies on `bank_accounts`) | `0823` | 6 / 6 restored by hand | -- | `bank_accounts_kept.sql` (new in `0823`; insert, update and delete each restored with its policy and then alone; a policy alone fails its last assertion) |
 | `app.a_posted_expense_is_kept` | `0824` | 33 / 34 | 1 (the depth clause: the only writers of `expenses` are two definers; said beside the owner's assertion) | `posted_expense_kept.sql` (new in `0824`; every one of the twenty-one frozen columns asked alone; eight answered first by a key, a policy, the branch check or `refuse_reposting`, killed because the guard's own sentence is asked for) |
 | `app.billed_time_is_kept` | `0825` | 20 / 21 | 1 (the depth clause: every writer of `time_entries` but the app is a definer; said beside the owner's assertion) | `billed_time_kept.sql` (new in `0825`; each of the eight frozen columns asked alone; `amount` asserted to be worked out again rather than frozen) |
+| `app.a_company_is_billed_as_the_platform_says` | `0826` | 12 / 13 | 1 (the depth clause: every writer of the four columns is a definer; said in the file) | `company_billing_columns.sql` (new in `0826`; each column alone on update and insert; `firm_member_role` with 'admin', since 'owner' is refused by a constraint; February's run asserted to bill both) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |
