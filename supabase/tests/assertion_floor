@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17638
+17666
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1559,3 +1559,13 @@
 # taken; uncoded and uncapped claims as typed; the computation's figure
 # and another company's apart; the owner held to it). Measured: `all
 # SQL assertions passed (420 files, 17638 assertions executed)`.
+#
+# 17638 -> 17666, 12 October: 0837, posting is the posting functions'
+# (posting_is_the_posting_functions.sql, 28: a draft receipt refused
+# another's journal and 0832's door still seeing it a draft; each
+# posting column on each of the five tables alone; a receipt's and
+# payment's status; each born posted on insert; a draft edited, an
+# order cancelled, an invoice posted with its receivable and money
+# settled by their functions; the owner at the top let through).
+# Measured: `all SQL assertions passed (421 files, 17666 assertions
+# executed)`.

@@ -2716,6 +2716,37 @@ page and renumbering would quietly break the reference.
     to `ci.yml`. Swept 8 / 9; the survivor is equivalent and the file
     says why.
     **Still to read back.**
+104. ~~A client can give a draft another document's journal, and it
+    then reads as posted.~~ **Raised and answered 12 October: guard the
+    posting columns. Built in `0837`.** Everything that asks "is this in
+    the books?" asks `gl_entry_id` -- `0832`'s door, the ageing and the
+    open items, and the posting functions, which refuse to post twice.
+    `refuse_reposting` stops a link changing once set and `0781` guards
+    a document's status and paid figures; nothing stopped a client
+    setting the link on a draft. Measured as the owner with the role
+    `authenticated`: a draft receipt given INV-2's journal was accepted,
+    `0832`'s door then applied it to INV-1 -- completed, the receivable
+    unmoved -- and `post_receipt` refused it as already posted; a draft
+    supplier payment the same to a bill; a draft invoice given one
+    stayed a draft, showed on the customer's open items with nothing in
+    the ledger, and could never be posted. Draft bills and manufacturing
+    orders the same. Expenses, stock adjustments and claims already
+    refused it. Now `posting_is_the_posting_functions` refuses a
+    client's own statement -- role `authenticated` or `anon`, at the top
+    trigger depth -- that sets or changes `gl_entry_id`, `posted_at` or
+    `posted_by` on sales and purchase documents, receipts, supplier
+    payments and manufacturing orders, or inserts one carrying them; on
+    a receipt or payment its status goes with them. Every function that
+    posts, voids or reverses is a definer and passes; the app writes
+    none of these columns. NOT security definer. Production held no
+    draft with a journal and no journal linked twice. New
+    `posting_is_the_posting_functions.sql`, added to `ci.yml`. Swept
+    9 / 10; the survivor, the depth clause, is equivalent. The triggers
+    are named `the_posting_...` so they fire after `refuse_reposting`
+    and the posted-row guards: the first build's `a_posting_...` fired
+    first, and `posted_document_is_frozen.sql`, which asks for
+    `refuse_reposting`'s own sentence on a posted invoice, caught it.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -2984,6 +3015,7 @@ function:
 | (six CHECK constraints on `employee_ytd_opening`) | `0834` | 16 / 16 by hand | -- | `ytd_opening_in_range.sql` (new in `0834`; each figure a cent below nothing refused and nothing taken, the year at 26, 1999 and 2101 refused and 2000 and 2100 taken; July's PCB on the EA form's figures; the owner held to it too) |
 | `app.a_share_class_stays_with_its_company` | `0835` | 3 / 3 | -- | `share_class_company_kept.sql` (new in `0835`; a class with shares and one without refused another company, the owner refused across tenants; the sheet's own amendment and both companies' books as before) |
 | `app.a_relief_claimed_within_its_ceiling` | `0836` | 8 / 9 | 1 (a relief without a ceiling: a total compared with a null ceiling is never over it; said in the file) | `relief_ceiling_on_form_b.sql` (new in `0836`; over the ceiling and claimed twice, a sen over by the claim and by a second one, a claim amended back to its ceiling, two claims up to it, uncoded and uncapped claims as typed, another company's computation apart, the owner held to it) |
+| `app.posting_is_the_posting_functions` | `0837` | 9 / 10 | 1 (the depth clause: every function that posts, voids or reverses is a definer; said in the file) | `posting_is_the_posting_functions.sql` (new in `0837`; each posting column on each of the five tables alone, a receipt's and payment's status, each born posted on insert; `0832`'s door still seeing the draft; a draft edited, an order cancelled, an invoice posted and money settled by their functions) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |
