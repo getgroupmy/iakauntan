@@ -1,0 +1,28 @@
+-- =====================================================================
+-- iAkauntan :: 0870 a task's owner ticks it, and does nothing else to it
+--
+-- `0093` gave onboarding its way to tick a task:
+-- `set_onboarding_task_done`, which admits HR or the task's owner --
+-- "that is the point of assigning one to a line manager rather than to
+-- HR" -- stamps who ticked it and when, and works out whether the
+-- checklist is complete. `0038` had already given the owner
+-- `onboarding_tasks_update`: any column of their task, directly, checked
+-- only for the HR module.
+--
+-- Measured on 13 October 2026, locally, as a `sales` member who is a new
+-- joiner's line manager and owns one of her tasks, with the role
+-- `authenticated`: he renamed "Laptop issued" to "Laptop (not needed)",
+-- made it optional, and marked it done with no time and with the HR
+-- manager recorded as the one who ticked it. Nothing worked out whether
+-- the checklist was complete.
+--
+-- Production held no onboarding checklists on 13 October. The app ticks
+-- a task only through the function.
+--
+-- Answered "ticked only by its function": the owner's policy goes. The
+-- owner ticks and unticks through `set_onboarding_task_done`, a definer,
+-- as the app already does; HR keeps `onboarding_tasks_write`, and
+-- whoever may read a task still reads it.
+-- =====================================================================
+
+drop policy onboarding_tasks_update on public.onboarding_tasks;

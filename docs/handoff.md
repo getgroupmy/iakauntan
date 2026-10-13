@@ -3751,6 +3751,25 @@ page and renumbering would quietly break the reference.
     and `statutory_inputs_in_range.sql` read two EPF rates as the owner
     and reads them through the function now.
     **Still to read back.**
+138. ~~The line manager who owns a new joiner's onboarding task could
+    rewrite it.~~ **Raised and answered 13 October** ("Ticked only by
+    its function"). `0093` gave onboarding `set_onboarding_task_done`,
+    which admits HR or the task's owner, stamps who ticked it and when,
+    and works out whether the checklist is complete; `0038` had already
+    given the owner `onboarding_tasks_update` -- any column of their
+    task, directly, checked only for the HR module. Measured locally as
+    a `sales` member who is the joiner's manager and owns one task: he
+    renamed "Laptop issued" to "Laptop (not needed)", made it optional,
+    and marked it done with no time and the HR manager recorded as the
+    one who ticked it; nothing worked out the checklist. Production has
+    no onboarding checklists yet, and the app ticks only through the
+    function. `0870` drops the owner's policy; the owner ticks and
+    unticks through the function, HR keeps `onboarding_tasks_write`, and
+    who reads a task is unchanged. No app change. New
+    `onboarding_task_ticked.sql` (9 assertions). Swept by hand: with the
+    policy back, "he cannot rewrite his task directly" fails, expected 0
+    rows, got 1; there is no function in the migration to mutate.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

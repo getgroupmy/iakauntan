@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18171
+18180
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1866,3 +1866,11 @@
 # every bank account; with HR switched off HR reads nothing either; anon
 # calls and reads nothing). access_types.sql and
 # statutory_inputs_in_range.sql changed how they ask, not how much.
+#
+# 18171 -> 18180, 13 October: 0870's onboarding_task_ticked.sql (9: the
+# line manager who owns a new joiner's task, and is not HR, reads it and
+# cannot rewrite it -- not its name, whether it is mandatory, whether it
+# is done or who did it; he ticks it through the function, which stamps
+# him and the time and leaves the checklist open, and unticks it the
+# same way; HR still renames a task and makes it optional; and the
+# owner's tick then finishes the checklist, which says so).
