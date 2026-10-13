@@ -3560,7 +3560,12 @@ page and renumbering would quietly break the reference.
     another company read nothing whatever this policy says, because the
     module gate asks for a current member first -- a mutant letting
     either in survived, and that is how it was found.
-    **Still to read back.**
+    **Applied, and read back** (13 October, read-only, after run
+    38382004982 on `270b914` had applied the migrations):
+    `fs_figures_select` is `app.can_read_ledger(org_id)` for
+    `authenticated`, and the restrictive `module_gate_select` still asks
+    `can_read_module(org_id, 'mbrs')`. The same run counted `6742 Dart
+    tests ran (floor 6742)`; the floor stays.
 133. ~~Every member reads the fixed asset register.~~ **Raised and
     answered 13 October** ("Register to ledger roles"). Since `0156`
     `report_depreciation_history` and `report_asset_movements` -- the
