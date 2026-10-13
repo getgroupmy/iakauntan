@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17834
+17843
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1695,3 +1695,12 @@
 # run still finished, failed and rolled back; the owner at the top sets
 # a status but does not reopen a posted import). Measured: `all SQL
 # assertions passed (434 files, 17834 assertions executed)`.
+#
+# 13 October 2026, `0851`: 17834 -> 17843. Nine in
+# `ticket_comments_kept.sql` (new: a comment refused in the customer's
+# name, as the owner with the role `authenticated`; the customer's reply
+# refused rewriting and deleting, a colleague's refused rewriting, an
+# internal note refused going public, so what was said stands; an agent
+# still comments as themselves and the customer still replies through
+# the link). Measured: `all SQL assertions passed (435 files, 17843
+# assertions executed)`.
