@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17814
+17822
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1676,3 +1676,12 @@
 # deleted, and another bucket's same-named file deleted, as before; the
 # owner at the top passes). Measured: `all SQL assertions passed (432
 # files, 17814 assertions executed)`.
+#
+# 12 October 2026, `0849`: 17814 -> 17822. Eight in
+# `received_einvoice_kept.sql` (new: a line of a supplier's document
+# refused deleting on its own, as the owner with the role
+# `authenticated`; the document behind a posted bill and behind a draft
+# one refused deleting; a document whose bill was deleted, and one
+# nothing was built from, deleted as before, lines and all; the owner at
+# the top passes). Measured: `all SQL assertions passed (433 files,
+# 17822 assertions executed)`.

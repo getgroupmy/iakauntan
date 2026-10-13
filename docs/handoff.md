@@ -3052,6 +3052,28 @@ page and renumbering would quietly break the reference.
     `authenticated`; their triggers are enabled on `attachments` and on
     `storage.objects`. The seven attachments are as they were, three of
     them evidence, every file present.
+116. ~~A received e-invoice's lines can be deleted one by one, and the
+    document behind a posted bill deleted.~~ **Raised and answered 12
+    October: lines go only with it; billed stays. Built in `0849`.**
+    `0650` keeps what a supplier sent through MyInvois as it arrived --
+    no client update, only deleting the whole of one that was not for
+    us -- but its lines carried a delete policy of their own, and
+    nothing asked whether a bill had been built from the document.
+    Measured as the owner with the role `authenticated`: one line of a
+    supplier's document deleted, the document still saying RM212 payable
+    over the one left; every line of a billed one deleted; and the
+    document behind a posted bill deleted, the bill standing in the
+    ledger with nothing it was drafted from -- all accepted. Now a
+    client's delete on `received_einvoice_lines` is revoked and its
+    policy dropped (lines go by the cascade, as the owner), and
+    `a_billed_document_stays` refuses a client's delete of a document
+    while a bill built from it still exists; a bill deleted lets the
+    document go after it. NOT security definer. Production held no
+    received e-invoice. New `received_einvoice_kept.sql`, added to
+    `ci.yml`. Swept 6 / 7; the survivor, the depth clause, is
+    equivalent. The revoke swept by hand: delete granted back and the
+    policy restored, the line assertion fails; restored, it passes.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -3336,6 +3358,7 @@ function:
 | `app.a_claim_is_what_was_decided` | `0846` | 7 / 9 | 2 (the depth clause, and a rejected step -- `decide_claim_step` rejects the claim with it; both said in the file) | `claim_lines_kept.sql` (new in `0846`; an approved claim's line refused rewriting, adding and deleting, a claim one approver has passed and a withdrawn one refused, a line moved either way between a decided and an open claim refused; an open claim and a draft written as before; HR still corrects; the owner at the top passes) |
 | `app.minutes_are_booked_before_posting` | `0847` | 6 / 7 | 1 (the depth clause: confirming and posting are definers; said in the file) | `operation_minutes_booked.sql` (new in `0847`; a posted order's minutes refused rebooking and its operation refused deleting; an operation refused adding and its planned minutes refused cutting; minutes booked before posting and costed, twice; the owner at the top passes) |
 | `app.evidence_stays_as_filed`, `app.an_evidence_file_stays` | `0848` | 17 / 19 | 2 (the depth clauses: nothing writes either table from inside a trigger as a client; said in the file) | `evidence_stays_filed.sql` (new in `0848`; a posted invoice's page refused repointing, moving and any other change, a no-op passing; its file refused deleting, renaming, moving bucket, a new version and new bytes, a timestamp passing; a capture refiled from its placeholder, a file nothing was built from deleted, and another bucket's same-named file deleted, as before; the owner at the top passes) |
+| `app.a_billed_document_stays` | `0849` | 6 / 7 | 1 (the depth clause: a document deleted from inside a trigger is a cascade, run as the owner; said in the file) | `received_einvoice_kept.sql` (new in `0849`; a line of a supplier's document refused deleting on its own; the document behind a posted bill and a draft one refused deleting; a document whose bill was deleted, and one nothing was built from, deleted as before, lines and all; the owner at the top passes. The lines' revoke swept by hand) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |
