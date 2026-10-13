@@ -3638,7 +3638,14 @@ page and renumbering would quietly break the reference.
     sends `salespersonColumns` and that `salespeopleWithRates()` calls
     the function -- `Repo` is never built over a mock HTTP client here.
     What holds the first is the SQL test's refusal of `select *`.
-    **Still to read back.**
+    **Applied, and read back** (13 October, read-only, after run
+    38390900746 on `1773d30` had applied the migrations):
+    `salesperson_commission_rates` is the body this branch builds,
+    `542d1d3e`, a definer executable by `authenticated` and not `anon`;
+    `app.commission_rate_is_the_ledgers` `64164306`, not a definer, on
+    its before insert or update trigger; `authenticated` reads `name` and
+    not `commission_rate`, and keeps update. The same run counted `6749
+    Dart tests ran (floor 6742)`, and the floor is 6749 now.
 135. ~~The cashier a credit hold is there to stop could take it off.~~
     **Raised and answered 13 October** ("Anyone tightens, posters
     loosen"). `0362` made a hold refuse an invoice whatever the credit
