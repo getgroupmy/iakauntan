@@ -82,6 +82,11 @@ class _TaxEstimateScreenState extends ConsumerState<TaxEstimateScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // `0860`. Before anything is asked: the database answers none of it
+    // to a role that does not read the ledger.
+    if (!ref.watch(canReadLedgerProvider)) {
+      return const LedgerWithheld(title: 'Tax estimate');
+    }
     final exposure = ref.watch(taxEstimateExposureProvider(_key));
 
     return Scaffold(

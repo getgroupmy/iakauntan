@@ -319,13 +319,17 @@ class _FilingTile extends StatelessWidget {
   }
 }
 
-class _OpenWorking extends StatelessWidget {
+class _OpenWorking extends ConsumerWidget {
   const _OpenWorking({required this.filing});
 
   final TaxFiling filing;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // The dates are everybody's; the workings behind them are the
+    // ledger's (`0860`), and a door to a screen that only says no is
+    // not offered.
+    if (!ref.watch(canReadLedgerProvider)) return const SizedBox.shrink();
     final estimate = filing.estimateId;
     final computation = filing.computationId;
     // A CP204 row leads to the estimate; everything else to the

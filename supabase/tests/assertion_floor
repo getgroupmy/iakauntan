@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18020
+18042
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1771,3 +1771,13 @@
 # both reads each its own; anon reads neither table and no client
 # writes either). Measured: `all SQL assertions passed (443 files,
 # 18020 assertions executed)`.
+#
+# 18020 -> 18042, 13 October: 0860's tax_figures_withheld.sql (22: the
+# salesman reads no row of the seven tax tables, is refused the
+# schedule and its inner arithmetic, and is given the instalment count
+# and next due date with every sum blank, the dashboard's tax tile still
+# drawn; the clerk reads the computation, its rows, the estimate and
+# what was paid, the schedule adding to the estimate and the summary
+# carrying the money; the salesman's dates and counts are the clerk's;
+# anon calls neither function). Measured: `all SQL assertions passed
+# (444 files, 18042 assertions executed)`.

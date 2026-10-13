@@ -26,6 +26,11 @@ class FormBScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // `0860`. Before anything is asked: the database answers none of it
+    // to a role that does not read the ledger.
+    if (!ref.watch(canReadLedgerProvider)) {
+      return const LedgerWithheld(title: 'Form B');
+    }
     return Scaffold(
       appBar: AppBar(
         title: const Text('Form B'),

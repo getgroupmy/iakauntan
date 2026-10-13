@@ -29,7 +29,13 @@ import 'package:iakauntan/src/features/financials/tax_estimate_screen.dart';
 /// null it did not expect, a layout that throws, a section that reads
 /// a field nobody set.
 void main() {
-  Widget wrap(Widget screen, List<Override> overrides) {
+  // An accountant unless a test says otherwise: these are the ledger's
+  // screens (`0860`), and every role that reads it sees them alike.
+  Widget wrap(
+    Widget screen,
+    List<Override> overrides, {
+    String role = 'accountant',
+  }) {
     final router = GoRouter(
       initialLocation: '/x',
       routes: [
@@ -45,7 +51,10 @@ void main() {
       ],
     );
     return ProviderScope(
-      overrides: overrides,
+      overrides: [
+        memberRoleProvider.overrideWith((ref) async => role),
+        ...overrides,
+      ],
       child: MaterialApp.router(
         theme: AppTheme.light(),
         routerConfig: router,
@@ -348,6 +357,109 @@ void main() {
       // A partnership is not a taxable person. A Form P that produced
       // a tax figure would be wrong in the most expensive direction.
       expect(find.textContaining('Tax payable'), findsNothing);
+      // And it is the working, drawn: the assertion above holds of a
+      // screen that drew nothing at all, which is what an accountant
+      // shown "not part of your role" would see (`0860`).
+      expect(find.text('Add a partner'), findsOneWidget);
+      expect(find.byKey(const ValueKey('ledger-withheld')), findsNothing);
     });
+  });
+  /// `0860`. The figures on these screens are the ledger's, and the
+  /// database answers none of them to a role that does not read it.
+  /// Each screen says so before it asks for anything; the calendar,
+  /// whose dates are everybody's, offers no door to them.
+  group('a role that does not read the ledger', () {
+    for (final (title, screen) in [
+      ('Tax computation', const TaxComputationScreen(computationId: 'c1')),
+      ('Form B', const FormBScreen(computationId: 'c1')),
+      ('Form P', const FormPScreen(computationId: 'c1')),
+      ('Tax estimate', const TaxEstimateScreen(estimateId: 'e1')),
+    ]) {
+      testWidgets('is told why on the $title, and nothing is asked', (
+        tester,
+      ) async {
+        var asked = 0;
+        await onAPhone(
+          tester,
+          wrap(screen, [
+            // What each screen reads first. Counted rather than
+            // answered: a screen that asked would be a screen that
+            // drew the refusal.
+            taxComputationProvider('c1').overrideWith((ref) async {
+              asked++;
+              throw StateError('asked');
+            }),
+            individualTaxProvider('c1').overrideWith((ref) async {
+              asked++;
+              throw StateError('asked');
+            }),
+            partnershipSummaryProvider('c1').overrideWith((ref) async {
+              asked++;
+              throw StateError('asked');
+            }),
+            taxEstimateExposureProvider((
+              estimate: 'e1',
+              computation: null,
+            )).overrideWith((ref) async {
+              asked++;
+              throw StateError('asked');
+            }),
+          ], role: 'sales'),
+        );
+        expect(find.byKey(const ValueKey('ledger-withheld')), findsOneWidget);
+        expect(find.text(title), findsOneWidget);
+        expect(asked, 0);
+      });
+    }
+
+    TaxFiling withWorking() => TaxFiling(
+      filingType: 'form_c',
+      name: 'Return of a company',
+      formLabel: 'C',
+      statuteRef: 'ITA 1967 s.77A(1)',
+      periodFrom: DateTime(2025, 7, 1),
+      periodTo: DateTime(2026, 6, 30),
+      yearOfAssessment: 2026,
+      dueDate: DateTime(2027, 1, 31),
+      efilingDueDate: null,
+      daysLeft: 90,
+      isOverdue: false,
+      status: 'not_started',
+      description: null,
+      fiscalYearId: 'fy1',
+      computationId: 'comp-1',
+      estimateId: null,
+    );
+
+    for (final (role, offered) in [
+      ('sales', false),
+      ('accounts_clerk', true),
+    ]) {
+      testWidgets(
+        'the calendar ${offered ? 'opens' : 'does not offer'} the working '
+        'to $role',
+        (tester) async {
+          await onAPhone(
+            tester,
+            wrap(const TaxCalendarScreen(), [
+              taxFilingCalendarProvider.overrideWith(
+                (ref) async => [withWorking()],
+              ),
+            ], role: role),
+          );
+          // The deadline itself is everybody's.
+          expect(find.text('Return of a company'), findsOneWidget);
+          expect(
+            find.text('Open the working'),
+            offered ? findsOneWidget : findsNothing,
+          );
+          if (offered) {
+            await tester.tap(find.text('Open the working'));
+            await tester.pumpAndSettle();
+            expect(find.text('a computation'), findsOneWidget);
+          }
+        },
+      );
+    }
   });
 }

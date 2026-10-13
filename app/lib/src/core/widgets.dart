@@ -208,6 +208,35 @@ class ErrorState extends StatelessWidget {
   }
 }
 
+/// What a screen built from the ledger shows a role that does not
+/// read it.
+///
+/// The database refuses what these screens read to a role
+/// `app.can_read_ledger` does not admit (`0855`, `0859`, `0860`).
+/// Built anyway, such a screen shows the refusal as an error, or --
+/// worse -- an empty answer as if there were nothing to show. So it
+/// returns this first, before it asks for anything, and the person is
+/// told why.
+class LedgerWithheld extends StatelessWidget {
+  const LedgerWithheld({super.key, required this.title});
+
+  /// The app bar's title, the same one the screen would have shown.
+  final String title;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: Text(title)),
+    body: const EmptyState(
+      key: ValueKey('ledger-withheld'),
+      icon: Icons.lock_outline,
+      title: 'Not part of your role',
+      message:
+          'This is worked out from the ledger, which your role in this '
+          'company does not read.',
+    ),
+  );
+}
+
 class EmptyState extends StatelessWidget {
   const EmptyState({
     super.key,

@@ -3411,6 +3411,38 @@ page and renumbering would quietly break the reference.
     `bank_reconciliations_select`, are `app.can_read_ledger(org_id)` for
     `authenticated`. The same run counted `6726 Dart tests ran (floor
     6695)`, and the floor is 6726 now.
+128. ~~Every member reads the company's tax.~~ **Raised and answered 13
+    October** ("Figures need ledger access, deadlines stay"). Since
+    `0855` the tax computation functions asked `can_read_ledger`; the
+    seven tables under them did not (`tax_computations`,
+    `tax_adjustments`, `tax_other_income`, `tax_relief_claims`,
+    `tax_partners`, `tax_estimates`, `tax_estimate_payments`), nor did
+    `tax_estimate_schedule` or `tax_estimate_payment_summary`. Measured
+    locally as `sales`: gross business income 2,345,678.90, a loss
+    brought forward of 120,000, an "Entertainment" add-back of 45,000,
+    an estimated tax of 456,000 and its twelve instalments. Production
+    has no tax rows yet -- structural. `0860`: the seven select
+    policies ask `can_read_ledger` (writes were `can_post`'s already);
+    the schedule refuses a non-reader; the summary still answers every
+    member -- `module_dashboard`'s tax tile asks it for every member,
+    for instalments behind and the next due date -- with its six sums of
+    money blank. **The trap:** the summary read the public schedule, so
+    refusing the schedule would have refused the summary and taken the
+    dashboard down with it. The schedule's body moved word for word to
+    `app.tax_estimate_schedule_of`, which no client may execute; the
+    public schedule is its refusals and that, and the summary reads it
+    too. `tax_filings` and `tax_upcoming_filings` (forms, dates, status)
+    are untouched. In the app, the tax computation, Form B, Form P and
+    estimate screens return `LedgerWithheld` (`core/widgets.dart`)
+    before asking anything -- they had shown `0855`'s refusal as an
+    error -- and the calendar offers no "Open the working" to such a
+    role. New `tax_figures_withheld.sql` (22 assertions; the salesman's
+    deadlines are compared with the clerk's, so they are not invented).
+    Swept 9 / 9 in SQL and the seven policies by hand, 7 / 7, each with
+    a control; 10 / 10 in Dart across five files. The Form P build test
+    asserted only that no tax figure was drawn, which an empty screen
+    also satisfies; it now asserts the working is drawn.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
