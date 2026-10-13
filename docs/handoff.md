@@ -3672,7 +3672,12 @@ page and renumbering would quietly break the reference.
     columns through `coalesce`, and both are NOT NULL -- a mutant
     dropping one was killed only by the column's own constraint, "for the
     wrong reason". The coalesces and the "none" assertion went.
-    **Still to read back.**
+    **Applied, and read back** (13 October, read-only, after run
+    38393899600 on `9f174dd` had applied the migrations):
+    `app.credit_is_loosened_by_a_poster` is the body this branch builds,
+    `3e2e4fcd`, not a definer, on `before update of credit_hold,
+    credit_limit on public.contacts`. The same run counted `6759 Dart
+    tests ran (floor 6749)`, and the floor is 6759 now.
 136. ~~The cashier could lift the drawer tolerance their own shift is
     judged by.~~ **Raised and answered 13 October** ("Tolerance is the
     manager's"). `close_pos_shift` refuses to close a shift further out
