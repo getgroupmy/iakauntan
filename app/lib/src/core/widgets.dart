@@ -218,21 +218,28 @@ class ErrorState extends StatelessWidget {
 /// returns this first, before it asks for anything, and the person is
 /// told why.
 class LedgerWithheld extends StatelessWidget {
-  const LedgerWithheld({super.key, required this.title});
+  const LedgerWithheld({
+    super.key,
+    required this.title,
+    this.message =
+        'This is worked out from the ledger, which your role in this '
+        'company does not read.',
+  });
 
   /// The app bar's title, the same one the screen would have shown.
   final String title;
 
+  /// Why. The ledger's reason unless the screen has its own.
+  final String message;
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: Text(title)),
-    body: const EmptyState(
-      key: ValueKey('ledger-withheld'),
+    body: EmptyState(
+      key: const ValueKey('ledger-withheld'),
       icon: Icons.lock_outline,
       title: 'Not part of your role',
-      message:
-          'This is worked out from the ledger, which your role in this '
-          'company does not read.',
+      message: message,
     ),
   );
 }

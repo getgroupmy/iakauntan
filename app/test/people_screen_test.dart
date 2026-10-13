@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:iakauntan/src/core/providers.dart';
 import 'package:iakauntan/src/core/theme.dart';
+import 'package:iakauntan/src/data/models.dart';
 import 'package:iakauntan/src/features/hr/people_screen.dart';
 
 /// The employee directory, and the bar above it.
@@ -20,11 +21,18 @@ import 'package:iakauntan/src/features/hr/people_screen.dart';
 /// flagged all three; only one was real, which is the reason the sweeps
 /// render rather than compute.
 void main() {
-  Widget harness({bool canManageHr = true}) => ProviderScope(
+  // `canRunPayroll` follows `canManageHr` unless said otherwise, as the
+  // roles do: every role that manages HR runs payroll too.
+  Widget harness({
+    bool canManageHr = true,
+    bool? canRunPayroll,
+    List<Employee> people = const [],
+  }) => ProviderScope(
     overrides: [
       repoProvider.overrideWithValue(null),
-      directoryProvider.overrideWith((ref) async => const []),
+      directoryProvider.overrideWith((ref) async => people),
       canManageHrProvider.overrideWithValue(canManageHr),
+      canRunPayrollProvider.overrideWithValue(canRunPayroll ?? canManageHr),
     ],
     child: MaterialApp(theme: AppTheme.light(), home: const PeopleScreen()),
   );
@@ -37,11 +45,19 @@ void main() {
     WidgetTester tester, {
     double width = 1400,
     bool canManageHr = true,
+    bool? canRunPayroll,
+    List<Employee> people = const [],
   }) async {
     tester.view.devicePixelRatio = 1.0;
     tester.view.physicalSize = Size(width, 900);
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(harness(canManageHr: canManageHr));
+    await tester.pumpWidget(
+      harness(
+        canManageHr: canManageHr,
+        canRunPayroll: canRunPayroll,
+        people: people,
+      ),
+    );
     await tester.pump();
     await tester.pump();
   }
@@ -92,6 +108,45 @@ void main() {
 
       expect(find.byKey(const ValueKey('attendance-month')), findsOneWidget);
       expect(find.byKey(const ValueKey('expiring-documents')), findsOneWidget);
+    });
+  });
+
+  // `0869`: the record is HR's and payroll's; everybody else is shown the
+  // person, here, and is not taken to a form of somebody else's pay.
+  group('who a name opens the record for', () {
+    final aminah = Employee.fromJson(const {
+      'id': 'e2',
+      'employee_no': 'E2',
+      'full_name': 'Aminah binti Ali',
+    });
+    ListTile tile(WidgetTester tester) => tester.widget(
+      find.ancestor(
+        of: find.text('Aminah binti Ali'),
+        matching: find.byType(ListTile),
+      ),
+    );
+
+    testWidgets('a manager outside HR sees the name and opens nothing', (
+      tester,
+    ) async {
+      await show(tester, canManageHr: false, people: [aminah]);
+      expect(find.text('Aminah binti Ali'), findsOneWidget);
+      expect(tile(tester).onTap, isNull);
+    });
+
+    testWidgets('payroll opens it', (tester) async {
+      await show(
+        tester,
+        canManageHr: false,
+        canRunPayroll: true,
+        people: [aminah],
+      );
+      expect(tile(tester).onTap, isNotNull);
+    });
+
+    testWidgets('and so does HR', (tester) async {
+      await show(tester, people: [aminah]);
+      expect(tile(tester).onTap, isNotNull);
     });
   });
 }

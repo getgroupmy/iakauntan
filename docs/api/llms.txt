@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0868` (the highest applied migration).
-849 functions and 368 readable tables, of which
-322 functions only read.
+Schema version `0869` (the highest applied migration).
+850 functions and 368 readable tables, of which
+323 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**709 of 849 functions carry a `comment on
+**710 of 850 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -170,6 +170,12 @@ Refused unless the company has the `forecasting` module switched on and the call
 - `create_po_from_suggestions(p_org uuid, p_lines jsonb, p_expected_date date, p_warehouse uuid)` *(writes)* — Turns forecast reorder suggestions into purchase orders, one per supplier, and returns how many it raised.
 - `forecast_suggestions(p_org uuid, p_warehouse uuid)` — What the latest run for this organization and location says to order, with the item and supplier named and any draft orders already raised netted off.
 - `run_inventory_forecast(p_org uuid, p_warehouse uuid, p_as_of date)` *(writes)* — Forecasts every stocked item and records what it decided.
+
+### hr (1)
+
+Refused unless the company has the `hr` module switched on and the caller may use it.
+
+- `employee_private_fields(p_org_id uuid, p_employee_id uuid)` — Every column of an employee's record that authenticated cannot select -- pay, identity, bank, family, statutory numbers -- for HR, payroll and the employee themselves; nothing for a manager or anybody else.
 
 ### inventory (28)
 

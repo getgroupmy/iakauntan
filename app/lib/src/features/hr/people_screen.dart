@@ -28,6 +28,9 @@ class _PeopleScreenState extends ConsumerState<PeopleScreen> {
   Widget build(BuildContext context) {
     final people = ref.watch(directoryProvider);
     final canManageHr = ref.watch(canManageHrProvider);
+    // `0869`: whoever may read the record may open it -- HR and payroll,
+    // which `canRunPayroll` admits both of.
+    final canOpen = ref.watch(canRunPayrollProvider);
     final narrow = MediaQuery.sizeOf(context).width < 700;
 
     return Scaffold(
@@ -133,7 +136,7 @@ class _PeopleScreenState extends ConsumerState<PeopleScreen> {
                   ]),
                 ),
                 for (final e in byDept[dept]!)
-                  _PersonTile(employee: e, canManageHr: canManageHr),
+                  _PersonTile(employee: e, canOpen: canOpen),
               ],
             ],
           );
@@ -144,15 +147,15 @@ class _PeopleScreenState extends ConsumerState<PeopleScreen> {
 }
 
 class _PersonTile extends StatelessWidget {
-  const _PersonTile({required this.employee, required this.canManageHr});
+  const _PersonTile({required this.employee, required this.canOpen});
 
   final Employee employee;
-  final bool canManageHr;
+  final bool canOpen;
 
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      onTap: () => context.go('/hr/people/${employee.id}'),
+      onTap: canOpen ? () => context.go('/hr/people/${employee.id}') : null,
       leading: CircleAvatar(
         backgroundColor: context.scheme.primaryContainer,
         child: Text(Fmt.initials(employee.fullName),

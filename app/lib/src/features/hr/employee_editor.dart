@@ -113,6 +113,17 @@ class _EmployeeEditorState extends ConsumerState<EmployeeEditor> {
 
   @override
   Widget build(BuildContext context) {
+    // `0869`: the record is HR's and payroll's -- `canRunPayroll`, which
+    // admits HR as well. A manager reads the person, on the People list,
+    // and nothing on this form.
+    if (!ref.watch(canRunPayrollProvider)) {
+      return const LedgerWithheld(
+        title: 'Employee',
+        message:
+            "An employee's record is kept by HR and payroll. Your own is "
+            'under My HR.',
+      );
+    }
     final existing = widget.isNew
         ? const AsyncValue<Employee?>.data(null)
         : ref.watch(employeeProvider(widget.employeeId!));

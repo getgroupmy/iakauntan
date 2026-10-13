@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18152
+18171
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1854,3 +1854,15 @@
 # the row and sets one; the manager clears, raises and deletes it, and
 # the cashier then closes the shift within it). Measured: `all SQL
 # assertions passed (452 files, 18152 assertions executed)`.
+#
+# 18152 -> 18171, 13 October: 0869's employee_record_withheld.sql (19:
+# a manager who is neither HR nor payroll reads who his report is and
+# where she sits, and not her salary, NRIC or bank account, nor the
+# whole row at once, and the function gives him nothing of hers but his
+# own record; a member who manages nobody reads no employee; the
+# employee reads her own record and only hers, with none of the public
+# columns in it; HR reads both and nothing of another company, and
+# still sets a salary and takes somebody on; payroll, not HR, reads
+# every bank account; with HR switched off HR reads nothing either; anon
+# calls and reads nothing). access_types.sql and
+# statutory_inputs_in_range.sql changed how they ask, not how much.

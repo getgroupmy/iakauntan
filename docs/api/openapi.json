@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0868",
+    "version": "0869",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -55,6 +55,10 @@
     {
       "name": "forecasting",
       "description": "Refused unless the company has the `forecasting` module switched on."
+    },
+    {
+      "name": "hr",
+      "description": "Refused unless the company has the `hr` module switched on."
     },
     {
       "name": "inventory",
@@ -35463,6 +35467,74 @@
                         "type": "string",
                         "format": "date"
                       }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Refused"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/rpc/employee_private_fields": {
+      "post": {
+        "operationId": "employee_private_fields",
+        "summary": "Every column of an employee's record that authenticated cannot select -- pay, identity, bank, family\u2026",
+        "description": "Every column of an employee's record that authenticated cannot select -- pay, identity, bank, family, statutory numbers -- for HR, payroll and the employee themselves; nothing for a manager or anybody else.\n\n`public.employee_private_fields(p_org_id uuid, p_employee_id uuid)` Reads only. Requires a signed-in user. Refused unless the company has the `hr` module and the caller may use it.",
+        "tags": [
+          "hr"
+        ],
+        "x-volatility": "stable",
+        "x-roles": [
+          "authenticated"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "p_org_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "p_employee_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "p_org_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The function returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "employee_id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "fields": {}
                     }
                   }
                 }
@@ -90155,76 +90227,6 @@
           "phone": {
             "type": "string"
           },
-          "nric": {
-            "type": "string"
-          },
-          "passport_no": {
-            "type": "string"
-          },
-          "nationality": {
-            "type": "string"
-          },
-          "residency_status": {
-            "type": "string",
-            "enum": [
-              "citizen",
-              "permanent_resident",
-              "expatriate",
-              "foreign_worker"
-            ]
-          },
-          "date_of_birth": {
-            "type": "string",
-            "format": "date"
-          },
-          "gender": {
-            "type": "string"
-          },
-          "marital_status": {
-            "type": "string",
-            "enum": [
-              "single",
-              "married",
-              "divorced",
-              "widowed"
-            ]
-          },
-          "spouse_is_working": {
-            "type": "boolean"
-          },
-          "is_disabled": {
-            "type": "boolean"
-          },
-          "spouse_is_disabled": {
-            "type": "boolean"
-          },
-          "address_line1": {
-            "type": "string"
-          },
-          "address_line2": {
-            "type": "string"
-          },
-          "city": {
-            "type": "string"
-          },
-          "postcode": {
-            "type": "string"
-          },
-          "state_code": {
-            "type": "string"
-          },
-          "country_code": {
-            "type": "string"
-          },
-          "emergency_contact_name": {
-            "type": "string"
-          },
-          "emergency_contact_phone": {
-            "type": "string"
-          },
-          "emergency_contact_relation": {
-            "type": "string"
-          },
           "department_id": {
             "type": "string",
             "format": "uuid"
@@ -90275,88 +90277,9 @@
             "type": "string",
             "format": "date"
           },
-          "termination_reason": {
-            "type": "string"
-          },
-          "pay_frequency": {
-            "type": "string",
-            "enum": [
-              "monthly",
-              "semi_monthly",
-              "weekly",
-              "daily"
-            ]
-          },
-          "basic_salary": {
-            "type": "number"
-          },
-          "working_days_per_month": {
-            "type": "number"
-          },
-          "working_hours_per_day": {
-            "type": "number"
-          },
-          "currency": {
-            "type": "string"
-          },
-          "bank_name": {
-            "type": "string"
-          },
-          "bank_account_no": {
-            "type": "string"
-          },
-          "bank_account_holder": {
-            "type": "string"
-          },
-          "epf_no": {
-            "type": "string"
-          },
-          "socso_no": {
-            "type": "string"
-          },
-          "income_tax_no": {
-            "type": "string"
-          },
-          "tin": {
-            "type": "string"
-          },
-          "eis_no": {
-            "type": "string"
-          },
-          "epf_eligible": {
-            "type": "boolean"
-          },
-          "socso_eligible": {
-            "type": "boolean"
-          },
-          "eis_eligible": {
-            "type": "boolean"
-          },
-          "pcb_eligible": {
-            "type": "boolean"
-          },
-          "hrdf_eligible": {
-            "type": "boolean"
-          },
-          "epf_voluntary_employee_rate": {
-            "type": "number"
-          },
-          "epf_voluntary_employer_rate": {
-            "type": "number"
-          },
-          "zakat_monthly": {
-            "type": "number"
-          },
-          "cp38_monthly": {
-            "type": "number"
-          },
           "photo_url": {
             "type": "string"
           },
-          "notes": {
-            "type": "string"
-          },
-          "custom_fields": {},
           "created_by": {
             "type": "string",
             "format": "uuid"

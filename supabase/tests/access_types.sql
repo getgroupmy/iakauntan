@@ -173,7 +173,10 @@ end $$;
 -- "all four commands" until `0817` made `payslips` the payroll
 -- functions' to write: a client only reads it now, so reading is the
 -- door the gate has to be on, and `table_grants.sql` refuses a policy
--- for a command nobody is granted.
+-- for a command nobody is granted. A column grant is a door as well:
+-- since `0869` a client selects some of `employees`' columns and not the
+-- table, and the gate is on that read all the same. DELETE has no
+-- column form.
 do $$
 declare
   v_table text;
@@ -192,7 +195,10 @@ begin
           and permissive = 'RESTRICTIVE'),
       (select string_agg(c, ',' order by c)
          from unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE']) c
-        where has_table_privilege('authenticated', format('public.%I', v_table), c)));
+        where case when c = 'DELETE'
+                   then has_table_privilege('authenticated', format('public.%I', v_table), c)
+                   else has_any_column_privilege('authenticated', format('public.%I', v_table), c)
+              end));
   end loop;
 end $$;
 

@@ -7633,9 +7633,50 @@ extension RepoHr on Repo {
     return Repo._rows(data).map(Employee.fromJson).toList();
   }
 
-  /// Full employee records, which RLS narrows to what the caller may see:
+  /// The columns of an employee row that anybody who may see the row may
+  /// read (`0869`): who somebody is and where they sit. A bare `*` is
+  /// refused outright, by anybody.
+  static const employeeColumns =
+      'id, org_id, employee_no, user_id, full_name, preferred_name, email, '
+      'phone, photo_url, department_id, position_id, manager_id, branch_id, '
+      'employment_type, employment_status, hire_date, confirmation_date, '
+      'resignation_date, last_working_date, created_by, created_at, '
+      'updated_at, import_source, import_ref, import_batch_id, imported_at';
+
+  static const _employeeSelect =
+      '$employeeColumns, departments!employees_department_id_fkey(name), '
+      'positions!employees_position_id_fkey(title)';
+
+  /// Each row with the rest of its record -- pay, identity, bank, family,
+  /// statutory numbers -- where `employee_private_fields` gave it: to HR,
+  /// to payroll and to the employee themselves. A manager's reports come
+  /// back as the person only.
+  static List<Map<String, dynamic>> withPrivateFields(
+    List<Map<String, dynamic>> rows,
+    List<Map<String, dynamic>> private,
+  ) {
+    final byId = {
+      for (final p in private)
+        p['employee_id']: (p['fields'] as Map?)?.cast<String, dynamic>(),
+    };
+    return [
+      for (final r in rows) {...r, ...?byId[r['id']]},
+    ];
+  }
+
+  Future<List<Map<String, dynamic>>> _employeePrivateFields({
+    String? employeeId,
+  }) async => Repo._rows(
+    await callRpc(
+      'employee_private_fields',
+      params: {'p_org_id': orgId, 'p_employee_id': employeeId},
+    ),
+  );
+
+  /// Employee records, which RLS narrows to the rows the caller may see --
   /// everyone for HR, your reporting line for a manager, yourself
-  /// otherwise.
+  /// otherwise -- with the private columns merged in only where the
+  /// caller may read them.
   Future<List<Employee>> employees({String? search, String? status}) async {
     var q = client
         .from('employees')
@@ -7644,10 +7685,7 @@ extension RepoHr on Repo {
         // so PostgREST sees two ways to join the two tables and refuses
         // the request rather than guessing. The JSON key stays
         // `departments`, so nothing downstream changes.
-        .select(
-          '*, departments!employees_department_id_fkey(name), '
-          'positions!employees_position_id_fkey(title)',
-        )
+        .select(_employeeSelect)
         .eq('org_id', orgId);
     if (status != null && status != 'all') {
       q = q.eq('employment_status', status);
@@ -7658,9 +7696,10 @@ extension RepoHr on Repo {
         [Repo.orLike('full_name', s), Repo.orLike('employee_no', s)].join(','),
       );
     }
-    return Repo._rows(
-      await q.order('employee_no', ascending: true),
-    ).map(Employee.fromJson).toList();
+    final rows = Repo._rows(await q.order('employee_no', ascending: true));
+    return withPrivateFields(rows, await _employeePrivateFields())
+        .map(Employee.fromJson)
+        .toList();
   }
 
   Future<Employee?> employee(String id) async {
@@ -7671,15 +7710,15 @@ extension RepoHr on Repo {
         // so PostgREST sees two ways to join the two tables and refuses
         // the request rather than guessing. The JSON key stays
         // `departments`, so nothing downstream changes.
-        .select(
-          '*, departments!employees_department_id_fkey(name), '
-          'positions!employees_position_id_fkey(title)',
-        )
+        .select(_employeeSelect)
         .eq('id', id)
         .maybeSingle();
-    return row == null
-        ? null
-        : Employee.fromJson(Map<String, dynamic>.from(row));
+    if (row == null) return null;
+    return Employee.fromJson(
+      withPrivateFields([
+        Map<String, dynamic>.from(row),
+      ], await _employeePrivateFields(employeeId: id)).single,
+    );
   }
 
   /// The caller's own employee record, or null when their login is not
@@ -7694,16 +7733,17 @@ extension RepoHr on Repo {
         // so PostgREST sees two ways to join the two tables and refuses
         // the request rather than guessing. The JSON key stays
         // `departments`, so nothing downstream changes.
-        .select(
-          '*, departments!employees_department_id_fkey(name), '
-          'positions!employees_position_id_fkey(title)',
-        )
+        .select(_employeeSelect)
         .eq('org_id', orgId)
         .eq('user_id', uid)
         .maybeSingle();
-    return row == null
-        ? null
-        : Employee.fromJson(Map<String, dynamic>.from(row));
+    if (row == null) return null;
+    final mine = Map<String, dynamic>.from(row);
+    return Employee.fromJson(
+      withPrivateFields([
+        mine,
+      ], await _employeePrivateFields(employeeId: mine['id'] as String)).single,
+    );
   }
 
   /// Takes somebody off the payroll.

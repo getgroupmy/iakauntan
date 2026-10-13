@@ -99,9 +99,12 @@ begin
      set epf_voluntary_employee_rate = 100, epf_voluntary_employer_rate = 100,
          cp38_monthly = 0, zakat_monthly = 0
    where id = d.emp;
+  -- Read as the app reads it: since `0869` these are not columns a
+  -- client selects, but what `employee_private_fields` gives back.
   perform pg_temp.check_eq('and a rate of a hundred, the edge, is a rate, either side''s',
-    (select epf_voluntary_employee_rate + epf_voluntary_employer_rate
-       from public.employees where id = d.emp), 200::numeric);
+    (select (fields ->> 'epf_voluntary_employee_rate')::numeric
+            + (fields ->> 'epf_voluntary_employer_rate')::numeric
+       from public.employee_private_fields(d.org, d.emp)), 200::numeric);
   update public.employees
      set epf_voluntary_employee_rate = 0, epf_voluntary_employer_rate = 0,
          cp38_monthly = 300

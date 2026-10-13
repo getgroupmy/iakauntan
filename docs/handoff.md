@@ -3699,6 +3699,53 @@ page and renumbering would quietly break the reference.
     tolerance was empty -- the one case where `old ... is not null`
     matters, `new > old` being null otherwise. Both are asserted.
     **Still to read back.**
+137. ~~A line manager read each report's whole employee record.~~
+    **Raised and answered 13 October** ("Managers see the person, not
+    the record"). `0038` let HR and payroll, the employee and "a manager
+    ... their own reporting line" read an employee's row, on the
+    understanding that salary "is not company reading material" and
+    that a directory view would carry the harmless columns for the rest;
+    `0044` dropped the view, and the manager kept the row -- salary,
+    NRIC and passport, date of birth, address, bank account, EPF, SOCSO
+    and tax numbers, zakat and CP38, the emergency contact, the notes.
+    Measured locally as a `sales` member who manages an employee and is
+    neither HR nor payroll: her salary of 3,800.00, NRIC, Maybank
+    account, home address and date of birth. Production: 4 employees,
+    none with a manager. `0869`: `authenticated` selects the 26 columns
+    that say who somebody is and where they sit -- name, number,
+    contact, department, position, manager, type and status, the dates
+    of joining and leaving -- and no other; which rows is still the
+    policy's business, so every approval screen still names the person.
+    `employee_private_fields(org, employee)`, a definer, gives every
+    other column back as one object per employee to `can_run_payroll`
+    (owner, admin, HR manager, accountant) and to the employee, past the
+    HR module gate; it is written as "everything but the public
+    columns", so a column added later is private until somebody says
+    otherwise. Writes are untouched. In the app `RepoHr.employeeColumns`
+    names the columns (a bare select is refused for everybody now, HR
+    included), and `employees()`, `employee(id)` and `myEmployee()`
+    merge the private fields by `employee_id`; the employee editor is
+    `LedgerWithheld` with its own message for anybody `canRunPayroll`
+    does not admit, and the People list opens a record only for them.
+    Every other `employees` embed in the client names only public
+    columns, and no view, policy or invoker function reads a private
+    one. New `employee_record_withheld.sql` (19 assertions). Swept
+    8 / 8 in SQL and the grant by hand (the whole table granted
+    back; `basic_salary` added to the list), 4 / 4 on the editor, 3 / 3
+    on the People list and 4 / 4 on the repository's column list and
+    merge, each with a control. **Caught by the sweep:** the module
+    gate inside the function was unasserted -- every member active and
+    HR switched on -- so HR switched off is asserted now.
+    **Not covered by a Dart test:** that the three reads send
+    `employeeColumns` and call the function -- `Repo` is never built over
+    a mock HTTP client here; what holds the first is the SQL test's
+    refusal of `select *`. **Two tests read the old way:**
+    `access_types.sql` counted the doors a client has with
+    `has_table_privilege`, which does not see a column grant -- it asks
+    `has_any_column_privilege` now, as `table_grants.sql` already did --
+    and `statutory_inputs_in_range.sql` read two EPF rates as the owner
+    and reads them through the function now.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
