@@ -3953,6 +3953,27 @@ page and renumbering would quietly break the reference.
     like the four by the list. No sweep of the five with `mutate_sql`:
     each is the same one-word substitution `0873`'s helper sweep covers.
     **Still to read back.**
+145. ~~A View Only member or an auditor could burn invoice numbers.~~
+    **Raised and answered 13 October** ("Only writers advance
+    counters"). `next_document_number` advances a company's counter,
+    and a number given out and not used is a gap an auditor and LHDN
+    read as a missing document. Since `0875` it answered staff for any
+    type, staff including the two roles that write nothing. Measured
+    locally: it gave a View Only member INV-2026-00001 and an auditor
+    INV-2026-00002. Production: 1 auditor, no View Only member. `0877`:
+    `can_write` for any type; `can_run_payroll` (which admits the HR
+    manager) for `employee`, which the app numbers when HR takes
+    somebody on, and `payroll_run`, which `create_payroll_run` numbers
+    as its caller; anybody in the company for `expense_claim` and
+    `leave_request`. No server-side job calls it. New
+    `numbers_are_the_writers.sql` (7 assertions: who takes which of five
+    kinds of number, the clerk's invoice the first, and a stranger
+    none); `employee_definers.sql`'s View Only check no longer takes an
+    invoice number. Swept 8 / 8 with a control. **Caught by the date
+    runs:** the first draft expected INV-2026-00001, which on or after
+    1 January is INV-2027-00001; it reads the year off the product's
+    clock now.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

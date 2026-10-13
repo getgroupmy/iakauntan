@@ -163,9 +163,10 @@ begin
   perform pg_temp.check_eq('and the forty on hand at 2.50',
     (select quantity::numeric(12,2) || ' / ' || value from public.stock_on_hand(d.org)),
     '40.00 / 100.00');
-  perform pg_temp.check_true('and the member list, and the invoice numbers',
-    (select count(*) from public.org_team(d.org)) = 3
-    and public.next_document_number(d.org, 'invoice') like 'INV-%');
+  -- The invoice numbers are a writer's since `0877`, which a View Only
+  -- member is not: `numbers_are_the_writers.sql`.
+  perform pg_temp.check_eq('and the member list',
+    (select count(*) from public.org_team(d.org))::int, 3);
   -- 0875: `attachments_of` asks what the table and the bucket ask, and
   -- a View Only member could list an invoice's files and open none.
   perform pg_temp.check_eq('and the dashboard and the project budget (0876)',

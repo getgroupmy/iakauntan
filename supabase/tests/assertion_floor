@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18219
+18226
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1919,3 +1919,10 @@
 # budget). Its catalog block was rewritten, not added to: it names
 # every definer that asks is_org_member instead of looking for those
 # that ask nothing narrower.
+#
+# 18219 -> 18226, 13 October: 0877's numbers_are_the_writers.sql (7: a
+# View Only member and an auditor take no number but a claim's and a
+# leave's; a clerk takes any; the HR manager the employee's and the
+# payroll run's and no invoice; an employee only a claim's and a
+# leave's; the clerk's invoice is the first, so there is no gap; and a
+# stranger takes none).
