@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18180
+18189
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1874,3 +1874,12 @@
 # him and the time and leaves the checklist open, and unticks it the
 # same way; HR still renames a task and makes it optional; and the
 # owner's tick then finishes the checklist, which says so).
+#
+# 18180 -> 18189, 13 October: 0871's employee_self_service.sql (9: an
+# employee with no access type writes in HR, reads payroll and has no
+# other module, and the menus the app draws say the same; she reads no
+# customer and no item, reads her own record and files her own claim;
+# a View Only member still reads the day-to-day records; an employee
+# given an access type has what it gives and only that, and the
+# storekeeper reads the stock list; and with payroll switched off she
+# has HR alone).

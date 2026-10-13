@@ -926,6 +926,13 @@ Assigned per company and enforced by RLS:
 Verified: a clerk can write but not post, an auditor can read the ledger
 but every write is refused by RLS.
 
+An Employee with no access type is held to that row of the table by
+`app.module_access` (`0871`): `write` in HR, where she files her own
+leave and claims, `read` in payroll, where her payslips are, and `none`
+in every other module -- so every module gate, and every menu the app
+draws from `my_module_access`, is shut to her. An access type, where
+the company gives her one, decides instead, as it does for anybody.
+
 The reports built from the ledger -- the statements, the general ledger,
 the group reports, the tax computation and the financial statements --
 ask the same question of their reader as the journals do

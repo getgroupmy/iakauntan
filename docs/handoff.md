@@ -3777,6 +3777,27 @@ page and renumbering would quietly break the reference.
     policy back, "he cannot rewrite his task directly" fails, expected 0
     rows, got 1; there is no function in the migration to mutate.
     **Still to read back.**
+139. ~~An employee read the company's records.~~ **Raised and answered
+    13 October** ("Employee reaches only HR"), in two steps. `0024` added
+    the `employee` role as "self-service only", the README's table of
+    roles and the role picker say the same, and nothing made it so:
+    `app.module_access` answered `write` for every module the company
+    holds to any member with no access type. Measured locally as an
+    `employee` member: `write` for sales and inventory, every customer,
+    every item with its cost price, the chart of accounts -- and the
+    app's menus, which come from `my_module_access`, showed it all.
+    Production has no `employee` and no `viewer` member. `0871`, the
+    first step: to an employee with no access type `module_access`
+    answers `write` for `hr` (her own leave and claims, the rows still
+    hers by their own policies), `read` for `payroll` (her payslips) and
+    `none` for every other module, which shuts all 46 module gates and
+    the menus. An access type still decides where the company has given
+    her one, and a module the company does not hold is still nobody's,
+    asked first. Receipts on her claims are unaffected: `can_attach_to`
+    asks `has_module`, not her access. New `employee_self_service.sql`
+    (9 assertions). Swept 8 / 8 with a control. **Still open:** the
+    tables no module gate stands in front of -- that is `0872`.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
