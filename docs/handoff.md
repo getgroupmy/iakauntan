@@ -3873,7 +3873,12 @@ page and renumbering would quietly break the reference.
     **Still to do:** `0874` (stock and lots), `0875` (corporate,
     property and people; `attachments_of` to `can_read_attachment`;
     `next_document_number` open to her for `expense_claim` only).
-    **Still to read back.**
+    **Applied, and read back** (13 October, read-only, after run
+    38415208349 on `ab5b4e0` had applied the migrations):
+    `app.is_staff_member` is the body this branch builds, `f0f4fe02`;
+    all 38 functions are definers that ask it, and their bodies, name by
+    name, hash to `462daa8c` there as here. The same run counted `6767
+    Dart tests ran (floor 6767)`; nothing in it touched the app.
 142. The stock domain of item 141. Measured locally after `0873` as
     an `employee` with no access type: `stock_on_hand` gave her the 40
     on hand at 2.50 it gives the owner. `0874` re-creates the nine stock,
