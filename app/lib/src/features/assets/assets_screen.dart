@@ -19,6 +19,11 @@ import 'disposal_dialog.dart';
 /// This is the schedule the auditor asks for by name: cost, accumulated
 /// depreciation and net book value per asset, with the basis stated so
 /// the charge can be checked rather than taken on trust.
+///
+/// The ledger's, since `0865`: the register's totals are the balance
+/// sheet's, and the tables give a member who does not read the ledger
+/// nothing -- so the screen says so before asking for anything, rather
+/// than drawing an empty register.
 class AssetsScreen extends ConsumerStatefulWidget {
   const AssetsScreen({super.key});
 
@@ -31,10 +36,12 @@ class _AssetsScreenState extends ConsumerState<AssetsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (!ref.watch(canReadLedgerProvider)) {
+      return const LedgerWithheld(title: 'Fixed assets');
+    }
     final assets = ref.watch(fixedAssetsProvider(_includeDisposed));
     final canWrite = ref.watch(canWriteProvider);
     final canPost = ref.watch(canPostProvider);
-    final canReadLedger = ref.watch(canReadLedgerProvider);
     final narrow = MediaQuery.sizeOf(context).width < 640;
 
     return Scaffold(
@@ -43,24 +50,22 @@ class _AssetsScreenState extends ConsumerState<AssetsScreen> {
         actions: [
           // The note itself, which until 0156 could not be produced from
           // the movements behind it.
-          if (canReadLedger)
-            IconButton(
-              key: const ValueKey('asset-schedule'),
-              tooltip: 'Fixed asset schedule',
-              icon: const Icon(Icons.table_chart_outlined),
-              onPressed: () => showAssetSchedule(context),
-            ),
+          IconButton(
+            key: const ValueKey('asset-schedule'),
+            tooltip: 'Fixed asset schedule',
+            icon: const Icon(Icons.table_chart_outlined),
+            onPressed: () => showAssetSchedule(context),
+          ),
           // The tax side of the same register. Beside the accounting
           // schedule rather than somewhere else, because the whole
           // point is that the two disagree and a reader should be able
           // to open both.
-          if (canReadLedger)
-            IconButton(
-              key: const ValueKey('asset-capital-allowances'),
-              tooltip: 'Capital allowances',
-              icon: const Icon(Icons.receipt_long_outlined),
-              onPressed: () => showCapitalAllowances(context),
-            ),
+          IconButton(
+            key: const ValueKey('asset-capital-allowances'),
+            tooltip: 'Capital allowances',
+            icon: const Icon(Icons.receipt_long_outlined),
+            onPressed: () => showCapitalAllowances(context),
+          ),
           if (canWrite)
             // The reconciliation from the ledger's end: what has been
             // bought and coded to a fixed asset account with nothing in
@@ -128,12 +133,10 @@ class _AssetsScreenState extends ConsumerState<AssetsScreen> {
                               onDispose: canPost && !list[i].isDisposed
                                   ? () => _dispose(context, list[i])
                                   : null,
-                              onHistory: canReadLedger
-                                  ? () => showDepreciationHistory(
-                                      context,
-                                      list[i],
-                                    )
-                                  : null,
+                              onHistory: () => showDepreciationHistory(
+                                context,
+                                list[i],
+                              ),
                             ),
                     ),
             ),
@@ -168,15 +171,15 @@ class _AssetsScreenState extends ConsumerState<AssetsScreen> {
 class _AssetTile extends StatelessWidget {
   const _AssetTile({
     required this.asset,
+    required this.onHistory,
     this.onTap,
     this.onDispose,
-    this.onHistory,
   });
 
   final FixedAsset asset;
+  final VoidCallback onHistory;
   final VoidCallback? onTap;
   final VoidCallback? onDispose;
-  final VoidCallback? onHistory;
 
   @override
   Widget build(BuildContext context) {
@@ -216,13 +219,12 @@ class _AssetTile extends StatelessWidget {
           ),
           // Offered on a disposed asset too: what it was charged over
           // its life is exactly what somebody asks about afterwards.
-          if (onHistory != null)
-            IconButton(
-              key: ValueKey('asset-history-${asset.id}'),
-              tooltip: 'Depreciation history',
-              icon: const Icon(Icons.history, size: 20),
-              onPressed: onHistory,
-            ),
+          IconButton(
+            key: ValueKey('asset-history-${asset.id}'),
+            tooltip: 'Depreciation history',
+            icon: const Icon(Icons.history, size: 20),
+            onPressed: onHistory,
+          ),
           if (onDispose != null)
             IconButton(
               tooltip: 'Dispose',

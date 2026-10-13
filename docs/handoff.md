@@ -3561,6 +3561,41 @@ page and renumbering would quietly break the reference.
     module gate asks for a current member first -- a mutant letting
     either in survived, and that is how it was found.
     **Still to read back.**
+133. ~~Every member reads the fixed asset register.~~ **Raised and
+    answered 13 October** ("Register to ledger roles"). Since `0156`
+    `report_depreciation_history` and `report_asset_movements` -- the
+    schedule an auditor asks for -- refuse a member who does not read
+    the ledger. The register they are built from was `is_org_member`:
+    `fixed_assets`, `depreciation_runs`, `depreciation_entries`, and
+    `depreciation_preview` and `capital_allowance_schedule` with them;
+    the screen's totals card calls itself "the three figures that have
+    to agree with the balance sheet". Measured locally as `sales`: the
+    director's car at cost 240,000.00, accumulated 48,000.00, book value
+    192,000.00, the run's 48,000.00 and its entry, while both reports
+    refused. Writes asked only `can_write`, so a salesman or purchaser
+    could register an asset or capitalise a bill line. Production: 7
+    assets in 2 companies, no member outside the ledger roles in either.
+    `0865`: the three select policies ask `can_read_ledger`; registering
+    or editing an asset asks `can_write` and `can_read_ledger`, on the
+    policies and in `capitalise_bill_line` (a definer); the preview and
+    the capital allowance schedule refuse after their membership check,
+    in `0855`'s words; `report_uncapitalised_purchases` gives nothing.
+    `create_ticket` still asks whether an asset id is the company's,
+    and shows nothing of it. In the app the Fixed assets screen returns
+    `LedgerWithheld` before asking, and the three `canReadLedger`
+    conditions behind it -- the schedule, the capital allowances, each
+    asset's history -- went, being unreachable. Its old build test
+    asserted "the register itself is still there" for a non-reader; it
+    asserts the opposite now, and that the register is not asked for.
+    New `fixed_assets_withheld.sql` (26 assertions). Swept 9 / 9 in SQL
+    functions, 11 / 11 policies by hand and 7 / 7 in Dart, each with a
+    control. **Two things the policy sweep taught, both in the test:** a
+    mutant putting the update's USING back to `can_write` is killed by
+    its WITH CHECK as an error, not by an assertion; and a WITH CHECK
+    mutant survived a move written with a WHERE, because an UPDATE that
+    reads its rows holds the new row to the select policy too -- so the
+    move is written without one.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18087
+18113
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1812,3 +1812,15 @@
 # none of its figures; the auditor reads them, the owner of two
 # companies reads the other's, anon reads none). Measured: `all SQL
 # assertions passed (448 files, 18087 assertions executed)`.
+#
+# 18087 -> 18113, 13 October: 0865's fixed_assets_withheld.sql (26: a
+# salesman and a purchaser past the module gate read no asset, run or
+# entry, are refused the preview and the capital allowance schedule and
+# told of no bill waiting; the purchaser registers nothing, capitalises
+# nothing and reaches no asset with an unqualified update; the clerk
+# reads the cost, the depreciation and the book value, the run and its
+# entry, the preview and both bills waiting, capitalises one, registers
+# one, edits all three and cannot move them into a company whose ledger
+# the clerk does not read; the auditor reads the register and the
+# capital allowances and writes nothing; anon reads none). Measured:
+# `all SQL assertions passed (449 files, 18113 assertions executed)`.

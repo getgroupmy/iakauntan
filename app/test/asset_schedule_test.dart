@@ -288,37 +288,52 @@ void main() {
   // -------------------------------------------------------------------
   // Getting to them
   // -------------------------------------------------------------------
+  // How many times the register was asked for.
+  var asked = 0;
+
   Widget assetsHarness({required bool canReadLedger}) => ProviderScope(
     overrides: [
       repoProvider.overrideWithValue(null),
       canWriteProvider.overrideWithValue(true),
       canPostProvider.overrideWithValue(true),
       canReadLedgerProvider.overrideWithValue(canReadLedger),
-      fixedAssetsProvider.overrideWith((ref, includeDisposed) async => [van]),
+      fixedAssetsProvider.overrideWith((ref, includeDisposed) async {
+        asked++;
+        return [van];
+      }),
     ],
     child: MaterialApp(theme: AppTheme.light(), home: const AssetsScreen()),
   );
 
-  testWidgets('both are offered to somebody who may read the ledger', (
-    tester,
-  ) async {
+  setUp(() => asked = 0);
+
+  testWidgets('the register, its note, its tax side and each history are '
+      'offered to somebody who may read the ledger', (tester) async {
     await tester.pumpWidget(assetsHarness(canReadLedger: true));
     await tester.pumpAndSettle();
+    expect(find.textContaining('FA-1'), findsOneWidget);
     expect(find.byKey(const ValueKey('asset-schedule')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('asset-capital-allowances')),
+      findsOneWidget,
+    );
     expect(find.byKey(const ValueKey('asset-history-a1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('ledger-withheld')), findsNothing);
   });
 
-  testWidgets('and to nobody else, because this is a ledger disclosure', (
+  testWidgets('and nobody else is shown the register, nor is it asked for', (
     tester,
   ) async {
-    // The stock card takes the opposite view on purpose: a storekeeper
-    // answers for a shelf without reading the ledger. A fixed asset note
-    // is a balance sheet disclosure, so the bar is the ledger's.
+    // `0865`: the register's totals are the balance sheet's, so the
+    // tables give a member who does not read the ledger nothing. The
+    // stock card takes the opposite view on purpose: a storekeeper
+    // answers for a shelf without reading the ledger.
     await tester.pumpWidget(assetsHarness(canReadLedger: false));
     await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('ledger-withheld')), findsOneWidget);
+    expect(find.text('Fixed assets'), findsOneWidget);
+    expect(find.textContaining('FA-1'), findsNothing);
     expect(find.byKey(const ValueKey('asset-schedule')), findsNothing);
-    expect(find.byKey(const ValueKey('asset-history-a1')), findsNothing);
-    // The register itself is still there — only the disclosure is gated.
-    expect(find.textContaining('FA-1'), findsOneWidget);
+    expect(asked, 0);
   });
 }
