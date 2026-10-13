@@ -3502,7 +3502,14 @@ page and renumbering would quietly break the reference.
     cluster that is already running makes Postgres shut itself down a
     minute later -- "data directory lock file is invalid" -- which took
     the first mutation run down with it. Check `ps` first.
-    **Still to read back.**
+    **Applied, and read back** (13 October, read-only, after run
+    38375436235 on `4ce5418` had applied the migrations): the three
+    bodies are the ones this branch builds -- `app.can_read_client_money`
+    `1cb09c80`, a definer executable by `authenticated` and not `anon`;
+    `matter_client_balance` `c62e9de8`; `report_matter_summary`
+    `f322d100` -- and `client_account_transactions_select` is
+    `app.can_read_client_money(matter_id)`. The same run counted
+    `6739 Dart tests ran (floor 6733)`, and the floor is 6739 now.
 131. ~~Every member reads each position's pay band.~~ **Raised and
     answered 13 October** ("Bands to HR only"). Everything in HR and
     payroll that says what somebody is paid asks `can_manage_hr` or
