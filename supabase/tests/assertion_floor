@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18215
+18219
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1912,3 +1912,10 @@
 # claim and not the scan on an invoice; somebody outside the company
 # takes no claim number of its; a View Only member has the member list
 # and the invoice numbers, and lists no file it could not open).
+#
+# 18215 -> 18219, 13 October: 0876 in employee_definers.sql (4: the
+# employee is refused the dashboard, the project budget report and the
+# assistant; a View Only member has the dashboard and the project
+# budget). Its catalog block was rewritten, not added to: it names
+# every definer that asks is_org_member instead of looking for those
+# that ask nothing narrower.

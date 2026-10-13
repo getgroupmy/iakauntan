@@ -3921,6 +3921,32 @@ page and renumbering would quietly break the reference.
     takes no claim number, so one is now. By hand: `corp_register_of_members` put back is caught
     by the list.
     **Still to read back.**
+144. ~~The dashboard still gave an employee the company's figures.~~
+    Found after `0875`, by reading what the dashboard asks: the check
+    that drove `0873`-`0875` looked for definers that ask
+    `is_org_member` and nothing narrower anywhere in the body, and so
+    passed four that ask something narrower for one figure and give
+    the rest to any member -- `dashboard_summary` (the bank balance to a
+    ledger reader; revenue, expenses, receivables, payables, overdue,
+    drafts, e-invoices, pipeline and low stock to anybody),
+    `report_project_budget` and `tax_estimate_payment_summary` (the
+    money to a ledger reader, every project and instalment date to
+    anybody), `report_matter_summary` (client money to its readers,
+    every matter's unbilled time and invoices to anybody) -- and
+    `ai_ask`, which asked whether the company holds the AI, not whether
+    she may use it. Measured locally after `0875` as an `employee`:
+    `dashboard_summary` answered her, counting the draft invoice, and
+    `report_project_budget` gave her the project. `0876` gives the five
+    `app.is_staff_member`, nothing else changed. `employee_definers.sql`
+    no longer pattern-matches "nothing narrower": it names every
+    definer `authenticated` may call that asks `is_org_member` at all --
+    15 left open to her, 38 that refuse her by something narrower before
+    they read -- and fails on one that is neither (21 assertions; 4
+    here). By hand: `dashboard_summary` put back is caught by its
+    refusal, `tax_estimate_payment_summary` and a new definer shaped
+    like the four by the list. No sweep of the five with `mutate_sql`:
+    each is the same one-word substitution `0873`'s helper sweep covers.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

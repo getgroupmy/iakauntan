@@ -944,8 +944,10 @@ that answer with the company's records ask `app.is_staff_member` --
 a member who is more than self-service -- rather than `is_org_member`
 (`0873`-`0875`); `supabase/tests/employee_definers.sql` names the few
 left open to her (her approvals and notifications, the claim's
-exchange rate and number, the modules the shell draws) and fails on
-any other definer that asks `is_org_member` alone.
+exchange rate and number, the modules the shell draws) and those that
+refuse her by something narrower before they read, and fails on any
+other definer that asks `is_org_member` at all (`0876`: the dashboard
+was one that asked something narrower for one figure only).
 
 The reports built from the ledger -- the statements, the general ledger,
 the group reports, the tax computation and the financial statements --

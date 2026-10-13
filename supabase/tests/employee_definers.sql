@@ -11,10 +11,10 @@
 -- `app.is_staff_member` now, and refuse her as each refused a stranger.
 -- Asked with the role `authenticated`, as the app asks.
 --
--- The last block keeps the list of definers left open to her on
--- purpose. Any other definer that asks `is_org_member` and nothing
--- narrower fails it, and so does a name on the list that has stopped
--- being true. Until `0875` it kept a second list, of those not yet done.
+-- The last block names every definer that asks `is_org_member`: left
+-- open to her on purpose, or refusing her by something narrower before
+-- it reads. Any other fails it, and so does a name that has stopped
+-- being true.
 --
 -- Nothing is written; the file rolls back.
 -- =====================================================================
@@ -69,6 +69,12 @@ begin
           r.org || '/expense_claims/' || r.claim || '/resit.jpg'),
          (r.org, 'sales_documents', r.invoice_ref, 'invoice-scan.pdf',
           r.org || '/sales_documents/' || r.invoice_ref || '/invoice-scan.pdf');
+  -- A draft invoice for the dashboard to count, and a project.
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, contact_id, total_amount, base_total_amount)
+  values (r.org, 'invoice', 'INV-DRAFT-1', r.customer, 5000, 5000);
+  insert into public.projects (org_id, code, name, budget_amount)
+  values (r.org, 'P-1', 'Projek Rahsia', 80000);
   insert into t_df select r.*;
 end $$;
 
@@ -104,6 +110,15 @@ begin
   perform pg_temp.check_true('and still numbers her own claim and her leave',
     public.next_document_number(d.org, 'expense_claim') like 'EXP-%'
     and public.next_document_number(d.org, 'leave_request') is not null);
+  perform pg_temp.check_refused('the dashboard refuses her (0876)',
+    format('select public.dashboard_summary(%L)', d.org),
+    '%Not a member of this organization%', '42501');
+  perform pg_temp.check_refused('so does the project budget report',
+    format('select * from public.report_project_budget(%L)', d.org),
+    '%Not your company%', '42501');
+  perform pg_temp.check_refused('and the assistant',
+    format('select public.ai_ask(%L, %L, null)', d.org, 'Berapa untung kita?'),
+    '%Not a member of that company%', '42501');
   perform pg_temp.check_eq('she lists the receipt on her claim, and not the scan on an invoice',
     (select count(*) from public.attachments_of(d.org, 'expense_claims', d.claim)) || ' / '
       || (select count(*) from public.attachments_of(d.org, 'sales_documents', d.invoice_ref)),
@@ -153,6 +168,10 @@ begin
     and public.next_document_number(d.org, 'invoice') like 'INV-%');
   -- 0875: `attachments_of` asks what the table and the bucket ask, and
   -- a View Only member could list an invoice's files and open none.
+  perform pg_temp.check_eq('and the dashboard and the project budget (0876)',
+    (public.dashboard_summary(d.org) ->> 'draft_invoices') || ' / '
+      || (select count(*) from public.report_project_budget(d.org)),
+    '1 / 1');
   perform pg_temp.check_eq('and lists no file it could not open',
     (select count(*) from public.attachments_of(d.org, 'sales_documents', d.invoice_ref))::int, 0);
 end $$;
@@ -160,8 +179,15 @@ end $$;
 reset role;
 
 -- ---------------------------------------------------------------------
--- Every definer that answers any member is on one side of the line
+-- Every definer that asks `is_org_member` is accounted for
 -- ---------------------------------------------------------------------
+-- Until `0876` this looked for a definer that asks `is_org_member` and
+-- nothing narrower anywhere in its body -- and so missed four that ask
+-- something narrower for one figure and give the rest to anybody. It
+-- names them all now: every definer `authenticated` may call that asks
+-- `is_org_member` at all is either left open to her on purpose or
+-- refuses her by something narrower before it reads. A new one is
+-- neither until somebody says which.
 do $$
 declare
   -- Hers, or the app's: her approvals and notifications, the rates a
@@ -175,28 +201,48 @@ declare
     'mark_all_notifications_read', 'mark_notification_read',
     'my_approvals', 'org_module_surface', 'record_export',
     'report_denied', 'report_feedback'];
+  -- Ask `is_org_member` and then something she is not: a ledger
+  -- reader, a reader of client money, an auditor, an admin, a platform
+  -- admin, the owner of the conversation; or, for
+  -- `next_document_number`, staff unless it is her claim's or her
+  -- leave's number.
+  v_narrower text[] := array[
+    'ai_answer', 'ai_conversation', 'ai_conversations_for', 'ai_status',
+    'audit_list_payslips', 'audit_view_payslip',
+    'bank_reconciliation_status', 'capital_allowance_schedule',
+    'depreciation_preview', 'fs_audit_exemption', 'fs_export',
+    'fs_prepare', 'link_group_contact', 'matter_client_balance',
+    'may_use_workspace', 'module_dashboard', 'my_group_companies',
+    'my_module_access', 'next_document_number', 'org_support_access',
+    'report_collections', 'report_deferred_revenue',
+    'report_group_consolidated_trial_balance',
+    'report_group_elimination_check', 'report_group_intercompany',
+    'report_group_trial_balance', 'report_with_layout',
+    'request_payslip_access', 'set_group_ownership',
+    'sub_account_refusal', 'suggest_bank_matches', 'tax_computation',
+    'tax_computation_individual', 'tax_computation_lines',
+    'tax_estimate_exposure', 'tax_estimate_schedule',
+    'tax_partnership_allocation', 'tax_partnership_summary'];
 begin
-  perform pg_temp.check_eq('no definer answers any member unless it is named here',
+  perform pg_temp.check_eq('every definer that asks is_org_member is named here',
     coalesce((
-      select string_agg(p.proname, ', ' order by p.proname)
+      select string_agg(distinct p.proname, ', ' order by p.proname)
         from pg_proc p
         join pg_namespace n on n.oid = p.pronamespace and n.nspname = 'public'
        where p.prosecdef
          and has_function_privilege('authenticated', p.oid, 'execute')
-         and p.prosrc ~ 'is_org_member'
-         and p.prosrc !~ '(can_read_module|can_write_module|module_access|can_read_ledger|can_write\(|can_post|can_admin|can_manage_hr|can_run_payroll|is_platform_admin|has_permission|my_employee_id|can_read_client_money|is_self_service_only|is_staff_member)'
-         and p.proname <> all (v_open)), 'none'),
+         and p.prosrc ~ 'app\.is_org_member\('
+         and p.proname <> all (v_open || v_narrower)), 'none'),
     'none');
-  perform pg_temp.check_eq('and every name here is still one that answers any member',
+  perform pg_temp.check_eq('and every name here still does',
     coalesce((
       select string_agg(x, ', ' order by x)
-        from unnest(v_open) x
+        from unnest(v_open || v_narrower) x
        where not exists (
          select 1 from pg_proc p
            join pg_namespace n on n.oid = p.pronamespace and n.nspname = 'public'
           where p.proname = x and p.prosecdef
-            and p.prosrc ~ 'is_org_member'
-            and p.prosrc !~ '(can_read_module|can_write_module|module_access|can_read_ledger|can_write\(|can_post|can_admin|can_manage_hr|can_run_payroll|is_platform_admin|has_permission|my_employee_id|can_read_client_money|is_self_service_only|is_staff_member)')), 'none'),
+            and p.prosrc ~ 'app\.is_org_member\(')), 'none'),
     'none');
 end $$;
 
