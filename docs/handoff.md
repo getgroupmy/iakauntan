@@ -3837,7 +3837,13 @@ page and renumbering would quietly break the reference.
     and a self-service table gated by mistake, each caught. **Not done:**
     definer functions that answer any member with company data -- the
     third surface, read next.
-    **Still to read back.**
+    **Applied, and read back** (13 October, read-only, after run
+    38411485783 on `a8f396b` had applied the migrations):
+    `app.is_self_service_only` is the body this branch builds,
+    `6db8739d`, a definer; 65 `staff_records_select` policies, every one
+    restrictive and for select, and the tables and expressions hash to
+    `3c0d08bf` there as here. The same run counted `6767 Dart tests ran
+    (floor 6767)`; nothing in it touched the app.
 141. ~~An employee still had the company's figures from the definer
     functions.~~ **Raised and answered 13 October** ("Refuse her in
     each, by domain"), the third surface of item 139. A definer reads
