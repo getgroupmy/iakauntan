@@ -533,8 +533,13 @@ class StatTile extends StatelessWidget {
               FittedBox(
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerLeft,
+                // Never wrapped: it is scaled down to fit instead. Said
+                // out loud because a grid that asks a tile how tall it
+                // is (`TileGrid`) asks at the tile's width, where a long
+                // figure would wrap, and was told a line too many.
                 child: Text(
                   value,
+                  softWrap: false,
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.w700,
                     letterSpacing: -0.5,

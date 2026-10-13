@@ -84,10 +84,8 @@ void main() {
         await t.pumpWidget(
           wrap(const TilesSkeleton(), size: Size(width, 900)),
         );
-        final grid = t.widget<GridView>(find.byType(GridView));
-        final delegate =
-            grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
-        expect(delegate.crossAxisCount, want, reason: 'at ${width}px');
+        final grid = t.widget<TileGrid>(find.byType(TileGrid));
+        expect(grid.columns, want, reason: 'at ${width}px');
       }
     });
   });
@@ -103,9 +101,13 @@ void main() {
     });
 
     testWidgets('and neither does the tile grid', (t) async {
+      // The rows sit in a scroll view only so that a box shorter than
+      // them cuts them off, as the `GridView` they were did.
       await t.pumpWidget(wrap(const TilesSkeleton()));
-      final grid = t.widget<GridView>(find.byType(GridView));
-      expect(grid.physics, isA<NeverScrollableScrollPhysics>());
+      final view = t.widget<SingleChildScrollView>(
+        find.byType(SingleChildScrollView),
+      );
+      expect(view.physics, isA<NeverScrollableScrollPhysics>());
     });
 
     testWidgets('and it is drawn as bones rather than as itself', (t) async {

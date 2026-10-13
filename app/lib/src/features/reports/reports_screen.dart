@@ -74,7 +74,10 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
   /// holds rather than from every project or department ever created. A
   /// department that has never had a penny posted against it is not a
   /// filter anybody wants; it is a row that would come back empty.
-  Widget _dimensionFilter({
+  ///
+  /// Null where the ledger holds no code of that kind: an empty
+  /// dropdown is a control that teaches people to ignore it.
+  Widget? _dimensionFilter({
     required String kind,
     required String allLabel,
     required String? selected,
@@ -85,25 +88,20 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
       for (final d in dimensions)
         if (d['kind'] == kind) d['code'] as String,
     ];
-    if (codes.isEmpty) return const SizedBox.shrink();
+    if (codes.isEmpty) return null;
 
-    return Padding(
-      padding: const EdgeInsets.only(left: 4),
-      child: SizedBox(
-        width: _filterWidth,
-        child: DropdownButton<String?>(
-          value: selected,
-          isExpanded: true,
-          hint: Text(allLabel, overflow: TextOverflow.ellipsis),
-          underline: const SizedBox.shrink(),
-          items: [
-            DropdownMenuItem(value: null, child: Text(allLabel)),
-            for (final code in codes)
-              DropdownMenuItem(value: code, child: Text(code)),
-          ],
-          onChanged: onChanged,
-        ),
-      ),
+    return DropdownButton<String?>(
+      key: ValueKey('reports-filter-$kind'),
+      value: selected,
+      isExpanded: true,
+      hint: Text(allLabel, overflow: TextOverflow.ellipsis),
+      underline: const SizedBox.shrink(),
+      items: [
+        DropdownMenuItem(value: null, child: Text(allLabel)),
+        for (final code in codes)
+          DropdownMenuItem(value: code, child: Text(code)),
+      ],
+      onChanged: onChanged,
     );
   }
 
@@ -429,6 +427,42 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
     // buttons wants and nothing stops the next label being longer.
     final narrow = MediaQuery.sizeOf(context).width < 900;
 
+    // 0637. Only on the two reports that HAVE a layout. Offering it
+    // on the trial balance would promise something that does not
+    // exist, which is worse than not offering it.
+    final VoidCallback? editLayout =
+        !_ledgerWithheld && (_tabs.index == 0 || _tabs.index == 1)
+        ? () async {
+            final kind = _tabs.index == 0 ? 'profit_loss' : 'balance_sheet';
+            final saved = await context.push<bool>('/reports/layout/$kind');
+            if (saved == true && mounted) setState(() {});
+          }
+        : null;
+
+    // The P&L's two dimension filters, on a row of their own under the
+    // tabs and not on the bar. On the bar, beside the group button, the
+    // downloads and the range, they ran it off the edge by 36 pixels at
+    // 1000, 136 at 900, and on a phone by 4 at 412 and 56 at 360 -- and
+    // a release build clips a toolbar rather than reporting it, so it
+    // was the range or a filter that was cut. Only once something in
+    // the ledger carries a code, as before.
+    final filters = <Widget>[
+      if (_tabs.index == 0 && !_ledgerWithheld) ...[
+        ?_dimensionFilter(
+          kind: 'project',
+          allLabel: 'All projects',
+          selected: _project,
+          onChanged: (v) => setState(() => _project = v),
+        ),
+        ?_dimensionFilter(
+          kind: 'department',
+          allLabel: 'All departments',
+          selected: _department,
+          onChanged: (v) => setState(() => _department = v),
+        ),
+      ],
+    ];
+
     // Folded rather than dropped: downloading the report on screen is
     // the reason most people open it, and the group button is the only
     // way to reach the consolidated figures.
@@ -454,19 +488,8 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
         icon: Icons.table_chart_outlined,
         onTap: spec == null ? null : () => _downloadCsv(spec),
       ),
-      // 0637. Only on the two reports that HAVE a layout. Offering it
-      // on the trial balance would promise something that does not
-      // exist, which is worse than not offering it.
-      if (!_ledgerWithheld && (_tabs.index == 0 || _tabs.index == 1))
-        (
-          label: 'Edit layout',
-          icon: Icons.tune,
-          onTap: () async {
-            final kind = _tabs.index == 0 ? 'profit_loss' : 'balance_sheet';
-            final saved = await context.push<bool>('/reports/layout/$kind');
-            if (saved == true && mounted) setState(() {});
-          },
-        ),
+      if (editLayout != null)
+        (label: 'Edit layout', icon: Icons.tune, onTap: editLayout),
     ];
 
     return Scaffold(
@@ -531,23 +554,15 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
               icon: const Icon(Icons.table_chart_outlined, size: 20),
               onPressed: spec == null ? null : () => _downloadCsv(spec),
             ),
-          // Only on the P&L, and only once something in the ledger
-          // actually carries a project code — an empty dropdown on every
-          // report is a control that teaches people to ignore it.
-          if (_tabs.index == 0 && !_ledgerWithheld) ...[
-            _dimensionFilter(
-              kind: 'project',
-              allLabel: 'All projects',
-              selected: _project,
-              onChanged: (v) => setState(() => _project = v),
+          // On a laptop as well as in the phone's menu: it was only in
+          // the menu, which a laptop never draws.
+          if (!narrow && editLayout != null)
+            IconButton(
+              key: const ValueKey('report-edit-layout'),
+              tooltip: 'Edit layout',
+              icon: const Icon(Icons.tune, size: 20),
+              onPressed: editLayout,
             ),
-            _dimensionFilter(
-              kind: 'department',
-              allLabel: 'All departments',
-              selected: _department,
-              onChanged: (v) => setState(() => _department = v),
-            ),
-          ],
           if (_tabs.index == 3 && !_ledgerWithheld) _accountFilter(),
           if (!narrow) _rangeButton(),
         ],
@@ -555,26 +570,54 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
         // shortened. It is twenty-three characters and it labels every
         // figure on the screen; "01/09 – 30/09" would drop the year
         // from a report somebody is about to file.
-        bottom: !narrow
+        bottom: !narrow && filters.isEmpty
             ? _tabBar()
             : PreferredSize(
-                preferredSize: const Size.fromHeight(46 + 52),
+                preferredSize: Size.fromHeight(
+                  46 + (narrow ? 52 : 0) + (filters.isEmpty ? 0 : 48),
+                ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        Space.lg,
-                        0,
-                        Space.lg,
-                        Space.sm,
+                    if (narrow)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          Space.lg,
+                          0,
+                          Space.lg,
+                          Space.sm,
+                        ),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: _rangeButton(),
+                        ),
                       ),
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: _rangeButton(),
-                      ),
-                    ),
                     _tabBar(),
+                    if (filters.isNotEmpty)
+                      SizedBox(
+                        height: 48,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: Space.lg,
+                          ),
+                          // Halves of the row on a phone; on a laptop
+                          // the width the bar gave them, side by side.
+                          child: Row(
+                            children: [
+                              for (var i = 0; i < filters.length; i++) ...[
+                                if (i > 0) const SizedBox(width: Space.md),
+                                if (narrow)
+                                  Expanded(child: filters[i])
+                                else
+                                  SizedBox(
+                                    width: _filterWidth,
+                                    child: filters[i],
+                                  ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),

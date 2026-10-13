@@ -126,17 +126,14 @@ class _Summary extends ConsumerWidget {
     final summary = ref.watch(securitySummaryProvider).valueOrNull ?? const {};
     int n(String key) => Fmt.toDouble(summary[key]).round();
 
-    final width = MediaQuery.sizeOf(context).width;
-    final columns = width >= 1100 ? 4 : (width >= 700 ? 2 : 1);
+    final columns = tileColumns(MediaQuery.sizeOf(context).width);
     final failed = n('failed_sign_ins');
 
-    return GridView.count(
-      crossAxisCount: columns,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 12,
-      crossAxisSpacing: 12,
-      childAspectRatio: columns == 1 ? 3.2 : 1.75,
+    // Rows as tall as their tiles: the fixed shape this was gave a tile
+    // 102 pixels at 360 for three lines that need 118.
+    return TileGrid(
+      columns: columns,
+      aspect: columns == 1 ? 3.2 : 1.75,
       children: [
         StatTile(
           label: 'Sign-ins',

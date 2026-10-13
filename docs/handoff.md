@@ -3348,6 +3348,39 @@ page and renumbering would quietly break the reference.
     `anon`; and `authenticated` reads `bank_accounts.name` but not
     `current_balance`. The same run counted `6695 Dart tests ran (floor
     6687)`, and the floor is 6695 now.
+126. ~~Two screens that run off their own edge.~~ **Raised and answered 13
+    October** ("Fix it and test it on phones", "Add a laptop button",
+    "Filters to their own row"). Dart only; no migration.
+    *The figures grid* -- the one 125 noticed. Every dashboard grid of
+    `StatTile`s gave a tile width over a fixed ratio, whatever was in it:
+    102 pixels at 360, 119 at 412 and 147 at 1100, for a tile that needs
+    165 with a sparkline and 118 without. Overflowed at all three widths,
+    a module's figures (no sparkline) at 360, and the security screen's
+    four at 360 and 412 (by 21 and 4.3 pixels). `TileGrid` in
+    `core/skeletons.dart` now lays the rows out: each as tall as its
+    tallest tile, never shorter than the old ratio, so 600, 700 and 1400
+    are unchanged to the pixel. `TilesSkeleton` uses it too, inside a
+    stilled scroll view, because the point of sale draws it in boxes of
+    fixed height the `GridView` used to clip. And the figure in a
+    `StatTile` is `softWrap: false`: asked its height at the tile's
+    width, a long figure reported the line it would have wrapped to --
+    tiles 29 pixels too tall. Asserted in `module_surface_test.dart` by
+    measurement, not by count: never below the ratio, grown only at 360,
+    412 and 1100, and grown by exactly the content (the sparkline sits on
+    the bottom padding, less what a scaled-down figure gives back).
+    *The Reports bar.* The two P&L dimension filters, drawn only once the
+    ledger carries a code, ran the bar off the edge by 36 pixels at
+    1000, 136 at 900, 4 at 412 and 56 at 360 -- clipped silently in a
+    release build. The old sweep said those filters could not be reached
+    from a test; they come through `Repo.ledgerDimensions`. They are on a
+    row of their own under the tabs now, at every width. And "Edit
+    layout", which was only in the phone's menu, is a button on the
+    laptop bar for the P&L and balance sheet, for a role that reads the
+    ledger. Swept 3 / 3, 3 / 3, 1 / 1, 1 / 1, 1 / 1 and 6 / 6 in Dart,
+    each with a control; the one survivor on the first run (the bar declaring less
+    height than its rows) squeezed the toolbar to six pixels without an
+    overflow, and is killed by asserting the range keeps its height above
+    the tabs.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

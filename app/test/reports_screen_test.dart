@@ -60,6 +60,11 @@ void main() {
           path: '/reports/group',
           builder: (_, __) => const Scaffold(body: Text('group reports')),
         ),
+        GoRoute(
+          path: '/reports/layout/:kind',
+          builder: (_, state) =>
+              Scaffold(body: Text('layout ${state.pathParameters['kind']}')),
+        ),
       ],
     );
     return ProviderScope(
@@ -132,10 +137,8 @@ void main() {
             inGroup: inGroup,
             width: width,
             // The General Ledger tab, which carries the account filter
-            // on top of everything else. The two dimension filters on
-            // the P&L cannot be reached from here — their provider is
-            // private — so that combination is NOT covered and is the
-            // one to watch if this bar grows again.
+            // on top of everything else. The P&L's two dimension
+            // filters are swept below, with codes for them to offer.
             tab: 'General Ledger',
             accounts: [
               account(
@@ -152,7 +155,108 @@ void main() {
     }
   });
 
+  /// The P&L's bar, with everything it can carry: the group button, the
+  /// downloads, both dimension filters and the range. Its filters were
+  /// once thought unreachable from a test, their provider being
+  /// private; it asks the repo, and a repo can answer it. They ran the
+  /// bar off the edge at 1000, 900, 412 and 360.
+  group('nothing runs off the edge of the P&L', () {
+    for (final width in [
+      1400.0,
+      1200.0,
+      1100.0,
+      1000.0,
+      900.0,
+      800.0,
+      412.0,
+      360.0,
+    ]) {
+      testWidgets('${width.toInt()} wide', (tester) async {
+        await show(
+          tester,
+          inGroup: true,
+          width: width,
+          repo: _RecordingRepo(
+            dimensions: const [
+              {'kind': 'project', 'code': 'PRJ-KLANG-WAREHOUSE'},
+              {'kind': 'department', 'code': 'FINANCE-AND-ADMIN'},
+            ],
+          ),
+        );
+        // The premise: the filters are drawn.
+        expect(find.text('All projects'), findsOneWidget);
+        expect(find.text('All departments'), findsOneWidget);
+
+        // And measured, not counted: under the tabs, side by side, and
+        // whole inside the window -- as is the range, wherever it is.
+        final tabs = tester.getRect(find.byType(TabBar));
+        final project = tester.getRect(
+          find.byKey(const ValueKey('reports-filter-project')),
+        );
+        final department = tester.getRect(
+          find.byKey(const ValueKey('reports-filter-department')),
+        );
+        final range = tester.getRect(
+          find.byKey(const ValueKey('reports-range')),
+        );
+        for (final r in [project, department]) {
+          expect(r.top, greaterThanOrEqualTo(tabs.bottom));
+          expect(r.left, greaterThanOrEqualTo(0));
+          expect(r.right, lessThanOrEqualTo(width));
+        }
+        expect(department.left, greaterThan(project.right));
+        expect(range.right, lessThanOrEqualTo(width));
+        // And the range keeps its height above the tabs, on the bar or
+        // under it: a bar that under-declares its height squeezes the
+        // toolbar to nothing rather than reporting an overflow.
+        expect(range.top, greaterThanOrEqualTo(0));
+        expect(range.bottom, lessThanOrEqualTo(tabs.top));
+        expect(range.height, greaterThanOrEqualTo(36));
+        // Nor do they cover the report: its body starts below them.
+        expect(
+          tester.getRect(find.byType(TabBarView)).top,
+          greaterThanOrEqualTo(department.bottom),
+        );
+      });
+    }
+  });
+
   group('on a laptop', () {
+    // It was only in the phone's menu, which a laptop never draws: the
+    // P&L and balance sheet layouts could not be reached at 900 and up.
+    for (final (tab, kind) in [
+      ('Profit & Loss', 'profit_loss'),
+      ('Balance Sheet', 'balance_sheet'),
+    ]) {
+      testWidgets('the $tab layout is a button on the bar', (tester) async {
+        await show(
+          tester,
+          role: 'accounts_clerk',
+          repo: _RecordingRepo(),
+          tab: tab,
+        );
+        expect(find.byKey(const ValueKey('reports-more')), findsNothing);
+        await tester.tap(find.byKey(const ValueKey('report-edit-layout')));
+        await tester.pumpAndSettle();
+        expect(find.text('layout $kind'), findsOneWidget);
+      });
+    }
+
+    testWidgets('and not on a report that has no layout', (tester) async {
+      await show(
+        tester,
+        role: 'accounts_clerk',
+        repo: _RecordingRepo(),
+        tab: 'Trial Balance',
+      );
+      expect(find.byKey(const ValueKey('report-edit-layout')), findsNothing);
+    });
+
+    testWidgets('nor for a role that does not read the ledger', (tester) async {
+      await show(tester, role: 'sales', repo: _RecordingRepo());
+      expect(find.byKey(const ValueKey('report-edit-layout')), findsNothing);
+    });
+
     testWidgets('the downloads and the group button are on the bar', (
       tester,
     ) async {
@@ -423,7 +527,14 @@ void main() {
 }
 
 /// Answers every report with no rows, and remembers which were asked.
+///
+/// And the ledger's dimension codes, when given some: they are what the
+/// P&L's two filters are drawn from, and with none the filters are not
+/// drawn at all.
 class _RecordingRepo implements Repo {
+  _RecordingRepo({this.dimensions = const []});
+
+  final List<Map<String, dynamic>> dimensions;
   final asked = <String>{};
 
   @override
@@ -442,6 +553,7 @@ class _RecordingRepo implements Repo {
             : 'agedBalances(payable)',
       _ => member,
     });
+    if (member == 'ledgerDimensions') return Future.value(dimensions);
     return Future.value(const <Map<String, dynamic>>[]);
   }
 }

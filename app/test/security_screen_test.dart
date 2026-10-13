@@ -54,6 +54,20 @@ void main() {
       authStateProvider.overrideWith((_) => const Stream<AuthState>.empty()),
       currentOrgProvider.overrideWith((_) async => null),
       memberRoleProvider.overrideWith((_) async => role),
+      securitySummaryProvider.overrideWith(
+        (_) async => const {
+          'sign_ins': 1284,
+          'people': 37,
+          'addresses': 112,
+          'failed_sign_ins': 9,
+          'exports': 46,
+          'reads': 318,
+          'changes': 5120,
+          'denials': 27,
+        },
+      ),
+      securityLogProvider.overrideWith((_, _) async => const []),
+      auditTrailProvider.overrideWith((_) async => const []),
     ],
     child: MaterialApp(
       theme: AppTheme.light(),
@@ -93,4 +107,30 @@ void main() {
     // Nothing was asked of the server, so nothing can have failed.
     expect(tester.takeException(), isNull);
   });
+
+  /// The four figures at the top, on a phone. A grid of fixed shape gave
+  /// each tile 102 pixels at 360 for three lines that need 118; the
+  /// rows are as tall as their tiles now (`TileGrid`).
+  for (final width in [360.0, 412.0, 1100.0]) {
+    testWidgets('the figures fit at ${width.toInt()}', (tester) async {
+      tester.view.physicalSize = Size(width, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(screen('owner'));
+      await tester.pumpAndSettle();
+
+      final card = find
+          .ancestor(of: find.text('Sign-ins'), matching: find.byType(Card))
+          .first;
+      final ink = tester.getRect(
+        find.descendant(of: card, matching: find.byType(InkWell)).first,
+      );
+      final content = tester.getRect(
+        find.descendant(of: card, matching: find.byType(Column)).first,
+      );
+      // The tile holds all of its content, caption included.
+      expect(find.text('37 people, 112 addresses'), findsOneWidget);
+      expect(ink.bottom - content.bottom, greaterThanOrEqualTo(Space.lg));
+    });
+  }
 }

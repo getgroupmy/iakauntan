@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:iakauntan/src/core/providers.dart';
 import 'package:iakauntan/src/core/theme.dart';
+import 'package:iakauntan/src/core/widgets.dart';
 import 'package:iakauntan/src/data/models.dart';
 import 'package:iakauntan/src/data/platform_catalog_repository.dart';
 import 'package:iakauntan/src/features/dashboard/dashboard_screen.dart';
@@ -68,6 +69,7 @@ void main() {
     List<String>? panels,
     List<Map<String, dynamic>>? aging,
     Map<String, dynamic> summary = const {},
+    List<Map<String, dynamic>> trend = const [],
   }) => ProviderScope(
     overrides: [
       currentUserProvider.overrideWithValue(null),
@@ -95,6 +97,7 @@ void main() {
       if (aging != null) ...[
         dashboardProvider.overrideWith((_) async => DashboardSummary(summary)),
         arAgingProvider.overrideWith((_) async => aging),
+        revenueTrendProvider.overrideWith((_) async => trend),
       ],
     ],
     child: MaterialApp(theme: AppTheme.light(), home: const DashboardScreen()),
@@ -242,6 +245,134 @@ void main() {
       },
     );
   }
+
+  /// The figures grid, at every width it is drawn at. It gave each tile
+  /// a fixed shape, 3.2 wide to 1 tall in one column and 1.75 to 1 in
+  /// four, whatever was in it: 102 pixels high at 360, 119 at 412 and
+  /// 147 at 1100, for a tile that needs 165 once it carries a
+  /// sparkline. Each overflowed, by up to 21 pixels, and nothing had
+  /// drawn the grid at those widths to say so. A `RenderFlex` overflow
+  /// is a test failure here; in a release build it is clipped, silently.
+  ///
+  /// An overflow is not the only thing measured. A tile is never shorter
+  /// than the shape it had, so the widths that fitted look as they did,
+  /// and where it is taller it is taller by exactly its content -- the
+  /// sparkline sits on the tile's bottom padding, with nothing under it.
+  ///
+  /// With the bank tile and without it, since `0858` takes it away from
+  /// a role that does not read the ledger and the grid closes up.
+  for (final width in [360.0, 412.0, 600.0, 700.0, 1100.0, 1400.0]) {
+    for (final bank in [true, false]) {
+      testWidgets('the figures fit at ${width.toInt()}, bank=$bank', (
+        tester,
+      ) async {
+        await onAPhone(
+          tester,
+          width: width,
+          dashboard(
+            modules: const {'accounting'},
+            figures: const {},
+            labels: const {'accounting': (name: 'Accounting', group: 'Books')},
+            panels: const ['metrics'],
+            aging: const [],
+            summary: {
+              'revenue': 1234567.89,
+              'expenses': 987654.32,
+              'receivables': 456789.01,
+              'overdue_receivables': 12345.67,
+              'bank_balance': bank ? 98765.43 : null,
+            },
+            // Months behind it, so the revenue and expense tiles draw
+            // their sparkline and a change on last month -- the tallest
+            // a tile gets.
+            trend: const [
+              {'revenue': 900000, 'expenses': 700000},
+              {'revenue': 1100000, 'expenses': 800000},
+              {'revenue': 1234567.89, 'expenses': 987654.32},
+            ],
+          ),
+        );
+        await show(tester, 'Accounting');
+        expect(find.text('Receivables'), findsOneWidget);
+        expect(find.text('Bank balance'), bank ? findsOneWidget : findsNothing);
+
+        final card = find
+            .ancestor(
+              of: find.text('Revenue this month'),
+              matching: find.byType(Card),
+            )
+            .first;
+        final tile = tester.getRect(card);
+        final ink = tester.getRect(
+          find.descendant(of: card, matching: find.byType(InkWell)).first,
+        );
+        final spark = tester.getRect(
+          find.descendant(of: card, matching: find.byType(Sparkline)),
+        );
+        final floor = tile.width / (width < 700 ? 3.2 : 1.75);
+        expect(tile.height, greaterThanOrEqualTo(floor - 0.01));
+        final grown = tile.height > floor + 0.01;
+        // Where the old shape was too short, and only there.
+        expect(grown, width == 360 || width == 412 || width == 1100);
+        if (grown) {
+          // Less what the figure gives back where it is scaled down to
+          // fit: it is measured a line high and drawn smaller.
+          final fit = find.descendant(
+            of: card,
+            matching: find.byType(FittedBox),
+          );
+          final figure = find.descendant(
+            of: fit,
+            matching: find.byType(RichText),
+          );
+          final givenBack =
+              tester.getSize(figure).height - tester.getSize(fit).height;
+          expect(
+            ink.bottom - spark.bottom,
+            moreOrLessEquals(Space.lg + givenBack),
+          );
+        }
+      });
+    }
+  }
+
+  /// The same grid under every other module's figures, whose tiles
+  /// carry no sparkline and need 118 pixels: at 360 the fixed shape gave
+  /// them 102.
+  testWidgets("a service desk's figures fit at 360", (tester) async {
+    await onAPhone(
+      tester,
+      width: 360,
+      dashboard(
+        modules: const {'ticketing'},
+        figures: const {
+          'ticketing': {
+            'open': 7,
+            'unassigned': 2,
+            'breaching': 5,
+            'breached': 3,
+            'resolved_today': 4,
+          },
+        },
+        labels: const {
+          'ticketing': (name: 'Service desk', group: 'Service desk'),
+        },
+      ),
+    );
+    await show(tester, 'Service desk');
+    final card = find
+        .ancestor(of: find.text('Open tickets'), matching: find.byType(Card))
+        .first;
+    final tile = tester.getRect(card);
+    final ink = tester.getRect(
+      find.descendant(of: card, matching: find.byType(InkWell)).first,
+    );
+    final content = tester.getRect(
+      find.descendant(of: card, matching: find.byType(Column)).first,
+    );
+    expect(tile.height, greaterThan(tile.width / 3.2 + 1));
+    expect(ink.bottom - content.bottom, moreOrLessEquals(Space.lg));
+  });
 
   testWidgets('a service desk company is not shown the ledger', (tester) async {
     await onADesktop(tester, shell(const {'ticketing', 'contacts'}));

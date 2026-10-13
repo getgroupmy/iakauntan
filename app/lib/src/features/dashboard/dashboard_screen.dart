@@ -696,13 +696,9 @@ class ModuleDashboardPane extends ConsumerWidget {
     // on screen together.
     final columns = tileColumns(width);
 
-    return GridView.count(
-      crossAxisCount: columns,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 12,
-      crossAxisSpacing: 12,
-      childAspectRatio: columns == 1 ? 3.2 : 1.75,
+    return TileGrid(
+      columns: columns,
+      aspect: columns == 1 ? 3.2 : 1.75,
       children: tiles,
     );
   }
@@ -813,13 +809,9 @@ class _MetricGrid extends ConsumerWidget {
         ),
     ];
 
-    return GridView.count(
-      crossAxisCount: columns,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 12,
-      crossAxisSpacing: 12,
-      childAspectRatio: columns == 1 ? 3.2 : 1.75,
+    return TileGrid(
+      columns: columns,
+      aspect: columns == 1 ? 3.2 : 1.75,
       children: tiles,
     );
   }

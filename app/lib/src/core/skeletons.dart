@@ -142,6 +142,81 @@ class TableSkeleton extends StatelessWidget {
 int tileColumns(double width, {double wideAt = 1100, double mediumAt = 700}) =>
     width >= wideAt ? 4 : (width >= mediumAt ? 2 : 1);
 
+/// Tiles in [columns] columns, each row as tall as its tallest tile
+/// needs and never shorter than the tile's width over [aspect].
+///
+/// A `GridView` gives every tile exactly width over aspect, whatever is
+/// in it. The dashboard's figures were measured against that and lost:
+/// a tile with a sparkline under its caption needs 165 pixels, and one
+/// column at 360 and 412 gave it 102 and 119, four columns at 1100 gave
+/// it 147 -- the foot of the tile cut off at the two widths most phones
+/// are and at a small laptop's. A taller fixed ratio would only move the
+/// width it breaks at, and a larger text size would move it again. So
+/// the ratio is the floor, as before, and the height is the content's.
+/// Where the ratio was tall enough, nothing moves.
+///
+/// Used by the real grids and by [TilesSkeleton] alike, for the reason
+/// [tileColumns] is.
+class TileGrid extends StatelessWidget {
+  const TileGrid({
+    super.key,
+    required this.columns,
+    required this.aspect,
+    this.spacing = 12,
+    required this.children,
+  });
+
+  /// From [tileColumns].
+  final int columns;
+
+  /// Width over height at the shortest a tile is drawn.
+  final double aspect;
+
+  /// The gap between tiles, in both directions.
+  final double spacing;
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final tileWidth =
+            (constraints.maxWidth - spacing * (columns - 1)) / columns;
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var row = 0; row < children.length; row += columns) ...[
+              if (row > 0) SizedBox(height: spacing),
+              ConstrainedBox(
+                constraints: BoxConstraints(minHeight: tileWidth / aspect),
+                // The row is as tall as its tallest tile, and every
+                // tile in it is stretched to that, as a grid's are.
+                child: IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (var c = 0; c < columns; c++) ...[
+                        if (c > 0) SizedBox(width: spacing),
+                        Expanded(
+                          child: row + c < children.length
+                              ? children[row + c]
+                              : const SizedBox.shrink(),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
 /// Figures on the way, in the shape of the tiles that hold them.
 ///
 /// The dashboard's own case. Its tiles are a fixed set decided by the
@@ -194,32 +269,36 @@ class TilesSkeleton extends StatelessWidget {
     final width = MediaQuery.sizeOf(context).width;
     final columns = tileColumns(width, wideAt: wideAt, mediumAt: mediumAt);
     return Skeletonizer(
-      child: GridView.count(
+      // Stilled, and there at all because the point of sale draws this
+      // in a box of fixed height -- a till's menu of twelve is taller
+      // than a phone -- where the `GridView` this used to be cut the
+      // rest off, and a column of rows would spill out of the box.
+      child: SingleChildScrollView(
         physics: const NeverScrollableScrollPhysics(),
-        shrinkWrap: true,
-        crossAxisCount: columns,
-        mainAxisSpacing: spacing,
-        crossAxisSpacing: spacing,
-        childAspectRatio: columns == 1 ? narrowAspect : wideAspect,
-        children: [
-          for (var i = 0; i < count; i++)
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(Space.md),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: const [
-                    // The label, the figure, and the line underneath
-                    // that says which way it is going.
-                    Bone.text(words: 2),
-                    Bone.text(words: 1),
-                    Bone.text(words: 2),
-                  ],
+        child: TileGrid(
+          columns: columns,
+          spacing: spacing,
+          aspect: columns == 1 ? narrowAspect : wideAspect,
+          children: [
+            for (var i = 0; i < count; i++)
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(Space.md),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: const [
+                      // The label, the figure, and the line underneath
+                      // that says which way it is going.
+                      Bone.text(words: 2),
+                      Bone.text(words: 1),
+                      Bone.text(words: 2),
+                    ],
+                  ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
