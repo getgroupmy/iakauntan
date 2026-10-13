@@ -44,7 +44,14 @@ begin
          and (p.roles::text like '%authenticated%'
               or p.roles::text like '%public%')
          and p.cmd <> 'ALL'
-         and not has_table_privilege('authenticated', c.oid, p.cmd)
+         -- A column grant reaches a policy too: `0852` lets a client
+         -- update `inbound_emails.read_at` and nothing else on it, and
+         -- `has_table_privilege` answers only for the whole table.
+         -- DELETE has no column form.
+         and not (case when p.cmd = 'DELETE'
+                       then has_table_privilege('authenticated', c.oid, p.cmd)
+                       else has_any_column_privilege('authenticated', c.oid, p.cmd)
+                  end)
     ) t;
 
   if v_missing is not null then

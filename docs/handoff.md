@@ -3124,6 +3124,24 @@ page and renumbering would quietly break the reference.
     granted back with the policy, its own assertion fails; with none,
     the file passes.
     **Still to read back.**
+119. ~~A received email can be rewritten -- its body, sender and date --
+    by anybody who may mark it read.~~ **Raised and answered 13 October:
+    only `read_at` is writable. Built in `0852`.** Mail is written by
+    `receive_email` (`0328`), a definer only the service role may call;
+    the client policy `inbound_emails_mark` is for marking a message
+    read, the app's one write, but the grant behind it was the whole
+    table. Measured as the owner with the role `authenticated`: a
+    supplier's "please pay RM12,400 to Maybank ..." rewritten to "our
+    bank account has changed: please pay ... CIMB ...", the sender kept
+    and the date moved back thirty days -- accepted. Now update is
+    revoked and granted back on `read_at` alone. `table_grants.sql`'s
+    "policy without the privilege" check now counts a column grant
+    (`has_any_column_privilege`; DELETE has no column form). Production
+    held no inbound email; the mailbox feature is not yet live. New
+    `inbound_email_kept.sql`, added to `ci.yml`. A grant has no mutant;
+    swept by hand: each of the six columns granted back fails its own
+    assertion, and `read_at` taken away fails the inbox's own write.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -3411,6 +3429,7 @@ function:
 | `app.a_billed_document_stays` | `0849` | 6 / 7 | 1 (the depth clause: a document deleted from inside a trigger is a cascade, run as the owner; said in the file) | `received_einvoice_kept.sql` (new in `0849`; a line of a supplier's document refused deleting on its own; the document behind a posted bill and a draft one refused deleting; a document whose bill was deleted, and one nothing was built from, deleted as before, lines and all; the owner at the top passes. The lines' revoke swept by hand) |
 | `app.an_import_is_finished_once` | `0850` | 6 / 7 | 1 (the depth clause: every import function is a definer; said in the file) | `import_batch_final.sql` (new in `0850`; a posted batch refused finishing again as failed or reconciling and reopening by hand, so still not rolled back, its journal and customer standing; a rolled-back one refused finishing again; a staging batch refused a status by hand; a label still edited, and a run still finished, failed and rolled back; the owner at the top sets a status but does not reopen a posted import) |
 | `ticket_comments` revoke (no function) | `0851` | 3 / 3 by hand | -- | `ticket_comments_kept.sql` (new in `0851`; a comment refused in the customer's name, the customer's reply refused rewriting and deleting, a colleague's refused rewriting, an internal note refused going public, so what was said stands; an agent still comments as themselves and the customer still replies through the link. Each verb granted back with the policy, its own assertion fails) |
+| `inbound_emails` column grant (no function) | `0852` | 7 / 7 by hand | -- | `inbound_email_kept.sql` (new in `0852`; opening a message still marks it read; its body, sender, date, subject, raw message and mailbox refused, so it reads as it arrived. Each of the six columns granted back fails its own assertion; `read_at` taken away fails the inbox's write) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |

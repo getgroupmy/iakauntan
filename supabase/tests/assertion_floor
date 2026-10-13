@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17843
+17852
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1703,4 +1703,12 @@
 # internal note refused going public, so what was said stands; an agent
 # still comments as themselves and the customer still replies through
 # the link). Measured: `all SQL assertions passed (435 files, 17843
+# assertions executed)`.
+#
+# 13 October 2026, `0852`: 17843 -> 17852. Nine in
+# `inbound_email_kept.sql` (new: opening a message still marks it read,
+# as the owner with the role `authenticated`; its body, sender, date,
+# subject, raw message and mailbox refused, so it reads as it arrived).
+# `table_grants.sql` keeps its count; its policy check now counts a
+# column grant. Measured: `all SQL assertions passed (436 files, 17852
 # assertions executed)`.

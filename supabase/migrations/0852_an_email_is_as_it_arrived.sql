@@ -1,0 +1,31 @@
+-- =====================================================================
+-- iAkauntan :: 0852 an email is as it arrived
+--
+-- Mail to a company's addresses lands in `inbound_emails`, written by
+-- `receive_email` (`0328`), a definer only the service role may call.
+-- Its one client write policy is `inbound_emails_mark` (`0328`, restated
+-- by `0559`), and the app's one write is marking a message read --
+-- `read_at`, set when it is opened. The grant behind the policy was the
+-- whole table.
+--
+-- Measured on 13 October 2026, locally, as the owner with the role
+-- `authenticated`: a supplier's email, "Please pay RM12,400 to Maybank
+-- 5123 4567 8901", was rewritten to "Our bank account has changed:
+-- please pay RM12,400 to CIMB 8000 1111 2222", the sender kept and the
+-- date it arrived moved back thirty days. Accepted -- a forged payment
+-- instruction in the inbox, reading as if the supplier had sent it.
+-- Marking it read was accepted too, as it should be.
+--
+-- Answered "only read_at is writable": update is revoked from
+-- `authenticated` and `anon` and granted back on `read_at` alone.
+-- Revoking at the table also takes any column grant with it, so the
+-- order matters. Who sent it, what it said, when it came, the raw
+-- message behind it, the mailbox it came to and the ticket it became
+-- are `receive_email`'s and the functions' to write.
+--
+-- Production held no inbound email on 13 October; the mailbox feature
+-- is not yet live.
+-- =====================================================================
+
+revoke update on public.inbound_emails from authenticated, anon;
+grant update (read_at) on public.inbound_emails to authenticated;
