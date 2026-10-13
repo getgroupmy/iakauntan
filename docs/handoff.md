@@ -3169,7 +3169,12 @@ page and renumbering would quietly break the reference.
     New `mail_files_private.sql`, added to `ci.yml`. Swept 4 / 4; the
     policy swept by hand: `0405`'s restored, the personal-mail assertion
     fails.
-    **Still to read back.**
+    **Applied, and read back** (13 October, read-only, after run
+    38337791557 on `0ab680c` had applied the migrations): recorded;
+    `app.may_read_mail_file` is there with the body this branch builds
+    (md5 `33d191c8`), a definer executable by `authenticated` and not by
+    `anon`, and `mail_files_read` on `storage.objects` now asks it beside
+    the module. Production holds no mail file.
 121. ~~The company export writes a payment gateway's X-Signature key
     out in clear.~~ **Raised and answered 13 October: redact signature
     and signing keys. Built in `0854`.** A company's gateway keys are
