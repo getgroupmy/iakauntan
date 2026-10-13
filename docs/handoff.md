@@ -3533,7 +3533,14 @@ page and renumbering would quietly break the reference.
     (that would mean adding `http` as a dependency). What holds it is
     the SQL test's refusal of a select of every column, which is what
     the setup list would get without it.
-    **Still to read back.**
+    **Applied, and read back** (13 October, read-only, after run
+    38378092721 on `ecbd635` had applied the migrations):
+    `position_salary_bands` is the body this branch builds, `563d70e4`, a
+    definer executable by `authenticated` and not `anon`; `authenticated`
+    has no table-wide select on `positions`, reads `title` and neither
+    `min_salary` nor `max_salary`, and keeps insert and update. The same
+    run counted `6742 Dart tests ran (floor 6739)`, and the floor is 6742
+    now.
 132. ~~Every member reads a filed set of accounts, figure by figure.~~
     **Raised and answered 13 October** ("Figures need ledger access").
     `0855` made `fs_prepare` and `fs_export` refuse a member who does not
