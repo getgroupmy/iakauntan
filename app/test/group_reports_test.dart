@@ -288,9 +288,15 @@ void main() {
     /// The Reports screen, with nothing behind it. Every report on it
     /// fails to load, which is fine — what is being looked at is the app
     /// bar.
+    ///
+    /// As the owner. Since `0855` the group reports are offered only to
+    /// a role that reads the ledger, and a role that has not loaded is
+    /// read as the least of them; `reports_screen_test.dart` asks it of
+    /// a salesman.
     Widget reports({required int companies}) => ProviderScope(
       overrides: [
         repoProvider.overrideWithValue(null),
+        memberRoleProvider.overrideWith((ref) async => 'owner'),
         groupCompaniesProvider.overrideWith(
           (ref) async => [
             for (var i = 0; i < companies; i++)
@@ -385,8 +391,9 @@ void main() {
       });
     }
 
-    testWidgets('and the range keeps its full dates on a phone',
-        (tester) async {
+    testWidgets('and the range keeps its full dates on a phone', (
+      tester,
+    ) async {
       await openAt(tester, 412);
 
       final range = find.byKey(const ValueKey('group-range'));

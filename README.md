@@ -926,6 +926,13 @@ Assigned per company and enforced by RLS:
 Verified: a clerk can write but not post, an auditor can read the ledger
 but every write is refused by RLS.
 
+The reports built from the ledger -- the statements, the general ledger,
+the group reports, the tax computation and the financial statements --
+ask the same question of their reader as the journals do
+(`app.can_read_ledger`, `0855`). They are definers, so the journals'
+policies do not reach inside them; until `0855` a salesman was refused
+`gl_lines` and handed every line of it by `report_general_ledger`.
+
 ### Super admin
 
 A platform tier *above* tenancy. `platform_admins` has RLS enabled with no

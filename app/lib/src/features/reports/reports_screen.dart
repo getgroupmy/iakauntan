@@ -155,10 +155,47 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
   bool get _inAGroup =>
       (ref.watch(groupCompaniesProvider).valueOrNull ?? const []).length > 1;
 
+  /// The tabs built from the ledger, by their place on the bar: the
+  /// profit and loss, balance sheet, trial balance, general ledger, cash
+  /// flows, changes in equity and deferred revenue.
+  ///
+  /// `0855`. The database refuses these to a role that does not read
+  /// the ledger -- sales, purchasing, view only, HR, an employee -- and
+  /// the ones written in SQL refuse by answering with nothing, which on
+  /// this screen would read "nothing posted in this period" and download
+  /// as an empty PDF. So for such a role the tab says why instead, and
+  /// nothing asks the database for it.
+  static const _ledgerTabs = {0, 1, 2, 3, 6, 7, 9};
+
+  bool get _readsLedger => ref.watch(canReadLedgerProvider);
+
+  /// Whether the tab on screen is one this person's role does not read.
+  bool get _ledgerWithheld =>
+      !_readsLedger && _ledgerTabs.contains(_tabs.index);
+
+  /// The group reports are ledger reports of every company in the group.
+  bool get _offersGroup => _inAGroup && _readsLedger;
+
+  /// The pages under the bar, with the ledger's withheld from a role
+  /// that does not read it. One list of places, [_ledgerTabs], decides
+  /// both this and the bar's own controls.
+  List<Widget> _withheld(List<Widget> pages) => [
+    for (final (i, page) in pages.indexed)
+      !_readsLedger && _ledgerTabs.contains(i) ? const _NotTheLedger() : page,
+  ];
+
   /// The spec for the tab currently showing, or null while its data is
   /// still loading or failed. Null is what disables the download button:
   /// a PDF of a half-loaded report is worse than no PDF.
+  ///
+  /// Case for case in the order of [_tabBar]. The general ledger went in
+  /// at 3 without a case here, so from it to the SST summary every
+  /// download was the NEXT tab's report -- the ledger downloaded as the
+  /// aged receivables, the SST summary as the deferred revenue -- and the
+  /// button watched that report's request too. Found by `0855`'s test,
+  /// which counts what a salesman's screen asks the database for.
   ReportSpec? get _visibleSpec {
+    if (_ledgerWithheld) return null;
     switch (_tabs.index) {
       case 0:
         final rows = ref
@@ -193,22 +230,27 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
         final rows = ref.watch(trialBalanceProvider).valueOrNull;
         return rows == null ? null : trialBalanceSpec(rows);
       case 3:
+        final rows = ref
+            .watch(_generalLedgerProvider((range: _range, account: _account)))
+            .valueOrNull;
+        return rows == null ? null : generalLedgerSpec(rows, _range);
+      case 4:
         final rows = ref.watch(_agedProvider(_aged(true))).valueOrNull;
         return rows == null
             ? null
             : agedBalanceSpec(rows, _range.end, receivable: true);
-      case 4:
+      case 5:
         final rows = ref.watch(_agedProvider(_aged(false))).valueOrNull;
         return rows == null
             ? null
             : agedBalanceSpec(rows, _range.end, receivable: false);
-      case 5:
+      case 6:
         final rows = ref.watch(_cashFlowProvider(_range)).valueOrNull;
         return rows == null ? null : cashFlowSpec(rows, _range);
-      case 6:
+      case 7:
         final rows = ref.watch(_equityProvider(_range)).valueOrNull;
         return rows == null ? null : changesInEquitySpec(rows, _range);
-      case 7:
+      case 8:
         final rows = ref.watch(_sstProvider(_range)).valueOrNull;
         return rows == null ? null : sstSummarySpec(rows, _range);
       default:
@@ -391,7 +433,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
     // the reason most people open it, and the group button is the only
     // way to reach the consolidated figures.
     final folded = <({String label, IconData icon, VoidCallback? onTap})>[
-      if (_inAGroup)
+      if (_offersGroup)
         (
           label: 'Group reports',
           icon: Icons.account_tree_outlined,
@@ -415,7 +457,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
       // 0637. Only on the two reports that HAVE a layout. Offering it
       // on the trial balance would promise something that does not
       // exist, which is worse than not offering it.
-      if (_tabs.index == 0 || _tabs.index == 1)
+      if (!_ledgerWithheld && (_tabs.index == 0 || _tabs.index == 1))
         (
           label: 'Edit layout',
           icon: Icons.tune,
@@ -460,7 +502,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
           // group. For everybody else the group reports would be this
           // company's figures under a heading claiming otherwise, which
           // is worse than not offering them.
-          if (!narrow && _inAGroup)
+          if (!narrow && _offersGroup)
             Padding(
               padding: const EdgeInsets.only(right: 4),
               child: TextButton.icon(
@@ -492,7 +534,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
           // Only on the P&L, and only once something in the ledger
           // actually carries a project code — an empty dropdown on every
           // report is a control that teaches people to ignore it.
-          if (_tabs.index == 0) ...[
+          if (_tabs.index == 0 && !_ledgerWithheld) ...[
             _dimensionFilter(
               kind: 'project',
               allLabel: 'All projects',
@@ -506,7 +548,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
               onChanged: (v) => setState(() => _department = v),
             ),
           ],
-          if (_tabs.index == 3) _accountFilter(),
+          if (_tabs.index == 3 && !_ledgerWithheld) _accountFilter(),
           if (!narrow) _rangeButton(),
         ],
         // On a phone the range moves BELOW the tabs rather than being
@@ -539,7 +581,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
       ),
       body: TabBarView(
         controller: _tabs,
-        children: [
+        children: _withheld([
           _Report(
             provider: _profitLossProvider((
               range: _range,
@@ -665,10 +707,27 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
                   'here until it has been.',
             ),
           ),
-        ],
+        ]),
       ),
     );
   }
+}
+
+/// What a ledger tab shows a role that does not read the ledger. Not the
+/// report's own empty state: "nothing posted in this period" would be
+/// untrue, and the person would go looking for postings that are there.
+class _NotTheLedger extends StatelessWidget {
+  const _NotTheLedger();
+
+  @override
+  Widget build(BuildContext context) => const EmptyState(
+    icon: Icons.lock_outline,
+    title: 'Not part of your role',
+    message:
+        'This report is built from the ledger, which your role in this '
+        'company does not read. The aged receivables and payables and '
+        'the SST summary are here for you.',
+  );
 }
 
 /// One report on screen, drawn from the same spec the PDF is drawn from.

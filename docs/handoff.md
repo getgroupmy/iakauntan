@@ -3199,6 +3199,46 @@ page and renumbering would quietly break the reference.
     `4a1ca9c1`), still immutable and not a definer, and its pattern
     names `signature_key`. Production holds no payment gateway, so no
     export has yet carried one.
+122. ~~A salesman or an employee is refused the journals and handed
+    them by the reports.~~ **Raised and answered 13 October: ledger
+    reports need ledger access. Built in `0855`.** `gl_entries` and
+    `gl_lines` are readable by `app.can_read_ledger` (owner, admin,
+    accountant, accounts clerk, auditor; `0019`), and the role picker
+    says "not the ledger" of the rest. The reports are definers and
+    asked only `is_org_member`. Measured as an `employee` and as
+    `sales`: `gl_lines` 0 rows, `report_general_ledger` every line, the
+    trial balance the same figure. Twenty-six functions restated, each
+    text unchanged but for the guard: nine SQL ones swap the guard in
+    their WHERE (an empty answer, as a stranger always had), seventeen
+    PL/pgSQL ones keep their membership refusal and add
+    "Insufficient privileges to read the ledger". The tax computation
+    and the financial statements are among them, being built on the
+    P&L and balance sheet; `fs_export` because a frozen filing is
+    answered from `fs_figures`. `app.group_orgs` lists the companies
+    whose ledger you read, so an accountant here who sells for a sister
+    sees this company in the group reports and not the sister.
+    **The reports screen** shows "Not part of your role" on its seven
+    ledger tabs for such a role and asks the database for none of them,
+    and offers no group, layout, dimension or account filter there.
+    **A separate defect found by its test, and fixed with it:** the
+    download buttons read the report by the tab's place, and the general
+    ledger had gone in at 3 without a case, so from the ledger to the
+    SST summary every download was the NEXT tab's report (the ledger as
+    the aged receivables, the SST summary as the deferred revenue).
+    Each tab now asks for its own report and no other, asserted per tab.
+    **Still open, raised next:** `accounts.current_balance` is readable
+    by every member through `accounts_select`, and one database role
+    cannot tell a column grant who is asking. `report_budget_vs_actual`,
+    `build_budget_from_actual` and `report_project_budget` read actuals
+    behind a module or membership check: their own question.
+    Production: every member is an owner, admin, accountant, clerk or
+    auditor, so nobody loses a report. New `ledger_reports_need_ledger.sql`
+    (97 assertions), added to `ci.yml`. Swept 24 / 30 in SQL, the six
+    equivalent and said so in the file; the screen 12 / 12 in Dart
+    (`reports_screen_test.dart`, against a repository that remembers
+    what it was asked for). **Noticed, not yet raised:** "Edit layout"
+    is only in the phone's More menu; a laptop's bar has no way to it.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -3489,6 +3529,7 @@ function:
 | `inbound_emails` column grant (no function) | `0852` | 7 / 7 by hand | -- | `inbound_email_kept.sql` (new in `0852`; opening a message still marks it read; its body, sender, date, subject, raw message and mailbox refused, so it reads as it arrived. Each of the six columns granted back fails its own assertion; `read_at` taken away fails the inbox's write) |
 | `app.may_read_mail_file` | `0853` | 4 / 4 | -- | `mail_files_private.sql` (new in `0853`; the owner refused the file on a clerk's personal mail, one filed under another company's email and one under an email that never was, so the listing is the company address's file alone; the clerk reads their own and the company's; an employee the company's only. The policy swept by hand: `0405`'s restored, the personal-mail assertion fails) |
 | `app.audit_redact` (restated) | `0854` | 7 / 7 | -- | `export_masks_gateway_keys.sql` (new in `0854`; the owner refused the gateway keys directly, and the export masks the signature key and the API key while still carrying the collection, mode and gateway; each new word masked under a prefix and in the plural; a document's signature and the secretary still readable) |
+| 25 report functions and `app.group_orgs` (guard only) | `0855` | 24 / 30 | 6 (`group_orgs` asked of the company the report is asked from, and five refusals masked in the same words by what they are built on; said in the file) | `ledger_reports_need_ledger.sql` (new in `0855`; a salesman and an employee given nothing by the nine SQL reports and refused by the seventeen others, the three other roles by the ledger itself, a clerk and an auditor answered by every one; a frozen filing's export; a project code; the group shown to somebody who sells for the sister, and the sister's line kept out of the intercompany report) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |

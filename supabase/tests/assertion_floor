@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17866
+17963
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1731,3 +1731,11 @@
 # plural; a document's signature and the secretary still readable).
 # Measured: `all SQL assertions passed (438 files, 17866 assertions
 # executed)`.
+#
+# 17963 (13 October 2026, `0855`): +97 from `ledger_reports_need_ledger.sql`
+# (a salesman and an employee given nothing by the nine SQL reports and
+# refused by the seventeen others, three more roles by the ledger
+# itself, a clerk and an auditor answered by every one, a frozen
+# filing's export, a project code, and the group shown to somebody who
+# sells for the sister company). Measured: `all SQL assertions passed
+# (439 files, 17963 assertions executed)`.
