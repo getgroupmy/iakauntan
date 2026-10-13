@@ -3838,6 +3838,36 @@ page and renumbering would quietly break the reference.
     definer functions that answer any member with company data -- the
     third surface, read next.
     **Still to read back.**
+141. ~~An employee still had the company's figures from the definer
+    functions.~~ **Raised and answered 13 October** ("Refuse her in
+    each, by domain"), the third surface of item 139. A definer reads
+    past every policy, and 83 that `authenticated` may call asked
+    `is_org_member` and nothing narrower. Measured locally after `0872`
+    as an `employee` with no access type: `report_revenue_trend`,
+    `document_numbering`, `contact_duplicates` and
+    `customer_credit_status` answered her as they answer the owner.
+    `0873`: `app.is_staff_member(org)` -- `is_org_member` and not
+    self-service only -- and the 38 sales, purchases, tax and contact
+    functions re-created with it in place of `is_org_member` and nothing
+    else changed: each body is the live one from `pg_get_functiondef`
+    with that one substitution, so each refuses her as it refused a
+    stranger -- the SQL ones answer nothing, the plpgsql ones raise
+    their own "Not a member" (which says less than it might, and is
+    left as it was). New `employee_definers.sql` (8 assertions), whose
+    last block keeps two lists -- the 15 left open to her (her
+    approvals and notifications, `exchange_rate_for` for claims, the
+    shell's `org_module_surface`, the company's name, the people
+    directory, download and denial logging) and the 30 not yet done --
+    and fails on any other definer that asks `is_org_member` alone, and
+    on a listed name that has stopped doing so. Swept 3 / 3 on the
+    helper with a control; **caught by the sweep:** nothing asserted
+    that a stranger is still refused, so one is now. By hand: a
+    re-created function put back, a new member-only definer, and a
+    to-do function done without leaving the list, each caught.
+    **Still to do:** `0874` (stock and lots), `0875` (corporate,
+    property and people; `attachments_of` to `can_read_attachment`;
+    `next_document_number` open to her for `expense_claim` only).
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

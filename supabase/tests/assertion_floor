@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18198
+18206
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1893,3 +1893,11 @@
 # all of it, as the owner does; and every table any member may read is
 # either gated or on the self-service list, and nothing on the list is
 # gated).
+#
+# 18198 -> 18206, 13 October: 0873's employee_definers.sql (8: an
+# employee with no access type is answered nothing by a report and
+# refused the numbering, the duplicate contacts and a customer's
+# credit; somebody outside the company is answered nothing too; a View
+# Only member has all four as the owner does; and no definer answers
+# any member unless it is named as left open or not yet done, and every
+# name so listed still is).
