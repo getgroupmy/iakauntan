@@ -3600,7 +3600,16 @@ page and renumbering would quietly break the reference.
     mutant survived a move written with a WHERE, because an UPDATE that
     reads its rows holds the new row to the select policy too -- so the
     move is written without one.
-    **Still to read back.**
+    **Applied, and read back** (13 October, read-only, after run
+    38385951490 on `5ed065c` had applied the migrations): the four
+    bodies are the ones this branch builds -- `capitalise_bill_line`
+    `18af2a3b`, `depreciation_preview` `d118fac4`,
+    `report_uncapitalised_purchases` `a8c82cf5`,
+    `capital_allowance_schedule` `9b8d3cc7`, each executable by
+    `authenticated` and not `anon` -- and the three select policies ask
+    `can_read_ledger`, insert and update `can_write and can_read_ledger`
+    with the module, delete `can_admin` as before. The same run counted
+    `6742 Dart tests ran (floor 6742)`; the floor stays.
 134. ~~Every member reads each salesperson's commission rate, and any
     writer sets it -- his own included.~~ **Raised and answered 13
     October** ("Rates are the ledger's"). `report_sales_by_person` turns
