@@ -3170,6 +3170,25 @@ page and renumbering would quietly break the reference.
     policy swept by hand: `0405`'s restored, the personal-mail assertion
     fails.
     **Still to read back.**
+121. ~~The company export writes a payment gateway's X-Signature key
+    out in clear.~~ **Raised and answered 13 October: redact signature
+    and signing keys. Built in `0854`.** A company's gateway keys are
+    write-only (`0412`, `0414`): no client role may read
+    `org_payment_gateways`. `company_export_page` (administrators)
+    carries the table and masks by column name through
+    `app.audit_redact`, whose pattern had `api_key` and not
+    `signature_key`. Measured as the owner with the role
+    `authenticated`: the table refused, and the export returned the
+    signature key in clear beside `"api_key": "***"` -- the key the
+    callback verifies confirmations against. Every exported column was
+    checked; this was the one real secret through. Now `audit_redact`
+    is restated from `0289` with one line more: `signature_key`,
+    `signing_key`, `hmac`, `webhook_key` and plurals. Only
+    `org_payment_gateways.signature_key` is named any of them; a bare
+    `signature` (an e-invoice's own) stays readable. Production held no
+    payment gateway. New `export_masks_gateway_keys.sql`, added to
+    `ci.yml`. Swept 7 / 7.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -3459,6 +3478,7 @@ function:
 | `ticket_comments` revoke (no function) | `0851` | 3 / 3 by hand | -- | `ticket_comments_kept.sql` (new in `0851`; a comment refused in the customer's name, the customer's reply refused rewriting and deleting, a colleague's refused rewriting, an internal note refused going public, so what was said stands; an agent still comments as themselves and the customer still replies through the link. Each verb granted back with the policy, its own assertion fails) |
 | `inbound_emails` column grant (no function) | `0852` | 7 / 7 by hand | -- | `inbound_email_kept.sql` (new in `0852`; opening a message still marks it read; its body, sender, date, subject, raw message and mailbox refused, so it reads as it arrived. Each of the six columns granted back fails its own assertion; `read_at` taken away fails the inbox's write) |
 | `app.may_read_mail_file` | `0853` | 4 / 4 | -- | `mail_files_private.sql` (new in `0853`; the owner refused the file on a clerk's personal mail, one filed under another company's email and one under an email that never was, so the listing is the company address's file alone; the clerk reads their own and the company's; an employee the company's only. The policy swept by hand: `0405`'s restored, the personal-mail assertion fails) |
+| `app.audit_redact` (restated) | `0854` | 7 / 7 | -- | `export_masks_gateway_keys.sql` (new in `0854`; the owner refused the gateway keys directly, and the export masks the signature key and the API key while still carrying the collection, mode and gateway; each new word masked under a prefix and in the plural; a document's signature and the secretary still readable) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |
