@@ -3146,6 +3146,26 @@ page and renumbering would quietly break the reference.
     swept by hand: each of the six columns granted back fails its own
     assertion, and `read_at` taken away fails the inbox's own write.
     **Still to read back.**
+120. ~~Any member can list and read every file attached to incoming
+    mail, a colleague's personal mailbox included.~~ **Raised and
+    answered 13 October: ask the mailbox. Built in `0853`.** Files on
+    incoming mail are stored as `<company>/<email>/<n>-<file>` in the
+    `mail` bucket; the email and its attachment row are private to
+    whoever may read its mailbox (`0559`, `0565`), but
+    `mail_files_read` (`0354`, `0405`) asked only for membership.
+    Measured as the company's owner with the role `authenticated`: a
+    clerk's personal email and its attachment row invisible, and the
+    bucket listing `0-medical-report.pdf` from it, readable. Now
+    `app.may_read_mail_file` (a definer) looks the email up by the
+    path's second segment and asks `may_read_mailbox` in the company the
+    first names, and the policy asks it with the module as before.
+    `bucket_survives_a_bad_path.sql` files its well-formed object under
+    a real email now; one under an email that never was is nobody's.
+    Production held no mailbox or mail file; the feature is not live.
+    New `mail_files_private.sql`, added to `ci.yml`. Swept 4 / 4; the
+    policy swept by hand: `0405`'s restored, the personal-mail assertion
+    fails.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -3434,6 +3454,7 @@ function:
 | `app.an_import_is_finished_once` | `0850` | 6 / 7 | 1 (the depth clause: every import function is a definer; said in the file) | `import_batch_final.sql` (new in `0850`; a posted batch refused finishing again as failed or reconciling and reopening by hand, so still not rolled back, its journal and customer standing; a rolled-back one refused finishing again; a staging batch refused a status by hand; a label still edited, and a run still finished, failed and rolled back; the owner at the top sets a status but does not reopen a posted import) |
 | `ticket_comments` revoke (no function) | `0851` | 3 / 3 by hand | -- | `ticket_comments_kept.sql` (new in `0851`; a comment refused in the customer's name, the customer's reply refused rewriting and deleting, a colleague's refused rewriting, an internal note refused going public, so what was said stands; an agent still comments as themselves and the customer still replies through the link. Each verb granted back with the policy, its own assertion fails) |
 | `inbound_emails` column grant (no function) | `0852` | 7 / 7 by hand | -- | `inbound_email_kept.sql` (new in `0852`; opening a message still marks it read; its body, sender, date, subject, raw message and mailbox refused, so it reads as it arrived. Each of the six columns granted back fails its own assertion; `read_at` taken away fails the inbox's write) |
+| `app.may_read_mail_file` | `0853` | 4 / 4 | -- | `mail_files_private.sql` (new in `0853`; the owner refused the file on a clerk's personal mail, one filed under another company's email and one under an email that never was, so the listing is the company address's file alone; the clerk reads their own and the company's; an employee the company's only. The policy swept by hand: `0405`'s restored, the personal-mail assertion fails) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |

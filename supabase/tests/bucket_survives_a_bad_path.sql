@@ -39,6 +39,7 @@ grant select on t_bucket to authenticated;
 
 do $$
 declare v_org uuid; v_me uuid := pg_temp.test_user(); v_mine text;
+  v_box uuid; v_email uuid;
 begin
   v_org := pg_temp.test_org('Bakul Fail Sdn Bhd');
   insert into public.org_members (org_id, user_id, role, status)
@@ -48,8 +49,15 @@ begin
     on conflict do nothing;
 
   -- One well-formed object, the shape `mail_files.ts` writes:
-  -- `<org_id>/<email_id>/<n>-<name>`.
-  v_mine := v_org || '/11111111-1111-1111-1111-111111111111/1-invois.pdf';
+  -- `<org_id>/<email_id>/<n>-<name>`. Under a real email to the
+  -- company's own address: since `0853` a file is read as its email is,
+  -- and one under an email that does not exist is nobody's.
+  insert into public.org_mailboxes (org_id, local_part, status, decided_at, is_personal)
+  values (v_org, 'akaun', 'approved', now(), false) returning id into v_box;
+  insert into public.inbound_emails (org_id, mailbox_id, message_id, from_email, to_email, subject)
+  values (v_org, v_box, '<b1@supplier.example>', 'billing@supplier.example',
+          'akaun@iakauntan.com', 'Invois') returning id into v_email;
+  v_mine := v_org || '/' || v_email || '/1-invois.pdf';
   insert into storage.objects (bucket_id, name, owner)
   values ('mail', v_mine, v_me);
 

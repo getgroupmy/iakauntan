@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17852
+17859
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1711,4 +1711,14 @@
 # subject, raw message and mailbox refused, so it reads as it arrived).
 # `table_grants.sql` keeps its count; its policy check now counts a
 # column grant. Measured: `all SQL assertions passed (436 files, 17852
+# assertions executed)`.
+#
+# 13 October 2026, `0853`: 17852 -> 17859. Seven in
+# `mail_files_private.sql` (new: the owner, with the role
+# `authenticated`, refused the file on a clerk's personal mail, one
+# filed under another company's email and one under an email that never
+# was, so the listing is the company address's file alone; the clerk
+# reads their own and the company's; an employee the company's only).
+# `bucket_survives_a_bad_path.sql` keeps its count, its object now under
+# a real email. Measured: `all SQL assertions passed (437 files, 17859
 # assertions executed)`.
