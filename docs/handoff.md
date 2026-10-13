@@ -3776,7 +3776,12 @@ page and renumbering would quietly break the reference.
     `onboarding_task_ticked.sql` (9 assertions). Swept by hand: with the
     policy back, "he cannot rewrite his task directly" fails, expected 0
     rows, got 1; there is no function in the migration to mutate.
-    **Still to read back.**
+    **Applied, and read back** (13 October, read-only, after run
+    38404798133 on `d8b619d` had applied the migrations):
+    `onboarding_tasks` carries `onboarding_tasks_select` and
+    `onboarding_tasks_write` and no `onboarding_tasks_update`. The same
+    run counted `6767 Dart tests ran (floor 6767)`; nothing in it touched
+    the app.
 139. ~~An employee read the company's records.~~ **Raised and answered
     13 October** ("Employee reaches only HR"), in two steps. `0024` added
     the `employee` role as "self-service only", the README's table of
