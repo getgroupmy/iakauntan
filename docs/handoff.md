@@ -3803,6 +3803,36 @@ page and renumbering would quietly break the reference.
     (9 assertions). Swept 8 / 8 with a control. **Still open:** the
     tables no module gate stands in front of -- that is `0872`.
     **Still to read back.**
+140. ~~An employee still read the tables no module gate stands in front
+    of.~~ The second step of item 139. Their read policies asked
+    `is_org_member` alone. Measured locally after `0871` as an `employee`
+    with no access type: the 85 accounts of the chart, a project, the
+    company's access types and all four members, as the owner sees them.
+    `0872`: `app.is_self_service_only(org)` -- the caller is an
+    `employee` there with no access type -- and a restrictive read
+    policy, `staff_records_select`, refusing that member and nobody else
+    on 64 tables: accounts, projects, time entries, opportunities and
+    pipelines, stock levels, lots and adjustments, e-invoices sent and
+    received, SST returns and tax filings, payment terms, methods and
+    allocations, email settings, templates and the outbox, report
+    layouts, import batches, MIA credentials, the company's credits and
+    platform payments, and the rest. On `org_members` she keeps her own
+    row. Left readable to her, by name, in the test: the company, its
+    modules, branches, departments, positions, shifts, holidays, leave
+    and claim types and settings, appraisal cycles, onboarding
+    templates, custom field definitions, fiscal years and periods,
+    exchange rates, tax codes, the login page and promotions, the change
+    feed, and her own notifications, to-dos and AI conversations;
+    `payment_batches` and `access_type_modules` close through their
+    parents. New `employee_reads_her_own.sql` (9 assertions), whose last
+    block refuses any table a member can read that is neither gated nor
+    on that list -- the next table added has to choose. Swept 6 / 6 on
+    the function with a control, and by hand: `org_members` without her
+    own row, `projects` without its gate, a new member-readable table,
+    and a self-service table gated by mistake, each caught. **Not done:**
+    definer functions that answer any member with company data -- the
+    third surface, read next.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

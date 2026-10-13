@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18189
+18198
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1883,3 +1883,13 @@
 # given an access type has what it gives and only that, and the
 # storekeeper reads the stock list; and with payroll switched off she
 # has HR alone).
+#
+# 18189 -> 18198, 13 October: 0872's employee_reads_her_own.sql (9: the
+# company has accounts, a project, an access type and four members; an
+# employee with no access type reads none of them and herself alone on
+# the member list, and still her company, its departments and leave
+# types; where she is a View Only member she reads what that role
+# reads; a View Only member and an employee given an access type read
+# all of it, as the owner does; and every table any member may read is
+# either gated or on the self-service list, and nothing on the list is
+# gated).

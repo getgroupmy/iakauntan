@@ -932,6 +932,14 @@ leave and claims, `read` in payroll, where her payslips are, and `none`
 in every other module -- so every module gate, and every menu the app
 draws from `my_module_access`, is shut to her. An access type, where
 the company gives her one, decides instead, as it does for anybody.
+The tables no module gate stands in front of -- the chart of accounts,
+projects, time, opportunities, stock, e-invoices, tax filings, the
+member list and the rest -- refuse her by a restrictive read policy of
+their own (`0872`); she keeps the company's frame (its name, modules,
+departments, leave and claim types, holidays) and her own row of the
+member list. `supabase/tests/employee_reads_her_own.sql` names what she
+may read and fails on a table any member can read that is on neither
+side of that line.
 
 The reports built from the ledger -- the statements, the general ledger,
 the group reports, the tax computation and the financial statements --
