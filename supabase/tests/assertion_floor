@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18066
+18078
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1798,3 +1798,11 @@
 # of the three). maintenance_mode.sql names can_read_client_money among
 # the read guards. Measured: `all SQL assertions passed (446 files,
 # 18066 assertions executed)`.
+#
+# 18066 -> 18078, 13 October: 0863's pay_bands_withheld.sql (12: the
+# salesman reads the position, its title and grade, but neither end of
+# its band and nothing through the function; HR is refused a select of
+# every column, reads the columns the app names and is given the band,
+# this company's only, and still sets it from the setup screen; anon
+# calls nothing and reads nothing). Measured: `all SQL assertions passed
+# (447 files, 18078 assertions executed)`.

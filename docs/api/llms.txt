@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0862` (the highest applied migration).
-847 functions and 368 readable tables, of which
-320 functions only read.
+Schema version `0863` (the highest applied migration).
+848 functions and 368 readable tables, of which
+321 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**707 of 847 functions carry a `comment on
+**708 of 848 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -422,7 +422,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text, p_idempotency_key text)` *(writes)* — Mints one share link per idempotency key and returns THE SAME URL on a replay.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (619)
+### general (620)
 
 Not gated on any module.
 
@@ -805,6 +805,7 @@ Not gated on any module.
 - `platform_users(p_query text, p_limit integer)` — Who is on this platform, for the console: when they last signed in, whether they confirmed their address, whether they are suspended, and how many companies they can open.
 - `portal_document_token(p_token text, p_document_id uuid)` *(writes)* — Hands a customer holding a portal token a document token for one of their own invoices, so 0067's view and 0414's payment work unchanged.
 - `pos_report_fields(p_source app.pos_report_source)` — What this source can be cut by and what it can add up.
+- `position_salary_bands(p_org_id uuid)` — Each position's salary band, for a member app.can_manage_hr admits, and nothing for anybody else.
 - `post_bank_transaction(p_transaction_id uuid, p_account_id uuid, p_description text, p_contact_id uuid, p_matter_id uuid)` *(writes)* — Turns an unmatched statement line into a journal against one chosen account, and matches the line to it.
 - `post_bank_transfer(p_id uuid)` *(writes)* — Posts a transfer between two of the company's own bank accounts, with the fee to its own account and any residual as exchange difference.
 - `post_client_transaction(p_id uuid)` *(writes)* — Posts money through a legal practice's CLIENT account -- money the firm holds and does not own.

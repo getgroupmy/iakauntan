@@ -3503,6 +3503,30 @@ page and renumbering would quietly break the reference.
     minute later -- "data directory lock file is invalid" -- which took
     the first mutation run down with it. Check `ps` first.
     **Still to read back.**
+131. ~~Every member reads each position's pay band.~~ **Raised and
+    answered 13 October** ("Bands to HR only"). Everything in HR and
+    payroll that says what somebody is paid asks `can_manage_hr` or
+    `can_run_payroll` -- except `positions`, read by every member, with
+    `min_salary` and `max_salary` on it. Measured locally as `sales`:
+    "Finance Manager" at 9,000 to 14,000. Production has no positions
+    yet. `0863`, as `0856` did for accounts: `authenticated` reads every
+    `positions` column but the two; `position_salary_bands(org)`, a
+    definer, gives the bands to a member `can_manage_hr` admits. Writes
+    are untouched -- `positions_write` asks `can_manage_hr`, and insert
+    and update are not select; the test makes both as HR, as
+    `saveSetupRow` sends them. In the app `RepoHr.positions()` names its
+    columns, and `setupRows('positions')` merges the bands back for the
+    HR setup list (`withPositionBands`, none rather than nought where
+    the function names none). New `pay_bands_withheld.sql` (12
+    assertions) and `position_bands_test.dart`. Swept 2 / 2 in SQL, the
+    grant by hand, and 3 / 3 in Dart, each with a control. **Not
+    covered by a Dart test:** the one line in `setupRows` that sends
+    `positions` to `positionsWithBands` -- extension methods cannot be
+    overridden and no test here builds `Repo` over a mock HTTP client
+    (that would mean adding `http` as a dependency). What holds it is
+    the SQL test's refusal of a select of every column, which is what
+    the setup list would get without it.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

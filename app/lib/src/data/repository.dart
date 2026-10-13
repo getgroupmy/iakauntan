@@ -7798,13 +7798,52 @@ extension RepoHr on Repo {
         .order('name', ascending: true),
   );
 
+  /// Every column of a position but its salary band, named because
+  /// `0863` withholds `min_salary` and `max_salary` from every client
+  /// role: a select of every column is refused, HR's included.
+  static const positionColumns =
+      'id, org_id, code, title, department_id, grade, job_description, '
+      'is_active, created_at, import_source, import_ref, import_batch_id, '
+      'imported_at';
+
   Future<List<Map<String, dynamic>>> positions() async => Repo._rows(
     await client
         .from('positions')
-        .select()
+        .select(positionColumns)
         .eq('org_id', orgId)
         .order('title', ascending: true),
   );
+
+  /// The positions with their bands beside them, for the HR setup list.
+  /// `position_salary_bands` names a band only to a member who manages
+  /// HR; anybody else's positions come back without the keys.
+  Future<List<Map<String, dynamic>>> positionsWithBands() async {
+    final bands = Repo._rows(
+      await callRpc('position_salary_bands', params: {'p_org_id': orgId}),
+    );
+    return withPositionBands(await positions(), bands);
+  }
+
+  /// Each position given the band `position_salary_bands` names for it.
+  /// One it does not name is given none -- not nought: the setup list
+  /// asks whether the key is there before it prints a band.
+  static List<Map<String, dynamic>> withPositionBands(
+    List<Map<String, dynamic>> positions,
+    List<Map<String, dynamic>> bands,
+  ) {
+    final byId = {for (final b in bands) b['position_id']: b};
+    return [
+      for (final p in positions)
+        if (byId[p['id']] case final band?)
+          {
+            ...p,
+            'min_salary': band['min_salary'],
+            'max_salary': band['max_salary'],
+          }
+        else
+          p,
+    ];
+  }
 
   // ------------------------------------------------------------------
   // Attendance
@@ -8701,13 +8740,18 @@ extension RepoHrSetup on Repo {
   Future<List<Map<String, dynamic>>> setupRows(
     String table, {
     String orderBy = 'name',
-  }) async => Repo._rows(
-    await client
-        .from(table)
-        .select()
-        .eq('org_id', orgId)
-        .order(orderBy, ascending: true),
-  );
+  }) async {
+    // `0863`: a select of every column of `positions` is refused, and
+    // the bands come from their own function.
+    if (table == 'positions') return positionsWithBands();
+    return Repo._rows(
+      await client
+          .from(table)
+          .select()
+          .eq('org_id', orgId)
+          .order(orderBy, ascending: true),
+    );
+  }
 
   Future<void> deleteSetupRow(String table, String id) =>
       client.from(table).delete().eq('id', id);
