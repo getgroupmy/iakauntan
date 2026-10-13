@@ -50,13 +50,31 @@ void main() {
     'is_active': isActive,
   };
 
+  late _FakeRepo repo;
+  // How many times the list with rates was fetched: once on opening, and
+  // again after anything that changes it.
+  var withRatesAsked = 0;
+  setUp(() => withRatesAsked = 0);
+
   Widget wrap(
     List<Map<String, dynamic>> report, {
     String base = 'MYR',
+    String role = 'owner',
+    List<Map<String, dynamic>> people = const [],
   }) => ProviderScope(
     overrides: [
-      repoProvider.overrideWithValue(_FakeRepo(report)),
-      salespeopleProvider.overrideWith((ref) async => const []),
+      repoProvider.overrideWithValue(repo = _FakeRepo(report)),
+      // What each provider would be given: the table's columns, which
+      // carry no rate since `0866`, and those merged with the rates.
+      salespeopleProvider.overrideWith(
+        (ref) async => [
+          for (final p in people) {...p}..remove('commission_rate'),
+        ],
+      ),
+      salespeopleWithRatesProvider.overrideWith((ref) async {
+        withRatesAsked++;
+        return people;
+      }),
       currentOrgProvider.overrideWith(
         (ref) async => Organization(
           id: 'o1',
@@ -65,7 +83,7 @@ void main() {
           baseCurrency: base,
         ),
       ),
-      memberRoleProvider.overrideWith((ref) async => 'owner'),
+      memberRoleProvider.overrideWith((ref) async => role),
     ],
     child: MaterialApp(
       theme: AppTheme.light(),
@@ -77,10 +95,22 @@ void main() {
     WidgetTester tester,
     List<Map<String, dynamic>> report, {
     String base = 'MYR',
+    String role = 'owner',
+    List<Map<String, dynamic>> people = const [],
   }) async {
-    await tester.pumpWidget(wrap(report, base: base));
+    await tester.pumpWidget(
+      wrap(report, base: base, role: role, people: people),
+    );
     await tester.pumpAndSettle();
   }
+
+  final siti = {
+    'id': 'sp2',
+    'code': 'SITI',
+    'name': 'Siti Binti Hassan',
+    'commission_rate': 4,
+    'is_active': true,
+  };
 
   group('sales attributed to nobody', () {
     testWidgets('are counted against the whole, in money', (tester) async {
@@ -211,20 +241,122 @@ void main() {
       expect(find.textContaining('RM '), findsNothing);
     });
   });
+
+  // `0866`: the figures and the rates are the ledger's, and a rate is
+  // set by whoever would pay it.
+  group('the ledger\'s', () {
+    testWidgets('a salesman is shown who sells, and neither the figures nor '
+        'a rate, and the report is not asked for', (tester) async {
+      await show(tester, [line()], role: 'sales', people: [siti]);
+
+      expect(find.text('Siti Binti Hassan'), findsOneWidget);
+      expect(find.text('Net sales'), findsNothing);
+      expect(find.textContaining('%'), findsNothing);
+      expect(repo.reportAsked, 0);
+    });
+
+    testWidgets('a reader is shown the report and each rate on file', (
+      tester,
+    ) async {
+      await show(tester, const [], role: 'accounts_clerk', people: [siti]);
+
+      expect(find.text('Net sales'), findsOneWidget);
+      expect(find.text('SITI  ·  4.00%'), findsOneWidget);
+      expect(repo.reportAsked, 1);
+    });
+
+    testWidgets('a reader who may not post edits a salesperson without the '
+        'rate, and sends none', (tester) async {
+      await show(tester, const [], role: 'accounts_clerk', people: [siti]);
+      await tester.tap(find.byIcon(Icons.edit_outlined));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Commission rate'), findsNothing);
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(repo.saved, isNotNull);
+      expect(repo.saved!['name'], 'Siti Binti Hassan');
+      expect(repo.saved!.containsKey('commission_rate'), isFalse);
+    });
+
+    testWidgets('and whoever may post sets it', (tester) async {
+      await show(tester, const [], role: 'accountant', people: [siti]);
+      await tester.tap(find.byIcon(Icons.edit_outlined));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Commission rate'),
+        '3.5',
+      );
+      await tester.pump();
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(repo.saved!['commission_rate'], 3.5);
+      expect(withRatesAsked, 2, reason: 'the list is fetched again');
+    });
+
+    testWidgets('and a removal fetches the list with its rates again', (
+      tester,
+    ) async {
+      await show(tester, const [], role: 'accountant', people: [siti]);
+      await tester.tap(find.byIcon(Icons.delete_outline));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Remove'));
+      await tester.pumpAndSettle();
+      expect(repo.removed, 'sp2');
+      expect(withRatesAsked, 2);
+    });
+  });
+
+  group('the rates, put back', () {
+    test('the table is asked for every column the grant leaves, and not '
+        'the rate', () {
+      final columns = Repo.salespersonColumns.split(', ');
+      expect(columns, isNot(contains('commission_rate')));
+      expect(columns, containsAll(['id', 'code', 'name', 'is_active']));
+    });
+
+    test('each person takes the rate named for them, and none where none '
+        'is named', () {
+      final merged = Repo.withCommissionRates(
+        [
+          {'id': 'sp1', 'name': 'Ali'},
+          {'id': 'sp2', 'name': 'Siti'},
+        ],
+        [
+          {'salesperson_id': 'sp2', 'commission_rate': 4},
+        ],
+      );
+      expect(merged.map((p) => p['commission_rate']), [null, 4]);
+      expect(merged.map((p) => p['name']), ['Ali', 'Siti']);
+    });
+  });
 }
 
-/// Only the two calls the screen makes.
+/// Only the calls the screen makes.
 class _FakeRepo implements Repo {
   _FakeRepo(this.report);
 
   final List<Map<String, dynamic>> report;
+  int reportAsked = 0;
+  Map<String, dynamic>? saved;
 
   @override
   Future<List<Map<String, dynamic>>> salesByPerson({
     required DateTime from,
     required DateTime to,
-  }) async =>
-      report;
+  }) async {
+    reportAsked++;
+    return report;
+  }
+
+  @override
+  Future<void> saveSalesperson(Map<String, dynamic> row) async => saved = row;
+
+  String? removed;
+
+  @override
+  Future<void> deleteSalesperson(String id) async => removed = id;
 
   @override
   Future<List<Map<String, dynamic>>> salespeople({

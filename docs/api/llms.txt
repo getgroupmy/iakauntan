@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0865` (the highest applied migration).
-848 functions and 368 readable tables, of which
-321 functions only read.
+Schema version `0866` (the highest applied migration).
+849 functions and 368 readable tables, of which
+322 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**708 of 848 functions carry a `comment on
+**709 of 849 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -422,7 +422,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text, p_idempotency_key text)` *(writes)* — Mints one share link per idempotency key and returns THE SAME URL on a replay.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (620)
+### general (621)
 
 Not gated on any module.
 
@@ -930,6 +930,7 @@ Not gated on any module.
 - `run_depreciation(p_org_id uuid, p_as_at date)` *(writes)* — Charges depreciation on every active asset up to a date, posts one journal grouped by expense and accumulated account, and returns the run.
 - `run_recurring_documents_for(p_org_id uuid, p_on date)` *(writes)* — Raises every recurring document due on or before a date for ONE company, and returns how many.
 - `run_recurring_journals_for(p_org_id uuid, p_on date)` *(writes)* — The same for recurring journals, one company, returning how many were advanced.
+- `salesperson_commission_rates(p_org_id uuid)` — Each salesperson's commission rate, for a member who reads the ledger; nothing for anybody else.
 - `save_layout_rows(p_layout_id uuid, p_rows jsonb)` *(writes)* — Replaces a layout's rows in one go, validating the whole set before deleting anything -- so a refused layout is the one that was there rather than an empty one.
 - `save_ocr_key(p_provider text, p_org_id uuid, p_id uuid, p_label text, p_api_key text, p_per_minute integer, p_per_day integer, p_per_month integer, p_hours smallint[], p_weekdays smallint[], p_months smallint[], p_is_active boolean)` *(writes)* — Adds a key to a reader's pool, or changes one.
 - `save_payment_method(p_org_id uuid, p_name text, p_id uuid, p_payment_mode_code text, p_bank_account_id uuid, p_charge_account_id uuid, p_charge_percent numeric, p_charge_fixed numeric, p_is_default boolean, p_is_active boolean, p_sort_order integer, p_notes text)` *(writes)* — Creates or amends one of a company's payment methods.

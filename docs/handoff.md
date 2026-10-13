@@ -3601,6 +3601,35 @@ page and renumbering would quietly break the reference.
     reads its rows holds the new row to the select policy too -- so the
     move is written without one.
     **Still to read back.**
+134. ~~Every member reads each salesperson's commission rate, and any
+    writer sets it -- his own included.~~ **Raised and answered 13
+    October** ("Rates are the ledger's"). `report_sales_by_person` turns
+    a rate into commission and has answered only a ledger reader since
+    `0105`; the rate was `is_org_member` to read and `can_write` to
+    write. Measured locally as a `sales` member named on a salesperson:
+    he read his own 2.5% and a colleague's 4%, raised his own to 25% and
+    cut hers to nothing, and was refused the report. The Salespeople
+    screen printed that refusal to him raw. Production has no
+    salespeople yet. `0866`: `authenticated` reads every column of
+    `salespeople` but `commission_rate`; `salesperson_commission_rates
+    (org)`, a definer, gives the rates to a ledger reader; a trigger --
+    NOT definer, `0822`'s shape -- refuses a client's statement that
+    sets a rate on a new salesperson or changes one on an old unless
+    `can_post`. Every other column stays a writer's. In the app
+    `Repo.salespeople()` names its columns (a bare select is now refused
+    outright), `salespeopleWithRates()` merges the rates for a reader;
+    the screen asks for the report only as a reader -- from `build` once
+    the role arrives, since `initState` can come first -- and draws it
+    only then; the list carries rates only for a reader; the dialog
+    offers the rate only to a poster and otherwise sends none, since a
+    blank would be a change. New `commission_rates_withheld.sql` (16
+    assertions). Swept 9 / 9 in SQL and the grant by hand, 12 / 12 on the
+    screen and 4 / 4 on the repository's column list and merge, each
+    with a control. **Not covered by a Dart test:** that `salespeople()`
+    sends `salespersonColumns` and that `salespeopleWithRates()` calls
+    the function -- `Repo` is never built over a mock HTTP client here.
+    What holds the first is the SQL test's refusal of `select *`.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

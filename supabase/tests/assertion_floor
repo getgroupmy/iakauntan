@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18113
+18129
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1824,3 +1824,13 @@
 # the clerk does not read; the auditor reads the register and the
 # capital allowances and writes nothing; anon reads none). Measured:
 # `all SQL assertions passed (449 files, 18113 assertions executed)`.
+#
+# 18113 -> 18129, 13 October: 0866's commission_rates_withheld.sql (16:
+# a salesman reads who sells and no rate -- not the column, not every
+# column at once, nothing from the function -- cannot raise his own,
+# cut a colleague's or bring somebody in on one, and still keeps the
+# list; the clerk reads every rate and sets none; the accountant sets
+# them and the report reads the same, and is given nothing of another
+# company; the owner of two is given each company's own; anon calls and
+# reads nothing). Measured: `all SQL assertions passed (450 files, 18129
+# assertions executed)`.

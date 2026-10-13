@@ -20,6 +20,10 @@ import '../../core/widgets.dart';
 /// liability is raised and nothing reaches payroll: whether commission
 /// falls due on invoice, on payment or on margin is a policy decision,
 /// and a figure accrued on a guess is worse than no figure at all.
+///
+/// The figures and the rates are the ledger's (`0855`, `0866`): a member
+/// who does not read it is shown the people and neither, and only a
+/// member who may post sets a rate.
 class SalespeopleScreen extends ConsumerStatefulWidget {
   const SalespeopleScreen({super.key});
 
@@ -52,7 +56,10 @@ class _SalespeopleScreenState extends ConsumerState<SalespeopleScreen> {
   /// not change who works here.
   void _reload() {
     final repo = ref.read(repoProvider);
-    if (repo == null) return;
+    // Asking for the report as somebody who does not read the ledger is
+    // asking to be refused. Left null, `build` starts it once the role
+    // says otherwise -- which can be after `initState`.
+    if (repo == null || !ref.read(canReadLedgerProvider)) return;
     setState(() {
       _report = repo.salesByPerson(from: _from, to: _to);
     });
@@ -75,9 +82,10 @@ class _SalespeopleScreenState extends ConsumerState<SalespeopleScreen> {
   }
 
   Future<void> _edit([Map<String, dynamic>? existing]) async {
+    final canSetRate = ref.read(canPostProvider);
     final saved = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (_) => _PersonDialog(existing: existing),
+      builder: (_) => _PersonDialog(existing: existing, canSetRate: canSetRate),
     );
     if (saved == null || !mounted) return;
 
@@ -89,6 +97,7 @@ class _SalespeopleScreenState extends ConsumerState<SalespeopleScreen> {
     );
     if (!ok) return;
     ref.invalidate(salespeopleProvider);
+    ref.invalidate(salespeopleWithRatesProvider);
     _reload();
   }
 
@@ -114,15 +123,22 @@ class _SalespeopleScreenState extends ConsumerState<SalespeopleScreen> {
     );
     if (!ok) return;
     ref.invalidate(salespeopleProvider);
+    ref.invalidate(salespeopleWithRatesProvider);
     _reload();
   }
 
   @override
   Widget build(BuildContext context) {
     final canWrite = ref.watch(canWriteProvider);
+    final canReadLedger = ref.watch(canReadLedgerProvider);
+    if (canReadLedger && _report == null) {
+      _report = ref.read(repoProvider)?.salesByPerson(from: _from, to: _to);
+    }
     final base =
         ref.watch(currentOrgProvider).valueOrNull?.baseCurrency ?? 'MYR';
-    final people = ref.watch(salespeopleProvider);
+    final people = ref.watch(
+      canReadLedger ? salespeopleWithRatesProvider : salespeopleProvider,
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -154,26 +170,28 @@ class _SalespeopleScreenState extends ConsumerState<SalespeopleScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              FutureBuilder<List<Map<String, dynamic>>>(
-                future: _report,
-                builder: (context, snap) {
-                  if (snap.connectionState != ConnectionState.done) {
-                    // Five columns, which is what `_Report` draws.
-                    // Outlining a different number would reflow the
-                    // instant the rows land, which is the flicker a
-                    // skeleton exists to remove.
-                    return const Card(
-                      child: Padding(
-                        padding: EdgeInsets.all(Space.lg),
-                        child: TableSkeleton(columns: 5, rows: 6),
-                      ),
-                    );
-                  }
-                  if (snap.hasError) return Text('${snap.error}');
-                  return _Report(rows: snap.data ?? const [], base: base);
-                },
-              ),
-              const SizedBox(height: Space.lg),
+              if (canReadLedger) ...[
+                FutureBuilder<List<Map<String, dynamic>>>(
+                  future: _report,
+                  builder: (context, snap) {
+                    if (snap.connectionState != ConnectionState.done) {
+                      // Five columns, which is what `_Report` draws.
+                      // Outlining a different number would reflow the
+                      // instant the rows land, which is the flicker a
+                      // skeleton exists to remove.
+                      return const Card(
+                        child: Padding(
+                          padding: EdgeInsets.all(Space.lg),
+                          child: TableSkeleton(columns: 5, rows: 6),
+                        ),
+                      );
+                    }
+                    if (snap.hasError) return Text('${snap.error}');
+                    return _Report(rows: snap.data ?? const [], base: base);
+                  },
+                ),
+                const SizedBox(height: Space.lg),
+              ],
               people.when(
                 loading: () => const SizedBox.shrink(),
                 error: (e, _) => Text(errorText(e)),
@@ -365,9 +383,13 @@ class _Report extends StatelessWidget {
 }
 
 class _PersonDialog extends StatefulWidget {
-  const _PersonDialog({this.existing});
+  const _PersonDialog({this.existing, required this.canSetRate});
 
   final Map<String, dynamic>? existing;
+
+  /// Whoever would pay a rate sets it (`0866`). Anybody else edits the
+  /// rest and sends no rate at all: one sent as blank would be a change.
+  final bool canSetRate;
 
   @override
   State<_PersonDialog> createState() => _PersonDialogState();
@@ -440,21 +462,23 @@ class _PersonDialogState extends State<_PersonDialog> {
                 border: OutlineInputBorder(),
               ),
             ),
-            const SizedBox(height: Space.sm),
-            TextField(
-              controller: _rate,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
+            if (widget.canSetRate) ...[
+              const SizedBox(height: Space.sm),
+              TextField(
+                controller: _rate,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  labelText: 'Commission rate',
+                  suffixText: '%',
+                  border: const OutlineInputBorder(),
+                  helperText: 'Optional. Nothing is posted from it.',
+                  errorText: rateBad ? 'Between 0 and 100' : null,
+                ),
               ),
-              onChanged: (_) => setState(() {}),
-              decoration: InputDecoration(
-                labelText: 'Commission rate',
-                suffixText: '%',
-                border: const OutlineInputBorder(),
-                helperText: 'Optional. Nothing is posted from it.',
-                errorText: rateBad ? 'Between 0 and 100' : null,
-              ),
-            ),
+            ],
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               value: _active,
@@ -484,7 +508,7 @@ class _PersonDialogState extends State<_PersonDialog> {
                   'email': _email.text.trim().isEmpty
                       ? null
                       : _email.text.trim(),
-                  'commission_rate': rate,
+                  if (widget.canSetRate) 'commission_rate': rate,
                   'is_active': _active,
                 }),
           child: const Text('Save'),

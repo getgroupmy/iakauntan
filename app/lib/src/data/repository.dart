@@ -4570,12 +4570,51 @@ class Repo {
   // so did not even keep one organization's documents from naming
   // another's people.
   // ------------------------------------------------------------------
+  /// Every column but `commission_rate`, which `0866` keeps from
+  /// `authenticated`: a bare `select()` is refused outright, by anybody.
+  static const salespersonColumns =
+      'id, org_id, code, name, employee_id, member_id, email, phone, notes, '
+      'is_active, created_at, updated_at';
+
   Future<List<Map<String, dynamic>>> salespeople({
     bool activeOnly = false,
   }) async {
-    var q = client.from('salespeople').select().eq('org_id', orgId);
+    var q = client
+        .from('salespeople')
+        .select(salespersonColumns)
+        .eq('org_id', orgId);
     if (activeOnly) q = q.eq('is_active', true);
     return _rows(await q.order('name', ascending: true));
+  }
+
+  /// The same people with their commission rates, which
+  /// `salesperson_commission_rates` gives a member who reads the ledger
+  /// and nobody else.
+  Future<List<Map<String, dynamic>>> salespeopleWithRates({
+    bool activeOnly = false,
+  }) async {
+    final people = await salespeople(activeOnly: activeOnly);
+    final rates = _rows(
+      await callRpc(
+        'salesperson_commission_rates',
+        params: {'p_org_id': orgId},
+      ),
+    );
+    return withCommissionRates(people, rates);
+  }
+
+  /// Each person with the rate the function named for them, and none --
+  /// not nought -- where it named none.
+  static List<Map<String, dynamic>> withCommissionRates(
+    List<Map<String, dynamic>> people,
+    List<Map<String, dynamic>> rates,
+  ) {
+    final byId = {
+      for (final r in rates) r['salesperson_id']: r['commission_rate'],
+    };
+    return [
+      for (final p in people) {...p, 'commission_rate': byId[p['id']]},
+    ];
   }
 
   Future<void> saveSalesperson(Map<String, dynamic> row) async {

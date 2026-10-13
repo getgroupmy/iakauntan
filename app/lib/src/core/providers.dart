@@ -895,6 +895,13 @@ final salespeopleProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).salespeople(activeOnly: true);
 });
 
+/// The same list with each commission rate, for a member who reads the
+/// ledger (`0866`). Nobody else is to watch it: the rates come back empty.
+final salespeopleWithRatesProvider =
+    FutureProvider<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).salespeopleWithRates(activeOnly: true);
+    });
+
 final warehousesProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).warehouses();
 });
