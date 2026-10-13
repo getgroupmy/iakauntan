@@ -3340,7 +3340,14 @@ page and renumbering would quietly break the reference.
     files. **Noticed, not yet raised:** the dashboard's figures grid
     overflows by 4.3 pixels at 412 wide -- with or without the bank tile,
     so before this; no test had drawn it on a phone.
-    **Still to read back.**
+    **Applied, and read back** (13 October, read-only, after run
+    38357833301 on `787b19a` had applied the migrations): the three
+    bodies are the ones this branch builds -- `bank_balances` `b11334aa`,
+    `dashboard_summary` `4b516db1`, `report_cash_forecast` `9d79372b` --
+    each a definer, each executable by `authenticated` and none by
+    `anon`; and `authenticated` reads `bank_accounts.name` but not
+    `current_balance`. The same run counted `6695 Dart tests ran (floor
+    6687)`, and the floor is 6695 now.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
