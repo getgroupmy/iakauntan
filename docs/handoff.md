@@ -3802,7 +3802,12 @@ page and renumbering would quietly break the reference.
     asks `has_module`, not her access. New `employee_self_service.sql`
     (9 assertions). Swept 8 / 8 with a control. **Still open:** the
     tables no module gate stands in front of -- that is `0872`.
-    **Still to read back.**
+    **Applied, and read back** (13 October, read-only, after run
+    38408221736 on `0a6cf90` had applied the migrations):
+    `app.module_access` is the body this branch builds, `e1265ea3`, a
+    definer executable by `authenticated` and not `anon`, with `0871`'s
+    comment. The same run counted `6767 Dart tests ran (floor 6767)`;
+    nothing in it touched the app.
 140. ~~An employee still read the tables no module gate stands in front
     of.~~ The second step of item 139. Their read policies asked
     `is_org_member` alone. Measured locally after `0871` as an `employee`
