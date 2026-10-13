@@ -3100,7 +3100,12 @@ page and renumbering would quietly break the reference.
     the import functions yet; production held no import batch. New
     `import_batch_final.sql`, added to `ci.yml`. Swept 6 / 7; the
     survivor, the depth clause, is equivalent.
-    **Still to read back.**
+    **Applied, and read back** (13 October, read-only, after run
+    38329073207 on `c04beb1` had applied the migrations): recorded;
+    `app.an_import_is_finished_once` is there with the body this branch
+    builds (md5 `c42fa420`), not a definer and not executable by
+    `authenticated`; its trigger is enabled on `import_batches`.
+    Production holds no import batch.
 118. ~~A ticket's comments can be written directly: put in the
     customer's mouth, rewritten, deleted, and an internal note made
     public.~~ **Raised and answered 13 October: read-only to clients.
