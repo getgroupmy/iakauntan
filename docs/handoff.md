@@ -3443,6 +3443,24 @@ page and renumbering would quietly break the reference.
     asserted only that no tax figure was drawn, which an empty screen
     also satisfies; it now asserts the working is drawn.
     **Still to read back.**
+129. ~~Every member reads the recurring journals and the bank
+    transfers.~~ **Raised and answered 13 October** ("Both need ledger
+    access"). `recurring_journals` holds in `template` the journal each
+    one posts, with accounts and amounts; `bank_transfers` moves money
+    between the company's own banks, with the figures `0858` and `0859`
+    withheld from the other side. Both select policies were
+    `is_org_member`. Measured locally as `sales`: a monthly "Directors'
+    fees" journal of 25,000 a side, a transfer of 300,000. Production has
+    no rows in either. Every function on them and every client write
+    already asked `can_post`. `0861`: both select policies ask
+    `can_read_ledger`. The recurring-journals screen returns
+    `LedgerWithheld` before asking; the transfers history sits on the
+    reconciliation screen, withheld since `0859`. Its "none" build test
+    asserted any `EmptyState` -- which the withheld screen is too -- and
+    asserts its own words now. New `journals_and_transfers_withheld.sql`
+    (8 assertions). Swept by hand, 5 / 5 with a control; 2 / 2 in Dart
+    with a control.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

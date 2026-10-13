@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18042
+18050
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1781,3 +1781,10 @@
 # carrying the money; the salesman's dates and counts are the clerk's;
 # anon calls neither function). Measured: `all SQL assertions passed
 # (444 files, 18042 assertions executed)`.
+#
+# 18042 -> 18050, 13 October: 0861's journals_and_transfers_withheld.sql
+# (8: the salesman reads no recurring journal and no transfer; the clerk
+# reads the journal and what it posts, the transfer, and nothing of a
+# company not theirs; the owner of both reads the other's; anon reads
+# neither). Measured: `all SQL assertions passed (445 files, 18050
+# assertions executed)`.

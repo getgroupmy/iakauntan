@@ -6,7 +6,7 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0860` (the highest applied migration).
+Schema version `0861` (the highest applied migration).
 847 functions and 368 readable tables, of which
 320 functions only read.
 

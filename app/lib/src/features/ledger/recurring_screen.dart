@@ -21,6 +21,12 @@ class RecurringScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // `0861`. Before anything is asked: each template is the journal it
+    // posts, and the database answers none of them to a role that does
+    // not read the ledger.
+    if (!ref.watch(canReadLedgerProvider)) {
+      return const LedgerWithheld(title: 'Recurring journals');
+    }
     final templates = ref.watch(recurringJournalsProvider);
     final canPost = ref.watch(canPostProvider);
 

@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 
 import 'package:iakauntan/src/core/providers.dart';
 import 'package:iakauntan/src/core/theme.dart';
-import 'package:iakauntan/src/core/widgets.dart';
 import 'package:iakauntan/src/data/corp_models.dart';
 import 'package:iakauntan/src/data/models.dart';
 import 'package:iakauntan/src/features/crm/leads_screen.dart';
@@ -333,6 +332,7 @@ void main() {
             ],
           ),
           canPostProvider.overrideWithValue(true),
+          canReadLedgerProvider.overrideWithValue(true),
         ]),
       );
       expect(find.textContaining('Monthly rent accrual'), findsOneWidget);
@@ -344,9 +344,30 @@ void main() {
         wrap(const RecurringScreen(), [
           recurringJournalsProvider.overrideWith((ref) async => []),
           canPostProvider.overrideWithValue(true),
+          canReadLedgerProvider.overrideWithValue(true),
         ]),
       );
-      expect(find.byType(EmptyState), findsOneWidget);
+      // Its own words, not any `EmptyState`: the screen withheld from a
+      // role that does not read the ledger is one too (`0861`).
+      expect(find.text('Nothing recurring'), findsOneWidget);
+    });
+
+    testWidgets('and to a role that does not read the ledger, says why '
+        'and asks for nothing', (tester) async {
+      var asked = 0;
+      await onAPhone(
+        tester,
+        wrap(const RecurringScreen(), [
+          recurringJournalsProvider.overrideWith((ref) async {
+            asked++;
+            return [];
+          }),
+          canReadLedgerProvider.overrideWithValue(false),
+        ]),
+      );
+      expect(find.byKey(const ValueKey('ledger-withheld')), findsOneWidget);
+      expect(find.text('Nothing recurring'), findsNothing);
+      expect(asked, 0);
     });
   });
 
