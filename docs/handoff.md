@@ -3145,7 +3145,11 @@ page and renumbering would quietly break the reference.
     `inbound_email_kept.sql`, added to `ci.yml`. A grant has no mutant;
     swept by hand: each of the six columns granted back fails its own
     assertion, and `read_at` taken away fails the inbox's own write.
-    **Still to read back.**
+    **Applied, and read back** (13 October, read-only, after run
+    38335629438 on `d7e8fc4` had applied the migrations): recorded;
+    `authenticated` no longer holds update on `inbound_emails` as a
+    table, and the one column it may update is `read_at`; `anon` may
+    update none. Both policies stand. Production holds no inbound email.
 120. ~~Any member can list and read every file attached to incoming
     mail, a colleague's personal mailbox included.~~ **Raised and
     answered 13 October: ask the mailbox. Built in `0853`.** Files on
