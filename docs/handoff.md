@@ -3193,7 +3193,12 @@ page and renumbering would quietly break the reference.
     `signature` (an e-invoice's own) stays readable. Production held no
     payment gateway. New `export_masks_gateway_keys.sql`, added to
     `ci.yml`. Swept 7 / 7.
-    **Still to read back.**
+    **Applied, and read back** (13 October, read-only, after run
+    38339758176 on `66aff24` had applied the migrations):
+    `app.audit_redact` is there with the body this branch builds (md5
+    `4a1ca9c1`), still immutable and not a definer, and its pattern
+    names `signature_key`. Production holds no payment gateway, so no
+    export has yet carried one.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
