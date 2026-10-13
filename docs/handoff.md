@@ -3673,6 +3673,27 @@ page and renumbering would quietly break the reference.
     dropping one was killed only by the column's own constraint, "for the
     wrong reason". The coalesces and the "none" assertion went.
     **Still to read back.**
+136. ~~The cashier could lift the drawer tolerance their own shift is
+    judged by.~~ **Raised and answered 13 October** ("Tolerance is the
+    manager's"). `close_pos_shift` refuses to close a shift further out
+    than `pos_settings.variance_tolerance` unless `can_admin`: "Only a
+    manager can close a shift more than % out." The tolerance was
+    written by anybody the till admits (`can_write_module(org,
+    'pos')`), and no row, or no tolerance, is no limit. Measured locally
+    as a `sales` cashier: a shift 50.00 short against 5.00 was refused;
+    he set the tolerance to nothing and it closed. Production: 5
+    companies with a till, each with a tolerance, 7 shifts, 2 members
+    there who are not managers. The app never reads or writes the table.
+    `0868`: a trigger -- NOT definer -- refuses a client's statement that
+    raises the tolerance, clears it or deletes the row holding it unless
+    `can_admin`, the test `close_pos_shift` applies; lowering it, setting
+    one, and an insert stay with the till. New `drawer_tolerance.sql`
+    (14 assertions), closing a shift end to end. Swept 10 / 10 with a
+    control. **Two the sweep found:** nothing had deleted a row with no
+    tolerance, and nothing had edited another setting while the
+    tolerance was empty -- the one case where `old ... is not null`
+    matters, `new > old` being null otherwise. Both are asserted.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18138
+18152
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1844,3 +1844,13 @@
 # raises one limit and removes another, and the cashier then sells on
 # account). Measured: `all SQL assertions passed (451 files, 18138
 # assertions executed)`.
+#
+# 18138 -> 18152, 13 October: 0868's drawer_tolerance.sql (14: the
+# cashier, who works the till and is not a manager, cannot raise the
+# drawer's tolerance, clear it or delete its row -- so a shift 50.00
+# short is still a manager's to close -- and lowers it, changes other
+# settings with it as it was or unnamed; an accountant cannot raise it
+# either; with none set the cashier changes another setting, deletes
+# the row and sets one; the manager clears, raises and deletes it, and
+# the cashier then closes the shift within it). Measured: `all SQL
+# assertions passed (452 files, 18152 assertions executed)`.
