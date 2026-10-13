@@ -3073,7 +3073,14 @@ page and renumbering would quietly break the reference.
     `ci.yml`. Swept 6 / 7; the survivor, the depth clause, is
     equivalent. The revoke swept by hand: delete granted back and the
     policy restored, the line assertion fails; restored, it passes.
-    **Still to read back.**
+    **Applied, and read back** (13 October, read-only, after run
+    38325996990 on `7d8afa1` had applied the migrations): recorded;
+    `app.a_billed_document_stays` is there with the body this branch
+    builds (md5 `52f8d532`), not a definer and not executable by
+    `authenticated`; its trigger is enabled on `received_einvoices`.
+    `authenticated` no longer holds delete on `received_einvoice_lines`,
+    whose one policy left is the select; it still deletes a document.
+    Production holds no received e-invoice.
 117. ~~A posted import can be reopened and rolled back, deleting its
     journals from the ledger.~~ **Raised and answered 13 October:
     posted and rolled back are final. Built in `0850`.**
