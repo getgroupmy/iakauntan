@@ -3468,7 +3468,12 @@ page and renumbering would quietly break the reference.
     asserts its own words now. New `journals_and_transfers_withheld.sql`
     (8 assertions). Swept by hand, 5 / 5 with a control; 2 / 2 in Dart
     with a control.
-    **Still to read back.**
+    **Applied, and read back** (13 October, read-only, after run
+    38371832009 on `9f118e0` had applied the migrations): both select
+    policies, `recurring_journals_select` and `bank_transfers_select`,
+    are `app.can_read_ledger(org_id)` for `authenticated`. The same run
+    counted `6733 Dart tests ran (floor 6732)`, and the floor is 6733
+    now.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
