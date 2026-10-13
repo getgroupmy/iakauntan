@@ -3316,6 +3316,31 @@ page and renumbering would quietly break the reference.
     `report_project_budget` `cddb02d1` -- each still a definer and each
     naming `can_read_ledger`. The same run counted `6687 Dart tests ran
     (floor 6682)`, and the floor is 6687 now.
+125. ~~Every member reads the bank's balance.~~ **Raised and answered 13
+    October: bank balances need ledger access. Built in `0858`.**
+    `bank_accounts_select` admits every member (a salesman picks the
+    account a receipt lands in), `dashboard_summary` gave every member
+    `bank_balance`, and `report_cash_forecast` asked only the accounting
+    module, which `module_access` grants every member without a custom
+    access type. Measured as `sales` after 98,765.43 into the bank and
+    `resync_bank_balance`: the table, the dashboard and the forecast's
+    opening figure all 98,765.43. As `0856` did for accounts:
+    `authenticated` reads every `bank_accounts` column but
+    `current_balance`; `bank_balances(org)`, a definer, gives it to a
+    ledger reader; `dashboard_summary` gives `bank_balance` only to one,
+    and nothing -- not nought -- to anybody else; the forecast adds the
+    ledger refusal. **The app:** `Repo.bankAccounts` names its columns and
+    puts each balance `bank_balances` gives beside its account, leaving
+    the key off where none is given; the statements screen prints a book
+    balance only where there is one; the dashboard tile and the ticker's
+    "Cash at bank" are left out, not shown as nought. New
+    `bank_balance_withheld.sql` (16 assertions; one is the app's own
+    column list), added to `ci.yml`, and `bank_balances_merge_test.dart`.
+    Swept 5 / 5 in SQL, the grant by hand, and 8 / 8 in Dart across four
+    files. **Noticed, not yet raised:** the dashboard's figures grid
+    overflows by 4.3 pixels at 412 wide -- with or without the bank tile,
+    so before this; no test had drawn it on a phone.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -3609,6 +3634,7 @@ function:
 | 25 report functions and `app.group_orgs` (guard only) | `0855` | 24 / 30 | 6 (`group_orgs` asked of the company the report is asked from, and five refusals masked in the same words by what they are built on; said in the file) | `ledger_reports_need_ledger.sql` (new in `0855`; a salesman and an employee given nothing by the nine SQL reports and refused by the seventeen others, the three other roles by the ledger itself, a clerk and an auditor answered by every one; a frozen filing's export; a project code; the group shown to somebody who sells for the sister, and the sister's line kept out of the intercompany report) |
 | `account_balances` (and the column grant on `accounts`) | `0856` | 5 / 5, the grant by hand | -- | `account_balance_withheld.sql` (new in `0856`; the salesman refused the column and given nothing by the function, a select of every column refused to the clerk too while the app's own nine are read, the clerk given both sides of the journal and no retired account or other company's, the owner's other company its own figure, anon given neither) |
 | `report_budget_vs_actual`, `build_budget_from_actual`, `report_project_budget` | `0857` | 8 / 8 | -- | `budget_actuals_need_ledger.sql` (new in `0857`; the salesman with the accounting module refused the variance and the build, which wrote nothing, and given every project with its cost, revenue, variance and percentage blank and its unbilled time kept; the clerk given all of it to the sen; a stranger refused in the old words) |
+| `bank_balances`, `dashboard_summary` (the bank), `report_cash_forecast` (and the column grant on `bank_accounts`) | `0858` | 5 / 5, the grant by hand | -- | `bank_balance_withheld.sql` (new in `0858`; the salesman refused the column, given nothing by the function and nothing on the dashboard while its other figures stand, refused the forecast; the clerk refused a select of every column while the app's own list is read, and given the balance, the dashboard figure and the forecast's opening; the other company's bank its own; anon given neither) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |

@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17993
+18009
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1755,3 +1755,11 @@
 # blank; the clerk given all of it to the sen; a stranger refused in the
 # old words). Measured: `all SQL assertions passed (441 files, 17993
 # assertions executed)`.
+#
+# 18009 (13 October 2026, `0858`): +16 from `bank_balance_withheld.sql`
+# (the salesman refused the bank's balance off the table, given nothing
+# by `bank_balances` or the dashboard while its other figures stand, and
+# refused the cash forecast; the clerk refused a select of every column
+# while the app's own list is read, and given the balance, the dashboard
+# figure and the forecast's opening; anon given neither). Measured: `all
+# SQL assertions passed (442 files, 18009 assertions executed)`.

@@ -67,6 +67,7 @@ void main() {
     Map<String, ({String name, String group})>? labels,
     List<String>? panels,
     List<Map<String, dynamic>>? aging,
+    Map<String, dynamic> summary = const {},
   }) => ProviderScope(
     overrides: [
       currentUserProvider.overrideWithValue(null),
@@ -92,16 +93,11 @@ void main() {
       // inside it watches `arAgingProvider`. Nothing in the suite fed
       // either, so the card's ROW BODY had never been built.
       if (aging != null) ...[
-        dashboardProvider.overrideWith(
-          (_) async => DashboardSummary(const {}),
-        ),
+        dashboardProvider.overrideWith((_) async => DashboardSummary(summary)),
         arAgingProvider.overrideWith((_) async => aging),
       ],
     ],
-    child: MaterialApp(
-      theme: AppTheme.light(),
-      home: const DashboardScreen(),
-    ),
+    child: MaterialApp(theme: AppTheme.light(), home: const DashboardScreen()),
   );
 
   Future<void> onADesktop(WidgetTester tester, Widget widget) async {
@@ -180,36 +176,71 @@ void main() {
   /// `document_list_screen_test` end their loops on, so a row that holds
   /// at 412 and not at 360 is a row that fails on a smaller handset.
   for (final width in [412.0, 360.0]) {
-    testWidgets(
-        'a receivable with a long name and a late count fits a '
+    testWidgets('a receivable with a long name and a late count fits a '
         '${width.toInt()}px phone', (tester) async {
-    await onAPhone(
-      tester,
-      width: width,
-      dashboard(
-        modules: const {'accounting'},
-        figures: const {},
-        labels: const {'accounting': (name: 'Accounting', group: 'Books')},
-        panels: const ['receivables'],
-        aging: const [
-          {
-            'contact_name': 'Perbadanan Pembangunan Infrastruktur Sdn Bhd',
-            'doc_no': 'INV-2026-004219',
-            'due_date': '2026-01-14',
-            'outstanding': 128450.75,
-            'currency': 'MYR',
-            'days_overdue': 263,
-          },
-        ],
-      ),
-    );
+      await onAPhone(
+        tester,
+        width: width,
+        dashboard(
+          modules: const {'accounting'},
+          figures: const {},
+          labels: const {'accounting': (name: 'Accounting', group: 'Books')},
+          panels: const ['receivables'],
+          aging: const [
+            {
+              'contact_name': 'Perbadanan Pembangunan Infrastruktur Sdn Bhd',
+              'doc_no': 'INV-2026-004219',
+              'due_date': '2026-01-14',
+              'outstanding': 128450.75,
+              'currency': 'MYR',
+              'days_overdue': 263,
+            },
+          ],
+        ),
+      );
 
-    await show(tester, 'Accounting');
+      await show(tester, 'Accounting');
 
-    // The row drew. Without this the test would pass over a card that
-    // rendered nothing, which is how the row went unbuilt for so long.
-    expect(find.textContaining('263 days late'), findsOneWidget);
+      // The row drew. Without this the test would pass over a card that
+      // rendered nothing, which is how the row went unbuilt for so long.
+      expect(find.textContaining('263 days late'), findsOneWidget);
     });
+  }
+
+  /// `0858`. The bank's balance is given only to a role that reads the
+  /// ledger, and nothing -- not nought -- to anybody else. The tile is
+  /// left out for them, as a figure the company cannot have is left
+  /// out of the ticker; "Bank balance RM 0.00" would say there is no
+  /// cash.
+  for (final (withheld, figure) in [(true, null), (false, 98765.43)]) {
+    testWidgets(
+      withheld
+          ? 'the bank balance is left out when it is withheld'
+          : 'and shown to a role that reads the ledger',
+      (tester) async {
+        await onADesktop(
+          tester,
+          dashboard(
+            modules: const {'accounting'},
+            figures: const {},
+            labels: const {'accounting': (name: 'Accounting', group: 'Books')},
+            // The figures grid, which is where the tile lives.
+            panels: const ['metrics'],
+            aging: const [],
+            summary: {'receivables': 1200, 'bank_balance': figure},
+          ),
+        );
+        await show(tester, 'Accounting');
+
+        // The tiles beside it drew either way.
+        expect(find.text('Receivables'), findsOneWidget);
+        expect(
+          find.text('Bank balance'),
+          withheld ? findsNothing : findsOneWidget,
+        );
+        if (!withheld) expect(find.text('RM 98,765.43'), findsWidgets);
+      },
+    );
   }
 
   testWidgets('a service desk company is not shown the ledger', (tester) async {
@@ -325,8 +356,13 @@ void main() {
       dashboard(
         modules: const {'ticketing'},
         figures: const {
-          'ticketing': {'open': 7, 'unassigned': 2, 'breaching': 5,
-                        'breached': 3, 'resolved_today': 4},
+          'ticketing': {
+            'open': 7,
+            'unassigned': 2,
+            'breaching': 5,
+            'breached': 3,
+            'resolved_today': 4,
+          },
         },
         labels: const {
           'ticketing': (name: 'Service desk', group: 'Service desk'),
@@ -369,10 +405,7 @@ void main() {
 
     expect(find.text('Open deals'), findsOneWidget);
     expect(find.text('5'), findsOneWidget);
-    expect(
-      find.textContaining('plus 2 in other currencies'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('plus 2 in other currencies'), findsOneWidget);
     expect(find.text('Follow-ups overdue'), findsOneWidget);
     expect(find.text('Somebody is waiting'), findsOneWidget);
   });
@@ -541,11 +574,17 @@ void main() {
     // Only the one row, and it is the one named for people rather than
     // the code that found it.
     expect(
-      find.descendant(of: find.byType(ListTile), matching: find.text('Sales pipeline')),
+      find.descendant(
+        of: find.byType(ListTile),
+        matching: find.text('Sales pipeline'),
+      ),
       findsOneWidget,
     );
     expect(
-      find.descendant(of: find.byType(ListTile), matching: find.text('Registrar')),
+      find.descendant(
+        of: find.byType(ListTile),
+        matching: find.text('Registrar'),
+      ),
       findsNothing,
     );
 

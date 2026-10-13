@@ -5005,14 +5005,45 @@ class Repo {
     return data as String;
   }
 
+  /// Every column of a bank account but its balance, named because
+  /// `0858` withholds `current_balance` from every client role: a select
+  /// of every column is refused, the accountant's included.
+  static const _bankAccountColumns =
+      'id, org_id, account_id, name, bank_name, bank_code, account_number, '
+      'account_type, currency, opening_balance, is_default, is_active, '
+      'created_at, updated_at, is_client_account, import_source, '
+      'import_ref, import_batch_id, imported_at';
+
   Future<List<Map<String, dynamic>>> bankAccounts() async {
     final data = await client
         .from('bank_accounts')
-        .select()
+        .select(_bankAccountColumns)
         .eq('org_id', orgId)
         .eq('is_active', true)
         .order('name', ascending: true);
-    return _rows(data);
+    final balances = _rows(
+      await callRpc('bank_balances', params: {'p_org_id': orgId}),
+    );
+    return withBankBalances(_rows(data), balances);
+  }
+
+  /// Each bank account given the `current_balance` that `bank_balances`
+  /// names for it. One it does not name -- every one, for a role that
+  /// does not read the ledger -- is given none, not nought: a screen
+  /// asks whether the key is there before it prints a balance.
+  static List<Map<String, dynamic>> withBankBalances(
+    List<Map<String, dynamic>> accounts,
+    List<Map<String, dynamic>> balances,
+  ) {
+    final byId = {
+      for (final b in balances) b['bank_account_id']: b['current_balance'],
+    };
+    return [
+      for (final a in accounts)
+        byId.containsKey(a['id'])
+            ? {...a, 'current_balance': byId[a['id']]}
+            : a,
+    ];
   }
 
   /// Rebuild an account's cached balance from the posted ledger.

@@ -1584,7 +1584,12 @@ class DashboardSummary {
   double get receivables => Fmt.toDouble(_raw['receivables']);
   double get payables => Fmt.toDouble(_raw['payables']);
   double get overdueReceivables => Fmt.toDouble(_raw['overdue_receivables']);
-  double get bankBalance => Fmt.toDouble(_raw['bank_balance']);
+
+  /// Null for a role that does not read the ledger: `0858` gives the
+  /// bank's balance only to one that does, and nothing -- not nought --
+  /// to anybody else. A zero here would say the company has no cash.
+  double? get bankBalance =>
+      _raw['bank_balance'] == null ? null : Fmt.toDouble(_raw['bank_balance']);
   int get draftInvoices => Fmt.toInt(_raw['draft_invoices']);
   int get einvoicePending => Fmt.toInt(_raw['einvoice_pending']);
   int get einvoiceInvalid => Fmt.toInt(_raw['einvoice_invalid']);

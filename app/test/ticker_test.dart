@@ -45,8 +45,10 @@ void main() {
   });
 
   test('overdue debt is bad news when there is any', () {
-    final items =
-        tickerItems(summary({'overdue_receivables': 500}), currency: 'MYR');
+    final items = tickerItems(
+      summary({'overdue_receivables': 500}),
+      currency: 'MYR',
+    );
     expect(itemFor(items, 'Overdue').good, isFalse);
   });
 
@@ -61,6 +63,20 @@ void main() {
     // Asserted as it actually reads rather than as one might assume,
     // because a receipt is read by a person and this is the string.
     expect(itemFor(items, 'Profit this year').value, 'RM -300.00');
+  });
+
+  test('a bank balance withheld from the role is left out, not nought', () {
+    // `0858`. The bank's balance comes only to a role that reads the
+    // ledger; anybody else is given nothing, and "Cash at bank RM 0.00"
+    // would tell them the company has no money.
+    final withheld = tickerItems(
+      summary({'bank_balance': null}),
+      currency: 'MYR',
+    );
+    expect(withheld.where((i) => i.label == 'Cash at bank'), isEmpty);
+    // While an empty bank, for one who reads the ledger, is still a figure.
+    final empty = tickerItems(summary({'bank_balance': 0}), currency: 'MYR');
+    expect(itemFor(empty, 'Cash at bank').value, 'RM 0.00');
   });
 
   test('what a company cannot have is left out, not shown as zero', () {
@@ -79,8 +95,10 @@ void main() {
   });
 
   test('a rejected e-Invoice only appears for a company that files', () {
-    final without =
-        tickerItems(summary({'einvoice_invalid': 2}), currency: 'MYR');
+    final without = tickerItems(
+      summary({'einvoice_invalid': 2}),
+      currency: 'MYR',
+    );
     expect(without.where((i) => i.label == 'e-Invoice rejected'), isEmpty);
 
     final with_ = tickerItems(
@@ -93,8 +111,10 @@ void main() {
 
   test('drafts appear only when there are some', () {
     expect(
-      tickerItems(summary({}), currency: 'MYR')
-          .where((i) => i.label == 'Drafts unposted'),
+      tickerItems(
+        summary({}),
+        currency: 'MYR',
+      ).where((i) => i.label == 'Drafts unposted'),
       isEmpty,
     );
     expect(
@@ -108,8 +128,10 @@ void main() {
 
   test('the to-do count says overdue only when something is', () {
     expect(
-      itemFor(tickerItems(summary({}), currency: 'MYR', openTodos: 3), 'To do')
-          .value,
+      itemFor(
+        tickerItems(summary({}), currency: 'MYR', openTodos: 3),
+        'To do',
+      ).value,
       '3 open',
     );
     final late = itemFor(

@@ -936,7 +936,9 @@ The running balance on `accounts` is withheld from every client read
 of the table (`0856`) -- a column grant cannot tell the accountant from
 the salesman, so neither selects it -- and `account_balances` gives it
 to a reader of the ledger. A `select *` on `accounts` is refused; name
-the columns.
+the columns. The bank's balance is the same (`0858`): withheld from
+every client read of `bank_accounts`, given by `bank_balances`, and on
+the dashboard only to a reader of the ledger.
 
 ### Super admin
 

@@ -117,10 +117,7 @@ void main() {
         }),
         memberRoleProvider.overrideWith((ref) async => role),
       ],
-      child: MaterialApp.router(
-        theme: AppTheme.light(),
-        routerConfig: router,
-      ),
+      child: MaterialApp.router(theme: AppTheme.light(), routerConfig: router),
     );
   }
 
@@ -141,8 +138,9 @@ void main() {
   }
 
   group('the account travels with the press', () {
-    testWidgets('Upload opens the import on the account it sits beside',
-        (tester) async {
+    testWidgets('Upload opens the import on the account it sits beside', (
+      tester,
+    ) async {
       await show(tester);
 
       await tester.tap(find.byKey(const ValueKey('bank-statement-upload-b2')));
@@ -163,8 +161,9 @@ void main() {
       expect(went, ['/reconcile?account=b1&import=1']);
     });
 
-    testWidgets('the row itself opens the account without the import',
-        (tester) async {
+    testWidgets('the row itself opens the account without the import', (
+      tester,
+    ) async {
       // Somebody who wants to LOOK at an account gets the account, not
       // a file picker over the top of it.
       await show(tester);
@@ -177,8 +176,9 @@ void main() {
   });
 
   group('who is offered it', () {
-    testWidgets('a clerk who cannot post is not offered Upload',
-        (tester) async {
+    testWidgets('a clerk who cannot post is not offered Upload', (
+      tester,
+    ) async {
       // Hidden rather than greyed. A disabled button is a question the
       // screen will not answer; the row still opens, because reading a
       // reconciliation is not posting to it.
@@ -188,8 +188,10 @@ void main() {
         find.byKey(const ValueKey('bank-statement-upload-b1')),
         findsNothing,
       );
-      expect(find.byKey(const ValueKey('bank-statement-account-b1')),
-          findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('bank-statement-account-b1')),
+        findsOneWidget,
+      );
     });
 
     testWidgets('an owner is', (tester) async {
@@ -203,14 +205,38 @@ void main() {
   });
 
   group('what the screen says when there is nothing', () {
+    testWidgets('a role that does not read the ledger is shown no balance', (
+      tester,
+    ) async {
+      // `0858`. The rows reach such a role without `current_balance`;
+      // "book balance RM 0.00" would be a figure nobody gave them.
+      await show(
+        tester,
+        banks: [
+          for (final a in accounts) {...a}..remove('current_balance'),
+        ],
+        role: 'sales',
+      );
+      expect(find.textContaining('Maybank Current'), findsOneWidget);
+      expect(find.textContaining('book balance'), findsNothing);
+    });
+
+    testWidgets('while one that does is shown each account\'s', (tester) async {
+      await show(tester);
+      expect(find.textContaining('book balance RM 12,500.00'), findsOneWidget);
+      expect(find.textContaining('book balance RM 840.50'), findsOneWidget);
+    });
+
     testWidgets('no bank account says where one comes from', (tester) async {
       await show(tester, banks: const []);
 
       expect(find.text('No bank account yet'), findsOneWidget);
       // And not the "nothing read" message, which would be answering a
       // question nobody can reach yet.
-      expect(find.byKey(const ValueKey('bank-statement-upload-b1')),
-          findsNothing);
+      expect(
+        find.byKey(const ValueKey('bank-statement-upload-b1')),
+        findsNothing,
+      );
     });
 
     testWidgets('nothing read yet says so', (tester) async {
@@ -221,8 +247,9 @@ void main() {
   });
 
   group('a statement read is not a statement imported', () {
-    testWidgets('one that was brought in, and one that was not',
-        (tester) async {
+    testWidgets('one that was brought in, and one that was not', (
+      tester,
+    ) async {
       await show(
         tester,
         inbox: [
@@ -245,9 +272,9 @@ void main() {
       // so counting them proves nothing -- swapping them was a mutant
       // that survived being counted.
       Finder inRow(String id, String text) => find.descendant(
-            of: find.byKey(ValueKey('bank-statement-scan-$id')),
-            matching: find.textContaining(text),
-          );
+        of: find.byKey(ValueKey('bank-statement-scan-$id')),
+        matching: find.textContaining(text),
+      );
 
       expect(inRow('s1', '· brought in'), findsOneWidget);
       // The second is the one this screen exists to surface: read,
@@ -255,8 +282,9 @@ void main() {
       expect(inRow('s2', '· not brought in yet'), findsOneWidget);
     });
 
-    testWidgets('a scan that is not a statement stays out of the list',
-        (tester) async {
+    testWidgets('a scan that is not a statement stays out of the list', (
+      tester,
+    ) async {
       await show(
         tester,
         inbox: [
@@ -274,8 +302,9 @@ void main() {
       expect(find.text('Nothing read yet'), findsOneWidget);
     });
 
-    testWidgets('the list asks for everything, not just what was posted',
-        (tester) async {
+    testWidgets('the list asks for everything, not just what was posted', (
+      tester,
+    ) async {
       await show(tester);
 
       // `posted` would hide the unimported statement, which is the one

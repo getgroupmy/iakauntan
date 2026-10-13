@@ -15,11 +15,7 @@ import '../../data/models.dart';
 /// exists. Cash rising is good; overdue debt rising is not, and a
 /// ticker that paints both green is one nobody reads twice.
 class TickerItem {
-  const TickerItem({
-    required this.label,
-    required this.value,
-    this.good,
-  });
+  const TickerItem({required this.label, required this.value, this.good});
 
   final String label;
   final String value;
@@ -49,11 +45,14 @@ List<TickerItem> tickerItems(
   bool showEinvoice = false,
 }) {
   return [
-    TickerItem(
-      label: 'Cash at bank',
-      value: Fmt.money(data.bankBalance, currency: currency),
-      good: data.bankBalance >= 0,
-    ),
+    // Left out, not shown as nought, for a role the bank's balance is
+    // withheld from (`0858`).
+    if (data.bankBalance case final bank?)
+      TickerItem(
+        label: 'Cash at bank',
+        value: Fmt.money(bank, currency: currency),
+        good: bank >= 0,
+      ),
     TickerItem(
       label: 'Owed to you',
       value: Fmt.money(data.receivables, currency: currency),
@@ -202,10 +201,7 @@ class _TickerCell extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            item.label,
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
+          Text(item.label, style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(width: 6),
           Text(
             item.value,

@@ -65,22 +65,21 @@ const String dashboardOverview = '';
 List<PickerOption<String>> dashboardViews(
   List<String> codes,
   String Function(String code) nameOf,
-) =>
-    [
-      const PickerOption(
-        value: dashboardOverview,
-        label: 'Overview',
-        sublabel: 'The figures everybody sees',
-        keywords: ['general', 'summary', 'home', 'everything'],
-      ),
-      for (final code in codes)
-        PickerOption(
-          value: code,
-          label: nameOf(code),
-          sublabel: 'Module dashboard',
-          keywords: [code],
-        ),
-    ];
+) => [
+  const PickerOption(
+    value: dashboardOverview,
+    label: 'Overview',
+    sublabel: 'The figures everybody sees',
+    keywords: ['general', 'summary', 'home', 'everything'],
+  ),
+  for (final code in codes)
+    PickerOption(
+      value: code,
+      label: nameOf(code),
+      sublabel: 'Module dashboard',
+      keywords: [code],
+    ),
+];
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -123,10 +122,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       held.valueOrNull,
       (c) => moduleEnabled(ref, c),
     );
-    final views = dashboardViews(
-      codes,
-      (c) => labels[c]?.name ?? c,
-    );
+    final views = dashboardViews(codes, (c) => labels[c]?.name ?? c);
 
     // A module that was switched off, or an access type narrowed, while
     // this screen was open. Falling back to the Overview beats showing
@@ -202,7 +198,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       const EmptyState(
                         icon: Icons.dashboard_customize_outlined,
                         title: 'Nothing to show yet',
-                        message: 'Choose what belongs here under '
+                        message:
+                            'Choose what belongs here under '
                             'Settings \u203a Landing page, or turn a module '
                             'on under Settings \u203a Modules.',
                       )
@@ -337,8 +334,11 @@ List<String> dashboardTabs(
 /// has not put away, and this person may read — so an absent key means
 /// "not yours" or "nothing measured", and either way there is nothing
 /// to draw.
-List<Widget> moduleTiles(BuildContext context, String code,
-    Map<String, dynamic> all) {
+List<Widget> moduleTiles(
+  BuildContext context,
+  String code,
+  Map<String, dynamic> all,
+) {
   Map<String, dynamic> block(String key) {
     final v = all[key];
     return v is Map ? Map<String, dynamic>.from(v) : const {};
@@ -483,8 +483,7 @@ List<Widget> moduleTiles(BuildContext context, String code,
     final nextRaw = t['next_due'];
     final next = nextRaw == null ? null : DateTime.tryParse('$nextRaw');
     final instRaw = t['instalment_next_due'];
-    final instNext =
-        instRaw == null ? null : DateTime.tryParse('$instRaw');
+    final instNext = instRaw == null ? null : DateTime.tryParse('$instRaw');
     final form = t['next_form']?.toString();
     tiles.addAll([
       StatTile(
@@ -572,7 +571,9 @@ List<Widget> moduleTiles(BuildContext context, String code,
         // Pooled across warehouses by 0300, so this is a count of
         // purchase orders somebody has to raise rather than of shelves
         // that happen to be low.
-        caption: reorder > 0 ? 'At or under their level' : 'Nothing running low',
+        caption: reorder > 0
+            ? 'At or under their level'
+            : 'Nothing running low',
         icon: Icons.add_shopping_cart_outlined,
         accent: reorder > 0 ? context.colors.warning : null,
         onTap: () => context.go('/items'),
@@ -681,7 +682,8 @@ class ModuleDashboardPane extends ConsumerWidget {
       return const EmptyState(
         icon: Icons.insights_outlined,
         title: 'Nothing measured here yet',
-        message: 'This module does not report figures to the dashboard. '
+        message:
+            'This module does not report figures to the dashboard. '
             'Its own screens have everything it records.',
       );
     }
@@ -717,18 +719,18 @@ class _Greeting extends StatelessWidget {
     final greeting = hour < 12
         ? 'Selamat pagi'
         : hour < 19
-            ? 'Selamat petang'
-            : 'Selamat malam';
+        ? 'Selamat petang'
+        : 'Selamat malam';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           greeting,
-          style: Theme.of(context)
-              .textTheme
-              .headlineSmall
-              ?.copyWith(fontWeight: FontWeight.w700, letterSpacing: -0.5),
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.5,
+          ),
         ),
         const SizedBox(height: 2),
         Text(
@@ -767,12 +769,8 @@ class _MetricGrid extends ConsumerWidget {
     // The same series the chart below uses; the tiles show its shape so the
     // top row answers "which way is this going" without scrolling.
     final rows = ref.watch(revenueTrendProvider).valueOrNull ?? const [];
-    final revenueSeries = [
-      for (final r in rows) Fmt.toDouble(r['revenue']),
-    ];
-    final expenseSeries = [
-      for (final r in rows) Fmt.toDouble(r['expenses']),
-    ];
+    final revenueSeries = [for (final r in rows) Fmt.toDouble(r['revenue'])];
+    final expenseSeries = [for (final r in rows) Fmt.toDouble(r['expenses'])];
 
     final tiles = <Widget>[
       StatTile(
@@ -804,13 +802,15 @@ class _MetricGrid extends ConsumerWidget {
         icon: Icons.account_balance_wallet_outlined,
         accent: data.overdueReceivables > 0 ? context.colors.danger : null,
       ),
-      StatTile(
-        label: 'Bank balance',
-        value: Fmt.money(data.bankBalance),
-        caption: 'Across active accounts',
-        icon: Icons.account_balance,
-        accent: context.colors.info,
-      ),
+      // Only for a role that reads the ledger (`0858`).
+      if (data.bankBalance case final bank?)
+        StatTile(
+          label: 'Bank balance',
+          value: Fmt.money(bank),
+          caption: 'Across active accounts',
+          icon: Icons.account_balance,
+          accent: context.colors.info,
+        ),
     ];
 
     return GridView.count(
@@ -833,7 +833,9 @@ class _EinvoiceBanner extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final needsAttention = data.einvoiceInvalid > 0;
-    final color = needsAttention ? context.colors.danger : context.colors.warning;
+    final color = needsAttention
+        ? context.colors.danger
+        : context.colors.warning;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 20),
@@ -1069,11 +1071,15 @@ class _ReceivablesCard extends ConsumerWidget {
                 // receipts and unused credit notes — because that is
                 // what makes it foot to the control account. This card
                 // is about who owes money, so they are left out here.
-                final rows = all
-                    .where((r) => Fmt.toDouble(r['outstanding']) > 0)
-                    .toList()
-                  ..sort((a, b) => Fmt.toInt(b['days_overdue'])
-                      .compareTo(Fmt.toInt(a['days_overdue'])));
+                final rows =
+                    all
+                        .where((r) => Fmt.toDouble(r['outstanding']) > 0)
+                        .toList()
+                      ..sort(
+                        (a, b) => Fmt.toInt(
+                          b['days_overdue'],
+                        ).compareTo(Fmt.toInt(a['days_overdue'])),
+                      );
 
                 if (rows.isEmpty) {
                   return const EmptyState(
@@ -1169,9 +1175,9 @@ class _ActivitiesCard extends ConsumerWidget {
                         contentPadding: EdgeInsets.zero,
                         leading: CircleAvatar(
                           radius: 16,
-                          backgroundColor: Theme.of(context)
-                              .colorScheme
-                              .primaryContainer,
+                          backgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.primaryContainer,
                           child: Icon(
                             _activityIcon(row['activity_type']?.toString()),
                             size: 15,
@@ -1198,14 +1204,14 @@ class _ActivitiesCard extends ConsumerWidget {
   }
 
   static IconData _activityIcon(String? type) => switch (type) {
-        'call' => Icons.phone,
-        'email' => Icons.mail_outline,
-        'meeting' => Icons.groups_outlined,
-        'whatsapp' => Icons.chat_bubble_outline,
-        'site_visit' => Icons.place_outlined,
-        'demo' => Icons.slideshow_outlined,
-        _ => Icons.task_alt,
-      };
+    'call' => Icons.phone,
+    'email' => Icons.mail_outline,
+    'meeting' => Icons.groups_outlined,
+    'whatsapp' => Icons.chat_bubble_outline,
+    'site_visit' => Icons.place_outlined,
+    'demo' => Icons.slideshow_outlined,
+    _ => Icons.task_alt,
+  };
 }
 
 /// Side-by-side on desktop, stacked on narrow screens.

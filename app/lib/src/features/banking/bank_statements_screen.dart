@@ -37,9 +37,9 @@ class BankStatementsScreen extends ConsumerWidget {
     // answer to a question nobody has asked yet.
     // `valueOrNull` rather than `.value`, which throws on an error
     // state and would take the account list down over a switch.
-    final showUpload = (ref.watch(scanSurfacesProvider).valueOrNull ??
-            const ScanSurfaces())
-        .statementsUpload;
+    final showUpload =
+        (ref.watch(scanSurfacesProvider).valueOrNull ?? const ScanSurfaces())
+            .statementsUpload;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Bank statements')),
@@ -70,7 +70,8 @@ class BankStatementsScreen extends ConsumerWidget {
                   return const EmptyState(
                     icon: Icons.account_balance_outlined,
                     title: 'No bank account yet',
-                    message: 'Add one on the chart of accounts, and its '
+                    message:
+                        'Add one on the chart of accounts, and its '
                         'statements can be brought in here.',
                   );
                 }
@@ -117,6 +118,10 @@ class _AccountTile extends StatelessWidget {
     final name = account['name']?.toString() ?? 'Bank account';
     final bank = account['bank_name']?.toString() ?? '';
     final last4 = account['account_number']?.toString() ?? '';
+    // A row carries its balance only for a role that reads the ledger
+    // (`0858`); for anybody else the subtitle says nothing of it, rather
+    // than a book balance of nought.
+    final hasBalance = account.containsKey('current_balance');
     final balance = Fmt.toDouble(account['current_balance']);
 
     return Card(
@@ -128,7 +133,7 @@ class _AccountTile extends StatelessWidget {
           [
             if (bank.isNotEmpty) bank,
             if (last4.isNotEmpty) last4,
-            'book balance ${Fmt.money(balance)}',
+            if (hasBalance) 'book balance ${Fmt.money(balance)}',
           ].join(' · '),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -142,8 +147,7 @@ class _AccountTile extends StatelessWidget {
                 key: ValueKey('bank-statement-upload-$id'),
                 icon: const Icon(Icons.upload_file_outlined, size: 18),
                 label: const Text('Upload'),
-                onPressed: () =>
-                    context.go('/reconcile?account=$id&import=1'),
+                onPressed: () => context.go('/reconcile?account=$id&import=1'),
               )
             : null,
         onTap: () => context.go('/reconcile?account=$id'),
@@ -174,7 +178,8 @@ class _Read extends ConsumerWidget {
           return const EmptyState(
             icon: Icons.description_outlined,
             title: 'Nothing read yet',
-            message: 'A statement photographed or uploaded through AI '
+            message:
+                'A statement photographed or uploaded through AI '
                 'SmartScan shows here, with what became of it.',
           );
         }

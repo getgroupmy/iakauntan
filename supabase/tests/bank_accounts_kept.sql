@@ -51,8 +51,9 @@ begin
   d.bank := public.upsert_bank_account('Maybank current', 'Maybank', 'MBBEMYKL',
     '5140-1234-5678', 'current', 'MYR', null, null, d.org);
   perform pg_temp.check_true('a bank account is set up on a bank account of the chart',
-    (select a.account_subtype::text = 'bank' and b.current_balance = 0 and b.is_default
+    (select a.account_subtype::text = 'bank' and bb.current_balance = 0 and b.is_default
        from public.bank_accounts b join public.accounts a on a.id = b.account_id
+       join public.bank_balances(d.org) bb on bb.bank_account_id = b.id
       where b.id = d.bank));
 
   -- The setup's own rule, as it was.
@@ -89,8 +90,11 @@ begin
        join public.gl_entries e on e.id = l.entry_id
        join public.accounts a on a.id = l.account_id
       where e.org_id = d.org and l.debit > 0), 'bank/500.00');
+  -- Read through `bank_balances`: since `0858` no client reads the
+  -- column itself, and the owner reads the ledger.
   perform pg_temp.check_eq('and the cached balance is what was posted',
-    (select current_balance from public.bank_accounts where id = d.bank), 500::numeric);
+    (select current_balance from public.bank_balances(d.org) where bank_account_id = d.bank),
+    500::numeric);
 
   -- Renamed through the setup, as the screen does.
   perform public.upsert_bank_account('Maybank operating', 'Maybank', 'MBBEMYKL',
