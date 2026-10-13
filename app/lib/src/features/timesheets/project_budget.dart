@@ -51,7 +51,17 @@ BudgetState budgetStateOf(Map<String, dynamic> row) {
 
 /// The sentence under a project's name.
 String describeBudget(Map<String, dynamic> row) {
-  final cost = (row['cost_to_date'] as num?) ?? 0;
+  // `0857`. A role that does not read the ledger is given the project and
+  // its budget, and nothing the ledger has against it: no cost, no
+  // variance, no percentage. Read as nought, that came out "RM0.00 spent
+  // · no budget set" -- wrong twice over about a job with a budget.
+  if (row['cost_to_date'] == null) {
+    final budget = row['budget_amount'] as num?;
+    return budget == null
+        ? 'No budget set · its cost is not shown to your role'
+        : '${Fmt.money(budget)} budgeted · its cost is not shown to your role';
+  }
+  final cost = row['cost_to_date'] as num;
   switch (budgetStateOf(row)) {
     case BudgetState.none:
       return '${Fmt.money(cost)} spent · no budget set';
@@ -89,10 +99,8 @@ String? closeBlockedBecause(Map<String, dynamic> row) {
 }
 
 /// Every project, with what it has cost.
-Future<void> showProjectBudgets(BuildContext context) => showDialog<void>(
-      context: context,
-      builder: (_) => const _BudgetDialog(),
-    );
+Future<void> showProjectBudgets(BuildContext context) =>
+    showDialog<void>(context: context, builder: (_) => const _BudgetDialog());
 
 class _BudgetDialog extends ConsumerStatefulWidget {
   const _BudgetDialog();
@@ -117,22 +125,24 @@ class _BudgetDialogState extends ConsumerState<_BudgetDialog> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(children: [
-              Expanded(
-                child: Text(
-                  'Cost is read from the ledger, so a journal posted by '
-                  'hand counts the same as a bill line.',
-                  style: Theme.of(context).textTheme.bodySmall,
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Cost is read from the ledger, so a journal posted by '
+                    'hand counts the same as a bill line.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                 ),
-              ),
-              const SizedBox(width: Space.md),
-              FilterChip(
-                key: const ValueKey('budget-include-closed'),
-                label: const Text('Closed too'),
-                selected: _includeClosed,
-                onSelected: (v) => setState(() => _includeClosed = v),
-              ),
-            ]),
+                const SizedBox(width: Space.md),
+                FilterChip(
+                  key: const ValueKey('budget-include-closed'),
+                  label: const Text('Closed too'),
+                  selected: _includeClosed,
+                  onSelected: (v) => setState(() => _includeClosed = v),
+                ),
+              ],
+            ),
             const SizedBox(height: Space.md),
             Expanded(
               child: AsyncView(
@@ -145,7 +155,8 @@ class _BudgetDialogState extends ConsumerState<_BudgetDialog> {
                     return const EmptyState(
                       icon: Icons.folder_outlined,
                       title: 'No projects',
-                      message: 'A project is what hours and costs are '
+                      message:
+                          'A project is what hours and costs are '
                           'recorded against.',
                     );
                   }
@@ -189,22 +200,28 @@ class _BudgetRow extends ConsumerWidget {
 
     return ListTile(
       key: ValueKey('budget-${row['project_id']}'),
-      title: Row(children: [
-        Expanded(
-          child: Text('${row['code']} · ${row['name']}',
-              style: const TextStyle(fontWeight: FontWeight.w600)),
-        ),
-        if (!open)
-          const Padding(
-            padding: EdgeInsets.only(left: Space.sm),
-            child: Text('closed', style: TextStyle(fontSize: 11)),
+      title: Row(
+        children: [
+          Expanded(
+            child: Text(
+              '${row['code']} · ${row['name']}',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
           ),
-      ]),
+          if (!open)
+            const Padding(
+              padding: EdgeInsets.only(left: Space.sm),
+              child: Text('closed', style: TextStyle(fontSize: 11)),
+            ),
+        ],
+      ),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(describeBudget(row),
-              style: TextStyle(fontSize: 12, color: colour)),
+          Text(
+            describeBudget(row),
+            style: TextStyle(fontSize: 12, color: colour),
+          ),
           if (state != BudgetState.none)
             Padding(
               padding: const EdgeInsets.only(top: Space.xs),
@@ -219,8 +236,7 @@ class _BudgetRow extends ConsumerWidget {
               child: Text(
                 '${Fmt.money(row['unbilled_time'] as num?)} recorded and '
                 'not invoiced',
-                style: TextStyle(
-                    fontSize: 11, color: context.colors.warning),
+                style: TextStyle(fontSize: 11, color: context.colors.warning),
               ),
             ),
         ],
@@ -235,8 +251,7 @@ class _BudgetRow extends ConsumerWidget {
     );
   }
 
-  Future<void> _toggle(
-      BuildContext context, WidgetRef ref, bool open) async {
+  Future<void> _toggle(BuildContext context, WidgetRef ref, bool open) async {
     final id = row['project_id'] as String;
     if (!open) {
       final ok = await runWithFeedback(
@@ -258,8 +273,10 @@ class _BudgetRow extends ConsumerWidget {
         context: context,
         builder: (_) => AlertDialog(
           title: const Text('Close the job?'),
-          content: Text('$blocked\n\nHours left on a closed job are '
-              'hours nobody is looking at.'),
+          content: Text(
+            '$blocked\n\nHours left on a closed job are '
+            'hours nobody is looking at.',
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
@@ -321,16 +338,16 @@ Map<String, dynamic> projectValues({
   DateTime? start,
   DateTime? end,
 }) => <String, dynamic>{
-      'code': code.trim(),
-      'name': name.trim(),
-      'contact_id': contactId,
-      // Cleared rather than left out: a budget somebody removed on
-      // purpose has to come off the record, or the report goes on
-      // measuring against a number nobody stands behind.
-      'budget_amount': budget,
-      'start_date': start == null ? null : Fmt.iso(start),
-      'end_date': end == null ? null : Fmt.iso(end),
-    };
+  'code': code.trim(),
+  'name': name.trim(),
+  'contact_id': contactId,
+  // Cleared rather than left out: a budget somebody removed on
+  // purpose has to come off the record, or the report goes on
+  // measuring against a number nobody stands behind.
+  'budget_amount': budget,
+  'start_date': start == null ? null : Fmt.iso(start),
+  'end_date': end == null ? null : Fmt.iso(end),
+};
 
 /// Create or amend a project.
 Future<bool> showProjectEditor(
@@ -354,13 +371,16 @@ class _ProjectEditor extends ConsumerStatefulWidget {
 
 class _ProjectEditorState extends ConsumerState<_ProjectEditor> {
   late final TextEditingController _code = TextEditingController(
-      text: widget.project?['code']?.toString() ?? '');
+    text: widget.project?['code']?.toString() ?? '',
+  );
   late final TextEditingController _name = TextEditingController(
-      text: widget.project?['name']?.toString() ?? '');
+    text: widget.project?['name']?.toString() ?? '',
+  );
   late final TextEditingController _budget = TextEditingController(
-      text: widget.project?['budget_amount'] == null
-          ? ''
-          : '${widget.project!['budget_amount']}');
+    text: widget.project?['budget_amount'] == null
+        ? ''
+        : '${widget.project!['budget_amount']}',
+  );
   late String? _contactId = widget.project?['contact_id'] as String?;
   late DateTime? _start = Fmt.parseDate(widget.project?['start_date']);
   late DateTime? _end = Fmt.parseDate(widget.project?['end_date']);
@@ -382,7 +402,8 @@ class _ProjectEditorState extends ConsumerState<_ProjectEditor> {
 
   @override
   Widget build(BuildContext context) {
-    final customers = ref
+    final customers =
+        ref
             .watch(contactsProvider((type: 'customer', search: '')))
             .valueOrNull ??
         const <Contact>[];
@@ -403,42 +424,45 @@ class _ProjectEditorState extends ConsumerState<_ProjectEditor> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(children: [
-                SizedBox(
-                  width: 140,
-                  child: TextField(
-                    key: const ValueKey('project-code'),
-                    controller: _code,
-                    enabled: !_saving && widget.project == null,
-                    onChanged: (_) => setState(() {}),
-                    decoration: const InputDecoration(
-                      labelText: 'Code',
-                      // The ledger carries the code, not the id, so
-                      // renaming a project must not restate last year's
-                      // job costing — which is `0088`'s own reasoning
-                      // for using codes on the lines.
-                      helperText: 'On the ledger lines',
+              Row(
+                children: [
+                  SizedBox(
+                    width: 140,
+                    child: TextField(
+                      key: const ValueKey('project-code'),
+                      controller: _code,
+                      enabled: !_saving && widget.project == null,
+                      onChanged: (_) => setState(() {}),
+                      decoration: const InputDecoration(
+                        labelText: 'Code',
+                        // The ledger carries the code, not the id, so
+                        // renaming a project must not restate last year's
+                        // job costing — which is `0088`'s own reasoning
+                        // for using codes on the lines.
+                        helperText: 'On the ledger lines',
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: Space.md),
-                Expanded(
-                  child: TextField(
-                    key: const ValueKey('project-name'),
-                    controller: _name,
-                    enabled: !_saving,
-                    onChanged: (_) => setState(() {}),
-                    decoration: const InputDecoration(labelText: 'Name'),
+                  const SizedBox(width: Space.md),
+                  Expanded(
+                    child: TextField(
+                      key: const ValueKey('project-name'),
+                      controller: _name,
+                      enabled: !_saving,
+                      onChanged: (_) => setState(() {}),
+                      decoration: const InputDecoration(labelText: 'Name'),
+                    ),
                   ),
-                ),
-              ]),
+                ],
+              ),
               const SizedBox(height: Space.md),
               SearchablePicker<String>(
                 key: const ValueKey('project-customer'),
                 options: contactPickerOptions(customers),
                 value: _contactId,
                 label: 'Customer',
-                helperText: 'Time on a project with no customer cannot '
+                helperText:
+                    'Time on a project with no customer cannot '
                     'be invoiced',
                 hint: 'Type a name or a code',
                 // Internal work is a real answer here, which is why the
@@ -462,35 +486,39 @@ class _ProjectEditorState extends ConsumerState<_ProjectEditor> {
                 onChanged: (_) => setState(() {}),
                 decoration: const InputDecoration(
                   labelText: 'Budget',
-                  helperText: 'What the job is expected to cost. Left '
+                  helperText:
+                      'What the job is expected to cost. Left '
                       'empty, nothing is measured against.',
                 ),
               ),
               const SizedBox(height: Space.md),
-              Row(children: [
-                Expanded(
-                  child: _ProjectDate(
-                    label: 'Starts',
-                    value: _start,
-                    enabled: !_saving,
-                    onChanged: (d) => setState(() => _start = d),
+              Row(
+                children: [
+                  Expanded(
+                    child: _ProjectDate(
+                      label: 'Starts',
+                      value: _start,
+                      enabled: !_saving,
+                      onChanged: (d) => setState(() => _start = d),
+                    ),
                   ),
-                ),
-                const SizedBox(width: Space.md),
-                Expanded(
-                  child: _ProjectDate(
-                    label: 'Ends',
-                    value: _end,
-                    enabled: !_saving,
-                    onChanged: (d) => setState(() => _end = d),
+                  const SizedBox(width: Space.md),
+                  Expanded(
+                    child: _ProjectDate(
+                      label: 'Ends',
+                      value: _end,
+                      enabled: !_saving,
+                      onChanged: (d) => setState(() => _end = d),
+                    ),
                   ),
-                ),
-              ]),
+                ],
+              ),
               if (blocked != null) ...[
                 const SizedBox(height: Space.md),
-                Text(blocked,
-                    style: TextStyle(
-                        fontSize: 12, color: context.colors.danger)),
+                Text(
+                  blocked,
+                  style: TextStyle(fontSize: 12, color: context.colors.danger),
+                ),
               ],
             ],
           ),
@@ -508,7 +536,8 @@ class _ProjectEditorState extends ConsumerState<_ProjectEditor> {
               ? const SizedBox(
                   height: 16,
                   width: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2))
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
               : const Text('Save'),
         ),
       ],
@@ -519,7 +548,9 @@ class _ProjectEditorState extends ConsumerState<_ProjectEditor> {
     setState(() => _saving = true);
     final ok = await runWithFeedback(
       context,
-      action: () => ref.read(repoProvider)!.saveProject(
+      action: () => ref
+          .read(repoProvider)!
+          .saveProject(
             projectValues(
               code: _code.text,
               name: _name.text,
@@ -556,33 +587,35 @@ class _ProjectDate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => InputDecorator(
-        decoration: InputDecoration(labelText: label),
-        child: Row(children: [
-          Expanded(
-            child: InkWell(
-              onTap: enabled
-                  ? () async {
-                      final now = DateTime.now();
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: value ?? now,
-                        firstDate: DateTime(now.year - 10),
-                        lastDate: DateTime(now.year + 20),
-                      );
-                      if (picked != null) onChanged(picked);
-                    }
-                  : null,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: Space.sm),
-                child: Text(value == null ? '—' : Fmt.date(value)),
-              ),
+    decoration: InputDecoration(labelText: label),
+    child: Row(
+      children: [
+        Expanded(
+          child: InkWell(
+            onTap: enabled
+                ? () async {
+                    final now = DateTime.now();
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: value ?? now,
+                      firstDate: DateTime(now.year - 10),
+                      lastDate: DateTime(now.year + 20),
+                    );
+                    if (picked != null) onChanged(picked);
+                  }
+                : null,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: Space.sm),
+              child: Text(value == null ? '—' : Fmt.date(value)),
             ),
           ),
-          if (value != null && enabled)
-            IconButton(
-              icon: const Icon(Icons.clear, size: 16),
-              onPressed: () => onChanged(null),
-            ),
-        ]),
-      );
+        ),
+        if (value != null && enabled)
+          IconButton(
+            icon: const Icon(Icons.clear, size: 16),
+            onPressed: () => onChanged(null),
+          ),
+      ],
+    ),
+  );
 }

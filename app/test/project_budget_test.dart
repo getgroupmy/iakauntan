@@ -2,16 +2,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:iakauntan/src/features/timesheets/project_budget.dart';
 
 Map<String, dynamic> job({
-  num? cost,
+  num? cost = 0,
   num? variance,
   num? percent,
   num unbilled = 0,
+  num? budget,
 }) => <String, dynamic>{
-      'cost_to_date': cost,
-      'variance': variance,
-      'percent_spent': percent,
-      'unbilled_time': unbilled,
-    };
+  'cost_to_date': cost,
+  'variance': variance,
+  'percent_spent': percent,
+  'unbilled_time': unbilled,
+  'budget_amount': budget,
+};
 
 void main() {
   group('where a job stands', () {
@@ -48,6 +50,33 @@ void main() {
     });
   });
 
+  /// `0857`. Somebody who does not read the ledger is given the project
+  /// and its budget, and its cost to date, variance and percentage come
+  /// back empty.
+  group('a role that does not read the ledger', () {
+    test('is told the budget, and that the cost is not theirs to see', () {
+      final j = job(cost: null, budget: 10000);
+      expect(describeBudget(j), startsWith('RM 10,000.00 budgeted'));
+      expect(describeBudget(j), contains('not shown to your role'));
+      expect(describeBudget(j), isNot(contains('spent')));
+      expect(budgetStateOf(j), BudgetState.none);
+    });
+
+    test('and a job with no budget says so, still without a cost', () {
+      final j = job(cost: null);
+      expect(describeBudget(j), startsWith('No budget set'));
+      expect(describeBudget(j), isNot(contains('RM 0.00')));
+    });
+
+    test(
+      'while nothing spent, for a reader of the ledger, is still nought',
+      () {
+        // The control: an empty cost is not the same as a cost of nought.
+        expect(describeBudget(job(cost: 0)), 'RM 0.00 spent · no budget set');
+      },
+    );
+  });
+
   group('whether the job can be closed', () {
     test('nothing outstanding, nothing in the way', () {
       expect(closeBlockedBecause(job()), isNull);
@@ -65,12 +94,22 @@ void main() {
     test('a code and a name', () {
       expect(
         projectBlockedBecause(
-            code: '', name: 'Fit-out', budget: null, start: null, end: null),
+          code: '',
+          name: 'Fit-out',
+          budget: null,
+          start: null,
+          end: null,
+        ),
         contains('code'),
       );
       expect(
         projectBlockedBecause(
-            code: 'JOB-1', name: ' ', budget: null, start: null, end: null),
+          code: 'JOB-1',
+          name: ' ',
+          budget: null,
+          start: null,
+          end: null,
+        ),
         contains('name'),
       );
     });
@@ -78,12 +117,22 @@ void main() {
     test('a budget that is not negative', () {
       expect(
         projectBlockedBecause(
-            code: 'J', name: 'N', budget: -1, start: null, end: null),
+          code: 'J',
+          name: 'N',
+          budget: -1,
+          start: null,
+          end: null,
+        ),
         contains('not negative'),
       );
       expect(
         projectBlockedBecause(
-            code: 'J', name: 'N', budget: 0, start: null, end: null),
+          code: 'J',
+          name: 'N',
+          budget: 0,
+          start: null,
+          end: null,
+        ),
         isNull,
       );
     });

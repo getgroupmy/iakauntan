@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17976
+17993
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1747,3 +1747,11 @@
 # journal and nothing retired or of another company, the owner's other
 # company its own figure, anon given neither). Measured: `all SQL
 # assertions passed (440 files, 17976 assertions executed)`.
+#
+# 17993 (13 October 2026, `0857`): +17 from `budget_actuals_need_ledger.sql`
+# (the salesman holding the accounting module refused the budget against
+# actual and the budget built from actuals, which wrote nothing, and
+# given every project with its cost, revenue, variance and percentage
+# blank; the clerk given all of it to the sen; a stranger refused in the
+# old words). Measured: `all SQL assertions passed (441 files, 17993
+# assertions executed)`.

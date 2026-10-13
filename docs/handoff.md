@@ -3286,6 +3286,30 @@ page and renumbering would quietly break the reference.
     reads `code` and still updates the table, and `anon` reads none of
     it. The same run counted `6682 Dart tests ran (floor 6678)`, and the
     floor is 6682 now.
+124. ~~A salesman reads the ledger's actuals beside a budget.~~ **Raised
+    and answered 13 October: actuals need ledger access; for the project
+    budget, asked again, answer everyone and blank the actuals. Built in
+    `0857`.** `report_budget_vs_actual` and `build_budget_from_actual`
+    (`0274`) asked the accounting module, and `app.module_access` answers
+    'write' for every member without a custom access type (`0232`), a
+    salesman included. Measured as `sales`: `can_read_ledger` false,
+    `gl_lines` 0 rows, and the budget report gave 5100 Purchases with an
+    actual of 4,321.09. The two budget functions keep their module check
+    and add "Insufficient privileges to read the ledger".
+    `report_project_budget` (`0389`) is also the projects' front door --
+    the Timesheets panel lists, makes and closes them from it -- so it
+    still answers every member with every project, budget, dates, status
+    and unbilled time, and cost to date, revenue to date, variance and
+    percent spent come back empty unless `can_read_ledger`. Budgets
+    themselves stay with the module. **The screens:** the budget panel
+    says why instead of showing the refusal and offers no "Fill it from
+    last year"; the project panel reads an empty cost as withheld, not
+    as nought ("RM 10,000.00 budgeted · its cost is not shown to your
+    role", where it would have said "RM 0.00 spent · no budget set").
+    New `budget_actuals_need_ledger.sql` (17 assertions), added to
+    `ci.yml`, and `budgets_screen_test.dart`. Swept 8 / 8 in SQL, and
+    2 / 2 and 2 / 2 in Dart.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -3578,6 +3602,7 @@ function:
 | `app.audit_redact` (restated) | `0854` | 7 / 7 | -- | `export_masks_gateway_keys.sql` (new in `0854`; the owner refused the gateway keys directly, and the export masks the signature key and the API key while still carrying the collection, mode and gateway; each new word masked under a prefix and in the plural; a document's signature and the secretary still readable) |
 | 25 report functions and `app.group_orgs` (guard only) | `0855` | 24 / 30 | 6 (`group_orgs` asked of the company the report is asked from, and five refusals masked in the same words by what they are built on; said in the file) | `ledger_reports_need_ledger.sql` (new in `0855`; a salesman and an employee given nothing by the nine SQL reports and refused by the seventeen others, the three other roles by the ledger itself, a clerk and an auditor answered by every one; a frozen filing's export; a project code; the group shown to somebody who sells for the sister, and the sister's line kept out of the intercompany report) |
 | `account_balances` (and the column grant on `accounts`) | `0856` | 5 / 5, the grant by hand | -- | `account_balance_withheld.sql` (new in `0856`; the salesman refused the column and given nothing by the function, a select of every column refused to the clerk too while the app's own nine are read, the clerk given both sides of the journal and no retired account or other company's, the owner's other company its own figure, anon given neither) |
+| `report_budget_vs_actual`, `build_budget_from_actual`, `report_project_budget` | `0857` | 8 / 8 | -- | `budget_actuals_need_ledger.sql` (new in `0857`; the salesman with the accounting module refused the variance and the build, which wrote nothing, and given every project with its cost, revenue, variance and percentage blank and its unbilled time kept; the clerk given all of it to the sen; a stranger refused in the old words) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |

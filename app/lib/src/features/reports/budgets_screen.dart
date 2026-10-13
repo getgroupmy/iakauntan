@@ -99,7 +99,8 @@ class _BudgetsScreenState extends ConsumerState<BudgetsScreen> {
             return const EmptyState(
               icon: Icons.flag_outlined,
               title: 'No budget yet',
-              message: 'Every management account has three columns: what '
+              message:
+                  'Every management account has three columns: what '
                   'happened, what was supposed to, and the difference. '
                   'Set the second one here and the third comes free.',
             );
@@ -148,18 +149,18 @@ class _BudgetsScreenState extends ConsumerState<BudgetsScreen> {
           () => ref.read(repoProvider)!.approveBudget(id),
           'Agreed',
         ),
-        _ => _run(
-          () => ref.read(repoProvider)!.archiveBudget(id),
-          'Put away',
-        ),
+        _ => _run(() => ref.read(repoProvider)!.archiveBudget(id), 'Put away'),
       },
       itemBuilder: (_) => [
         if (status == 'draft') ...[
           const PopupMenuItem(value: 'edit', child: Text('Change the numbers')),
-          const PopupMenuItem(
-            value: 'fill',
-            child: Text('Fill it from last year'),
-          ),
+          // `0857`: filling it copies the ledger's actuals, which only a
+          // role that reads the ledger is given.
+          if (ref.watch(canReadLedgerProvider))
+            const PopupMenuItem(
+              value: 'fill',
+              child: Text('Fill it from last year'),
+            ),
           const PopupMenuItem(value: 'approve', child: Text('Agree it')),
         ],
         if (status != 'archived')
@@ -169,6 +170,20 @@ class _BudgetsScreenState extends ConsumerState<BudgetsScreen> {
   }
 
   Widget _variance(String id) {
+    // `0857`. The actual beside the budget is the ledger's, and the
+    // database refuses it to a role that does not read the ledger; asked
+    // anyway, the panel would be an error where an explanation belongs.
+    if (!ref.watch(canReadLedgerProvider)) {
+      return Container(
+        key: const ValueKey('budget-actuals-withheld'),
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        padding: const EdgeInsets.all(Space.md),
+        child: const Text(
+          'What actually happened beside this budget comes from the '
+          'ledger, which your role in this company does not read.',
+        ),
+      );
+    }
     final report = ref.watch(
       budgetVsActualProvider((budget: id, from: _from, to: _to)),
     );
@@ -255,8 +270,7 @@ class _BudgetsScreenState extends ConsumerState<BudgetsScreen> {
               ListTile(
                 dense: true,
                 title: Text(r.label),
-                onTap: () =>
-                    Navigator.of(ctx).pop((from: r.from, to: r.to)),
+                onTap: () => Navigator.of(ctx).pop((from: r.from, to: r.to)),
               ),
             const Divider(height: 1),
             for (var p = 1; p <= 12; p++)
@@ -325,7 +339,9 @@ class _BudgetsScreenState extends ConsumerState<BudgetsScreen> {
                 DropdownButtonFormField<String>(
                   isExpanded: true,
                   initialValue: year,
-                  decoration: const InputDecoration(labelText: 'From which year'),
+                  decoration: const InputDecoration(
+                    labelText: 'From which year',
+                  ),
                   items: [
                     for (final y in years)
                       DropdownMenuItem(value: y.id, child: Text(y.name)),
@@ -504,10 +520,7 @@ class _BudgetGrid extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SectionHeader(
-              '${budget['name']}',
-              subtitle: budgetSummary(budget),
-            ),
+            SectionHeader('${budget['name']}', subtitle: budgetSummary(budget)),
             const Divider(height: 1),
             Flexible(
               child: AsyncView<List<Map<String, dynamic>>>(
