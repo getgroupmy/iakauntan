@@ -3123,7 +3123,11 @@ page and renumbering would quietly break the reference.
     mutant; swept by hand, a verb at a time: insert, update or delete
     granted back with the policy, its own assertion fails; with none,
     the file passes.
-    **Still to read back.**
+    **Applied, and read back** (13 October, read-only, after run
+    38331517992 on `66f8516` had applied the migrations): recorded;
+    `authenticated` and `anon` hold no insert, update or delete on
+    `ticket_comments`, `authenticated` still reads it, and its one policy
+    left is `ticket_comments_select`. The eleven comments stand.
 119. ~~A received email can be rewritten -- its body, sender and date --
     by anybody who may mark it read.~~ **Raised and answered 13 October:
     only `read_at` is writable. Built in `0852`.** Mail is written by
