@@ -30,17 +30,19 @@ import 'package:iakauntan/src/features/contacts/contact_editor.dart';
 /// that fails shut is an annoyance somebody reports within the hour; one
 /// that fails open is found when an invoice cannot be collected.
 void main() {
-  Contact existing({double creditLimit = 0}) => Contact(
-    id: 'c1',
-    code: 'C-0001',
-    name: 'Rantaian Maju Sdn Bhd',
-    contactType: 'customer',
-    creditLimit: creditLimit,
-  );
+  Contact existing({double creditLimit = 0, bool creditHold = false}) =>
+      Contact(
+        id: 'c1',
+        code: 'C-0001',
+        name: 'Rantaian Maju Sdn Bhd',
+        contactType: 'customer',
+        creditLimit: creditLimit,
+        creditHold: creditHold,
+      );
 
   late _FakeRepo repo;
 
-  Widget wrap() => ProviderScope(
+  Widget wrap({String role = 'owner'}) => ProviderScope(
     overrides: [
       repoProvider.overrideWithValue(repo),
       currentOrgProvider.overrideWith(
@@ -50,7 +52,7 @@ void main() {
           slug: 'rantaian',
         ),
       ),
-      memberRoleProvider.overrideWith((ref) async => 'owner'),
+      memberRoleProvider.overrideWith((ref) async => role),
     ],
     child: MaterialApp(
       theme: AppTheme.light(),
@@ -58,12 +60,19 @@ void main() {
     ),
   );
 
-  Future<void> open(WidgetTester tester, {double creditLimit = 0}) async {
+  Future<void> open(
+    WidgetTester tester, {
+    double creditLimit = 0,
+    bool creditHold = false,
+    String role = 'owner',
+  }) async {
     tester.view.devicePixelRatio = 1.0;
     tester.view.physicalSize = const Size(1400, 2400);
     addTearDown(tester.view.reset);
-    repo = _FakeRepo(existing(creditLimit: creditLimit));
-    await tester.pumpWidget(wrap());
+    repo = _FakeRepo(
+      existing(creditLimit: creditLimit, creditHold: creditHold),
+    );
+    await tester.pumpWidget(wrap(role: role));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 600));
   }
@@ -191,6 +200,93 @@ void main() {
       await open(tester);
 
       expect(find.text('Zero means no limit'), findsOneWidget);
+    });
+  });
+
+  // `0867`: anybody who may write tightens a customer's credit; only
+  // whoever may post loosens it.
+  group('loosening is the owner\'s, an admin\'s or an accountant\'s', () {
+    SwitchListTile hold(WidgetTester tester) => tester.widget(
+      find.widgetWithText(SwitchListTile, 'On credit hold'),
+    );
+
+    testWidgets('a salesman cannot raise a limit', (tester) async {
+      await open(tester, creditLimit: 5000, role: 'sales');
+      await enterAndSave(tester, '9000');
+      expect(repo.saved, isNull);
+      expect(find.textContaining('can raise or remove a limit'), findsOneWidget);
+    });
+
+    testWidgets('nor take it away', (tester) async {
+      await open(tester, creditLimit: 5000, role: 'sales');
+      await enterAndSave(tester, '0');
+      expect(repo.saved, isNull);
+    });
+
+    testWidgets('but lowers it', (tester) async {
+      await open(tester, creditLimit: 5000, role: 'sales');
+      await enterAndSave(tester, '3000');
+      expect(repo.saved?.creditLimit, 3000);
+    });
+
+    testWidgets('and sets one where there was none', (tester) async {
+      await open(tester, role: 'sales');
+      await enterAndSave(tester, '3000');
+      expect(repo.saved?.creditLimit, 3000);
+    });
+
+    testWidgets('and keeps the one there is while editing the rest', (
+      tester,
+    ) async {
+      await open(tester, creditLimit: 5000, role: 'sales');
+      await enterAndSave(tester, '5000');
+      expect(repo.saved?.creditLimit, 5000);
+    });
+
+    testWidgets('a clerk who may not post cannot raise one either', (
+      tester,
+    ) async {
+      await open(tester, creditLimit: 5000, role: 'accounts_clerk');
+      await enterAndSave(tester, '9000');
+      expect(repo.saved, isNull);
+    });
+
+    testWidgets('an accountant raises it', (tester) async {
+      await open(tester, creditLimit: 5000, role: 'accountant');
+      await enterAndSave(tester, '9000');
+      expect(repo.saved?.creditLimit, 9000);
+    });
+
+    testWidgets('a salesman cannot take a hold off, and is told why', (
+      tester,
+    ) async {
+      await open(tester, creditHold: true, role: 'sales');
+      expect(hold(tester).value, isTrue);
+      expect(hold(tester).onChanged, isNull);
+      expect(
+        find.text(
+          'Only the owner, an admin or an accountant can take a hold off.',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('but puts a customer on hold', (tester) async {
+      await open(tester, role: 'sales');
+      expect(hold(tester).onChanged, isNotNull);
+      await tester.tap(find.text('On credit hold'));
+      await tester.pump();
+      await enterAndSave(tester, '0');
+      expect(repo.saved?.creditHold, isTrue);
+    });
+
+    testWidgets('and an accountant takes one off', (tester) async {
+      await open(tester, creditHold: true, role: 'accountant');
+      expect(hold(tester).onChanged, isNotNull);
+      await tester.tap(find.text('On credit hold'));
+      await tester.pump();
+      await enterAndSave(tester, '0');
+      expect(repo.saved?.creditHold, isFalse);
     });
   });
 }

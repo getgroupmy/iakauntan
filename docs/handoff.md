@@ -3639,6 +3639,33 @@ page and renumbering would quietly break the reference.
     the function -- `Repo` is never built over a mock HTTP client here.
     What holds the first is the SQL test's refusal of `select *`.
     **Still to read back.**
+135. ~~The cashier a credit hold is there to stop could take it off.~~
+    **Raised and answered 13 October** ("Anyone tightens, posters
+    loosen"). `0362` made a hold refuse an invoice whatever the credit
+    control mode -- "a hold is a person's instruction" -- and `0467`
+    refuses the part of a till sale put on account. Both `credit_hold`
+    and `credit_limit` were `can_write`. Measured locally as a `sales`
+    member (writes, uses the till, does not post): a sale on account to a
+    held customer was refused; he took the hold off and set the limit to
+    1,000,000 himself; the same sale went through. Production: 4
+    customers with a limit in 1 company, with 1 writer there who does not
+    post; none on hold; no tender on account. `0867`: a trigger -- NOT
+    definer, `0822`'s shape -- refuses a client's statement that takes a
+    hold off, raises a limit or takes one away (nought is no limit; both
+    columns are NOT NULL) unless `can_post`. Anybody who writes still
+    puts a customer on hold, lowers a limit or sets one where there was
+    none; an insert can only arrive tighter than no limit, so it and
+    `import_contacts` are not asked. In the app the contact editor
+    remembers what the contact was saved with: for a member who may not
+    post the hold switch cannot be turned off once saved on, and says
+    why, and the limit's validator refuses a raise or a removal. New
+    `credit_terms_loosened.sql` (9 assertions), which sells at the till
+    end to end. Swept 10 / 10 in SQL and 12 / 12 in Dart, each with a
+    control. **Caught by the sweep:** the first trigger read both
+    columns through `coalesce`, and both are NOT NULL -- a mutant
+    dropping one was killed only by the column's own constraint, "for the
+    wrong reason". The coalesces and the "none" assertion went.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

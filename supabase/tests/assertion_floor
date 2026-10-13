@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18129
+18138
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1833,4 +1833,14 @@
 # them and the report reads the same, and is given nothing of another
 # company; the owner of two is given each company's own; anon calls and
 # reads nothing). Measured: `all SQL assertions passed (450 files, 18129
+# assertions executed)`.
+#
+# 18129 -> 18138, 13 October: 0867's credit_terms_loosened.sql (9: the
+# cashier, who writes and sells at the till and does not post, cannot
+# take a customer off hold -- so the sale on account is still refused --
+# nor raise the limit nor take it away, and still lowers a limit, sets
+# one where there was none, puts somebody on hold and edits the rest;
+# the clerk cannot take a hold off either; the accountant takes one off,
+# raises one limit and removes another, and the cashier then sells on
+# account). Measured: `all SQL assertions passed (451 files, 18138
 # assertions executed)`.

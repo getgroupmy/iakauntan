@@ -115,6 +115,10 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
   String? _priceLevelId;
   Map<String, dynamic> _customFields = const {};
   bool _creditHold = false;
+  // What the contact was saved with, which a member who may not post
+  // may tighten and not loosen (`0867`).
+  bool _savedCreditHold = false;
+  double _savedCreditLimit = 0;
   String? _receivableAccountId;
   String? _payableAccountId;
   String? _linkedOrgId;
@@ -334,6 +338,8 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
         _c('postcode').text = contact.postcode ?? '';
         _c('creditLimit').text = contact.creditLimit.toStringAsFixed(2);
         _creditHold = contact.creditHold;
+        _savedCreditHold = contact.creditHold;
+        _savedCreditLimit = contact.creditLimit;
         _receivableAccountId = contact.receivableAccountId;
         _payableAccountId = contact.payableAccountId;
         _contactType = contact.contactType;
@@ -582,6 +588,19 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
     final value = Fmt.typedNumber(raw);
     if (value == null) return 'Enter an amount, or leave it empty for none.';
     if (value < 0) return 'A credit limit cannot be below zero.';
+    return null;
+  }
+
+  /// Whether [typed] loosens the limit the contact was saved with --
+  /// raises it, or takes it away (nought is no limit) -- which `0867`
+  /// leaves to a member who may post.
+  String? _limitLoosened(String typed) {
+    final value = Fmt.typedNumber(typed) ?? 0;
+    if (_savedCreditLimit > 0 &&
+        (value <= 0 || value > _savedCreditLimit)) {
+      return 'Only the owner, an admin or an accountant can raise or '
+          'remove a limit.';
+    }
     return null;
   }
 
@@ -1232,7 +1251,11 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                         keyboardType: const TextInputType.numberWithOptions(
                           decimal: true,
                         ),
-                        validator: (v) => _creditLimitProblem(v ?? ''),
+                        validator: (v) =>
+                            _creditLimitProblem(v ?? '') ??
+                            (ref.read(canPostProvider)
+                                ? null
+                                : _limitLoosened(v ?? '')),
                         autovalidateMode: AutovalidateMode.onUserInteraction,
                         decoration: const InputDecoration(
                           labelText: 'Credit limit',
@@ -1250,11 +1273,21 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                         SwitchListTile(
                           contentPadding: EdgeInsets.zero,
                           value: _creditHold,
-                          onChanged: (v) => setState(() => _creditHold = v),
+                          // Anybody may put a customer on hold; taking a
+                          // saved hold off is the owner's, an admin's or
+                          // an accountant's (`0867`).
+                          onChanged:
+                              _savedCreditHold && !ref.watch(canPostProvider)
+                              ? null
+                              : (v) => setState(() => _creditHold = v),
                           title: const Text('On credit hold'),
-                          subtitle: const Text(
-                            'Refuses a new invoice until it is taken off. '
-                            'Credit notes and receipts still go through.',
+                          subtitle: Text(
+                            _savedCreditHold && !ref.watch(canPostProvider)
+                                ? 'Only the owner, an admin or an '
+                                      'accountant can take a hold off.'
+                                : 'Refuses a new invoice until it is taken '
+                                      'off. Credit notes and receipts still '
+                                      'go through.',
                           ),
                         ),
                       const SizedBox(height: 14),
