@@ -3698,7 +3698,12 @@ page and renumbering would quietly break the reference.
     tolerance, and nothing had edited another setting while the
     tolerance was empty -- the one case where `old ... is not null`
     matters, `new > old` being null otherwise. Both are asserted.
-    **Still to read back.**
+    **Applied, and read back** (13 October, read-only, after run
+    38396698199 on `92b83ee` had applied the migrations):
+    `app.drawer_tolerance_is_the_managers` is the body this branch
+    builds, `47e15277`, not a definer, on `BEFORE DELETE OR UPDATE ON
+    public.pos_settings`. The same run counted `6759 Dart tests ran
+    (floor 6759)`; nothing in it touched the app, and the floor stays.
 137. ~~A line manager read each report's whole employee record.~~
     **Raised and answered 13 October** ("Managers see the person, not
     the record"). `0038` let HR and payroll, the employee and "a manager
