@@ -3891,7 +3891,11 @@ page and renumbering would quietly break the reference.
     done (2 more assertions: she is refused the stock on hand, a View
     Only member has the forty at 2.50). By hand: `stock_on_hand` put
     back is caught by its refusal, `trace_lot` put back by the list.
-    **Still to read back.**
+    **Applied, and read back** (13 October, read-only, after run
+    38418620212 on `29b1a57` had applied the migrations): all nine are
+    definers that ask `app.is_staff_member`, and their bodies, name by
+    name, hash to `4d1872f1` there as here. The same run counted `6767
+    Dart tests ran (floor 6767)`; nothing in it touched the app.
 143. The last domain of item 141. Measured locally after `0874` as an
     `employee` with no access type: `org_team` gave her the member list,
     `next_document_number` advanced the invoice sequence for her to
