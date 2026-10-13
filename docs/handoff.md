@@ -3920,7 +3920,13 @@ page and renumbering would quietly break the reference.
     control; **caught by the sweep:** nothing asserted that a stranger
     takes no claim number, so one is now. By hand: `corp_register_of_members` put back is caught
     by the list.
-    **Still to read back.**
+    **Applied, and read back** (13 October, read-only, after run
+    38421919556 on `b672de2` had applied the migrations): the other 20
+    are definers asking `app.is_staff_member` or, for `attachments_of`,
+    `can_read_attachment`, their bodies hashing name by name to
+    `04e5aa99` there as here; `next_document_number` is `0875`'s text,
+    `907eecee`. The same run counted `6767 Dart tests ran (floor
+    6767)`; nothing in it touched the app.
 144. ~~The dashboard still gave an employee the company's figures.~~
     Found after `0875`, by reading what the dashboard asks: the check
     that drove `0873`-`0875` looked for definers that ask
