@@ -3074,6 +3074,26 @@ page and renumbering would quietly break the reference.
     equivalent. The revoke swept by hand: delete granted back and the
     policy restored, the line assertion fails; restored, it passes.
     **Still to read back.**
+117. ~~A posted import can be reopened and rolled back, deleting its
+    journals from the ledger.~~ **Raised and answered 13 October:
+    posted and rolled back are final. Built in `0850`.**
+    `rollback_import_batch` (`0610`) refuses a posted batch -- it has
+    reached the ledger and is reversed with a journal -- but the status
+    was the only thing in the way, and `finish_import_batch` set any
+    status without asking what the batch already was, and an
+    administrator may write the table. Measured as the owner with the
+    role `authenticated`, on a posted import that had written a
+    RM50,000 opening-balance journal: finished again as `failed`, then
+    rolled back -- the posted journal and both its lines deleted from
+    the ledger, and the imported customer; set back to `staging` by
+    hand, the same. Now `an_import_is_finished_once` refuses moving a
+    batch out of `posted` or `rolled_back`, whoever asks, and a client's
+    own change of status at all; a label or note is still editable. NOT
+    security definer. Nothing in the app or the edge functions calls
+    the import functions yet; production held no import batch. New
+    `import_batch_final.sql`, added to `ci.yml`. Swept 6 / 7; the
+    survivor, the depth clause, is equivalent.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -3359,6 +3379,7 @@ function:
 | `app.minutes_are_booked_before_posting` | `0847` | 6 / 7 | 1 (the depth clause: confirming and posting are definers; said in the file) | `operation_minutes_booked.sql` (new in `0847`; a posted order's minutes refused rebooking and its operation refused deleting; an operation refused adding and its planned minutes refused cutting; minutes booked before posting and costed, twice; the owner at the top passes) |
 | `app.evidence_stays_as_filed`, `app.an_evidence_file_stays` | `0848` | 17 / 19 | 2 (the depth clauses: nothing writes either table from inside a trigger as a client; said in the file) | `evidence_stays_filed.sql` (new in `0848`; a posted invoice's page refused repointing, moving and any other change, a no-op passing; its file refused deleting, renaming, moving bucket, a new version and new bytes, a timestamp passing; a capture refiled from its placeholder, a file nothing was built from deleted, and another bucket's same-named file deleted, as before; the owner at the top passes) |
 | `app.a_billed_document_stays` | `0849` | 6 / 7 | 1 (the depth clause: a document deleted from inside a trigger is a cascade, run as the owner; said in the file) | `received_einvoice_kept.sql` (new in `0849`; a line of a supplier's document refused deleting on its own; the document behind a posted bill and a draft one refused deleting; a document whose bill was deleted, and one nothing was built from, deleted as before, lines and all; the owner at the top passes. The lines' revoke swept by hand) |
+| `app.an_import_is_finished_once` | `0850` | 6 / 7 | 1 (the depth clause: every import function is a definer; said in the file) | `import_batch_final.sql` (new in `0850`; a posted batch refused finishing again as failed or reconciling and reopening by hand, so still not rolled back, its journal and customer standing; a rolled-back one refused finishing again; a staging batch refused a status by hand; a label still edited, and a run still finished, failed and rolled back; the owner at the top sets a status but does not reopen a posted import) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |

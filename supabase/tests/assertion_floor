@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17822
+17834
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1685,3 +1685,13 @@
 # nothing was built from, deleted as before, lines and all; the owner at
 # the top passes). Measured: `all SQL assertions passed (433 files,
 # 17822 assertions executed)`.
+#
+# 13 October 2026, `0850`: 17822 -> 17834. Twelve in
+# `import_batch_final.sql` (new: a posted import refused finishing again
+# as failed or reconciling and reopening by hand, as the owner with the
+# role `authenticated`, so still not rolled back, its journal and
+# customer standing; a rolled-back one refused finishing again; a
+# staging batch refused a status by hand; a label still edited, and a
+# run still finished, failed and rolled back; the owner at the top sets
+# a status but does not reopen a posted import). Measured: `all SQL
+# assertions passed (434 files, 17834 assertions executed)`.
