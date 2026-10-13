@@ -3309,7 +3309,13 @@ page and renumbering would quietly break the reference.
     New `budget_actuals_need_ledger.sql` (17 assertions), added to
     `ci.yml`, and `budgets_screen_test.dart`. Swept 8 / 8 in SQL, and
     2 / 2 and 2 / 2 in Dart.
-    **Still to read back.**
+    **Applied, and read back** (13 October, read-only, after run
+    38353842821 on `bb1a67a` had applied the migrations): the three
+    bodies are the ones this branch builds -- `report_budget_vs_actual`
+    `83da6f21`, `build_budget_from_actual` `ace1f23f`,
+    `report_project_budget` `cddb02d1` -- each still a definer and each
+    naming `can_read_ledger`. The same run counted `6687 Dart tests ran
+    (floor 6682)`, and the floor is 6687 now.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
