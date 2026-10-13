@@ -3474,6 +3474,35 @@ page and renumbering would quietly break the reference.
     are `app.can_read_ledger(org_id)` for `authenticated`. The same run
     counted `6733 Dart tests ran (floor 6732)`, and the floor is 6733
     now.
+130. ~~Every member of a law firm reads its client money.~~ **Raised and
+    answered 13 October** ("Ledger roles, plus the matter's own fee
+    earner"). `client_account_transactions` -- the trust ledger, line by
+    line -- was `is_org_member`, and so were `matter_client_balance` and
+    `report_matter_summary`'s `client_funds`. Measured locally as a
+    `sales` member who is the matter's fee earner: the receipt "Purchase
+    price, held in trust" of 850,000.00, and the matter's 850,000.00, by
+    all three. Production: 4 lines in 2 companies, owners only. There is
+    no lawyer role, so a fee earner may hold any. `0862`:
+    `app.can_read_client_money(matter)` answers for a current member of
+    the matter's company who reads the ledger or is named its fee earner
+    (`matters.fee_earner`, an `auth.users` id); the select policy asks it
+    of the line's matter; `matter_client_balance` gives nothing -- not
+    nought -- to anybody else; `report_matter_summary` lists every
+    matter to every member with `client_funds` blank where the answer is
+    no. Every write already asked `can_post`. In the app
+    `MatterSummary.clientFunds` is nullable: the list draws a dash and
+    leaves the withheld files out of its total, saying "held on your
+    files" when it covers only a fee earner's own; the matter header
+    draws a dash; and `closeBlockedBecause` reads a withheld figure as a
+    reason in itself rather than as nothing held -- read as nought, the
+    file would have looked free to close. New `client_money_withheld.sql`
+    (16 assertions, a suspended fee earner among them). Swept 7 / 7 in
+    SQL and 6 / 6 in Dart across four files, each with a control. **A
+    trap paid for here:** `rm postmaster.pid` before `pg_ctl start` on a
+    cluster that is already running makes Postgres shut itself down a
+    minute later -- "data directory lock file is invalid" -- which took
+    the first mutation run down with it. Check `ps` first.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

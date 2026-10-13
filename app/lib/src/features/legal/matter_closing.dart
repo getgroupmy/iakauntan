@@ -26,9 +26,15 @@ const _sen = 0.005;
 /// closed with a balance on it is money nobody is looking at any more.
 String? closeBlockedBecause({
   required String status,
-  required double clientFunds,
+  required double? clientFunds,
 }) {
   if (status == 'closed') return 'This matter is already closed.';
+  // Withheld (`0862`), which is not the same as nothing held: whether
+  // the file may close turns on a figure this role is not shown.
+  if (clientFunds == null) {
+    return 'Whether this file can close turns on the client money held '
+        'on it, which your role is not shown.';
+  }
   if (clientFunds.abs() > _sen) {
     return clientFunds > 0
         ? 'The client account still holds money on this matter. Pay it '

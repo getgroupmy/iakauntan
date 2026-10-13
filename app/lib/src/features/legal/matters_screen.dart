@@ -35,7 +35,10 @@ class _MattersScreenState extends ConsumerState<MattersScreen> {
     final canWrite = ref.watch(canWriteProvider);
 
     final byId = {for (final s in summaries) s.matterId: s};
-    final totalHeld = summaries.fold<double>(0, (sum, s) => sum + s.clientFunds);
+    // Only the files whose money this role is shown (`0862`); a total
+    // over the rest would be a total of what it cannot see.
+    final shown = [for (final s in summaries) if (s.clientFunds != null) s];
+    final totalHeld = shown.fold<double>(0, (sum, s) => sum + s.clientFunds!);
 
     return Scaffold(
       appBar: AppBar(
@@ -128,8 +131,15 @@ class _MattersScreenState extends ConsumerState<MattersScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      '${list.length} matters · ${Fmt.money(totalHeld)} '
-                      'held in the client account',
+                      shown.isEmpty && summaries.isNotEmpty
+                          ? '${list.length} matters'
+                          // A fee earner is shown their own files' money
+                          // and no other's, and the line says whose.
+                          : shown.length < summaries.length
+                          ? '${list.length} matters · ${Fmt.money(totalHeld)} '
+                                'held on your files'
+                          : '${list.length} matters · ${Fmt.money(totalHeld)} '
+                                'held in the client account',
                       style: const TextStyle(
                           fontWeight: FontWeight.w600, fontSize: 13),
                     ),
@@ -190,7 +200,10 @@ class _MatterTile extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Money(summary?.clientFunds ?? 0, bold: true),
+          if (summary != null && summary!.clientFunds == null)
+            const Text('—', key: ValueKey('client-funds-withheld'))
+          else
+            Money(summary?.clientFunds ?? 0, bold: true),
           Text(
             summary == null || summary!.workInProgress == 0
                 ? 'client funds'

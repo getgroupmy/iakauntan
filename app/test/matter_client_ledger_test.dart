@@ -29,7 +29,7 @@ import 'package:iakauntan/src/features/legal/matter_detail_screen.dart';
 /// DESC — but it cannot know which direction this screen needs. So the
 /// pairing is asserted here, on the figures.
 void main() {
-  MatterSummary summary({double clientFunds = 0}) => MatterSummary(
+  MatterSummary summary({double? clientFunds = 0}) => MatterSummary(
     matterId: 'm1',
     matterNo: 'CONV/2026/014',
     matterName: 'Sale of shophouse',
@@ -89,10 +89,13 @@ void main() {
   Widget harness({
     List<ClientTransaction> transactions = const [],
     bool canPost = true,
+    double? clientFunds = 0,
   }) => ProviderScope(
     overrides: [
       repoProvider.overrideWithValue(null),
-      matterSummaryProvider.overrideWith((ref) async => [summary()]),
+      matterSummaryProvider.overrideWith(
+        (ref) async => [summary(clientFunds: clientFunds)],
+      ),
       canPostProvider.overrideWithValue(canPost),
       clientTransactionsProvider(
         'm1',
@@ -112,12 +115,17 @@ void main() {
     List<ClientTransaction> transactions = const [],
     bool canPost = true,
     double width = 1400,
+    double? clientFunds = 0,
   }) async {
     tester.view.devicePixelRatio = 1.0;
     tester.view.physicalSize = Size(width, 1000);
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
-      harness(transactions: transactions, canPost: canPost),
+      harness(
+        transactions: transactions,
+        canPost: canPost,
+        clientFunds: clientFunds,
+      ),
     );
     await tester.pumpAndSettle();
   }
@@ -234,6 +242,41 @@ void main() {
       expect(find.text('Client money'), findsNothing);
       // The ledger itself is still readable.
       expect(find.text('Deposit on account'), findsOneWidget);
+    });
+  });
+
+  /// `0862`. Null is the server withholding what the account holds on
+  /// this file -- from a role that neither reads the ledger nor earns
+  /// on it -- and the header says nothing rather than nought.
+  group('client money the role is not shown', () {
+    testWidgets('is a dash in the header, not RM 0.00', (tester) async {
+      await show(tester, canPost: false, clientFunds: null);
+      final held = find.ancestor(
+        of: find.text('Client funds held'),
+        matching: find.byType(Column),
+      ).first;
+      expect(
+        find.descendant(of: held, matching: find.text('—')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: held, matching: find.text('RM 0.00')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('while what is held is shown to whoever may see it', (
+      tester,
+    ) async {
+      await show(tester, clientFunds: 850000);
+      final held = find.ancestor(
+        of: find.text('Client funds held'),
+        matching: find.byType(Column),
+      ).first;
+      expect(
+        find.descendant(of: held, matching: find.text('RM 850,000.00')),
+        findsOneWidget,
+      );
     });
   });
 

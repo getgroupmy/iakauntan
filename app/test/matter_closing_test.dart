@@ -30,6 +30,15 @@ void main() {
       );
     });
 
+    test('and money the role is not shown, which is not none held', () {
+      // `0862`: the summary's figure is null to a role that neither
+      // reads the ledger nor earns on the file. Read as nought, the
+      // file would look free to close.
+      final why = closeBlockedBecause(status: 'open', clientFunds: null);
+      expect(why, contains('not shown'));
+      expect(closeBlockedBecause(status: 'open', clientFunds: 0), isNull);
+    });
+
     test('but nothing else does', () {
       expect(closeBlockedBecause(status: 'open', clientFunds: 0), isNull);
       expect(closeBlockedBecause(status: 'on_hold', clientFunds: 0), isNull);

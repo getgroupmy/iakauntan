@@ -758,6 +758,88 @@ void main() {
     });
   });
 
+  /// `0862`. Client money is shown to a role that reads the ledger and
+  /// to a matter's own fee earner; the summary's figure is null to
+  /// anybody else, and null is not nought.
+  group('the matters list, where the money is withheld', () {
+    MatterSummary summary(String id, String no, double? funds) =>
+        MatterSummary(
+          matterId: id,
+          matterNo: no,
+          matterName: 'File $no',
+          clientName: 'Tan Sri Lim',
+          status: 'open',
+          clientFunds: funds,
+          unbilledTime: 0,
+          unbilledDisbursements: 0,
+          billed: 0,
+          outstanding: 0,
+        );
+    Matter matter(String id, String no) => Matter(
+      id: id,
+      matterNo: no,
+      name: 'File $no',
+      clientId: 'c1',
+      status: 'open',
+    );
+
+    testWidgets('a role shown none of it sees no figure and no total', (
+      tester,
+    ) async {
+      await onAPhone(
+        tester,
+        wrap(const MattersScreen(), [
+          mattersProvider((status: 'open', search: '')).overrideWith(
+            (ref) async => [matter('m1', 'MAT-001')],
+          ),
+          matterSummaryProvider.overrideWith(
+            (ref) async => [summary('m1', 'MAT-001', null)],
+          ),
+          canWriteProvider.overrideWithValue(false),
+        ]),
+      );
+      expect(find.byKey(const ValueKey('client-funds-withheld')), findsOneWidget);
+      expect(find.text('RM 0.00'), findsNothing);
+      expect(find.textContaining('held'), findsNothing);
+      expect(find.text('1 matters'), findsOneWidget);
+    });
+
+    testWidgets('a fee earner is shown their own files, and told so', (
+      tester,
+    ) async {
+      await onAPhone(
+        tester,
+        wrap(const MattersScreen(), [
+          mattersProvider((status: 'open', search: '')).overrideWith(
+            (ref) async => [matter('m1', 'MAT-001'), matter('m2', 'MAT-002')],
+          ),
+          matterSummaryProvider.overrideWith(
+            (ref) async => [
+              summary('m1', 'MAT-001', 850000),
+              summary('m2', 'MAT-002', null),
+            ],
+          ),
+          canWriteProvider.overrideWithValue(false),
+        ]),
+      );
+      expect(
+        find.textContaining('2 matters · RM 850,000.00 held on your files'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('client-funds-withheld')), findsOneWidget);
+    });
+  });
+
+  test('a withheld figure is read as nothing, and nought as nought', () {
+    Map<String, dynamic> row(Object? funds) => {
+      'matter_id': 'm1',
+      'client_funds': funds,
+    };
+    expect(MatterSummary.fromJson(row(null)).clientFunds, isNull);
+    expect(MatterSummary.fromJson(row(0)).clientFunds, 0);
+    expect(MatterSummary.fromJson(row('850000.00')).clientFunds, 850000);
+  });
+
   group('the budgets screen', () {
     testWidgets('builds and phrases what is in each budget', (tester) async {
       await onAPhone(

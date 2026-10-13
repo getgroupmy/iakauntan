@@ -3450,7 +3450,11 @@ class MatterSummary {
   final String matterName;
   final String clientName;
   final String status;
-  final double clientFunds;
+  /// What the client account holds on the matter. Null where the
+  /// server withheld it (`0862`): it goes to a role that reads the
+  /// ledger and to the matter's own fee earner, and is blank -- not
+  /// nought -- to everybody else.
+  final double? clientFunds;
   final double unbilledTime;
   final double unbilledDisbursements;
   final double billed;
@@ -3464,7 +3468,9 @@ class MatterSummary {
     matterName: j['matter_name']?.toString() ?? '',
     clientName: j['client_name']?.toString() ?? '',
     status: j['status']?.toString() ?? 'open',
-    clientFunds: Fmt.toDouble(j['client_funds']),
+    clientFunds: j['client_funds'] == null
+        ? null
+        : Fmt.toDouble(j['client_funds']),
     unbilledTime: Fmt.toDouble(j['unbilled_time']),
     unbilledDisbursements: Fmt.toDouble(j['unbilled_disbursements']),
     billed: Fmt.toDouble(j['billed']),

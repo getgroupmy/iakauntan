@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18050
+18066
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1788,3 +1788,13 @@
 # company not theirs; the owner of both reads the other's; anon reads
 # neither). Measured: `all SQL assertions passed (445 files, 18050
 # assertions executed)`.
+#
+# 18050 -> 18066, 13 October: 0862's client_money_withheld.sql (16: a
+# salesman who earns on no file reads no client money line, no balance,
+# and every matter in the summary with its money blank; the fee earner,
+# who also holds sales, reads their own file's line, balance and summary
+# figure and not another's; the clerk reads them all and nothing of a
+# firm not theirs; a suspended fee earner reads nothing; anon calls none
+# of the three). maintenance_mode.sql names can_read_client_money among
+# the read guards. Measured: `all SQL assertions passed (446 files,
+# 18066 assertions executed)`.

@@ -193,7 +193,7 @@ class _MatterHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final narrow = MediaQuery.sizeOf(context).width < 700;
 
-    final figures = <({String label, double value, Color? colour})>[
+    final figures = <({String label, double? value, Color? colour})>[
       (label: 'Client funds held', value: summary.clientFunds, colour: context.colors.info),
       (label: 'Unbilled time', value: summary.unbilledTime, colour: null),
       (
@@ -224,7 +224,8 @@ class _MatterHeader extends StatelessWidget {
                 Text(f.label, style: Theme.of(context).textTheme.bodySmall),
                 const SizedBox(height: 2),
                 Text(
-                  Fmt.money(f.value),
+                  // Null is withheld (`0862`), never nought.
+                  f.value == null ? '—' : Fmt.money(f.value!),
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                         color: f.colour,

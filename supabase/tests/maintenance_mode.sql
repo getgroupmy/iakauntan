@@ -177,6 +177,8 @@ begin
        -- Reads. Somebody looking at an invoice when the shutter comes
        -- down goes on looking at it.
        'can_read_ledger', 'can_read_module', 'can_read_attachment',
+       -- `0862`'s: who may read a matter's client money. A read.
+       'can_read_client_money',
        -- `0118`'s claim-receipt guard, which already routes through
        -- `can_write` and is therefore shut by that.
        'can_attach_to',
