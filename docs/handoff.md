@@ -3405,7 +3405,12 @@ page and renumbering would quietly break the reference.
     statement asked for anyway inside `_refresh` -- survived, masked by
     the screen's own guard on every road to it, and the line was taken
     out rather than kept untested.
-    **Still to read back.**
+    **Applied, and read back** (13 October, read-only, after run
+    38366666759 on `24e7fc6` had applied the migrations): both select
+    policies, `bank_transactions_select` and
+    `bank_reconciliations_select`, are `app.can_read_ledger(org_id)` for
+    `authenticated`. The same run counted `6726 Dart tests ran (floor
+    6695)`, and the floor is 6726 now.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
