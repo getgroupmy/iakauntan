@@ -167,6 +167,38 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// `0859`. The statement and every reconciliation are the ledger's,
+  /// and the database answers neither to a role that does not read it.
+  /// An empty statement would say nothing happened on the account; the
+  /// screen says why instead, and asks for nothing.
+  group('a role that does not read the ledger', () {
+    for (final role in ['sales', 'viewer']) {
+      testWidgets('$role is told why, and nothing is asked', (tester) async {
+        final repo = _FakeRepo(status())..lines = const [];
+        await show(tester, status(), repo: repo, role: role);
+        expect(
+          find.byKey(const ValueKey('reconciliation-withheld')),
+          findsOneWidget,
+        );
+        expect(find.textContaining('your role in this company'), findsOneWidget);
+        expect(repo.about, isEmpty);
+        expect(repo.linesAsked, 0);
+        expect(find.byTooltip('Import statement'), findsNothing);
+        expect(find.byKey(const ValueKey('book-balance')), findsNothing);
+      });
+    }
+
+    testWidgets('while a clerk is shown the statement', (tester) async {
+      // The control: without it, the assertions above hold of a screen
+      // that had stopped asking for anybody.
+      final repo = _FakeRepo(status());
+      await show(tester, status(), repo: repo, role: 'accounts_clerk');
+      expect(find.byKey(const ValueKey('reconciliation-withheld')), findsNothing);
+      expect(repo.about, ['b1']);
+      expect(repo.linesAsked, 1);
+    });
+  });
+
   _theEmptyLedger();
 
   group('the working, so it can be checked', () {
@@ -281,8 +313,11 @@ void main() {
 
     testWidgets('and somebody who cannot post is offered neither',
         (tester) async {
+      // An auditor: reads the ledger, so is shown the statement (`0859`),
+      // and posts nothing.
       final repo = _FakeRepo(status())..lines = oneLine;
-      await show(tester, status(), repo: repo, role: 'viewer');
+      await show(tester, status(), repo: repo, role: 'auditor');
+      expect(find.text(oneLine.first['description'] as String), findsOneWidget);
 
       expect(find.byIcon(Icons.post_add), findsNothing);
     });
@@ -719,9 +754,9 @@ void main() {
           findsOneWidget);
     });
 
-    testWidgets('and a viewer, who may not post, still sees its own history',
+    testWidgets('and an auditor, who may not post, still sees its own history',
         (tester) async {
-      await show(tester, status(), role: 'viewer');
+      await show(tester, status(), role: 'auditor');
 
       // The transfer register is not a posting action.
       expect(find.byKey(const ValueKey('transfers-history')), findsOneWidget);
@@ -1157,12 +1192,17 @@ class _FakeRepo implements Repo {
   /// Lines the screen will list. Empty unless a test supplies them.
   List<Map<String, dynamic>> lines = const [];
 
+  /// How many times the statement was asked for.
+  int linesAsked = 0;
+
   @override
   Future<List<Map<String, dynamic>>> bankStatementLines(
     String bankAccountId, {
     bool onlyOpen = false,
-  }) async =>
-      lines;
+  }) async {
+    linesAsked++;
+    return lines;
+  }
 
   /// What the last posting was handed. Null until something posts,
   /// which is the assertion in the case where nothing should.

@@ -3381,6 +3381,31 @@ page and renumbering would quietly break the reference.
     height than its rows) squeezed the toolbar to six pixels without an
     overflow, and is killed by asserting the range keeps its height above
     the tabs.
+127. ~~Every member reads the bank's statement.~~ **Raised and answered 13
+    October** ("Statement lines need ledger access"). `0858` withheld the
+    bank's balance; `bank_transactions` and `bank_reconciliations` still
+    gave it away to every member (`is_org_member`). Measured locally as
+    `sales` (`can_read_ledger` false, `bank_balances` empty): the
+    salesman read "GAJI PENGARAH OKT" at -45,000.00 with a running
+    balance of 98,765.43, and a reconciliation's statement and book
+    balance of 110,765.43. Production: 32 lines in one company with no
+    member outside the ledger roles -- structural, not yet exposed.
+    Every function on either table already asks for the ledger or for
+    posting, and no view or invoker function reads them; the plain
+    select was the one door. `0859` makes both select policies
+    `app.can_read_ledger(org_id)`. Writes were already the functions'
+    (`0808`). The reconciliation screen tells a role that does not read
+    the ledger why, and asks for nothing -- an empty statement would
+    have read as an account nothing happened on; its two "may not
+    post" tests used `viewer`, refused the status since `0855`, and use
+    an auditor now. New `bank_statement_withheld.sql` (11 assertions),
+    added to `ci.yml`. Swept by hand, the policies being no function:
+    each put back to `is_org_member` and each made `false`, 4 / 4, with
+    a control; 2 / 2 in Dart with a control. A third Dart mutant -- the
+    statement asked for anyway inside `_refresh` -- survived, masked by
+    the screen's own guard on every road to it, and the line was taken
+    out rather than kept untested.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

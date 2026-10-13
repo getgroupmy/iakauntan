@@ -107,6 +107,24 @@ class _ReconciliationScreenState extends ConsumerState<ReconciliationScreen> {
     final banks = ref.watch(bankAccountsProvider).value ?? const [];
     final canPost = ref.watch(canPostProvider);
 
+    // `0859`. The statement and every reconciliation are the ledger's,
+    // and the database gives neither to a role that does not read it --
+    // an empty statement here would read as a bank account nothing has
+    // happened on. So such a role is told why, and nothing is asked.
+    if (!ref.watch(canReadLedgerProvider)) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Bank reconciliation')),
+        body: const EmptyState(
+          key: ValueKey('reconciliation-withheld'),
+          icon: Icons.lock_outline,
+          title: 'Not part of your role',
+          message:
+              "Reconciling reads the bank's statement against the ledger, "
+              'and your role in this company reads neither.',
+        ),
+      );
+    }
+
     // Seed the account once the list arrives, so the screen is useful
     // without a first click.
     if (_bankAccountId == null && banks.isNotEmpty) {
