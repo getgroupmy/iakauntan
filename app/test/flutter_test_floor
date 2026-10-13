@@ -1,4 +1,4 @@
-6759
+6767
 
 The number of Dart tests `flutter test` runs in app/. One definition,
 read by `scripts/check_flutter_test_count.py` and by nothing else; CI's

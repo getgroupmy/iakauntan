@@ -3750,7 +3750,14 @@ page and renumbering would quietly break the reference.
     `has_any_column_privilege` now, as `table_grants.sql` already did --
     and `statutory_inputs_in_range.sql` read two EPF rates as the owner
     and reads them through the function now.
-    **Still to read back.**
+    **Applied, and read back** (13 October, read-only, after run
+    38400149777 on `c5d4dce` had applied the migrations):
+    `employee_private_fields` is the body this branch builds,
+    `282edec9`, a definer executable by `authenticated` and not `anon`;
+    `authenticated` holds no table-wide select on `employees` and a
+    select on 26 of its columns -- `full_name` and not `basic_salary` or
+    `nric` -- and keeps update. The same run counted `6767 Dart tests
+    ran (floor 6759)`, and the floor is 6767 now.
 138. ~~The line manager who owns a new joiner's onboarding task could
     rewrite it.~~ **Raised and answered 13 October** ("Ticked only by
     its function"). `0093` gave onboarding `set_onboarding_task_done`,
