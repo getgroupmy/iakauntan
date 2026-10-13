@@ -6,15 +6,15 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0855` (the highest applied migration).
-845 functions and 368 readable tables, of which
-318 functions only read.
+Schema version `0856` (the highest applied migration).
+846 functions and 368 readable tables, of which
+319 functions only read.
 
 Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**705 of 845 functions carry a `comment on
+**706 of 846 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -422,12 +422,13 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text, p_idempotency_key text)` *(writes)* — Mints one share link per idempotency key and returns THE SAME URL on a replay.
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)* — Moves a ticket to another status, and IS THE SLA CLOCK rather than just a status setter.
 
-### general (617)
+### general (618)
 
 Not gated on any module.
 
 - `accept_intercompany_bill(p_sales_document_id uuid, p_org_id uuid)` *(writes)* — Raises, in this company, the bill matching an invoice another company in the group has issued to it.
 - `accept_invitation(p_token text)` *(writes)* — Takes up an invitation.
+- `account_balances(p_org_id uuid)` — Each live account's running balance, for a reader app.can_read_ledger admits, and nothing for anybody else.
 - `activate_report_layout(p_layout_id uuid)` *(writes)* — Makes one layout the one this company's report uses.
 - `add_fixed_public_holidays(p_org_id uuid, p_year integer)` *(writes)* — Adds the four fixed-date national holidays — Labour Day, National Day, Malaysia Day, Christmas — to a year's calendar, and returns how many were actually added.
 - `add_sub_account(p_parent_id uuid, p_name text, p_code text, p_subtype app.account_subtype, p_description text, p_currency text)` *(writes)* — Adds an account under another.

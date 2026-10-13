@@ -640,8 +640,9 @@ class FixedAsset {
         ? j['purchase_documents']['doc_no']?.toString()
         : null,
     supplierId: j['supplier_id'] as String?,
-    supplierName:
-        j['contacts'] is Map ? j['contacts']['name']?.toString() : null,
+    supplierName: j['contacts'] is Map
+        ? j['contacts']['name']?.toString()
+        : null,
   );
 
   // `purchase_document_id`, `purchase_line_id` and `supplier_id` are
@@ -964,7 +965,6 @@ class Account {
     this.taxTreatment,
     this.isGroup = false,
     this.parentId,
-    this.currentBalance = 0,
     this.isActive = true,
   });
 
@@ -984,7 +984,10 @@ class Account {
   /// can send it back: the edit dialog used to send none, and every
   /// account it saved came out from under its parent (0766).
   final String? parentId;
-  final double currentBalance;
+
+  // No balance. `0856` withholds `current_balance` from every client
+  // read of `accounts`; a role that reads the ledger is given it by
+  // `Repo.accountBalances`, and a field here would read 0 for everybody.
   final bool isActive;
 
   factory Account.fromJson(Map<String, dynamic> j) => Account(
@@ -996,7 +999,6 @@ class Account {
     taxTreatment: j['tax_treatment'] as String?,
     isGroup: j['is_group'] == true,
     parentId: j['parent_id'] as String?,
-    currentBalance: Fmt.toDouble(j['current_balance']),
     isActive: j['is_active'] != false,
   );
 }
@@ -1183,6 +1185,7 @@ class BusinessDocument {
   final List<DocumentLine> lines;
 
   bool get isPosted => glEntryId != null;
+
   /// Overdue is STRICTLY before today, on the date and not the moment.
   ///
   /// This has to mean what `v_ar_aging` means, because that view is
@@ -1201,8 +1204,11 @@ class BusinessDocument {
     final due = dueDate;
     if (due == null || balanceAmount <= 0 || status == 'void') return false;
     final today = DateTime.now();
-    return DateTime(due.year, due.month, due.day)
-        .isBefore(DateTime(today.year, today.month, today.day));
+    return DateTime(
+      due.year,
+      due.month,
+      due.day,
+    ).isBefore(DateTime(today.year, today.month, today.day));
   }
 
   /// The fields this company added to a document.
@@ -1844,8 +1850,7 @@ bool memberIsEditable({
   required bool canAdmin,
   required bool isSelf,
   required String role,
-}) =>
-    canAdmin && !isSelf && role != 'owner';
+}) => canAdmin && !isSelf && role != 'owner';
 
 /// What an approval rule covers, in words. A null `docType` means every
 /// document of that kind, which is what the column's null means.
@@ -2350,8 +2355,9 @@ class TaxInstalment {
     amount: Fmt.toDouble(j['amount']),
     setByRevision: j['set_by_revision'] == true,
     paidOn: Fmt.parseDate(j['paid_on']),
-    paidAmount:
-        j['paid_amount'] == null ? null : Fmt.toDouble(j['paid_amount']),
+    paidAmount: j['paid_amount'] == null
+        ? null
+        : Fmt.toDouble(j['paid_amount']),
     paidLate: j['paid_late'] == true,
     outstanding: Fmt.toDouble(j['outstanding']),
   );
@@ -2678,18 +2684,21 @@ class TaxFirstPeriod {
     filingDueKnown: j['filing_due_known'] == true,
     exemptInstalments: j['exempt_instalments'] == true,
     exemptionKnown: j['exemption_known'] == true,
-    exemptUntilYa:
-        j['exempt_until_ya'] == null ? null : Fmt.toInt(j['exempt_until_ya']),
+    exemptUntilYa: j['exempt_until_ya'] == null
+        ? null
+        : Fmt.toInt(j['exempt_until_ya']),
     paidUpCapital: j['paid_up_capital'] == null
         ? null
         : Fmt.toDouble(j['paid_up_capital']),
     grossBusinessIncome: j['gross_business_income'] == null
         ? null
         : Fmt.toDouble(j['gross_business_income']),
-    capitalLimit:
-        j['capital_limit'] == null ? null : Fmt.toDouble(j['capital_limit']),
-    turnoverLimit:
-        j['turnover_limit'] == null ? null : Fmt.toDouble(j['turnover_limit']),
+    capitalLimit: j['capital_limit'] == null
+        ? null
+        : Fmt.toDouble(j['capital_limit']),
+    turnoverLimit: j['turnover_limit'] == null
+        ? null
+        : Fmt.toDouble(j['turnover_limit']),
   );
 }
 
@@ -2778,37 +2787,35 @@ class TaxEstimateExposure {
   /// as a failure.
   bool get missesFloor => floorApplies && floorKnown && !meetsFloor;
 
-  factory TaxEstimateExposure.fromMap(Map<String, dynamic> j) =>
-      TaxEstimateExposure(
-        form: j['form']?.toString() ?? 'CP204',
-        estimatedTax: Fmt.toDouble(j['estimated_tax']),
-        priorEstimate: j['prior_estimate'] == null
-            ? null
-            : Fmt.toDouble(j['prior_estimate']),
-        floorRequired: j['floor_required'] == null
-            ? null
-            : Fmt.toDouble(j['floor_required']),
-        meetsFloor: j['meets_floor'] == true,
-        floorKnown: j['floor_known'] == true,
-        floorApplies: j['floor_applies'] == true,
-        actualTax:
-            j['actual_tax'] == null ? null : Fmt.toDouble(j['actual_tax']),
-        actualKnown: j['actual_known'] == true,
-        shortfall:
-            j['shortfall'] == null ? null : Fmt.toDouble(j['shortfall']),
-        toleranceAmount: j['tolerance_amount'] == null
-            ? null
-            : Fmt.toDouble(j['tolerance_amount']),
-        excessOverTolerance: j['excess_over_tolerance'] == null
-            ? null
-            : Fmt.toDouble(j['excess_over_tolerance']),
-        penalty: j['penalty'] == null ? null : Fmt.toDouble(j['penalty']),
-        revisionOpen: j['revision_open'] == true,
-        revisionMonths: [
-          for (final m in (j['revision_months'] as List? ?? const []))
-            Fmt.toInt(m),
-        ],
-      );
+  factory TaxEstimateExposure.fromMap(
+    Map<String, dynamic> j,
+  ) => TaxEstimateExposure(
+    form: j['form']?.toString() ?? 'CP204',
+    estimatedTax: Fmt.toDouble(j['estimated_tax']),
+    priorEstimate: j['prior_estimate'] == null
+        ? null
+        : Fmt.toDouble(j['prior_estimate']),
+    floorRequired: j['floor_required'] == null
+        ? null
+        : Fmt.toDouble(j['floor_required']),
+    meetsFloor: j['meets_floor'] == true,
+    floorKnown: j['floor_known'] == true,
+    floorApplies: j['floor_applies'] == true,
+    actualTax: j['actual_tax'] == null ? null : Fmt.toDouble(j['actual_tax']),
+    actualKnown: j['actual_known'] == true,
+    shortfall: j['shortfall'] == null ? null : Fmt.toDouble(j['shortfall']),
+    toleranceAmount: j['tolerance_amount'] == null
+        ? null
+        : Fmt.toDouble(j['tolerance_amount']),
+    excessOverTolerance: j['excess_over_tolerance'] == null
+        ? null
+        : Fmt.toDouble(j['excess_over_tolerance']),
+    penalty: j['penalty'] == null ? null : Fmt.toDouble(j['penalty']),
+    revisionOpen: j['revision_open'] == true,
+    revisionMonths: [
+      for (final m in (j['revision_months'] as List? ?? const [])) Fmt.toInt(m),
+    ],
+  );
 }
 
 /// The Form B working: a person with business income.
@@ -3409,8 +3416,7 @@ class Matter {
       courtReference: j['court_reference'] as String?,
       opposingParty: j['opposing_party'] as String?,
       feeEarner: j['fee_earner'] as String?,
-      agreedFee:
-          j['agreed_fee'] == null ? null : Fmt.toDouble(j['agreed_fee']),
+      agreedFee: j['agreed_fee'] == null ? null : Fmt.toDouble(j['agreed_fee']),
       hourlyRate: Fmt.toDouble(j['hourly_rate']),
       estimatedFees: Fmt.toDouble(j['estimated_fees']),
       depositRequired: Fmt.toDouble(j['deposit_required']),
@@ -3675,16 +3681,13 @@ class Employee {
       incomeTaxNo: j['income_tax_no']?.toString(),
       cp38Monthly: Fmt.toDouble(j['cp38_monthly']),
       zakatMonthly: Fmt.toDouble(j['zakat_monthly']),
-      epfVoluntaryEmployeeRate:
-          Fmt.toDouble(j['epf_voluntary_employee_rate']),
-      epfVoluntaryEmployerRate:
-          Fmt.toDouble(j['epf_voluntary_employer_rate']),
+      epfVoluntaryEmployeeRate: Fmt.toDouble(j['epf_voluntary_employee_rate']),
+      epfVoluntaryEmployerRate: Fmt.toDouble(j['epf_voluntary_employer_rate']),
       bankName: j['bank_name']?.toString(),
       bankAccountNo: j['bank_account_no']?.toString(),
       emergencyContactName: j['emergency_contact_name']?.toString(),
       emergencyContactPhone: j['emergency_contact_phone']?.toString(),
-      emergencyContactRelation:
-          j['emergency_contact_relation']?.toString(),
+      emergencyContactRelation: j['emergency_contact_relation']?.toString(),
       maritalStatus: j['marital_status']?.toString() ?? 'single',
       residencyStatus: j['residency_status']?.toString() ?? 'citizen',
       dateOfBirth: Fmt.parseDate(j['date_of_birth']),
@@ -4560,8 +4563,8 @@ class Applicant {
   bool get isHired => hiredEmployeeId != null;
 
   /// The earliest day they could start, given the notice they owe.
-  DateTime? earliestStart(DateTime today) => noticePeriodDays == null ||
-          noticePeriodDays! <= 0
+  DateTime? earliestStart(DateTime today) =>
+      noticePeriodDays == null || noticePeriodDays! <= 0
       ? null
       : DateTime(today.year, today.month, today.day + noticePeriodDays!);
 
@@ -4669,8 +4672,7 @@ class Appraisal {
     final emp = j['employees'];
     final rev = j['reviewer'];
     final cyc = j['appraisal_cycles'];
-    double? num_(String key) =>
-        j[key] == null ? null : Fmt.toDouble(j[key]);
+    double? num_(String key) => j[key] == null ? null : Fmt.toDouble(j[key]);
     DateTime? when(Map? m, String key) {
       final raw = (m ?? j)[key];
       return raw == null ? null : DateTime.tryParse(raw.toString());
@@ -4685,8 +4687,9 @@ class Appraisal {
       employeeName: emp is Map ? emp['full_name'] as String? : null,
       reviewerName: rev is Map ? rev['full_name'] as String? : null,
       cycleName: cyc is Map ? cyc['name'] as String? : null,
-      ratingScaleMax:
-          cyc is Map ? (cyc['rating_scale_max'] as num?)?.toInt() ?? 5 : 5,
+      ratingScaleMax: cyc is Map
+          ? (cyc['rating_scale_max'] as num?)?.toInt() ?? 5
+          : 5,
       selfReviewDue: cyc is Map ? when(cyc, 'self_review_due') : null,
       managerReviewDue: cyc is Map ? when(cyc, 'manager_review_due') : null,
       selfRating: num_('self_rating'),
@@ -4775,14 +4778,14 @@ class AppraisalDue {
   final int daysLate;
 
   factory AppraisalDue.fromJson(Map<String, dynamic> j) => AppraisalDue(
-        appraisalId: j['appraisal_id'] as String,
-        cycleName: j['cycle_name']?.toString() ?? '',
-        employeeName: j['employee_name']?.toString() ?? '',
-        reviewerName: j['reviewer_name'] as String?,
-        waitingOn: j['waiting_on']?.toString() ?? '',
-        dueOn: DateTime.parse(j['due_on'].toString()),
-        daysLate: (j['days_late'] as num?)?.toInt() ?? 0,
-      );
+    appraisalId: j['appraisal_id'] as String,
+    cycleName: j['cycle_name']?.toString() ?? '',
+    employeeName: j['employee_name']?.toString() ?? '',
+    reviewerName: j['reviewer_name'] as String?,
+    waitingOn: j['waiting_on']?.toString() ?? '',
+    dueOn: DateTime.parse(j['due_on'].toString()),
+    daysLate: (j['days_late'] as num?)?.toInt() ?? 0,
+  );
 }
 
 /// An auditor's request to read payslips, and the admin decision on it.
@@ -4903,7 +4906,6 @@ class PayslipAccessLogEntry {
     );
   }
 }
-
 
 /// The short lists `Repo.createQuickRow` may add a row to.
 ///

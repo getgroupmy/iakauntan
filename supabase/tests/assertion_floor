@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-17963
+17976
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1739,3 +1739,11 @@
 # filing's export, a project code, and the group shown to somebody who
 # sells for the sister company). Measured: `all SQL assertions passed
 # (439 files, 17963 assertions executed)`.
+#
+# 17976 (13 October 2026, `0856`): +13 from `account_balance_withheld.sql`
+# (the salesman refused an account's balance and given nothing by
+# `account_balances`, a select of every column refused to the clerk too
+# while the app's own nine are read, the clerk given both sides of the
+# journal and nothing retired or of another company, the owner's other
+# company its own figure, anon given neither). Measured: `all SQL
+# assertions passed (440 files, 17976 assertions executed)`.

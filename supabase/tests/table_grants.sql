@@ -189,9 +189,12 @@ begin
       v_relations;
   end if;
 
+  -- Any column, not the table: since `0856` `accounts` is read column by
+  -- column, its running balance withheld, and `has_table_privilege` is
+  -- false for a grant made that way.
   foreach v_probe in array array['accounts', 'contacts', 'gl_entries', 'audit_logs']
   loop
-    if not has_table_privilege('authenticated', 'public.' || v_probe, 'SELECT') then
+    if not has_any_column_privilege('authenticated', 'public.' || v_probe, 'SELECT') then
       raise exception
         'FAIL authenticated cannot read %s -- too much was revoked', v_probe;
     end if;

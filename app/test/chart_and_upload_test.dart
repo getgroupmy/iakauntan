@@ -25,16 +25,16 @@ void main() {
     String subtype = 'operating_expense',
     bool group = false,
     bool active = true,
-    double balance = 0,
   }) => Account(
-    id: code,
+    // Not the code: the balances are keyed by id, and a fixture where
+    // the two were the same string could not tell which was read.
+    id: 'id-$code',
     code: code,
     name: name,
     accountType: type,
     accountSubtype: subtype,
     isGroup: group,
     isActive: active,
-    currentBalance: balance,
   );
 
   group('the chart as a file', () {
@@ -43,22 +43,49 @@ void main() {
       // parent_code, description, is_group. Everything the export writes
       // that the importer takes has to be spelled its way, or a chart
       // exported here does not go back in.
-      final header = chartOfAccountsCsv([account('8000', 'X')]).split('\n').first;
-      expect(header.split(','), containsAll(<String>[
-        'code',
-        'name',
-        'account_type',
-        'account_subtype',
-        'is_group',
-      ]));
+      final header = chartOfAccountsCsv([
+        account('8000', 'X'),
+      ]).split('\n').first;
+      expect(
+        header.split(','),
+        containsAll(<String>[
+          'code',
+          'name',
+          'account_type',
+          'account_subtype',
+          'is_group',
+        ]),
+      );
     });
 
-    test('a row carries the account', () {
-      final csv = chartOfAccountsCsv([
-        account('4000', 'Sales', type: 'revenue', subtype: 'sales',
-            balance: 1234.5),
-      ]);
+    test('a row carries the account, and its balance for a ledger reader', () {
+      final csv = chartOfAccountsCsv(
+        [account('4000', 'Sales', type: 'revenue', subtype: 'sales')],
+        balances: {'id-4000': 1234.5},
+      );
+      expect(csv.split('\n').first, endsWith(',is_active,current_balance'));
       expect(csv, contains('4000,Sales,revenue,sales,false,true,1234.50'));
+    });
+
+    test('an account the balances do not name is written at zero', () {
+      final csv = chartOfAccountsCsv(
+        [account('4000', 'Sales'), account('5000', 'Purchases')],
+        balances: {'id-4000': 10},
+      );
+      expect(
+        csv,
+        contains('5000,Purchases,expense,operating_expense,false,true,0.00'),
+      );
+    });
+
+    test('without balances there is no balance column, not one of zeros', () {
+      // `0856`. A role that does not read the ledger is given no
+      // balances, and a column of 0.00 would read as a chart where
+      // nothing has ever been posted.
+      final csv = chartOfAccountsCsv([account('4000', 'Sales')]);
+      expect(csv.split('\n').first, endsWith(',is_active'));
+      expect(csv, isNot(contains('current_balance')));
+      expect(csv.trim().split('\n')[1], endsWith(',false,true'));
     });
 
     test('sorted by code, so a heading precedes its accounts', () {
@@ -90,14 +117,18 @@ void main() {
     });
 
     test('the filename carries the company and the day', () {
-      final name = chartExportFilename('Sinar Teknologi Sdn Bhd',
-          DateTime(2026, 3, 7));
+      final name = chartExportFilename(
+        'Sinar Teknologi Sdn Bhd',
+        DateTime(2026, 3, 7),
+      );
       expect(name, 'sinar-teknologi-sdn-bhd-chart-of-accounts-2026-03-07.csv');
     });
 
     test('and a company with no name still produces a file', () {
-      expect(chartExportFilename(null, DateTime(2026, 1, 1)),
-          'chart-chart-of-accounts-2026-01-01.csv');
+      expect(
+        chartExportFilename(null, DateTime(2026, 1, 1)),
+        'chart-chart-of-accounts-2026-01-01.csv',
+      );
     });
   });
 
@@ -115,8 +146,12 @@ void main() {
       // character on the front of the first heading, so `code` stops
       // matching `code` and every row is missing its account number for
       // a reason nobody can see.
-      final withBom = Uint8List.fromList(
-          [0xEF, 0xBB, 0xBF, ...utf8.encode('code,name\n8000,Fuel\n')]);
+      final withBom = Uint8List.fromList([
+        0xEF,
+        0xBB,
+        0xBF,
+        ...utf8.encode('code,name\n8000,Fuel\n'),
+      ]);
       final read = readImportFile(withBom);
       expect(read.problem, isNull);
       expect(read.text!.startsWith('code'), isTrue);
@@ -185,8 +220,10 @@ void main() {
         final table = parseCsvTable(read.text!, (h) => h);
 
         expect(table.rows.map((r) => r['name']), contains('GOH KOK HUAT'));
-        expect(table.rows.map((r) => r['name']),
-            contains('TF AUTO PARTS SDN. BHD'));
+        expect(
+          table.rows.map((r) => r['name']),
+          contains('TF AUTO PARTS SDN. BHD'),
+        );
       });
 
       test('an ordinary file is not given a note about nothing', () {
@@ -211,15 +248,16 @@ void main() {
         expect(read.problem, contains('not UTF-8'));
       });
 
-      test('and a 0xA0 inside a real character is not swapped out of it',
-          () {
+      test('and a 0xA0 inside a real character is not swapped out of it', () {
         // U+00A0 properly encoded is C2 A0, and U+4E20 is E4 B8 A0.
         // Replacing the A0 in either would break a character that was
         // never broken — so the retry is a STRICT decode, and it only
         // succeeds when every other byte was already valid.
         final good = Uint8List.fromList([
           ...utf8.encode('code,name\n8000,'),
-          0xE4, 0xB8, 0xA0,
+          0xE4,
+          0xB8,
+          0xA0,
           ...utf8.encode('\n'),
         ]);
         final read = readImportFile(good);

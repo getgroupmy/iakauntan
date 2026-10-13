@@ -59,13 +59,16 @@ begin
     'A new account starts with nothing on it.%', '42501');
 
   -- What the screens do is as before: an account renamed and made, and
-  -- the balance moved by posting.
+  -- the balance moved by posting. Read through `account_balances`: since
+  -- `0856` no client reads the column itself, and the owner reads the
+  -- ledger.
   update public.accounts set name = 'Maybank operating' where id = d.cash;
   insert into public.accounts (org_id, code, name, account_type, account_subtype)
   values (d.org, '1998', 'Petty cash, front desk', 'asset', 'cash');
   perform pg_temp.check_eq('an account is still renamed, and made with nothing on it',
     (select name from public.accounts where id = d.cash) || ' / ' ||
-    (select current_balance::text from public.accounts where org_id = d.org and code = '1998'),
+    (select b.current_balance::text from public.account_balances(d.org) b
+       join public.accounts a on a.id = b.account_id where a.code = '1998'),
     'Maybank operating / 0.00');
 
   perform public.post_manual_journal(d.org, app.today(),
@@ -74,9 +77,9 @@ begin
       jsonb_build_object('account_id', d.sales, 'debit', 0, 'credit', 1200)),
     'Cash sale', 'JV-1');
   perform pg_temp.check_eq('and posting a journal still moves the balance',
-    (select current_balance from public.accounts where id = d.cash), 1200.00);
+    (select current_balance from public.account_balances(d.org) where account_id = d.cash), 1200.00);
   perform pg_temp.check_eq('on both sides of it',
-    (select current_balance from public.accounts where id = d.sales), 1200.00);
+    (select current_balance from public.account_balances(d.org) where account_id = d.sales), 1200.00);
 end $$;
 
 reset role;

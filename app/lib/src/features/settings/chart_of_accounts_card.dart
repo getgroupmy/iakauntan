@@ -226,7 +226,16 @@ Future<void> _export(
     );
     return;
   }
-  final csv = chartOfAccountsCsv(accounts);
+  // The balances only for a role that reads the ledger; anybody else is
+  // given none by `account_balances` and gets a chart without them. The
+  // role is waited for: read before it has loaded, it is the least of
+  // them, and an accountant's file would come out without balances.
+  final repo = ref.read(repoProvider);
+  await ref.read(memberRoleProvider.future).catchError((_) => 'viewer');
+  final balances = repo != null && ref.read(canReadLedgerProvider)
+      ? await repo.accountBalances()
+      : null;
+  final csv = chartOfAccountsCsv(accounts, balances: balances);
   final saved = await exportTextFile(
     ref,
     chartExportFilename(
@@ -312,8 +321,10 @@ class _TypeGroup extends ConsumerWidget {
                       IconButton(
                         key: ValueKey('sub-account-${a.id}'),
                         tooltip: 'Add a sub-account under this',
-                        icon: const Icon(Icons.subdirectory_arrow_right,
-                            size: 18),
+                        icon: const Icon(
+                          Icons.subdirectory_arrow_right,
+                          size: 18,
+                        ),
                         onPressed: a.isActive
                             ? () async {
                                 final added = await showSubAccountDialog(
@@ -329,8 +340,10 @@ class _TypeGroup extends ConsumerWidget {
                       if (!a.isGroup)
                         IconButton(
                           tooltip: 'Retire this account',
-                          icon: const Icon(Icons.remove_circle_outline,
-                              size: 18),
+                          icon: const Icon(
+                            Icons.remove_circle_outline,
+                            size: 18,
+                          ),
                           onPressed: a.isActive
                               ? () => _retire(context, ref, a)
                               : null,
@@ -484,8 +497,9 @@ class _AccountDialogState extends ConsumerState<_AccountDialog> {
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               isExpanded: true,
-              initialValue:
-                  choices.contains(_subtype) ? _subtype : choices.first,
+              initialValue: choices.contains(_subtype)
+                  ? _subtype
+                  : choices.first,
               decoration: const InputDecoration(labelText: 'Where it sits'),
               items: [
                 for (final s in choices)
@@ -526,8 +540,9 @@ class _AccountDialogState extends ConsumerState<_AccountDialog> {
                   code: _code.text.trim(),
                   name: _name.text.trim(),
                   type: _type,
-                  subtype:
-                      choices.contains(_subtype) ? _subtype : choices.first,
+                  subtype: choices.contains(_subtype)
+                      ? _subtype
+                      : choices.first,
                   id: widget.existing?.id,
                   // What the account already is (0766). Left out, these
                   // went as `is_group: false` and no parent on every
@@ -631,10 +646,7 @@ class _TaxTreatmentPicker extends ConsumerWidget {
                     ? '${Fmt.qty(fraction * 100)}% of this account is '
                           'added back. ${chosen['notes'] ?? ''}'
                     : '${chosen['notes'] ?? ''}',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: scheme.onSurfaceVariant,
-                ),
+                style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
               ),
             ],
           ],

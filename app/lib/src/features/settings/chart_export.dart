@@ -26,7 +26,9 @@ String csvField(String? value) {
   return '"${v.replaceAll('"', '""')}"';
 }
 
-/// The header row, and the order every row follows.
+/// The header row, and the order every row follows. `current_balance`
+/// follows them for a role that reads the ledger -- see
+/// [chartOfAccountsCsv].
 const chartExportColumns = [
   'code',
   'name',
@@ -34,7 +36,6 @@ const chartExportColumns = [
   'account_subtype',
   'is_group',
   'is_active',
-  'current_balance',
 ];
 
 /// The whole chart as CSV.
@@ -50,9 +51,24 @@ const chartExportColumns = [
 /// a different shape than it left. The importer treats a missing
 /// parent as "no parent", so a re-import is flat until the model
 /// carries it.
-String chartOfAccountsCsv(List<Account> accounts) {
+///
+/// [balances] are each account's running balance by id, and only a role
+/// that reads the ledger has them (`0856`). Without them the file has no
+/// balance column at all, rather than one of zeros that would read as a
+/// chart where nothing has moved. The importer reads no balance either
+/// way.
+String chartOfAccountsCsv(
+  List<Account> accounts, {
+  Map<String, double>? balances,
+}) {
   final rows = [...accounts]..sort((a, b) => a.code.compareTo(b.code));
-  final buffer = StringBuffer()..writeln(chartExportColumns.join(','));
+  final buffer = StringBuffer()
+    ..writeln(
+      [
+        ...chartExportColumns,
+        if (balances != null) 'current_balance',
+      ].join(','),
+    );
   for (final a in rows) {
     buffer.writeln(
       [
@@ -62,7 +78,7 @@ String chartOfAccountsCsv(List<Account> accounts) {
         csvField(a.accountSubtype),
         a.isGroup ? 'true' : 'false',
         a.isActive ? 'true' : 'false',
-        a.currentBalance.toStringAsFixed(2),
+        if (balances != null) (balances[a.id] ?? 0).toStringAsFixed(2),
       ].join(','),
     );
   }

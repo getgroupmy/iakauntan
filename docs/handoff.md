@@ -3247,6 +3247,38 @@ page and renumbering would quietly break the reference.
     `can_read_ledger`. Nobody in production lost a report: every member
     is an owner, admin, accountant, clerk or auditor. The same run counted
     `6678 Dart tests ran (floor 6649)`, and the floor is 6678 now.
+123. ~~Every member reads every account's running balance.~~ **Raised
+    and answered 13 October: withhold the running balance. Built in
+    `0856`.** `0855` left `accounts.current_balance`: `accounts_select`
+    admits every member (a salesman picks a revenue account), so the
+    trial balance was one column away from the reports refused them.
+    Measured with `0855` applied, as `sales`: the general ledger gave
+    nothing, `accounts` gave 3100 Share Capital 4,321.09 and 5100
+    Purchases 4,321.09. RLS cannot hide a column and `authenticated` is
+    one role, so `authenticated` now holds select on every column but
+    that one, and `account_balances(org)`, a definer, serves it to a
+    reader `can_read_ledger` admits and gives anybody else nothing. **A
+    `select *` on `accounts` is refused to every client, the
+    accountant's included**: `Repo.accounts` names its nine columns, and
+    `Account` has no balance field (it would read 0 for everybody). The
+    chart export asks for the balances only for a ledger reader, waiting
+    for the role first, and anybody else's file has no balance column.
+    Checked before building: nothing a client runs reads the column --
+    `apply_account_balance` fires on `gl_lines`, which only definers
+    write; no invoker function, view, policy, edge function or realtime
+    feed names it. `opening_balance` stays readable. New
+    `account_balance_withheld.sql` (13 assertions; one is the app's own
+    column list), added to `ci.yml`. Swept 5 / 5; the grant by hand (the
+    table-wide select put back, the salesman's refusal fails); the export
+    5 / 5 in Dart across `chart_export.dart` and the card. **And the
+    API description**: `generate_api_description.py` counted a table as
+    readable by `has_table_privilege`, which is false for a column
+    grant, so `accounts` dropped out of `openapi.json` while every client
+    still read it. It asks any column now, and lists only the columns a
+    tenant role may read; every other table came out the same.
+    0844's `account_balance_is_the_ledgers.sql` reads balances through
+    the function, and `table_grants.sql` probes any column.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
@@ -3538,6 +3570,7 @@ function:
 | `app.may_read_mail_file` | `0853` | 4 / 4 | -- | `mail_files_private.sql` (new in `0853`; the owner refused the file on a clerk's personal mail, one filed under another company's email and one under an email that never was, so the listing is the company address's file alone; the clerk reads their own and the company's; an employee the company's only. The policy swept by hand: `0405`'s restored, the personal-mail assertion fails) |
 | `app.audit_redact` (restated) | `0854` | 7 / 7 | -- | `export_masks_gateway_keys.sql` (new in `0854`; the owner refused the gateway keys directly, and the export masks the signature key and the API key while still carrying the collection, mode and gateway; each new word masked under a prefix and in the plural; a document's signature and the secretary still readable) |
 | 25 report functions and `app.group_orgs` (guard only) | `0855` | 24 / 30 | 6 (`group_orgs` asked of the company the report is asked from, and five refusals masked in the same words by what they are built on; said in the file) | `ledger_reports_need_ledger.sql` (new in `0855`; a salesman and an employee given nothing by the nine SQL reports and refused by the seventeen others, the three other roles by the ledger itself, a clerk and an auditor answered by every one; a frozen filing's export; a project code; the group shown to somebody who sells for the sister, and the sister's line kept out of the intercompany report) |
+| `account_balances` (and the column grant on `accounts`) | `0856` | 5 / 5, the grant by hand | -- | `account_balance_withheld.sql` (new in `0856`; the salesman refused the column and given nothing by the function, a select of every column refused to the clerk too while the app's own nine are read, the clerk given both sides of the journal and no retired account or other company's, the owner's other company its own figure, anon given neither) |
 | `set_requires_self_billed` | `0801` | 8 / 9 | 1 (a valid document withdrawn: `sync_einvoice_status` makes its bill 'valid', refused first) | `self_billed_einvoice.sql` (its `0801` block: queued and failed ones withdrawn, the bill cleared, a re-tick clearing the withdrawal) |
 | `recalc_pos_sale` (the rate), `pos_receipt_text` (the rate line) | `0800` | 5 / 5 | -- | `pos_service_charge.sql` (the line asserted as text, a reprint after a rate change, a fractional rate) |
 | `app.ticket_link_state` | `0799` | 6 / 6 | -- | `ticket_share.sql` (the deleted ticket by `0799`'s own block) |

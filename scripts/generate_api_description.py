@@ -188,6 +188,13 @@ select coalesce(json_object_agg(name, labels), '{}'::json) from (
 # A table is in the surface if a tenant role may read it. Whether RLS is
 # on is reported rather than assumed: a granted table with RLS off is
 # the whole tenant's data, and that would be a finding, not a footnote.
+#
+# "May read" is ANY COLUMN, not the table. `0856` grants `accounts`
+# column by column, its running balance withheld, and
+# `has_table_privilege` is false for a grant made that way -- so the
+# table people read most dropped out of this file while every client
+# still read it. A column a tenant role may not read is left out of the
+# table's columns for the same reason.
 TABLES_SQL = r"""
 select coalesce(json_agg(x), '[]'::json) from (
   select json_build_object(
@@ -208,7 +215,9 @@ select coalesce(json_agg(x), '[]'::json) from (
         from unnest(%(roles)s::text[]) r
         cross join unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE']) priv
         cross join lateral (select priv || ':' || r as pr) x
-       where has_table_privilege(r, c.oid, priv)),
+       where case when priv = 'DELETE'
+                  then has_table_privilege(r, c.oid, priv)
+                  else has_any_column_privilege(r, c.oid, priv) end),
     'columns', (
       select coalesce(json_agg(json_build_object(
                'name', att.attname,
@@ -221,7 +230,9 @@ select coalesce(json_agg(x), '[]'::json) from (
                'required', att.attnotnull and not att.atthasdef
              ) order by att.attnum), '[]'::json)
         from pg_attribute att
-       where att.attrelid = c.oid and att.attnum > 0 and not att.attisdropped)
+       where att.attrelid = c.oid and att.attnum > 0 and not att.attisdropped
+         and (has_column_privilege('anon', c.oid, att.attnum, 'select')
+           or has_column_privilege('authenticated', c.oid, att.attnum, 'select')))
   ) as x
   from pg_class c
   join pg_namespace n on n.oid = c.relnamespace
@@ -230,8 +241,8 @@ select coalesce(json_agg(x), '[]'::json) from (
    and c.relkind in ('r', 'v', 'm', 'p')
    and not exists (select 1 from pg_depend d
                     where d.objid = c.oid and d.deptype = 'e')
-   and (has_table_privilege('anon', c.oid, 'select')
-     or has_table_privilege('authenticated', c.oid, 'select'))
+   and (has_any_column_privilege('anon', c.oid, 'select')
+     or has_any_column_privilege('authenticated', c.oid, 'select'))
 ) s;
 """
 

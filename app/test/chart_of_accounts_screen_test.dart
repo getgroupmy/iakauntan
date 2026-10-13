@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show SupabaseClient;
@@ -43,8 +44,12 @@ void main() {
       type: 'liability',
       subtype: 'current_liability',
     ),
-    account(code: '3000', name: 'Share capital', type: 'equity',
-        subtype: 'equity'),
+    account(
+      code: '3000',
+      name: 'Share capital',
+      type: 'equity',
+      subtype: 'equity',
+    ),
     account(code: '4000', name: 'Sales', type: 'revenue', subtype: 'revenue'),
     // All five types present, deliberately. With no expense account in
     // the fixture, dropping 'expense' from the order the chart is drawn
@@ -89,8 +94,9 @@ void main() {
       expect(find.textContaining('Sales'), findsOneWidget);
     });
 
-    testWidgets('offers the three doors to somebody who may post',
-        (tester) async {
+    testWidgets('offers the three doors to somebody who may post', (
+      tester,
+    ) async {
       await show(tester, const ChartOfAccountsScreen());
 
       expect(find.text('Export'), findsOneWidget);
@@ -119,8 +125,9 @@ void main() {
     // would lose the right-hand one silently. `RowActions` folds them
     // into a menu instead.
     for (final width in [360.0, 412.0, 600.0]) {
-      testWidgets('fits at ${width.toInt()} and keeps every action',
-          (tester) async {
+      testWidgets('fits at ${width.toInt()} and keeps every action', (
+        tester,
+      ) async {
         await show(tester, const ChartOfAccountsScreen(), width: width);
 
         // Rendering is the overflow assertion: a RenderFlex overflow is
@@ -135,8 +142,9 @@ void main() {
       });
     }
 
-    testWidgets('and on a laptop they are buttons rather than a menu',
-        (tester) async {
+    testWidgets('and on a laptop they are buttons rather than a menu', (
+      tester,
+    ) async {
       // Both sides, because "they are all in the menu" alone passes
       // against a build that folds them at every width.
       await show(tester, const ChartOfAccountsScreen());
@@ -181,7 +189,9 @@ void main() {
     testWidgets('and carries the same actions', (tester) async {
       await show(
         tester,
-        const Scaffold(body: SingleChildScrollView(child: ChartOfAccountsCard())),
+        const Scaffold(
+          body: SingleChildScrollView(child: ChartOfAccountsCard()),
+        ),
       );
 
       expect(find.text('Export'), findsOneWidget);
@@ -207,8 +217,11 @@ void main() {
     }
 
     for (var i = 1; i < headings.length; i++) {
-      expect(seen[headings[i]]!, greaterThan(seen[headings[i - 1]]!),
-          reason: '${headings[i]} comes after ${headings[i - 1]}');
+      expect(
+        seen[headings[i]]!,
+        greaterThan(seen[headings[i - 1]]!),
+        reason: '${headings[i]} comes after ${headings[i - 1]}',
+      );
     }
   });
 
@@ -258,17 +271,19 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       tester.view.physicalSize = const Size(1400, 760);
       addTearDown(tester.view.reset);
-      await tester.pumpWidget(ProviderScope(
-        overrides: [
-          accountsProvider.overrideWith((ref) async => [heading, leaf]),
-          canPostProvider.overrideWithValue(true),
-          repoProvider.overrideWithValue(repo),
-        ],
-        child: MaterialApp(
-          theme: AppTheme.light(),
-          home: const ChartOfAccountsScreen(),
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            accountsProvider.overrideWith((ref) async => [heading, leaf]),
+            canPostProvider.overrideWithValue(true),
+            repoProvider.overrideWithValue(repo),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.light(),
+            home: const ChartOfAccountsScreen(),
+          ),
         ),
-      ));
+      );
       await tester.pumpAndSettle();
 
       await tester.tap(find.text(row));
@@ -277,15 +292,20 @@ void main() {
       await tester.tap(find.text('Save'));
       await tester.pumpAndSettle();
 
-      final upserts =
-          repo.calls.where((c) => c.$1 == 'upsert_account').toList();
+      final upserts = repo.calls
+          .where((c) => c.$1 == 'upsert_account')
+          .toList();
       expect(upserts, hasLength(1), reason: 'one save, one call');
       return upserts.single.$2!;
     }
 
     testWidgets('a heading renamed stays a heading', (tester) async {
       final p = await saveRenamed(
-          tester, '6000  EXPENSES', 'EXPENSES', 'Operating Expenses');
+        tester,
+        '6000  EXPENSES',
+        'EXPENSES',
+        'Operating Expenses',
+      );
 
       expect(p['p_id'], 'a-6000');
       expect(p['p_name'], 'Operating Expenses');
@@ -293,14 +313,86 @@ void main() {
       expect(p['p_parent_id'], isNull);
     });
 
-    testWidgets('and an account renamed stays under its heading',
-        (tester) async {
+    testWidgets('and an account renamed stays under its heading', (
+      tester,
+    ) async {
       final p = await saveRenamed(tester, '6200  Rental', 'Rental', 'Sewa');
 
       expect(p['p_id'], 'a-6200');
       expect(p['p_name'], 'Sewa');
       expect(p['p_is_group'], isFalse);
       expect(p['p_parent_id'], 'a-6000');
+    });
+  });
+
+  /// `0856`. The running balance is withheld from every client read of
+  /// `accounts` and given by `account_balances` to a role that reads the
+  /// ledger. The export asks for it only for such a role; anybody else's
+  /// file has no balance column, rather than one of zeros.
+  group('the exported chart and its balances', () {
+    Future<(List<String>, String?)> export(
+      WidgetTester tester,
+      String role,
+    ) async {
+      final repo = _RecordingRepo();
+      String? copied;
+      final messenger = tester.binding.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(SystemChannels.platform, (c) async {
+        if (c.method == 'Clipboard.setData') {
+          copied = (c.arguments as Map)['text'] as String?;
+        }
+        return null;
+      });
+      addTearDown(
+        () => messenger.setMockMethodCallHandler(SystemChannels.platform, null),
+      );
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.physicalSize = const Size(1400, 760);
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            accountsProvider.overrideWith((ref) async => chart),
+            canPostProvider.overrideWithValue(role != 'sales'),
+            memberRoleProvider.overrideWith((ref) async => role),
+            repoProvider.overrideWithValue(repo),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.light(),
+            home: const ChartOfAccountsScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Export'));
+      await tester.pumpAndSettle();
+      return ([for (final c in repo.calls) c.$1], copied);
+    }
+
+    testWidgets("an accountant's file carries each account's balance", (
+      tester,
+    ) async {
+      final (asked, csv) = await export(tester, 'accountant');
+      expect(asked, contains('account_balances'));
+      expect(csv!.split('\n').first, endsWith(',is_active,current_balance'));
+      expect(
+        csv,
+        contains('1000,Cash at bank,asset,current_asset,false,true,2500.00'),
+      );
+      // And one the function did not name, at nothing.
+      expect(csv, contains('5000,Rent,expense,expense,false,true,0.00'));
+    });
+
+    testWidgets("a salesman's has no balance column, and none is asked for", (
+      tester,
+    ) async {
+      final (asked, csv) = await export(tester, 'sales');
+      expect(asked, isNot(contains('account_balances')));
+      expect(csv!.split('\n').first, endsWith(',is_active'));
+      expect(
+        csv,
+        contains('1000,Cash at bank,asset,current_asset,false,true\n'),
+      );
     });
   });
 }
@@ -315,6 +407,11 @@ class _RecordingRepo extends Repo {
   @override
   Future<dynamic> callRpc(String fn, {Map<String, dynamic>? params}) async {
     calls.add((fn, params));
+    if (fn == 'account_balances') {
+      return [
+        {'account_id': 'a-1000', 'current_balance': 2500},
+      ];
+    }
     if (fn != 'upsert_account') return null;
     return params?['p_id'] ?? 'a-new';
   }

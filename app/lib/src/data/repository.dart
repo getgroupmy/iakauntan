@@ -125,9 +125,7 @@ class Repo {
   /// refreshes.
   @override
   bool operator ==(Object other) =>
-      other is Repo &&
-      other.orgId == orgId &&
-      identical(other.client, client);
+      other is Repo && other.orgId == orgId && identical(other.client, client);
 
   @override
   int get hashCode => Object.hash(identityHashCode(client), orgId);
@@ -363,6 +361,19 @@ class Repo {
     return _rows(data);
   }
 
+  /// Each live account's running balance, by account id: `0856`'s
+  /// `account_balances`, which answers a role that reads the ledger and
+  /// gives anybody else nothing.
+  Future<Map<String, double>> accountBalances() async {
+    final rows = _rows(
+      await callRpc('account_balances', params: {'p_org_id': orgId}),
+    );
+    return {
+      for (final r in rows)
+        r['account_id'] as String: Fmt.toDouble(r['current_balance']),
+    };
+  }
+
   /// Which project and department codes actually appear in the ledger.
   Future<List<Map<String, dynamic>>> ledgerDimensions() async =>
       _rows(await callRpc('ledger_dimensions', params: {'p_org_id': orgId}));
@@ -447,10 +458,13 @@ class Repo {
     final safe = fileName
         .replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '-')
         .replaceAll(RegExp(r'^-+|-+$'), '');
-    final path = '$reportId/${DateTime.now().millisecondsSinceEpoch}-'
+    final path =
+        '$reportId/${DateTime.now().millisecondsSinceEpoch}-'
         '${safe.isEmpty ? 'file' : safe}';
 
-    await client.storage.from('feedback').uploadBinary(
+    await client.storage
+        .from('feedback')
+        .uploadBinary(
           path,
           bytes,
           fileOptions: FileOptions(contentType: mimeType),
@@ -467,7 +481,6 @@ class Repo {
     );
     return id as String;
   }
-
 
   // ------------------------------------------------------------------
   // The chart of accounts
@@ -828,11 +841,13 @@ class Repo {
     }
     if (search != null && search.trim().isNotEmpty) {
       final q = search.trim();
-      query = query.or([
-        Repo.orLike('name', q),
-        Repo.orLike('code', q),
-        Repo.orLike('email', q),
-      ].join(','));
+      query = query.or(
+        [
+          Repo.orLike('name', q),
+          Repo.orLike('code', q),
+          Repo.orLike('email', q),
+        ].join(','),
+      );
     }
 
     final data = await query.order('name', ascending: true).limit(200);
@@ -1056,11 +1071,13 @@ class Repo {
 
     if (search != null && search.trim().isNotEmpty) {
       final q = search.trim();
-      query = query.or([
-        Repo.orLike('name', q),
-        Repo.orLike('code', q),
-        Repo.orLike('barcode', q),
-      ].join(','));
+      query = query.or(
+        [
+          Repo.orLike('name', q),
+          Repo.orLike('code', q),
+          Repo.orLike('barcode', q),
+        ].join(','),
+      );
     }
 
     final data = await query.order('code', ascending: true).limit(300);
@@ -1217,10 +1234,8 @@ class Repo {
   /// from that rather than from anything passed in — a start date sent
   /// from here could leave a day covered by no period, which is a date
   /// nothing can be posted to and nothing reports.
-  Future<void> createPreviousFiscalYear() => callRpc(
-    'create_previous_fiscal_year',
-    params: {'p_org_id': orgId},
-  );
+  Future<void> createPreviousFiscalYear() =>
+      callRpc('create_previous_fiscal_year', params: {'p_org_id': orgId});
 
   Future<void> setPeriodStatus(String periodId, String status) => callRpc(
     'set_fiscal_period_status',
@@ -1230,16 +1245,12 @@ class Repo {
   /// Brings the year's revenue and expenses to nil and puts the result
   /// in equity. `0648`. Returns nothing: what came back is the journal
   /// id, and the screen reads the year again rather than the entry.
-  Future<void> closeFiscalYear(String fiscalYearId) => callRpc(
-    'close_fiscal_year',
-    params: {'p_fiscal_year_id': fiscalYearId},
-  );
+  Future<void> closeFiscalYear(String fiscalYearId) =>
+      callRpc('close_fiscal_year', params: {'p_fiscal_year_id': fiscalYearId});
 
   /// And reverses it.
-  Future<void> reopenFiscalYear(String fiscalYearId) => callRpc(
-    'reopen_fiscal_year',
-    params: {'p_fiscal_year_id': fiscalYearId},
-  );
+  Future<void> reopenFiscalYear(String fiscalYearId) =>
+      callRpc('reopen_fiscal_year', params: {'p_fiscal_year_id': fiscalYearId});
 
   /// The ledger itself. Everything in the system posts through
   /// create_gl_entry, so this is the one place an invoice, a payroll run
@@ -1255,7 +1266,9 @@ class Repo {
         // Named because 0515 added a same-org composite key alongside
         // the plain one, so 'gl_lines' can now be joined to a journal
         // two ways and PostgREST refuses the embed with PGRST201.
-        .select('*, gl_lines!gl_lines_entry_id_fkey(*, accounts!gl_lines_account_id_fkey(code, name))')
+        .select(
+          '*, gl_lines!gl_lines_entry_id_fkey(*, accounts!gl_lines_account_id_fkey(code, name))',
+        )
         .eq('org_id', orgId);
     if (from != null) q = q.gte('entry_date', Fmt.iso(from));
     if (to != null) q = q.lte('entry_date', Fmt.iso(to));
@@ -1327,10 +1340,18 @@ class Repo {
     params: {'p_entry_id': entryId, 'p_date': Fmt.iso(on)},
   );
 
+  /// The columns [Account] reads, named because `0856` withholds
+  /// `current_balance` from every client role: a select of every column
+  /// is refused, the accountant's included. The balance comes from
+  /// [accountBalances], for a role that reads the ledger.
+  static const _accountColumns =
+      'id, code, name, account_type, account_subtype, tax_treatment, '
+      'is_group, parent_id, is_active';
+
   Future<List<Account>> accounts({bool postableOnly = false}) async {
     var query = client
         .from('accounts')
-        .select()
+        .select(_accountColumns)
         .eq('org_id', orgId)
         .isFilter('deleted_at', null);
     if (postableOnly) query = query.eq('is_group', false);
@@ -1367,7 +1388,10 @@ class Repo {
   }
 
   Future<List<Map<String, dynamic>>> states() async {
-    final data = await client.from('ref_states').select().order('code', ascending: true);
+    final data = await client
+        .from('ref_states')
+        .select()
+        .order('code', ascending: true);
     return _rows(data);
   }
 
@@ -1964,10 +1988,7 @@ class Repo {
   /// Returns the row's id, because a project is now also created from
   /// the box that needed one — the hour being recorded against it, the
   /// rate card being set — and that caller has to select what it made.
-  Future<String> saveProject(
-    Map<String, dynamic> values, {
-    String? id,
-  }) async {
+  Future<String> saveProject(Map<String, dynamic> values, {String? id}) async {
     if (id == null) {
       final row = await client
           .from('projects')
@@ -2508,7 +2529,6 @@ class Repo {
     return Map<String, dynamic>.from(data as Map);
   }
 
-
   /// Every reconciliation closed on an account, newest first, with the
   /// number of statement lines each one closed over — which is what
   /// tells a real reconciliation from one that agreed nothing.
@@ -2543,7 +2563,9 @@ class Repo {
         // Named because 0518 added a same-org composite key alongside
         // the plain one, so 'purchase_documents' can now be joined two
         // ways and PostgREST refuses the embed with PGRST201.
-        .select('*, purchase_documents!fixed_assets_purchase_document_id_fkey(doc_no), contacts!fixed_assets_supplier_id_fkey(name)')
+        .select(
+          '*, purchase_documents!fixed_assets_purchase_document_id_fkey(doc_no), contacts!fixed_assets_supplier_id_fkey(name)',
+        )
         .eq('org_id', orgId)
         .isFilter('deleted_at', null);
     if (!includeDisposed) q = q.neq('status', 'disposed');
@@ -2900,10 +2922,7 @@ class Repo {
   }) async {
     await callRpc(
       'clear_tax_instalment',
-      params: {
-        'p_estimate_id': estimateId,
-        'p_instalment_no': instalmentNo,
-      },
+      params: {'p_estimate_id': estimateId, 'p_instalment_no': instalmentNo},
     );
   }
 
@@ -2924,10 +2943,7 @@ class Repo {
   /// How a first basis period differs, where it is one.
   Future<TaxFirstPeriod> taxEstimateFirstPeriod(String id) async {
     final rows = _rows(
-      await callRpc(
-        'tax_estimate_first_period',
-        params: {'p_estimate_id': id},
-      ),
+      await callRpc('tax_estimate_first_period', params: {'p_estimate_id': id}),
     );
     if (rows.isEmpty) {
       throw StateError('That estimate no longer exists.');
@@ -2963,10 +2979,7 @@ class Repo {
     return list.isEmpty ? null : list.first;
   }
 
-  Future<void> saveTaxEstimate(
-    String id,
-    Map<String, dynamic> changes,
-  ) async {
+  Future<void> saveTaxEstimate(String id, Map<String, dynamic> changes) async {
     await client.from('tax_estimates').update(changes).eq('id', id);
   }
 
@@ -2983,10 +2996,7 @@ class Repo {
 
   Future<List<TaxInstalment>> taxEstimateSchedule(String id) async {
     final rows = _rows(
-      await callRpc(
-        'tax_estimate_schedule',
-        params: {'p_estimate_id': id},
-      ),
+      await callRpc('tax_estimate_schedule', params: {'p_estimate_id': id}),
     );
     return [for (final r in rows) TaxInstalment.fromMap(r)];
   }
@@ -3000,10 +3010,7 @@ class Repo {
     final rows = _rows(
       await callRpc(
         'tax_estimate_exposure',
-        params: {
-          'p_estimate_id': id,
-          'p_computation_id': computationId,
-        },
+        params: {'p_estimate_id': id, 'p_computation_id': computationId},
       ),
     );
     if (rows.isEmpty) {
@@ -3042,9 +3049,7 @@ class Repo {
   }
 
   /// The head of a Form P.
-  Future<PartnershipSummary> partnershipSummary(
-    String computationId,
-  ) async {
+  Future<PartnershipSummary> partnershipSummary(String computationId) async {
     final rows = _rows(
       await callRpc(
         'tax_partnership_summary',
@@ -3162,8 +3167,10 @@ class Repo {
         .select('id')
         .eq('body', 'pcb')
         .lte('effective_from', day)
-        .or('effective_to.is.null,effective_to.gt.'
-            '${Repo.orValue(day)}')
+        .or(
+          'effective_to.is.null,effective_to.gt.'
+          '${Repo.orValue(day)}',
+        )
         .order('effective_from', ascending: false)
         .limit(1);
     final list = (schedules as List).cast<Map<String, dynamic>>();
@@ -3275,8 +3282,10 @@ class Repo {
         .from('capital_allowance_classes')
         .select()
         .lte('effective_from', today)
-        .or('effective_to.is.null,effective_to.gt.'
-            '${Repo.orValue(today)}')
+        .or(
+          'effective_to.is.null,effective_to.gt.'
+          '${Repo.orValue(today)}',
+        )
         // `ascending: true` said out loud. postgrest-dart defaults it
         // to FALSE, so the bare `.order('sort_order')` this was written
         // as put industrial buildings at the top of the picker and
@@ -3423,10 +3432,12 @@ class Repo {
       final q = search.trim();
       query = kind.isSales
           ? query.ilike('doc_no', '%$q%')
-          : query.or([
-              Repo.orLike('doc_no', q),
-              Repo.orLike('supplier_doc_no', q),
-            ].join(','));
+          : query.or(
+              [
+                Repo.orLike('doc_no', q),
+                Repo.orLike('supplier_doc_no', q),
+              ].join(','),
+            );
     }
 
     final data = await query.order('doc_date', ascending: false).limit(limit);
@@ -3436,9 +3447,7 @@ class Repo {
   Future<BusinessDocument> document(DocKind kind, String id) async {
     final data = await client
         .from(kind.table)
-        .select(
-          '*, ${kind.contactEmbed}(name, code), ${kind.lineEmbed}(*)',
-        )
+        .select('*, ${kind.contactEmbed}(name, code), ${kind.lineEmbed}(*)')
         .eq('id', id)
         .single();
     return BusinessDocument.fromJson(data);
@@ -3785,20 +3794,21 @@ class Repo {
         .order('code', ascending: true),
   );
 
-  Future<Map<String, dynamic>> billOfMaterials(String id) async =>
-      Map<String, dynamic>.from(
-        await client
-            .from('bills_of_materials')
-            .select(
-              '*, items!bills_of_materials_item_id_fkey(code, name), '
-              'bom_lines!bom_lines_bom_id_fkey(*, items!bom_lines_item_id_fkey(code, name)), '
-              'bom_operations!bom_operations_bom_id_fkey'
-              '(*, work_centres!bom_operations_work_centre_id_fkey(code, name, cost_per_hour))',
-            )
-            .eq('id', id)
-            .eq('org_id', orgId)
-            .single(),
-      );
+  Future<Map<String, dynamic>> billOfMaterials(
+    String id,
+  ) async => Map<String, dynamic>.from(
+    await client
+        .from('bills_of_materials')
+        .select(
+          '*, items!bills_of_materials_item_id_fkey(code, name), '
+          'bom_lines!bom_lines_bom_id_fkey(*, items!bom_lines_item_id_fkey(code, name)), '
+          'bom_operations!bom_operations_bom_id_fkey'
+          '(*, work_centres!bom_operations_work_centre_id_fkey(code, name, cost_per_hour))',
+        )
+        .eq('id', id)
+        .eq('org_id', orgId)
+        .single(),
+  );
 
   /// Header and both sets of children in one call. The lines are deleted
   /// and re-inserted rather than merged: a recipe is short, and the
@@ -3934,7 +3944,9 @@ class Repo {
         // Named because 0520 added a same-org composite key alongside
         // the plain one, so 'bills_of_materials' can now be joined two ways and
         // PostgREST refuses an unqualified embed with PGRST201.
-        .select('*, items!manufacturing_orders_item_id_fkey(code, name), bills_of_materials!manufacturing_orders_bom_id_fkey(code)')
+        .select(
+          '*, items!manufacturing_orders_item_id_fkey(code, name), bills_of_materials!manufacturing_orders_bom_id_fkey(code)',
+        )
         .eq('org_id', orgId);
     if (openOnly) {
       q = q.inFilter('status', ['draft', 'confirmed', 'in_progress']);
@@ -3942,23 +3954,24 @@ class Repo {
     return _rows(await q.order('created_at', ascending: false));
   }
 
-  Future<Map<String, dynamic>> manufacturingOrder(String id) async =>
-      Map<String, dynamic>.from(
-        await client
-            .from('manufacturing_orders')
-            .select(
-              '*, items!manufacturing_orders_item_id_fkey(code, name), '
-              'bills_of_materials!manufacturing_orders_bom_id_fkey'
-              '(code, name), '
-              'warehouses!manufacturing_orders_warehouse_id_fkey(code, name), '
-              'mo_components!mo_components_mo_id_fkey(*, items!mo_components_item_id_fkey(code, name)), '
-              'mo_operations!mo_operations_mo_id_fkey'
-              '(*, work_centres!mo_operations_work_centre_id_fkey(code, name, cost_per_hour))',
-            )
-            .eq('id', id)
-            .eq('org_id', orgId)
-            .single(),
-      );
+  Future<Map<String, dynamic>> manufacturingOrder(
+    String id,
+  ) async => Map<String, dynamic>.from(
+    await client
+        .from('manufacturing_orders')
+        .select(
+          '*, items!manufacturing_orders_item_id_fkey(code, name), '
+          'bills_of_materials!manufacturing_orders_bom_id_fkey'
+          '(code, name), '
+          'warehouses!manufacturing_orders_warehouse_id_fkey(code, name), '
+          'mo_components!mo_components_mo_id_fkey(*, items!mo_components_item_id_fkey(code, name)), '
+          'mo_operations!mo_operations_mo_id_fkey'
+          '(*, work_centres!mo_operations_work_centre_id_fkey(code, name, cost_per_hour))',
+        )
+        .eq('id', id)
+        .eq('org_id', orgId)
+        .single(),
+  );
 
   Future<String> createManufacturingOrder({
     required String bomId,
@@ -4684,6 +4697,7 @@ class Repo {
     allocations,
     String? bankAccountId,
     String? paymentModeCode,
+
     /// Which of the company's own payment methods this is. Null on
     /// every settlement before 0635 and on any company that has
     /// configured none; the bank charge then resolves to the company
@@ -4846,8 +4860,10 @@ class Repo {
   Future<List<Map<String, dynamic>>> bankRules() async => _rows(
     await client
         .from('bank_rules')
-        .select('*, accounts!bank_rules_account_same_org(code, name), '
-            'contacts!bank_rules_contact_same_org(name)')
+        .select(
+          '*, accounts!bank_rules_account_same_org(code, name), '
+          'contacts!bank_rules_contact_same_org(name)',
+        )
         .eq('org_id', orgId)
         .order('sort_order', ascending: true)
         .order('id', ascending: true),
@@ -4877,8 +4893,10 @@ class Repo {
   /// What the rules say one line is. Null when nothing describes it.
   Future<Map<String, dynamic>?> suggestBankCoding(String transactionId) async {
     final rows = _rows(
-      await callRpc('suggest_bank_coding',
-          params: {'p_transaction_id': transactionId}),
+      await callRpc(
+        'suggest_bank_coding',
+        params: {'p_transaction_id': transactionId},
+      ),
     );
     return rows.isEmpty ? null : rows.first;
   }
@@ -4956,9 +4974,9 @@ class Repo {
   /// account here is TWO records and the chart screen makes one of
   /// them, so the account existed and the picker was right not to list
   /// it. This is the list that offers to finish the job.
-  Future<List<Map<String, dynamic>>> unregisteredBankAccounts() async =>
-      _rows(await callRpc('unregistered_bank_accounts',
-          params: {'p_org_id': orgId}));
+  Future<List<Map<String, dynamic>>> unregisteredBankAccounts() async => _rows(
+    await callRpc('unregistered_bank_accounts', params: {'p_org_id': orgId}),
+  );
 
   Future<String> upsertBankAccount({
     required String name,
@@ -5137,8 +5155,10 @@ class Repo {
     // header's amount, tax and account from the lines, so the figures
     // sent above are a first draft the split then corrects.
     if (split != null && split.isNotEmpty) {
-      await callRpc('set_expense_split',
-          params: {'p_expense_id': row['id'], 'p_lines': split});
+      await callRpc(
+        'set_expense_split',
+        params: {'p_expense_id': row['id'], 'p_lines': split},
+      );
     }
 
     await callRpc('post_expense', params: {'p_id': row['id']});
@@ -5153,17 +5173,19 @@ class Repo {
   /// whether it went and, when it did not, what the database said —
   /// see 0500. One document failing is not the batch failing.
   Future<List<Map<String, dynamic>>> bulkPostDocuments(
-          List<String> ids) async =>
-      Repo._rows(
-        await callRpc('bulk_post_documents', params: {'p_ids': ids}),
-      );
+    List<String> ids,
+  ) async =>
+      Repo._rows(await callRpc('bulk_post_documents', params: {'p_ids': ids}));
 
-  Future<List<Map<String, dynamic>>> bulkEmailDocuments(List<String> ids,
-          {String template = 'document_new'}) async =>
-      Repo._rows(
-        await callRpcOnce('bulk_email_documents',
-            params: {'p_ids': ids, 'p_template_code': template}),
-      );
+  Future<List<Map<String, dynamic>>> bulkEmailDocuments(
+    List<String> ids, {
+    String template = 'document_new',
+  }) async => Repo._rows(
+    await callRpcOnce(
+      'bulk_email_documents',
+      params: {'p_ids': ids, 'p_template_code': template},
+    ),
+  );
 
   // ------------------------------------------------------------------
   // What is waiting for somebody
@@ -5171,10 +5193,14 @@ class Repo {
 
   /// The caller's notifications for this company. Unread only unless
   /// asked otherwise; the row level policy decides whose they are.
-  Future<List<Map<String, dynamic>>> myNotifications(
-          {bool includeRead = false}) async =>
-      Repo._rows(await callRpc('my_notifications',
-          params: {'p_org': orgId, 'p_include_read': includeRead}));
+  Future<List<Map<String, dynamic>>> myNotifications({
+    bool includeRead = false,
+  }) async => Repo._rows(
+    await callRpc(
+      'my_notifications',
+      params: {'p_org': orgId, 'p_include_read': includeRead},
+    ),
+  );
 
   Future<int> unreadNotifications() async {
     final n = await callRpc('unread_notifications', params: {'p_org': orgId});
@@ -5188,8 +5214,10 @@ class Repo {
       callRpc('dismiss_notification', params: {'p_id': id});
 
   Future<int> markAllNotificationsRead() async {
-    final n =
-        await callRpc('mark_all_notifications_read', params: {'p_org': orgId});
+    final n = await callRpc(
+      'mark_all_notifications_read',
+      params: {'p_org': orgId},
+    );
     return (n as num?)?.toInt() ?? 0;
   }
 
@@ -5570,7 +5598,9 @@ class Repo {
         // Named because 0520 added a same-org composite key alongside
         // the plain one, so 'opportunities' can now be joined two ways and
         // PostgREST refuses an unqualified embed with PGRST201.
-        .select('*, contacts!activities_contact_id_fkey(name), opportunities!activities_opportunity_id_fkey(name)')
+        .select(
+          '*, contacts!activities_contact_id_fkey(name), opportunities!activities_opportunity_id_fkey(name)',
+        )
         .eq('org_id', orgId);
     if (onlyPending) query = query.eq('status', 'pending');
     final data = await query.order('due_date', ascending: true).limit(100);
@@ -5597,7 +5627,9 @@ class Repo {
         .select()
         .eq('org_id', orgId)
         .eq('user_id', uid);
-    query = done ? query.not('done_at', 'is', null) : query.isFilter('done_at', null);
+    query = done
+        ? query.not('done_at', 'is', null)
+        : query.isFilter('done_at', null);
     final data = await query
         .order('due_date', ascending: true, nullsFirst: false)
         .order('created_at', ascending: true)
@@ -5679,7 +5711,8 @@ class Repo {
         .from('todos')
         .update({
           if (title != null) 'title': title.trim(),
-          if (notes != null) 'notes': notes.trim().isEmpty ? null : notes.trim(),
+          if (notes != null)
+            'notes': notes.trim().isEmpty ? null : notes.trim(),
           if (clearDueDate)
             'due_date': null
           else if (dueDate != null)
@@ -6085,8 +6118,10 @@ class PlatformRepo {
     String? query,
     int limit = 50,
   }) async {
-    final data = await client.rpc('platform_users',
-        params: {'p_query': query, 'p_limit': limit});
+    final data = await client.rpc(
+      'platform_users',
+      params: {'p_query': query, 'p_limit': limit},
+    );
     return _platformRows(data);
   }
 
@@ -6096,23 +6131,26 @@ class PlatformRepo {
     required String userId,
     String? fullName,
     String? phone,
-  }) =>
-      client.rpc('platform_update_user', params: {
-        'p_user_id': userId,
-        'p_full_name': fullName,
-        'p_phone': phone,
-      });
+  }) => client.rpc(
+    'platform_update_user',
+    params: {'p_user_id': userId, 'p_full_name': fullName, 'p_phone': phone},
+  );
 
   /// Which companies one person can open, and as what. `0720`.
   Future<List<Map<String, dynamic>>> platformUserOrganizations(
-          String userId) async =>
-      _platformRows(await client.rpc('platform_user_organizations',
-          params: {'p_user_id': userId}));
+    String userId,
+  ) async => _platformRows(
+    await client.rpc(
+      'platform_user_organizations',
+      params: {'p_user_id': userId},
+    ),
+  );
 
   /// Who can open one company. `0720`.
   Future<List<Map<String, dynamic>>> platformOrgMembers(String orgId) async =>
-      _platformRows(await client
-          .rpc('platform_org_members', params: {'p_org_id': orgId}));
+      _platformRows(
+        await client.rpc('platform_org_members', params: {'p_org_id': orgId}),
+      );
 
   /// Gives somebody access to a company, or changes what they have.
   /// The same request arriving twice, so the database upserts. `0720`.
@@ -6120,19 +6158,18 @@ class PlatformRepo {
     required String orgId,
     required String email,
     required String role,
-  }) =>
-      client.rpc('platform_assign_org_access', params: {
-        'p_org_id': orgId,
-        'p_user_email': email,
-        'p_role': role,
-      });
+  }) => client.rpc(
+    'platform_assign_org_access',
+    params: {'p_org_id': orgId, 'p_user_email': email, 'p_role': role},
+  );
 
   Future<void> platformRemoveOrgAccess({
     required String orgId,
     required String userId,
-  }) =>
-      client.rpc('platform_remove_org_access',
-          params: {'p_org_id': orgId, 'p_user_id': userId});
+  }) => client.rpc(
+    'platform_remove_org_access',
+    params: {'p_org_id': orgId, 'p_user_id': userId},
+  );
 
   /// Makes a fully seeded company and hands it to the named owner.
   /// `0719`.
@@ -6147,17 +6184,20 @@ class PlatformRepo {
     String? phone,
     String? email,
   }) async {
-    final id = await client.rpc('platform_create_organization', params: {
-      'p_owner_email': ownerEmail,
-      'p_name': name,
-      'p_entity_type': entityType,
-      'p_registration_no': registrationNo,
-      'p_tin': tin,
-      'p_state_code': stateCode,
-      'p_city': city,
-      'p_phone': phone,
-      'p_email': email,
-    });
+    final id = await client.rpc(
+      'platform_create_organization',
+      params: {
+        'p_owner_email': ownerEmail,
+        'p_name': name,
+        'p_entity_type': entityType,
+        'p_registration_no': registrationNo,
+        'p_tin': tin,
+        'p_state_code': stateCode,
+        'p_city': city,
+        'p_phone': phone,
+        'p_email': email,
+      },
+    );
     return '$id';
   }
 
@@ -6173,18 +6213,20 @@ class PlatformRepo {
     String? email,
     String? city,
     String? stateCode,
-  }) =>
-      client.rpc('platform_update_organization', params: {
-        'p_org_id': orgId,
-        'p_name': name,
-        'p_legal_name': legalName,
-        'p_registration_no': registrationNo,
-        'p_tin': tin,
-        'p_phone': phone,
-        'p_email': email,
-        'p_city': city,
-        'p_state_code': stateCode,
-      });
+  }) => client.rpc(
+    'platform_update_organization',
+    params: {
+      'p_org_id': orgId,
+      'p_name': name,
+      'p_legal_name': legalName,
+      'p_registration_no': registrationNo,
+      'p_tin': tin,
+      'p_phone': phone,
+      'p_email': email,
+      'p_city': city,
+      'p_state_code': stateCode,
+    },
+  );
 
   /// Opens a support session over one company: read-only, expiring,
   /// and written into that company's own audit trail. `0719`.
@@ -6193,11 +6235,10 @@ class PlatformRepo {
     required String reason,
     int minutes = 60,
   }) async {
-    final id = await client.rpc('grant_support_access', params: {
-      'p_org_id': orgId,
-      'p_reason': reason,
-      'p_minutes': minutes,
-    });
+    final id = await client.rpc(
+      'grant_support_access',
+      params: {'p_org_id': orgId, 'p_reason': reason, 'p_minutes': minutes},
+    );
     return '$id';
   }
 
@@ -6211,9 +6252,9 @@ class PlatformRepo {
   /// Every session, open and closed, for the console.
   Future<List<Map<String, dynamic>>> platformSupportAccess({
     int limit = 100,
-  }) async =>
-      _platformRows(
-          await client.rpc('platform_support_access', params: {'p_limit': limit}));
+  }) async => _platformRows(
+    await client.rpc('platform_support_access', params: {'p_limit': limit}),
+  );
 
   // ------------------------------------------------------------------
   // The three that are not SQL
@@ -6243,22 +6284,20 @@ class PlatformRepo {
   Future<void> platformSetPassword({
     required String userId,
     required String password,
-  }) =>
-      _callPlatformUsers({
-        'action': 'password',
-        'user_id': userId,
-        'password': password,
-      });
+  }) => _callPlatformUsers({
+    'action': 'password',
+    'user_id': userId,
+    'password': password,
+  });
 
   Future<void> platformSetSuspended({
     required String userId,
     required bool suspended,
-  }) =>
-      _callPlatformUsers({
-        'action': 'suspend',
-        'user_id': userId,
-        'suspended': suspended,
-      });
+  }) => _callPlatformUsers({
+    'action': 'suspend',
+    'user_id': userId,
+    'suspended': suspended,
+  });
 
   /// The edge function, with its refusal turned into one this app shows
   /// like any other.
@@ -6268,7 +6307,8 @@ class PlatformRepo {
   /// address has already been registered" is the one that matters, and
   /// it tells an administrator to go and look for them.
   Future<Map<String, dynamic>> _callPlatformUsers(
-      Map<String, dynamic> body) async {
+    Map<String, dynamic> body,
+  ) async {
     try {
       final res = await client.functions.invoke('platform-users', body: body);
       final data = res.data;
@@ -6278,7 +6318,8 @@ class PlatformRepo {
       final said = e.details;
       final message = said is Map ? '${said['error'] ?? ''}'.trim() : '';
       throw PlatformUserException(
-          message.isEmpty ? 'That did not work.' : message);
+        message.isEmpty ? 'That did not work.' : message,
+      );
     }
   }
 
@@ -6352,10 +6393,7 @@ class PlatformRepo {
 
   /// Moves one of them. Platform administrators only, and the database
   /// refuses a key that is not one of the five.
-  Future<void> setScanSurface({
-    required String key,
-    required bool on,
-  }) =>
+  Future<void> setScanSurface({required String key, required bool on}) =>
       client.rpc('set_scan_surface', params: {'p_key': key, 'p_on': on});
 
   /// Whether this person sees the floating report button.
@@ -6530,11 +6568,7 @@ class PlatformRepo {
   }) async {
     final data = await client.rpc(
       'platform_close_account',
-      params: {
-        'p_kind': kind,
-        'p_subject_id': subjectId,
-        'p_reason': reason,
-      },
+      params: {'p_kind': kind, 'p_subject_id': subjectId, 'p_reason': reason},
     );
     return Map<String, dynamic>.from(data as Map);
   }
@@ -6552,7 +6586,10 @@ class PlatformRepo {
   }
 
   Future<List<Map<String, dynamic>>> settings() async {
-    final data = await client.from('platform_settings').select().order('key', ascending: true);
+    final data = await client
+        .from('platform_settings')
+        .select()
+        .order('key', ascending: true);
     return Repo._rows(data);
   }
 
@@ -6600,8 +6637,10 @@ class PlatformRepo {
   /// `#>> '{}'`, which only works on a scalar. Typing this as a map
   /// meant the console could not save one back in the shape the
   /// database needs.
-  Future<void> updateSetting(String key, dynamic value) => client
-      .rpc('platform_update_setting', params: {'p_key': key, 'p_value': value});
+  Future<void> updateSetting(String key, dynamic value) => client.rpc(
+    'platform_update_setting',
+    params: {'p_key': key, 'p_value': value},
+  );
 
   // ------------------------------------------------------------------
   // Scanning credit
@@ -6799,11 +6838,7 @@ extension RepoExtras on Repo {
   /// asking anybody, which is the door 0486's refusal names.
   Future<void> setOwnModule(String module, bool enabled) => callRpc(
     'set_own_module',
-    params: {
-      'p_org_id': orgId,
-      'p_module_code': module,
-      'p_enabled': enabled,
-    },
+    params: {'p_org_id': orgId, 'p_module_code': module, 'p_enabled': enabled},
   );
 
   /// What the add-ons this company holds have cost it so far this
@@ -6990,10 +7025,9 @@ extension RepoExtras on Repo {
     if (status != null && status != 'all') query = query.eq('status', status);
     if (search != null && search.trim().isNotEmpty) {
       final q = search.trim();
-      query = query.or([
-        Repo.orLike('name', q),
-        Repo.orLike('matter_no', q),
-      ].join(','));
+      query = query.or(
+        [Repo.orLike('name', q), Repo.orLike('matter_no', q)].join(','),
+      );
     }
 
     final data = await query.order('matter_no', ascending: false).limit(200);
@@ -7124,9 +7158,11 @@ extension RepoExtras on Repo {
         // table a second, composite key alongside the plain one, so
         // `matters` is joinable two ways from here and PostgREST
         // refuses an unqualified embed with PGRST201.
-        .select('*, matters!client_account_transactions_matter_id_fkey!inner'
-            '(matter_no, name, client_id, '
-            'contacts!matters_client_id_fkey(name))')
+        .select(
+          '*, matters!client_account_transactions_matter_id_fkey!inner'
+          '(matter_no, name, client_id, '
+          'contacts!matters_client_id_fkey(name))',
+        )
         .eq('org_id', orgId)
         .inFilter('transaction_type', types)
         .order('transaction_date', ascending: false)
@@ -7548,10 +7584,9 @@ extension RepoHr on Repo {
     }
     if (search != null && search.trim().isNotEmpty) {
       final s = search.trim();
-      q = q.or([
-        Repo.orLike('full_name', s),
-        Repo.orLike('employee_no', s),
-      ].join(','));
+      q = q.or(
+        [Repo.orLike('full_name', s), Repo.orLike('employee_no', s)].join(','),
+      );
     }
     return Repo._rows(
       await q.order('employee_no', ascending: true),
@@ -7725,11 +7760,19 @@ extension RepoHr on Repo {
       client.from('employee_tax_reliefs').delete().eq('id', id);
 
   Future<List<Map<String, dynamic>>> departments() async => Repo._rows(
-    await client.from('departments').select().eq('org_id', orgId).order('name', ascending: true),
+    await client
+        .from('departments')
+        .select()
+        .eq('org_id', orgId)
+        .order('name', ascending: true),
   );
 
   Future<List<Map<String, dynamic>>> positions() async => Repo._rows(
-    await client.from('positions').select().eq('org_id', orgId).order('title', ascending: true),
+    await client
+        .from('positions')
+        .select()
+        .eq('org_id', orgId)
+        .order('title', ascending: true),
   );
 
   // ------------------------------------------------------------------
@@ -8061,7 +8104,9 @@ extension RepoHr on Repo {
         // Named because 0521 added a same-org composite key alongside
         // the plain one, so 'payroll_runs' can now be joined two ways and
         // PostgREST refuses an unqualified embed with PGRST201.
-        .select('*, payroll_runs!payslips_run_id_fkey(run_no, pay_periods!payroll_runs_period_id_fkey(code))')
+        .select(
+          '*, payroll_runs!payslips_run_id_fkey(run_no, pay_periods!payroll_runs_period_id_fkey(code))',
+        )
         .eq('org_id', orgId);
     if (runId != null) q = q.eq('run_id', runId);
     if (employeeId != null) q = q.eq('employee_id', employeeId);
@@ -8076,7 +8121,9 @@ extension RepoHr on Repo {
         // Named because 0521 added a same-org composite key alongside
         // the plain one, so 'payslip_lines and payroll_runs' can now be joined two ways and
         // PostgREST refuses an unqualified embed with PGRST201.
-        .select('*, payslip_lines!payslip_lines_payslip_id_fkey(*), payroll_runs!payslips_run_id_fkey(run_no, pay_periods!payroll_runs_period_id_fkey(code))')
+        .select(
+          '*, payslip_lines!payslip_lines_payslip_id_fkey(*), payroll_runs!payslips_run_id_fkey(run_no, pay_periods!payroll_runs_period_id_fkey(code))',
+        )
         .eq('id', id)
         .maybeSingle();
     return row == null
@@ -8134,7 +8181,9 @@ extension RepoHr on Repo {
         // Named because 0521 added a same-org composite key alongside
         // the plain one, so 'applicants' can now be joined two ways and
         // PostgREST refuses an unqualified embed with PGRST201.
-        .select('*, departments!job_requisitions_department_id_fkey(name), applicants!applicants_requisition_id_fkey(count)')
+        .select(
+          '*, departments!job_requisitions_department_id_fkey(name), applicants!applicants_requisition_id_fkey(count)',
+        )
         .eq('org_id', orgId)
         .order('created_at', ascending: false),
   ).map(JobRequisition.fromJson).toList();
@@ -8539,11 +8588,9 @@ extension RepoPayslipAccess on Repo {
   /// Deliberately not a sensitive read on the server: it is a list of
   /// names for a dropdown, and recording one for drawing a dropdown
   /// fills the security log with events nobody caused.
-  Future<List<Map<String, dynamic>>> auditTrailActors() async =>
-      Repo._rows(await callRpc(
-        'audit_trail_actors',
-        params: {'p_org_id': orgId},
-      ));
+  Future<List<Map<String, dynamic>>> auditTrailActors() async => Repo._rows(
+    await callRpc('audit_trail_actors', params: {'p_org_id': orgId}),
+  );
 
   /// Who got in, what they took out, what they looked at and what they
   /// were refused. Owners and admins only -- the rows carry everybody's
@@ -8624,7 +8671,11 @@ extension RepoHrSetup on Repo {
     String table, {
     String orderBy = 'name',
   }) async => Repo._rows(
-    await client.from(table).select().eq('org_id', orgId).order(orderBy, ascending: true),
+    await client
+        .from(table)
+        .select()
+        .eq('org_id', orgId)
+        .order(orderBy, ascending: true),
   );
 
   Future<void> deleteSetupRow(String table, String id) =>
@@ -8709,9 +8760,11 @@ extension RepoHrSetup on Repo {
         await client
             .from('item_prices')
             // Named because 0521 added a same-org composite key alongside
-        // the plain one, so 'price_levels' can now be joined two ways and
-        // PostgREST refuses an unqualified embed with PGRST201.
-        .select('*, price_levels!item_prices_price_level_id_fkey(code, name)')
+            // the plain one, so 'price_levels' can now be joined two ways and
+            // PostgREST refuses an unqualified embed with PGRST201.
+            .select(
+              '*, price_levels!item_prices_price_level_id_fkey(code, name)',
+            )
             .eq('item_id', itemId)
             .order('min_quantity', ascending: true),
       );
@@ -9026,10 +9079,8 @@ extension RepoHrSetup on Repo {
     return Map<String, dynamic>.from(data as Map);
   }
 
-  Future<void> revokeCustomerPortal(String contactId) => callRpc(
-    'revoke_customer_portal',
-    params: {'p_contact_id': contactId},
-  );
+  Future<void> revokeCustomerPortal(String contactId) =>
+      callRpc('revoke_customer_portal', params: {'p_contact_id': contactId});
 
   /// The links issued to this customer, newest first.
   ///
@@ -9042,8 +9093,10 @@ extension RepoHrSetup on Repo {
   ) async => Repo._rows(
     await client
         .from('customer_portal_links')
-        .select('expires_at, revoked_at, last_opened_at, open_count, '
-            'sent_to_email, created_at')
+        .select(
+          'expires_at, revoked_at, last_opened_at, open_count, '
+          'sent_to_email, created_at',
+        )
         .eq('contact_id', contactId)
         .order('created_at', ascending: false)
         .limit(10),
@@ -9054,10 +9107,9 @@ extension RepoHrSetup on Repo {
   /// 0630. Both sides in one question, because a knock-off screen that
   /// asked twice would show two moments of the same account.
   Future<List<Map<String, dynamic>>> openItems(String contactId) async =>
-      Repo._rows(await callRpc(
-        'open_items',
-        params: {'p_contact_id': contactId},
-      ));
+      Repo._rows(
+        await callRpc('open_items', params: {'p_contact_id': contactId}),
+      );
 
   /// Set several credits against several invoices, all or none.
   ///
@@ -9091,17 +9143,19 @@ extension RepoHrSetup on Repo {
     DateTime? docDate,
     double? totalAmount,
     String? excludeId,
-  }) async => Repo._rows(await callRpc(
-    'duplicate_purchase_documents',
-    params: {
-      'p_contact_id': contactId,
-      'p_doc_type': docType,
-      'p_supplier_doc_no': supplierDocNo,
-      'p_doc_date': docDate == null ? null : Fmt.iso(docDate),
-      'p_total_amount': totalAmount,
-      'p_exclude_id': excludeId,
-    },
-  ));
+  }) async => Repo._rows(
+    await callRpc(
+      'duplicate_purchase_documents',
+      params: {
+        'p_contact_id': contactId,
+        'p_doc_type': docType,
+        'p_supplier_doc_no': supplierDocNo,
+        'p_doc_date': docDate == null ? null : Fmt.iso(docDate),
+        'p_total_amount': totalAmount,
+        'p_exclude_id': excludeId,
+      },
+    ),
+  );
 
   // ------------------------------------------------------------------
   // 0626. Asking a customer for their own tax details.
@@ -9134,10 +9188,8 @@ extension RepoHrSetup on Repo {
     return Map<String, dynamic>.from(data as Map);
   }
 
-  Future<void> revokeTaxDetailRequest(String contactId) => callRpc(
-    'revoke_tax_detail_request',
-    params: {'p_contact_id': contactId},
-  );
+  Future<void> revokeTaxDetailRequest(String contactId) =>
+      callRpc('revoke_tax_detail_request', params: {'p_contact_id': contactId});
 
   /// The tax-details links issued to this contact, newest first.
   ///
@@ -9149,8 +9201,10 @@ extension RepoHrSetup on Repo {
       Repo._rows(
         await client
             .from('tax_detail_requests')
-            .select('expires_at, revoked_at, last_opened_at, open_count, '
-                'submission_count, sent_to_email, created_at')
+            .select(
+              'expires_at, revoked_at, last_opened_at, open_count, '
+              'submission_count, sent_to_email, created_at',
+            )
             .eq('contact_id', contactId)
             .order('created_at', ascending: false)
             .limit(10),
@@ -9161,10 +9215,9 @@ extension RepoHrSetup on Repo {
   /// Both sides of every disagreement come back, because "they say
   /// C1234567890" is not answerable without "you hold C9999999999".
   Future<List<Map<String, dynamic>>> pendingTaxSubmissions() async =>
-      Repo._rows(await callRpc(
-        'pending_tax_submissions',
-        params: {'p_org_id': orgId},
-      ));
+      Repo._rows(
+        await callRpc('pending_tax_submissions', params: {'p_org_id': orgId}),
+      );
 
   /// Accept what a customer said over what the contact already holds.
   ///
@@ -10808,7 +10861,9 @@ extension RepoPos on Repo {
         // Named because 0517 added a same-org composite key alongside
         // the plain one, so 'pos_outlets' can now be joined two ways
         // and PostgREST refuses the embed with PGRST201.
-        .select('*, pos_outlets!pos_registers_outlet_id_fkey(id, name, code, business_type)')
+        .select(
+          '*, pos_outlets!pos_registers_outlet_id_fkey(id, name, code, business_type)',
+        )
         .eq('org_id', orgId)
         .eq('is_active', true)
         .order('code', ascending: true),
@@ -10919,22 +10974,23 @@ extension RepoPos on Repo {
     bool? active,
   }) async =>
       (await callRpc(
-        'upsert_pos_tender_type',
-        params: {
-          'p_id': id,
-          'p_org': orgId,
-          'p_code': code,
-          'p_name': name,
-          'p_kind': kind,
-          'p_payment_mode': paymentMode,
-          'p_bank_account': bankAccountId,
-          'p_counts_in_drawer': countsInDrawer,
-          'p_gives_change': givesChange,
-          'p_opens_drawer': opensDrawer,
-          'p_sort': sortOrder,
-          'p_active': active,
-        },
-      )) as String;
+            'upsert_pos_tender_type',
+            params: {
+              'p_id': id,
+              'p_org': orgId,
+              'p_code': code,
+              'p_name': name,
+              'p_kind': kind,
+              'p_payment_mode': paymentMode,
+              'p_bank_account': bankAccountId,
+              'p_counts_in_drawer': countsInDrawer,
+              'p_gives_change': givesChange,
+              'p_opens_drawer': opensDrawer,
+              'p_sort': sortOrder,
+              'p_active': active,
+            },
+          ))
+          as String;
 
   /// Refuses a tender that has taken money, and says to switch it off
   /// instead. See `0732`: `pos_tenders` references the type `on delete
@@ -11162,8 +11218,10 @@ extension RepoPos on Repo {
         // has been ambiguous since that migration and nothing said so:
         // `check_embeds.py` treated the `!inner` join modifier as a
         // constraint name and skipped the check entirely.
-        .select('*, pos_sale_lines!pos_sale_line_modifiers_line_id_fkey!inner'
-            '(sale_id)')
+        .select(
+          '*, pos_sale_lines!pos_sale_line_modifiers_line_id_fkey!inner'
+          '(sale_id)',
+        )
         .eq('pos_sale_lines.sale_id', saleId),
   );
 
@@ -11215,14 +11273,18 @@ extension RepoPos on Repo {
       'p_register': registerId,
       if (contactId != null) 'p_contact': contactId,
     };
-    final attempt = _attempts.putIfAbsent('open_pos_sale',
-        IdempotentAttempt.new);
+    final attempt = _attempts.putIfAbsent(
+      'open_pos_sale',
+      IdempotentAttempt.new,
+    );
     // 32 hex characters, which Postgres accepts as a uuid unhyphenated.
     final uuid = clientUuid ?? attempt.keyFor(params);
-    final sale = await callRpc(
-      'open_pos_sale',
-      params: {...params, 'p_client_uuid': uuid},
-    ) as String;
+    final sale =
+        await callRpc(
+              'open_pos_sale',
+              params: {...params, 'p_client_uuid': uuid},
+            )
+            as String;
     attempt.succeeded();
     return sale;
   }
@@ -11281,19 +11343,23 @@ extension RepoPos on Repo {
   /// One serial onto one line, checked while the customer is still at
   /// the counter. Returns everything scanned onto the line so far.
   Future<List<String>> posScanSerial(String lineId, String serial) async =>
-      ((await callRpc('pos_scan_serial',
-                  params: {'p_line': lineId, 'p_serial': serial})
-              as List?) ??
-          const [])
+      ((await callRpc(
+                    'pos_scan_serial',
+                    params: {'p_line': lineId, 'p_serial': serial},
+                  )
+                  as List?) ??
+              const [])
           .map((e) => '$e')
           .toList(growable: false);
 
   /// And taking a mis-scan back off.
   Future<List<String>> posUnscanSerial(String lineId, String serial) async =>
-      ((await callRpc('pos_unscan_serial',
-                  params: {'p_line': lineId, 'p_serial': serial})
-              as List?) ??
-          const [])
+      ((await callRpc(
+                    'pos_unscan_serial',
+                    params: {'p_line': lineId, 'p_serial': serial},
+                  )
+                  as List?) ??
+              const [])
           .map((e) => '$e')
           .toList(growable: false);
 
@@ -11312,9 +11378,9 @@ extension RepoPos on Repo {
         await client
             .from('pos_sales')
             // Named because 0520 added a same-org composite key alongside
-        // the plain one, so 'pos_tables' can now be joined two ways and
-        // PostgREST refuses an unqualified embed with PGRST201.
-        .select('*, pos_tables!pos_sales_table_id_fkey(code, name)')
+            // the plain one, so 'pos_tables' can now be joined two ways and
+            // PostgREST refuses an unqualified embed with PGRST201.
+            .select('*, pos_tables!pos_sales_table_id_fkey(code, name)')
             .eq('register_id', registerId)
             .eq('status', 'parked')
             .order('opened_at', ascending: true),
@@ -11653,7 +11719,9 @@ extension RepoPos on Repo {
         // Named because 0513 added a same-org composite key alongside
         // the plain one, so 'items' can now be joined two ways and
         // PostgREST refuses an unqualified embed with PGRST201.
-        .select('*, items!pos_services_item_id_fkey(id, name, code, unit_price)')
+        .select(
+          '*, items!pos_services_item_id_fkey(id, name, code, unit_price)',
+        )
         .eq('org_id', orgId)
         .eq('is_active', true),
   );
@@ -12181,7 +12249,9 @@ extension RepoMemberships on Repo {
         // Named because 0521 added a same-org composite key alongside
         // the plain one, so 'pos_memberships' can now be joined two ways and
         // PostgREST refuses an unqualified embed with PGRST201.
-        .select('id, status, pos_memberships!pos_membership_subscriptions_membership_id_fkey(name, sessions_included)')
+        .select(
+          'id, status, pos_memberships!pos_membership_subscriptions_membership_id_fkey(name, sessions_included)',
+        )
         .eq('org_id', orgId)
         .eq('contact_id', contactId)
         .eq('status', 'active')
@@ -13628,25 +13698,30 @@ extension RepoLandedCost on Repo {
   Future<List<Map<String, dynamic>>> landedCostPreview(String runId) async =>
       Repo.rows(await callRpc('landed_cost_preview', params: {'p_run': runId}));
 
-  Future<List<Map<String, dynamic>>> landedCostTargets(String runId) async =>
-      Repo.rows(
-        await client
-            .from('landed_cost_targets')
+  Future<List<Map<String, dynamic>>> landedCostTargets(
+    String runId,
+  ) async => Repo.rows(
+    await client
+        .from('landed_cost_targets')
         // Named because 0518 added a same-org composite key alongside
         // the plain one, so 'purchase_documents' can now be joined two
         // ways and PostgREST refuses the embed with PGRST201.
-        .select('bill_id, purchase_documents!landed_cost_targets_bill_id_fkey(doc_no, doc_date)')
-            .eq('run_id', runId),
-      );
+        .select(
+          'bill_id, purchase_documents!landed_cost_targets_bill_id_fkey(doc_no, doc_date)',
+        )
+        .eq('run_id', runId),
+  );
 
   Future<List<Map<String, dynamic>>> landedCostCharges(String runId) async =>
       Repo.rows(
         await client
             .from('landed_cost_charges')
-        // Named because 0514 added a same-org composite key alongside
-        // the plain one, so 'accounts' can now be joined two ways and
-        // PostgREST refuses an unqualified embed with PGRST201.
-        .select('*, accounts!landed_cost_charges_account_id_fkey(code, name)')
+            // Named because 0514 added a same-org composite key alongside
+            // the plain one, so 'accounts' can now be joined two ways and
+            // PostgREST refuses an unqualified embed with PGRST201.
+            .select(
+              '*, accounts!landed_cost_charges_account_id_fkey(code, name)',
+            )
             .eq('run_id', runId)
             .order('line_no', ascending: true),
       );
@@ -14126,8 +14201,6 @@ extension RepoTenantPayments on Repo {
     await callRpc('org_payment_gateway_status', params: {'p_org_id': orgId}),
   );
 
-
-
   /// Saves an acquirer's credentials.
   ///
   /// A null key leaves the stored one alone, which is what makes
@@ -14211,19 +14284,18 @@ extension RepoBankFeeds on Repo {
   // beside the form that uses it. The SQL is ready and waiting.
 
   /// Stop pulling, or start again. Keeps the credential either way.
-  Future<void> setBankFeedPaused(String bankAccountId, bool paused) =>
-      callRpc('set_bank_feed_paused', params: {
-        'p_bank_account_id': bankAccountId,
-        'p_paused': paused,
-      });
+  Future<void> setBankFeedPaused(String bankAccountId, bool paused) => callRpc(
+    'set_bank_feed_paused',
+    params: {'p_bank_account_id': bankAccountId, 'p_paused': paused},
+  );
 
   /// Remove the credential. The row and its runs stay, because what was
   /// imported and when is the company's record of where its statements
   /// came from.
-  Future<void> disconnectBankFeed(String bankAccountId) =>
-      callRpc('disconnect_bank_feed', params: {
-        'p_bank_account_id': bankAccountId,
-      });
+  Future<void> disconnectBankFeed(String bankAccountId) => callRpc(
+    'disconnect_bank_feed',
+    params: {'p_bank_account_id': bankAccountId},
+  );
 
   /// Every pull, newest first. A feed that has stopped is otherwise
   /// silent until somebody fails to reconcile.
@@ -14256,42 +14328,44 @@ extension RepoMia on Repo {
     required String subjectType,
     required String subjectId,
   }) async => Repo._rows(
-        await client
-            .from('mia_credentials')
-            .select(
-              '*, verifier:profiles!mia_credentials_verified_by_fkey'
-              '(full_name, email)',
-            )
-            .eq('subject_type', subjectType)
-            .eq('subject_id', subjectId)
-            .order('kind', ascending: true),
-      ).map(MiaCredential.fromJson).toList();
+    await client
+        .from('mia_credentials')
+        .select(
+          '*, verifier:profiles!mia_credentials_verified_by_fkey'
+          '(full_name, email)',
+        )
+        .eq('subject_type', subjectType)
+        .eq('subject_id', subjectId)
+        .order('kind', ascending: true),
+  ).map(MiaCredential.fromJson).toList();
 
   Future<String> saveMiaCredential({
     required String subjectType,
     required String subjectId,
     required String kind,
     required Map<String, Object> fields,
-  }) async =>
-      (await callRpc('upsert_mia_credential', params: {
-        'p_subject_type': subjectType,
-        'p_subject_id': subjectId,
-        'p_kind': kind,
-        'p_fields': fields,
-      })).toString();
+  }) async => (await callRpc(
+    'upsert_mia_credential',
+    params: {
+      'p_subject_type': subjectType,
+      'p_subject_id': subjectId,
+      'p_kind': kind,
+      'p_fields': fields,
+    },
+  )).toString();
 
   Future<void> deleteMiaCredential(String id) async =>
       await callRpc('delete_mia_credential', params: {'p_id': id});
-
 }
 
 /// A company's own payment methods. 0635.
 extension RepoPaymentMethods on Repo {
   /// The company's own payment methods, live ones only.
   Future<List<PaymentMethod>> paymentMethods() async {
-    final data = await callRpc('payment_methods_for', params: {
-      'p_org_id': orgId,
-    });
+    final data = await callRpc(
+      'payment_methods_for',
+      params: {'p_org_id': orgId},
+    );
     return Repo._rows(data).map(PaymentMethod.fromJson).toList();
   }
 
@@ -14313,21 +14387,23 @@ extension RepoPaymentMethods on Repo {
     bool isActive = true,
     int sortOrder = 0,
     String? notes,
-  }) async =>
-      (await callRpc('save_payment_method', params: {
-        'p_org_id': orgId,
-        'p_name': name,
-        'p_id': id,
-        'p_payment_mode_code': paymentModeCode,
-        'p_bank_account_id': bankAccountId,
-        'p_charge_account_id': chargeAccountId,
-        'p_charge_percent': chargePercent,
-        'p_charge_fixed': chargeFixed,
-        'p_is_default': isDefault,
-        'p_is_active': isActive,
-        'p_sort_order': sortOrder,
-        'p_notes': notes,
-      })).toString();
+  }) async => (await callRpc(
+    'save_payment_method',
+    params: {
+      'p_org_id': orgId,
+      'p_name': name,
+      'p_id': id,
+      'p_payment_mode_code': paymentModeCode,
+      'p_bank_account_id': bankAccountId,
+      'p_charge_account_id': chargeAccountId,
+      'p_charge_percent': chargePercent,
+      'p_charge_fixed': chargeFixed,
+      'p_is_default': isDefault,
+      'p_is_active': isActive,
+      'p_sort_order': sortOrder,
+      'p_notes': notes,
+    },
+  )).toString();
 
   /// Retire one. Soft, because receipts already name it.
   Future<void> archivePaymentMethod(String id) async =>
@@ -14339,10 +14415,12 @@ extension RepoPaymentMethods on Repo {
   /// in one place. It is a suggestion for the screen: posting uses what
   /// the document says, never this.
   Future<double> suggestedCharge(String methodId, double amount) async =>
-      Fmt.toDouble(await callRpc('suggested_charge', params: {
-        'p_payment_method_id': methodId,
-        'p_amount': amount,
-      }));
+      Fmt.toDouble(
+        await callRpc(
+          'suggested_charge',
+          params: {'p_payment_method_id': methodId, 'p_amount': amount},
+        ),
+      );
 }
 
 /// A company's own report layouts. 0637.
@@ -14365,42 +14443,45 @@ extension RepoReportLayouts on Repo {
     String? projectCode,
     String? departmentCode,
   }) async {
-    final data = await callRpc('report_with_layout', params: {
-      'p_org_id': orgId,
-      'p_kind': kind,
-      'p_from': from == null ? null : Fmt.iso(from),
-      'p_to': to == null ? null : Fmt.iso(to),
-      'p_layout_id': layoutId,
-      'p_project_code': projectCode,
-      'p_department_code': departmentCode,
-    });
+    final data = await callRpc(
+      'report_with_layout',
+      params: {
+        'p_org_id': orgId,
+        'p_kind': kind,
+        'p_from': from == null ? null : Fmt.iso(from),
+        'p_to': to == null ? null : Fmt.iso(to),
+        'p_layout_id': layoutId,
+        'p_project_code': projectCode,
+        'p_department_code': departmentCode,
+      },
+    );
     return Repo._rows(data);
   }
 
   /// This company's layouts for one report, the active one first.
   Future<List<ReportLayout>> reportLayouts(String kind) async {
-    final data = await callRpc('report_layouts_for', params: {
-      'p_org_id': orgId,
-      'p_kind': kind,
-    });
+    final data = await callRpc(
+      'report_layouts_for',
+      params: {'p_org_id': orgId, 'p_kind': kind},
+    );
     return Repo._rows(data).map(ReportLayout.fromJson).toList();
   }
 
   /// One layout's rows, in order, for the builder.
   Future<List<LayoutRow>> layoutRows(String layoutId) async {
-    final data = await callRpc('layout_rows', params: {
-      'p_layout_id': layoutId,
-    });
+    final data = await callRpc(
+      'layout_rows',
+      params: {'p_layout_id': layoutId},
+    );
     return Repo._rows(data).map(LayoutRow.fromJson).toList();
   }
 
   /// Copy the standard layout into an editable one and make it active.
   Future<String> createLayoutFromBuiltin(String kind, {String? name}) async =>
-      (await callRpc('create_layout_from_builtin', params: {
-        'p_org_id': orgId,
-        'p_kind': kind,
-        'p_name': name,
-      })).toString();
+      (await callRpc(
+        'create_layout_from_builtin',
+        params: {'p_org_id': orgId, 'p_kind': kind, 'p_name': name},
+      )).toString();
 
   /// Replace a layout's rows in one go.
   ///
@@ -14408,10 +14489,13 @@ extension RepoReportLayouts on Repo {
   /// a builder's changes one at a time would pass through states where
   /// a formula points at a row that has not arrived.
   Future<void> saveLayoutRows(String layoutId, List<LayoutRow> rows) async =>
-      await callRpc('save_layout_rows', params: {
-        'p_layout_id': layoutId,
-        'p_rows': [for (final r in rows) r.toJson()],
-      });
+      await callRpc(
+        'save_layout_rows',
+        params: {
+          'p_layout_id': layoutId,
+          'p_rows': [for (final r in rows) r.toJson()],
+        },
+      );
 
   Future<void> activateReportLayout(String id) async =>
       await callRpc('activate_report_layout', params: {'p_layout_id': id});

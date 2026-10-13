@@ -932,6 +932,11 @@ ask the same question of their reader as the journals do
 (`app.can_read_ledger`, `0855`). They are definers, so the journals'
 policies do not reach inside them; until `0855` a salesman was refused
 `gl_lines` and handed every line of it by `report_general_ledger`.
+The running balance on `accounts` is withheld from every client read
+of the table (`0856`) -- a column grant cannot tell the accountant from
+the salesman, so neither selects it -- and `account_balances` gives it
+to a reader of the ledger. A `select *` on `accounts` is refused; name
+the columns.
 
 ### Super admin
 
