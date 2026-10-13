@@ -3278,7 +3278,14 @@ page and renumbering would quietly break the reference.
     tenant role may read; every other table came out the same.
     0844's `account_balance_is_the_ledgers.sql` reads balances through
     the function, and `table_grants.sql` probes any column.
-    **Still to read back.**
+    **Applied, and read back** (13 October, read-only, after run
+    38351728049 on `4e49a25` had applied the migrations):
+    `account_balances` is there with the body this branch builds (md5
+    `dc6a4738`), a definer `authenticated` may run and `anon` may not;
+    `authenticated` no longer reads `accounts.current_balance`, still
+    reads `code` and still updates the table, and `anon` reads none of
+    it. The same run counted `6682 Dart tests ran (floor 6678)`, and the
+    floor is 6682 now.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
