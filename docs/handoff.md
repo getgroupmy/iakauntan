@@ -3442,7 +3442,15 @@ page and renumbering would quietly break the reference.
     a control; 10 / 10 in Dart across five files. The Form P build test
     asserted only that no tax figure was drawn, which an empty screen
     also satisfies; it now asserts the working is drawn.
-    **Still to read back.**
+    **Applied, and read back** (13 October, read-only, after run
+    38369369028 on `8eca0a3` had applied the migrations): the three
+    bodies are the ones this branch builds -- `app.tax_estimate_schedule_of`
+    `7b95ab53`, executable by neither `authenticated` nor `anon`;
+    `tax_estimate_schedule` `2b6a9dbb` and `tax_estimate_payment_summary`
+    `f5c50602`, definers executable by `authenticated` and not `anon` --
+    and the seven select policies are `app.can_read_ledger(org_id)`,
+    `tax_filings_select` still `is_org_member`. The same run counted
+    `6732 Dart tests ran (floor 6726)`, and the floor is 6732 now.
 129. ~~Every member reads the recurring journals and the bank
     transfers.~~ **Raised and answered 13 October** ("Both need ledger
     access"). `recurring_journals` holds in `template` the journal each
