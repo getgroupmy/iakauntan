@@ -3534,6 +3534,26 @@ page and renumbering would quietly break the reference.
     the SQL test's refusal of a select of every column, which is what
     the setup list would get without it.
     **Still to read back.**
+132. ~~Every member reads a filed set of accounts, figure by figure.~~
+    **Raised and answered 13 October** ("Figures need ledger access").
+    `0855` made `fs_prepare` and `fs_export` refuse a member who does not
+    read the ledger -- `fs_export` in words of its own, because it
+    answers a frozen filing from `fs_figures` without `fs_prepare`. The
+    table it answers from was still `is_org_member`. Measured locally as
+    `sales`, past the MBRS module gate: `fs_export` refused, and `select
+    * from fs_figures` gave cost of sales 4,321.09, share capital
+    4,321.09 and retained earnings -4,321.09. Production has four frozen
+    filings and no figure rows yet. No screen reads the table; the four
+    functions on it are definers. `0864`: the select policy asks
+    `can_read_ledger`; the restrictive module gate stays; `fs_filings`
+    and the narrative `fs_disclosures` hold no figure and stay open, as
+    the filings list needs them. New `fs_figures_withheld.sql` (9
+    assertions). Swept by hand, 4 / 4 with a control. **Two assertions
+    were dropped as masked:** a suspended accountant and a reader of
+    another company read nothing whatever this policy says, because the
+    module gate asks for a current member first -- a mutant letting
+    either in survived, and that is how it was found.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

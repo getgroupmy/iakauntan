@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18078
+18087
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1806,3 +1806,9 @@
 # this company's only, and still sets it from the setup screen; anon
 # calls nothing and reads nothing). Measured: `all SQL assertions passed
 # (447 files, 18078 assertions executed)`.
+#
+# 18078 -> 18087, 13 October: 0864's fs_figures_withheld.sql (9: a
+# salesman and a viewer past the MBRS gate read the frozen filing and
+# none of its figures; the auditor reads them, the owner of two
+# companies reads the other's, anon reads none). Measured: `all SQL
+# assertions passed (448 files, 18087 assertions executed)`.
