@@ -3874,6 +3874,19 @@ page and renumbering would quietly break the reference.
     property and people; `attachments_of` to `can_read_attachment`;
     `next_document_number` open to her for `expense_claim` only).
     **Still to read back.**
+142. The stock domain of item 141. Measured locally after `0873` as
+    an `employee` with no access type: `stock_on_hand` gave her the 40
+    on hand at 2.50 it gives the owner. `0874` re-creates the nine stock,
+    lot and manufacturing definers -- `stock_on_hand`,
+    `report_stock_card`, `report_lot_balances`, `report_expiring_stock`,
+    `trace_lot`, `line_lots`, `suggest_lots`, `document_lot_problems`,
+    `mo_shortages` -- with `app.is_staff_member` in place of
+    `is_org_member` and nothing else changed, as `0873` did, and
+    `employee_definers.sql` takes them off its list of what is not yet
+    done (2 more assertions: she is refused the stock on hand, a View
+    Only member has the forty at 2.50). By hand: `stock_on_hand` put
+    back is caught by its refusal, `trace_lot` put back by the list.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

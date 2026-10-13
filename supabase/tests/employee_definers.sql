@@ -6,7 +6,8 @@
 -- A definer reads past every policy, so `0871` and `0872` did not reach
 -- the functions that answer any member: an employee with no access type
 -- called `report_revenue_trend`, `document_numbering` and
--- `contact_duplicates` and was answered as the owner is. They ask
+-- `contact_duplicates` and was answered as the owner is, and
+-- `stock_on_hand` gave her the stock and what it cost. They ask
 -- `app.is_staff_member` now, and refuse her as each refused a stranger.
 -- Asked with the role `authenticated`, as the app asks.
 --
@@ -24,7 +25,7 @@ begin;
 \i supabase/tests/_helpers.sql
 
 create temporary table t_df (org uuid, staff uuid, viewer uuid, outsider uuid,
-  customer uuid);
+  customer uuid, item uuid);
 grant select on t_df to authenticated;
 
 do $$
@@ -42,6 +43,17 @@ begin
   insert into public.contacts (org_id, code, name, contact_type)
   values (r.org, 'C-1', 'Pelanggan Besar', 'customer')
   returning id into r.customer;
+  -- Forty on hand at 2.50, put there the way every movement arrives.
+  perform public.create_fiscal_year(r.org, date '2026-01-01');
+  insert into public.items (org_id, code, name, item_type, track_inventory,
+                            uom_code, unit_price, cost_price)
+  values (r.org, 'ITM-1', 'Widget', 'stock', true, 'C62', 20, 2.50)
+  returning id into r.item;
+  insert into public.stock_movements
+    (org_id, movement_no, movement_date, movement_type, item_id, warehouse_id,
+     quantity, unit_cost)
+  values (r.org, 'OPEN-1', date '2026-01-01', 'opening_balance', r.item,
+          app.default_warehouse(r.org), 40, 2.50);
   insert into t_df select r.*;
 end $$;
 
@@ -65,6 +77,9 @@ begin
     '%Not a member of that company%', '42501');
   perform pg_temp.check_refused('and a customer''s credit',
     format('select * from public.customer_credit_status(%L)', d.customer),
+    '%Not a member of organization%', '42501');
+  perform pg_temp.check_refused('and the stock on hand (0874)',
+    format('select * from public.stock_on_hand(%L)', d.org),
     '%Not a member of organization%', '42501');
 end $$;
 
@@ -100,6 +115,9 @@ begin
       || (select count(*) from public.contact_duplicates(d.org)) || ' / '
       || (select count(*) from public.customer_credit_status(d.customer)),
     '6 / true / 1 / 1');
+  perform pg_temp.check_eq('and the forty on hand at 2.50',
+    (select quantity::numeric(12,2) || ' / ' || value from public.stock_on_hand(d.org)),
+    '40.00 / 100.00');
 end $$;
 
 reset role;
@@ -120,20 +138,18 @@ declare
     'mark_all_notifications_read', 'mark_notification_read',
     'my_approvals', 'org_module_surface', 'record_export',
     'report_denied', 'report_feedback'];
-  -- Not yet done: stock and lots (`0874`), and the corporate, property
-  -- and people functions (`0875`). This list only shrinks.
+  -- Not yet done: the corporate, property and people functions
+  -- (`0875`). This list only shrinks; stock and lots left it with
+  -- `0874`.
   v_todo text[] := array[
     'ai_tool_catalogue', 'approval_state', 'attachments_of',
     'chat_links_for', 'corp_issued_capital', 'corp_register_of_members',
     'corp_template_placeholders', 'corp_upcoming_filings',
-    'custom_field_lookup_options', 'document_lot_problems',
-    'document_scan_totals', 'fs_deadlines', 'line_lots', 'mo_shortages',
-    'next_document_number', 'org_team', 'property_statutory_due',
-    'rent_preview', 'report_expiring_stock', 'report_fs_deadlines',
-    'report_lot_balances', 'report_statutory_charges',
-    'report_stock_card', 'report_timesheet', 'scan_inbox',
-    'stock_on_hand', 'strata_arrears', 'strata_charge_preview',
-    'suggest_lots', 'trace_lot'];
+    'custom_field_lookup_options', 'document_scan_totals',
+    'fs_deadlines', 'next_document_number', 'org_team',
+    'property_statutory_due', 'rent_preview', 'report_fs_deadlines',
+    'report_statutory_charges', 'report_timesheet', 'scan_inbox',
+    'strata_arrears', 'strata_charge_preview'];
 begin
   perform pg_temp.check_eq('no definer answers any member unless it is named here',
     coalesce((
