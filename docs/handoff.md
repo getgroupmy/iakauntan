@@ -3238,7 +3238,15 @@ page and renumbering would quietly break the reference.
     (`reports_screen_test.dart`, against a repository that remembers
     what it was asked for). **Noticed, not yet raised:** "Edit layout"
     is only in the phone's More menu; a laptop's bar has no way to it.
-    **Still to read back.**
+    **Applied, and read back** (13 October, read-only, after run
+    38344769154 on `e1e3be8` had applied the migrations): all twenty-six
+    bodies are the ones this branch builds, md5 for md5 (`group_orgs`
+    `0032f5a1`, `report_general_ledger` `37fcfe5e`, `report_trial_balance`
+    `ca8d3fe3`, `fs_export` `79953c25`, `tax_computation_lines` `f8b3f6e7`
+    among them), each still a definer and each now naming
+    `can_read_ledger`. Nobody in production lost a report: every member
+    is an owner, admin, accountant, clerk or auditor. The same run counted
+    `6678 Dart tests ran (floor 6649)`, and the floor is 6678 now.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
