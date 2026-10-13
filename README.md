@@ -939,7 +939,13 @@ their own (`0872`); she keeps the company's frame (its name, modules,
 departments, leave and claim types, holidays) and her own row of the
 member list. `supabase/tests/employee_reads_her_own.sql` names what she
 may read and fails on a table any member can read that is on neither
-side of that line.
+side of that line. A definer reads past all of that, so the functions
+that answer with the company's records ask `app.is_staff_member` --
+a member who is more than self-service -- rather than `is_org_member`
+(`0873`-`0875`); `supabase/tests/employee_definers.sql` names the few
+left open to her (her approvals and notifications, the claim's
+exchange rate and number, the modules the shell draws) and fails on
+any other definer that asks `is_org_member` alone.
 
 The reports built from the ledger -- the statements, the general ledger,
 the group reports, the tax computation and the financial statements --

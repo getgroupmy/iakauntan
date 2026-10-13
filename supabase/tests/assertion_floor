@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18208
+18215
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1905,3 +1905,10 @@
 # 18206 -> 18208, 13 October: 0874 in employee_definers.sql (2: the
 # employee is refused the stock on hand, and a View Only member has the
 # forty on hand at 2.50 as the owner does).
+#
+# 18208 -> 18215, 13 October: 0875 in employee_definers.sql (7: the
+# employee is answered no member list, cannot advance the invoice
+# numbers and still numbers her own claim, and lists the receipt on her
+# claim and not the scan on an invoice; somebody outside the company
+# takes no claim number of its; a View Only member has the member list
+# and the invoice numbers, and lists no file it could not open).

@@ -3892,6 +3892,31 @@ page and renumbering would quietly break the reference.
     Only member has the forty at 2.50). By hand: `stock_on_hand` put
     back is caught by its refusal, `trace_lot` put back by the list.
     **Still to read back.**
+143. The last domain of item 141. Measured locally after `0874` as an
+    `employee` with no access type: `org_team` gave her the member list,
+    `next_document_number` advanced the invoice sequence for her to
+    INV-2026-00001, and `attachments_of` listed the scan on an invoice
+    she may not open. `0875` re-creates the remaining 21 -- the
+    corporate register and filings, property and strata previews, the
+    timesheet report, the member list, chat links, the AI's tool list,
+    the scan inbox, custom field lookups, a document's approval state --
+    with `app.is_staff_member`, and two differently: `attachments_of`
+    asks `can_read_attachment` of the record, the question the table and
+    the bucket already ask, so she lists the receipt on her own claim
+    and nothing else -- and **a View Only member, who could list an
+    invoice's files and open none of them, lists none now**;
+    `next_document_number` answers anybody in the company for
+    `expense_claim` and `leave_request` -- `createClaim` asks for the
+    first, and `submit_leave_request`, a definer, asks for the second as
+    her -- and staff for everything else. **Caught by the full suite:**
+    the first draft allowed claims only, and `request_decisions.sql`,
+    filing leave as an employee, was refused its number.
+    `employee_definers.sql` has no list of what is not yet done any more
+    (17 assertions in all; 7 here). Swept 6 / 6 on the two with a
+    control; **caught by the sweep:** nothing asserted that a stranger
+    takes no claim number, so one is now. By hand: `corp_register_of_members` put back is caught
+    by the list.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

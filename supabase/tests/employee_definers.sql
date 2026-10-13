@@ -11,10 +11,10 @@
 -- `app.is_staff_member` now, and refuse her as each refused a stranger.
 -- Asked with the role `authenticated`, as the app asks.
 --
--- The last block keeps two lists: the definers left open to her on
--- purpose, and those not yet done. Any other definer that asks
--- `is_org_member` and nothing narrower fails it, and so does a name on
--- either list that has stopped being true.
+-- The last block keeps the list of definers left open to her on
+-- purpose. Any other definer that asks `is_org_member` and nothing
+-- narrower fails it, and so does a name on the list that has stopped
+-- being true. Until `0875` it kept a second list, of those not yet done.
 --
 -- Nothing is written; the file rolls back.
 -- =====================================================================
@@ -25,7 +25,7 @@ begin;
 \i supabase/tests/_helpers.sql
 
 create temporary table t_df (org uuid, staff uuid, viewer uuid, outsider uuid,
-  customer uuid, item uuid);
+  customer uuid, item uuid, invoice_ref uuid, claim uuid);
 grant select on t_df to authenticated;
 
 do $$
@@ -54,6 +54,21 @@ begin
      quantity, unit_cost)
   values (r.org, 'OPEN-1', date '2026-01-01', 'opening_balance', r.item,
           app.default_warehouse(r.org), 40, 2.50);
+  -- Her own claim, with its receipt; and a scan on an invoice.
+  insert into public.employees (org_id, employee_no, full_name, user_id, hire_date)
+  values (r.org, 'E1', 'Staf Biasa', r.staff, pg_temp.today());
+  insert into public.expense_claims
+    (org_id, claim_no, employee_id, claim_date, title, total_amount)
+  values (r.org, 'CLM-DF-1',
+          (select id from public.employees where org_id = r.org and user_id = r.staff),
+          pg_temp.today(), 'Parking', 12.00)
+  returning id into r.claim;
+  r.invoice_ref := gen_random_uuid();
+  insert into public.attachments (org_id, entity_table, entity_id, file_name, storage_path)
+  values (r.org, 'expense_claims', r.claim, 'resit.jpg',
+          r.org || '/expense_claims/' || r.claim || '/resit.jpg'),
+         (r.org, 'sales_documents', r.invoice_ref, 'invoice-scan.pdf',
+          r.org || '/sales_documents/' || r.invoice_ref || '/invoice-scan.pdf');
   insert into t_df select r.*;
 end $$;
 
@@ -81,6 +96,18 @@ begin
   perform pg_temp.check_refused('and the stock on hand (0874)',
     format('select * from public.stock_on_hand(%L)', d.org),
     '%Not a member of organization%', '42501');
+  perform pg_temp.check_eq('and the member list (0875)',
+    (select count(*) from public.org_team(d.org))::int, 0);
+  perform pg_temp.check_refused('she cannot advance the invoice numbers',
+    format('select public.next_document_number(%L, %L)', d.org, 'invoice'),
+    '%Not a member of organization%', '42501');
+  perform pg_temp.check_true('and still numbers her own claim and her leave',
+    public.next_document_number(d.org, 'expense_claim') like 'EXP-%'
+    and public.next_document_number(d.org, 'leave_request') is not null);
+  perform pg_temp.check_eq('she lists the receipt on her claim, and not the scan on an invoice',
+    (select count(*) from public.attachments_of(d.org, 'expense_claims', d.claim)) || ' / '
+      || (select count(*) from public.attachments_of(d.org, 'sales_documents', d.invoice_ref)),
+    '1 / 0');
 end $$;
 
 reset role;
@@ -95,6 +122,9 @@ begin
   select * into d from t_df;
   perform pg_temp.check_eq('somebody outside the company is answered with nothing too',
     (select count(*) from public.report_revenue_trend(d.org, 6))::int, 0);
+  perform pg_temp.check_refused('and takes no claim number of its, either',
+    format('select public.next_document_number(%L, %L)', d.org, 'expense_claim'),
+    '%Not a member of organization%', '42501');
 end $$;
 
 reset role;
@@ -118,6 +148,13 @@ begin
   perform pg_temp.check_eq('and the forty on hand at 2.50',
     (select quantity::numeric(12,2) || ' / ' || value from public.stock_on_hand(d.org)),
     '40.00 / 100.00');
+  perform pg_temp.check_true('and the member list, and the invoice numbers',
+    (select count(*) from public.org_team(d.org)) = 3
+    and public.next_document_number(d.org, 'invoice') like 'INV-%');
+  -- 0875: `attachments_of` asks what the table and the bucket ask, and
+  -- a View Only member could list an invoice's files and open none.
+  perform pg_temp.check_eq('and lists no file it could not open',
+    (select count(*) from public.attachments_of(d.org, 'sales_documents', d.invoice_ref))::int, 0);
 end $$;
 
 reset role;
@@ -138,18 +175,6 @@ declare
     'mark_all_notifications_read', 'mark_notification_read',
     'my_approvals', 'org_module_surface', 'record_export',
     'report_denied', 'report_feedback'];
-  -- Not yet done: the corporate, property and people functions
-  -- (`0875`). This list only shrinks; stock and lots left it with
-  -- `0874`.
-  v_todo text[] := array[
-    'ai_tool_catalogue', 'approval_state', 'attachments_of',
-    'chat_links_for', 'corp_issued_capital', 'corp_register_of_members',
-    'corp_template_placeholders', 'corp_upcoming_filings',
-    'custom_field_lookup_options', 'document_scan_totals',
-    'fs_deadlines', 'next_document_number', 'org_team',
-    'property_statutory_due', 'rent_preview', 'report_fs_deadlines',
-    'report_statutory_charges', 'report_timesheet', 'scan_inbox',
-    'strata_arrears', 'strata_charge_preview'];
 begin
   perform pg_temp.check_eq('no definer answers any member unless it is named here',
     coalesce((
@@ -160,12 +185,12 @@ begin
          and has_function_privilege('authenticated', p.oid, 'execute')
          and p.prosrc ~ 'is_org_member'
          and p.prosrc !~ '(can_read_module|can_write_module|module_access|can_read_ledger|can_write\(|can_post|can_admin|can_manage_hr|can_run_payroll|is_platform_admin|has_permission|my_employee_id|can_read_client_money|is_self_service_only|is_staff_member)'
-         and p.proname <> all (v_open || v_todo)), 'none'),
+         and p.proname <> all (v_open)), 'none'),
     'none');
   perform pg_temp.check_eq('and every name here is still one that answers any member',
     coalesce((
       select string_agg(x, ', ' order by x)
-        from unnest(v_open || v_todo) x
+        from unnest(v_open) x
        where not exists (
          select 1 from pg_proc p
            join pg_namespace n on n.oid = p.pronamespace and n.nspname = 'public'
