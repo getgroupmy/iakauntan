@@ -3979,6 +3979,34 @@ page and renumbering would quietly break the reference.
     1 January is INV-2027-00001; it reads the year off the product's
     clock now.
     **Still to read back.**
+146. ~~A purchaser could raise invoices and a salesperson bills.~~
+    **Raised and answered 13 October** ("Each writes only its own
+    side"). The README gave Sales and Purchasing "their own documents";
+    both pass `can_write`, and with no access type `module_access`
+    answers both `write` for sales and purchases. Measured locally: a
+    `purchaser` raised a sales invoice and a `sales` member a supplier
+    bill. Production has neither role yet. `0878`:
+    `app.writes_side(org, side)` -- false only for a member of the other
+    side's role with no access type -- and a trigger, NOT definer, on
+    `sales_documents`, `sales_document_lines`, `receipts`,
+    `purchase_documents`, `purchase_document_lines` and
+    `purchase_payments` refusing a client's own statement by the wrong
+    side. Both still read both sides; an access type decides instead,
+    which is how a company lets one person do both. **Client statements
+    only, on purpose:** `settle_pos_stalls` bills the stall owners when a
+    cashier closes the till, and `accept_intercompany_bill` books another
+    company's invoice as a bill -- functions that cross sides keep their
+    own guards. The app raises documents by writing the table directly,
+    so its path is covered; a definer that writes one side and asks only
+    `can_write` (`quote_opportunity`, `draft_bill_from_received_einvoice`)
+    is not, and is the next place to look if this needs to be tighter.
+    New `each_side_writes_its_own.sql` (12 assertions). Swept 6 / 6 with
+    a control, and by hand: the trigger dropped from `receipts` is
+    caught by the catalog check. **Caught by the full suite:**
+    `trigger_reachable_grants.sql` -- what a trigger calls,
+    `service_role` must be able to execute; `writes_side` was granted to
+    `authenticated` alone at first.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

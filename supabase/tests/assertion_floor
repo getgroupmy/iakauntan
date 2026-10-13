@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18226
+18238
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1926,3 +1926,11 @@
 # payroll run's and no invoice; an employee only a claim's and a
 # leave's; the clerk's invoice is the first, so there is no gap; and a
 # stranger takes none).
+#
+# 18226 -> 18238, 13 October: 0878's each_side_writes_its_own.sql (12: a
+# purchaser raises no invoice, changes none and adds no line to one,
+# still reads it, and writes an order and a bill line; a salesperson
+# raises no bill and deletes none, still reads it, and raises an
+# invoice; a purchaser given the sales side by an access type raises an
+# invoice; an accountant writes both; and the six tables carry the
+# guard, each for its own side).
