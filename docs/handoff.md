@@ -4424,7 +4424,11 @@ page and renumbering would quietly break the reference.
     company wrote, issued) and, once paid in, before that day; before
     its own date stays open, as `0886` left it. New
     `cheque_comes_back_after.sql` (10 assertions). Swept 7 / 7 with a
-    control. **Still to read back.**
+    control. **Applied, and read back** (14 October, read-only, after
+    run 38549022279 on `39a510a` had applied the migrations, its three
+    deploy jobs present): `bounce_pdc` hashes `9a2c34d5`, as here,
+    carrying the change. The same run counted `6767 Dart tests ran
+    (floor 6767)`.
 161. ~~Withholding tax could be paid over before it was withheld.~~
     **Raised and answered 14 October** ("Not before the certificate").
     Found in the same sweep. `remit_withholding` took any date; a
