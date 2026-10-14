@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18382
+18396
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2028,3 +2028,12 @@
 # and the third year reads its band, not the default; a shift assignment
 # ending before it starts is refused, and one ending the day it starts
 # is kept, with an open one).
+#
+# 18382 -> 18396, 14 October: 0891's client_money_any_day.sql (14: a
+# client-money payment dated before the money it spends is refused, even
+# the day before, and one the day it arrived goes; one funded by money
+# already held goes dated back, but not for more than was held that day,
+# and of two short days the first is named; the whole of it on the day it
+# came is allowed; a transfer to another matter or to office dated before
+# the money is refused; a void or a move that leaves an earlier payment
+# unfunded is refused, though the total stays in credit).

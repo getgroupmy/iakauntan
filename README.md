@@ -460,12 +460,23 @@ Solicitors' Accounts Rules:
 
 Client money posts as an offsetting asset/liability pair — client bank
 against *Client Monies Held* — so it never touches income. A deferred
-constraint trigger refuses any movement that would overdraw a matter:
+constraint trigger refuses any movement that would overdraw a matter on
+any day:
 
 ```
-Client account for matter MAT-2026-00001 would be overdrawn by 7500.00.
-Client money held for one matter cannot fund another.
+Client account for matter MAT-2026-00001 would be overdrawn by 7500.00
+on 2026-10-04. Client money held for one matter cannot fund another,
+and money that had not arrived yet cannot fund it either.
 ```
+
+It reads the matter's client ledger day by day, each day's movements
+summed first, and names the first day it would close in debit. Until
+`0891` it added up the whole ledger and never asked when, so a payment
+dated before the receipt that paid for it went through: the total came
+right once the money arrived, and for every day in between another
+client's money had paid. A receipt and a payment on the same day pass
+in either order; a void or a move that leaves an earlier payment
+unfunded is refused, though the total stays in credit.
 
 That is enforced in the database, not the UI, so it holds however the
 row is written.

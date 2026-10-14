@@ -4381,6 +4381,27 @@ page and renumbering would quietly break the reference.
     both pay -- but nothing in the app assigns salary components yet
     (only the demo does), so it waits for the screen that will.
     **Still to read back.**
+159. ~~A client-money payment could be dated before the money it spent.~~
+    **Raised and answered 14 October** ("Never short on any day").
+    Found sweeping the functions that take a date for a dated thing they
+    act on. `app.assert_client_funds`, the deferred constraint trigger
+    under every client-money write, summed a matter's whole client
+    ledger and refused only a total below nought, never asking when.
+    Measured locally as an accountant: 1,000 received today, then 600
+    paid out dated ten days ago through `pay_from_client_account` (the
+    payment screen has a date picker); it posted, and the matter read
+    -600 for ten days -- another client's money. Transfers between
+    matters and to office write the same table. Production: four
+    client-money transactions on two matters, neither ever short on any
+    day. `0891` rewrites the trigger to read the ledger day by day (each
+    day's movements summed first, so same-day in and out pass in either
+    order) and name the first day it closes in debit, and to check the
+    matter a row leaves as well as the one it joins. New
+    `client_money_any_day.sql` (14 assertions: payment, transfer between
+    matters, transfer to office, a void and a move that leave an earlier
+    payment unfunded though the total is in credit, the exact-to-the-sen
+    day, and of two short days the first named). Swept 8 / 8 with a
+    control. **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
