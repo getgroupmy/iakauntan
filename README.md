@@ -569,6 +569,11 @@ forward: an officer ceases on or after the appointment, and a charge is
 lodged and satisfied on or after its creation, its memorandum filed on
 or after the satisfaction (`0897`).
 
+A director -- or an alternate -- is a natural person who has attained
+eighteen (Companies Act 2016, s.196(1)(a)): the register refuses a
+company, and anybody whose recorded date of birth leaves them short of
+eighteen on the day of appointment (`0899`).
+
 ### Documents are built from the registers
 
 A resolution that disagrees with the register is worse than no

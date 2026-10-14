@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18455
+18462
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2087,3 +2087,10 @@
 # journal, so until then the rice is in one place only and on the day
 # it is in the shop, not the kitchen; one already dated arrives today,
 # as before, and one dated today, today).
+#
+# 18455 -> 18462, 14 October: 0899's director_of_eighteen.sql (7: a
+# company is not appointed director, nor somebody a day short of
+# eighteen, while an adult, one eighteen today and one with no birthday
+# on file are; nor is a minor an alternate director; an auditor that is
+# a company is not made a director, nor a director's seat handed to a
+# minor, so the board is as it was).

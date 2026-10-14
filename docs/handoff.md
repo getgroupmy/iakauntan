@@ -4548,6 +4548,22 @@ page and renumbering would quietly break the reference.
     movement in and its journal `greatest(app.today(),
     transfer_date)`. New `transfer_arrives_after_it_leaves.sql` (5
     assertions). Swept 4 / 4 with a control. **Still to read back.**
+167. ~~A company, or a child, could be appointed director.~~ **Raised
+    and answered 14 October** ("Refuse both"). Companies Act 2016
+    s.196(1)(a): a director is a natural person who has attained
+    eighteen. Neither the sheet nor the register asked. Measured
+    locally as the owner: a person born ten years earlier and a
+    `corporate` person each appointed director, both stored.
+    Production: eight directors, all individuals, none with a date of
+    birth on file. `0899` adds the definer trigger
+    `app.corp_director_is_eligible` on `corp_officers` (insert, and a
+    change of person, role or appointment date) for directors and
+    alternates. With no date of birth the age is not read; a correction
+    to a person is not refused for what it reveals. New
+    `director_of_eighteen.sql` (7 assertions). Swept 6 / 6 with a
+    control. **Noticed and not raised:** s.196(2)'s resident director
+    is shown on an empty register only, and s.235's natural-person
+    secretary is not asked either. **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
