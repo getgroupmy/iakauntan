@@ -4465,7 +4465,12 @@ page and renumbering would quietly break the reference.
     date moves stays; the clip makes it free. New
     `unpaid_leave_while_employed.sql` (8 assertions, the payroll
     figures among them). Swept 10 / 10 with a control.
-    **Still to read back.**
+    **Applied, and read back** (14 October, read-only, after run
+    38556025516 on `18ceeeb` had applied the migrations, its three
+    deploy jobs present): `calculate_payroll_run` hashes `5aa7cf0f`,
+    `app.leave_within_employment` `5f910ccd` and its trigger
+    `e80034c4`, as here. The same run counted `6767 Dart tests ran
+    (floor 6767)`.
 163. ~~Overtime was paid for days after the last working day.~~
     **Raised and answered 14 October** ("Refuse at the clock, clip in
     pay"). The same window as item 162, for overtime. `clock_in` had no
