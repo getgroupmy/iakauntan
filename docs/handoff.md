@@ -4012,6 +4012,35 @@ page and renumbering would quietly break the reference.
     `service_role` must be able to execute; `writes_side` was granted to
     `authenticated` alone at first.
     **Still to read back.**
+147. ~~Any signed-in user could insert a company past `create_organization`.~~
+    **Raised and answered 14 October** ("Only through its function").
+    Found by listing the write policies that ask no role at all:
+    `0010`'s `organizations_insert` checked only `created_by =
+    auth.uid()`, and `add_creator_as_owner` made the inserter owner.
+    Measured locally as `authenticated`, signed in as the owner of one
+    company without Multi-Company (`can_add_company()` false):
+    `create_organization` refused the second company and a plain insert
+    made it -- theirs, 28 modules seeded, no chart of accounts, tax codes
+    or fiscal year. Maintenance did not stop it either. The app always
+    calls `create_organization`. Production: nineteen companies, none
+    made this way (the one with no chart has no creator, which the
+    policy would have demanded). `0879` revokes insert from
+    `authenticated` and `anon` and drops the policy, as `0839` did for
+    `org_members`; `create_organization` and `demo_calling_pair` are the
+    definers that insert, and `platform_create_organization` and
+    `app.demo_company` go through `create_organization`. New
+    `company_by_its_function.sql` (11 assertions). No function, so no
+    `mutate_sql`; swept by hand against the old grant and policy, with
+    the migration as written as the control: the grant kept, the policy
+    kept, the insert gated by `can_add_company` instead, and nothing done
+    are each caught. Revoking from `anon` is belt and braces -- `anon`
+    held no insert before -- so leaving it out is not a mutant the test
+    can see. **Caught by the full suite:** `company_billing_columns.sql`
+    asked `0826`'s insert branch through a client insert and expected
+    its sentence; the privilege refuses first now, so it asks for that,
+    and `0826`'s four insert mutants are recorded as equivalent (re-swept:
+    8 of 13 killed, the control surviving).
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

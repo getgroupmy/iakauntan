@@ -1,0 +1,34 @@
+-- =====================================================================
+-- iAkauntan :: 0879 a company is made by its function
+--
+-- `create_organization` is the door a company comes in by. It asks
+-- `app.can_add_company` -- the first company is free, every one after
+-- it is the Multi-Company module (`0486`), and nothing is added while
+-- the platform is in maintenance (`0568`) -- and then stands up the
+-- books: the chart of accounts, the tax codes, the fiscal year. The
+-- app never inserts a company itself. But `0010`'s
+-- `organizations_insert` let any signed-in user insert a row whose
+-- `created_by` was themselves, with nothing else asked, and
+-- `add_creator_as_owner` made them its owner.
+--
+-- Measured on 14 October 2026, locally, with the role `authenticated`,
+-- signed in as the owner of one company without Multi-Company, for
+-- whom `can_add_company()` answered false: `create_organization`
+-- refused the second company, and a plain insert made it -- owned by
+-- them, 28 modules seeded, and no chart of accounts, tax codes or
+-- fiscal year.
+--
+-- Production held nineteen companies on 14 October, none made this way:
+-- the one without a chart of accounts has no creator, which the policy
+-- would have demanded.
+--
+-- Answered "only through its function": insert is revoked from
+-- `authenticated` and `anon` and `organizations_insert` dropped.
+-- `create_organization` and `demo_calling_pair` are definers and keep
+-- making companies, and `platform_create_organization` and
+-- `app.demo_company` make theirs through `create_organization`. An
+-- admin's update and an owner's delete are as before.
+-- =====================================================================
+
+revoke insert on public.organizations from authenticated, anon;
+drop policy if exists organizations_insert on public.organizations;

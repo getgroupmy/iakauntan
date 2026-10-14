@@ -14,9 +14,15 @@
 # and the file says so. `firm_member_role` was first asked with 'owner',
 # which `firm_role_is_not_owner` refuses anyway, so its mutant died for
 # the wrong reason; the file asks with 'admin' now, which only the guard
-# refuses. The four insert mutants die for the wrong reason by design: a
-# company made directly is refused a step later today, by a trigger that
-# reads auth.users, and the file asks for the guard's own sentence.
+# refuses.
+#
+# Since `0879` the four insert mutants survive, and are equivalent: no
+# client holds insert on `organizations`, so no client statement reaches
+# the insert branch, and every company is made by a definer, which the
+# guard lets through. The file asks for the privilege's refusal now.
+# Re-run on 14 October after `0879`: 8 of 13 killed, the control
+# surviving; the five survivors are the four insert mutants and the
+# nested statement, all equivalent.
 
 m('the guard is never asked',
   'a_company_is_billed_as_the_platform_says',

@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18238
+18249
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1934,3 +1934,11 @@
 # invoice; a purchaser given the sales side by an access type raises an
 # invoice; an accountant writes both; and the six tables carry the
 # guard, each for its own side).
+#
+# 18238 -> 18249, 14 October: 0879's company_by_its_function.sql (11:
+# an owner without Multi-Company inserts no second company, its
+# function refuses it as before, they own the one, and still rename
+# it; with the module the bare insert is still refused and the
+# function makes it with its books; a first company is not inserted
+# either, and is made by its function; neither client role holds
+# insert, and no policy admits one).

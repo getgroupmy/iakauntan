@@ -69,10 +69,11 @@ begin
       format('%s of %s is the platform''s to set%%', r.col, r.name), '42501');
   end loop;
 
-  -- Nor is one made with any of them. (A company made directly is
-  -- refused today a step later, by a trigger that reads `auth.users`;
-  -- the app makes one through `create_organization`. The guard answers
-  -- first, and stays if that ever changes.)
+  -- Nor is one made with any of them. Since `0879` no client makes a
+  -- company at all -- `create_organization` is the door -- so the
+  -- refusal is the privilege's, before the guard's insert branch is
+  -- reached. That branch stays, and answers if the grant ever returns;
+  -- its four mutants survive until then, as equivalent ones.
   for r in select * from (values
       ('is_demo', 'true'),
       ('status', '''trial'''),
@@ -83,7 +84,7 @@ begin
     perform pg_temp.check_refused(format('nor is a company made with its %s set', r.col),
       format($q$insert into public.organizations (name, created_by, %s)
                 values ('Syarikat Sendiri', %L, %s)$q$, r.col, d.u, r.val),
-      'A company starts active, not a demonstration%', '42501');
+      'permission denied for table organizations', '42501');
   end loop;
 
   -- What the settings screen writes is as before.

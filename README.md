@@ -1002,6 +1002,16 @@ dialog says out loud that the administrator now knows somebody else's
 password — a person typing another person's credentials should be aware
 they are doing it.
 
+### A company is made by its function
+
+`create_organization` is the only door a signed-in user has: it asks
+`app.can_add_company` -- the first company is free, every one after it
+is the Multi-Company module, and none is added in maintenance -- and
+stands up the chart of accounts, tax codes and fiscal year. A client
+cannot insert a company row itself (`0879`); until then any user could,
+past that question, and own a company with no books.
+`supabase/tests/company_by_its_function.sql` asserts it.
+
 ### A company made for a customer, and who can open it
 
 `platform_create_organization` composes the ordinary `create_organization`
