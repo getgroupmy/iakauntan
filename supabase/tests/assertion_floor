@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18249
+18263
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1942,3 +1942,13 @@
 # function makes it with its books; a first company is not inserted
 # either, and is made by its function; neither client role holds
 # insert, and no policy admits one).
+#
+# 18249 -> 18263, 14 October: 0880's chat_by_its_functions.sql (14: a
+# direct conversation is not turned into a group, so still takes no
+# third person, and no conversation is made past its functions; a group
+# still takes one by its function and the direct one is still two; a
+# participant changes neither the company he is in it as nor walks out
+# of a direct one, which its function refuses as before, and is still
+# in it as he joined; marking read and leaving a group by their
+# functions, and a message moving the conversation up, work as before;
+# neither client role writes either table, and no policy admits it).

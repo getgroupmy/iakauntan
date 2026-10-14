@@ -4047,6 +4047,36 @@ page and renumbering would quietly break the reference.
     and `0826`'s four insert mutants are recorded as equivalent (re-swept:
     8 of 13 killed, the control surviving).
     **Still to read back.**
+148. ~~One side of a direct chat could open it to a third person.~~
+    **Raised and answered 14 October** ("Only through its functions").
+    Found by the same listing as item 147. `0135` put every change to a
+    conversation behind a function and said why -- a policy cannot see
+    the old row -- and then wrote policies that let any participant
+    update the conversation, any column, and anybody update or delete
+    their own participant row, any column, under a comment reading
+    "only ever to mark it read". `chat_add_participant` refuses a third
+    person on a direct conversation by reading `is_direct`. Measured
+    locally as `authenticated`: one side set `is_direct` false and added
+    a colleague, who read the two people's history; a participant
+    rewrote their own row's `org_id` to a company where chat is not on
+    for them; and a participant left a direct conversation by deleting
+    their row, which `chat_leave` refuses. Moving one's own row into
+    somebody else's conversation was already refused -- the read policy
+    is applied to the new row. Production: one conversation, direct,
+    two people. `0880` revokes insert, update and delete on
+    `chat_conversations` and on `chat_participants` from
+    `authenticated` and `anon` and drops the four policies; every
+    writer is a definer (`chat_start_direct`, `chat_create_group`,
+    `chat_add_participant`, `chat_leave`, `chat_mark_read`,
+    `chat_mark_delivered`, `app.touch_conversation`,
+    `demo_calling_pair`), and the app writes neither table. New
+    `chat_by_its_functions.sql` (14 assertions). Swept by hand against
+    `0135`'s grants and policies, with the migration as written as the
+    control: nothing done, either table closed and the other left open,
+    the conversation policies dropped with the grants kept, update closed
+    with insert kept, and the participant's update and delete each
+    closed without the other are each caught (7 / 7).
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
