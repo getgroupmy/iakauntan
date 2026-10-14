@@ -3952,7 +3952,12 @@ page and renumbering would quietly break the reference.
     refusal, `tax_estimate_payment_summary` and a new definer shaped
     like the four by the list. No sweep of the five with `mutate_sql`:
     each is the same one-word substitution `0873`'s helper sweep covers.
-    **Still to read back.**
+    **Applied, and read back** (14 October, read-only, after run
+    38426494608 on `924abdd` had applied the migrations): the five are
+    definers asking `app.is_staff_member`, one each, their bodies
+    hashing name by name to `1741bbe3` there as here. The same run
+    counted `6767 Dart tests ran (floor 6767)`; nothing in it touched
+    the app.
 145. ~~A View Only member or an auditor could burn invoice numbers.~~
     **Raised and answered 13 October** ("Only writers advance
     counters"). `next_document_number` advances a company's counter,
