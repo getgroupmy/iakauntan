@@ -4486,7 +4486,12 @@ page and renumbering would quietly break the reference.
     control. **Noticed and not raised:** salary components are paid in
     full in a part month and percent-of-basic reads the contract basic,
     not the prorated one -- a pay-policy question (some allowances are
-    fixed), not a defect on its face. **Still to read back.**
+    fixed), not a defect on its face. **Applied, and read back** (14
+    October, read-only, after run 38559916891 on `5628cdf` had applied
+    the migrations, its three deploy jobs present):
+    `calculate_payroll_run` hashes `7cc56ce0` and `clock_in` `b396ad57`,
+    as here, each carrying the change. The same run counted `6767 Dart
+    tests ran (floor 6767)`.
 164. ~~The secretarial registers took dates that had not happened.~~
     **Raised and answered 14 October** ("Refuse what the sheets
     refuse"). Found sweeping the date pickers that stop at today for a
