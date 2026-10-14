@@ -920,7 +920,7 @@ Assigned per company and enforced by RLS:
 | Auditor | Reads everything including journals and audit trail; writes nothing |
 | HR Manager | Employee records, leave, claims, payroll and talent |
 | Employee | Self-service only — their own record, payslips, leave and claims |
-| Sales / Purchasing | Their own side's documents -- a salesperson raises no bill, a purchaser no invoice (`0878`), unless an access type says otherwise; both read both; no access to journals |
+| Sales / Purchasing | Their own side's documents -- a salesperson raises no bill, a purchaser no invoice, by the table (`0878`) or by a function that raises one -- an import, a quotation, a transfer (`0881`) -- unless an access type says otherwise; both read both; no access to journals |
 | View Only | Read-only on day-to-day records |
 
 Verified: a clerk can write but not post, an auditor can read the ledger

@@ -4082,6 +4082,31 @@ page and renumbering would quietly break the reference.
     with insert kept, and the participant's update and delete each
     closed without the other are each caught (7 / 7).
     **Still to read back.**
+149. ~~A salesperson could import a supplier bill, and a purchaser quote.~~
+    **Raised and answered 14 October** ("Each asks the side too").
+    Item 146 named it: `0878`'s trigger answers a client's own statement
+    and nothing else, so the functions that raise one side's paper as
+    their owner asked only `can_write` -- or `can_write_module`, which
+    every role with no access type passes. Measured locally as
+    `authenticated`: a `sales` member imported a supplier bill through
+    `import_purchase_transactions` and a `purchaser` raised a quotation
+    through `quote_opportunity`. Production has neither role yet.
+    `0881`: `app.require_side(org, side)` raises `0878`'s own sentences
+    where `writes_side` says no, and seven functions ask it straight
+    after the guard they had -- `quote_opportunity` and
+    `import_sales_transactions` the sales side;
+    `import_purchase_transactions`, `draft_bill_from_received_einvoice`,
+    `create_po_from_suggestions` and `accept_intercompany_bill` the
+    purchases side; `transfer_document` the side its source is on. Each
+    body is `pg_get_functiondef` of what was applied plus the one
+    `perform`. The till's `complete_pos_sale` and `settle_pos_stalls`
+    keep their own. New `each_side_by_its_functions.sql` (18
+    assertions): every refusal is paired with the same call by the right
+    side, which does the work or meets the function's NEXT question --
+    so the refusal is this guard's and no other. Swept 11 / 11 with a
+    control; the quotation asking the wrong side dies by an error
+    rather than an assertion (the salesperson's own quote is refused).
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

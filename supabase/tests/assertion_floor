@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18263
+18281
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1952,3 +1952,12 @@
 # in it as he joined; marking read and leaving a group by their
 # functions, and a message moving the conversation up, work as before;
 # neither client role writes either table, and no policy admits it).
+#
+# 18263 -> 18281, 14 October: 0881's each_side_by_its_functions.sql (18:
+# a salesperson imports no supplier bill, drafts none from an e-Invoice,
+# raises no order from the forecast, accepts no intercompany bill and
+# carries no requisition forward, and imports a sales invoice, quotes a
+# deal and carries a quotation forward; a purchaser the reverse, and is
+# stopped on his own side only by each function's next question; a
+# purchaser given the sales side by an access type quotes; and what was
+# made is what each side was allowed to make).
