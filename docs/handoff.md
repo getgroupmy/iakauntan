@@ -4149,7 +4149,12 @@ page and renumbering would quietly break the reference.
     `clear_pdc` and `bounce_pdc` post journals asking nothing more --
     beside `record_settlement`, which asks `can_post`. The README says a
     clerk "cannot post".
-    **Still to read back.**
+    **Applied, and read back** (14 October, read-only, after run
+    38519771131 on `33f0743` had applied the migrations -- its job list
+    has the three deploy jobs, so it was not a superseded run):
+    `app.module_access` hashes to `92d1c868` there as here, and its body
+    answers a `viewer` and an `auditor` `read`. The same run counted
+    `6767 Dart tests ran (floor 6767)`.
 151. ~~An Accounts Clerk could post through deposits, contras and cheques.~~
     **Raised and answered 14 October** ("These ask can_post too"). The
     gap item 150 left. Seven functions post a journal the moment they
