@@ -4350,7 +4350,13 @@ page and renumbering would quietly break the reference.
     (10 assertions). Swept 8 / 9 with a control; the survivor, dropping
     `original_invoice_id is not null`, is equivalent -- a missing
     original compares as null and never raises -- said so in the file.
-    **Still to read back.**
+    **Applied, and read back** (14 October, read-only, after run
+    38539396870 on `5a35818` had applied the migrations, its three
+    deploy jobs present): `app.post_sales_document_internal` hashes
+    `89fb2a4c`, `app.post_purchase_document_internal` `86f6e2df`,
+    `credit_sales_invoice` `611426b3` and `credit_purchase_bill`
+    `dbff0c37`, as here, each carrying the change marked 0889. The same
+    run counted `6767 Dart tests ran (floor 6767)`.
 158. ~~A leave band and a shift assignment could run backwards.~~
     **Raised and answered 14 October** ("Add them as checks"). Found
     sweeping every pair of start/end columns for a missing order check,
