@@ -4297,6 +4297,32 @@ page and renumbering would quietly break the reference.
     `deposit_used_after_taken.sql` (10 assertions). Swept 6 / 6 with a
     control. No existing fixture used a deposit early.
     **Still to read back.**
+156. ~~A journal could be reversed before it was made.~~ **Raised and
+    answered 14 October** ("Never before what it undoes"). The same
+    order again, in the ledger itself. `reverse_gl_entry` asked only
+    that the period was open; the Journals screen's "Reverse" offers a
+    year back; and `void_sales_document`, `void_deposit` and
+    `void_contra` reverse at today, so a document dated ahead was
+    undone before it was done. Measured locally as an accountant: a
+    journal dated 14 Oct reversed on 4 Oct; an invoice dated 3 Nov
+    voided on 14 Oct, its reversal dated 14 Oct -- negative revenue in
+    October, the sale in November. Production: one reversal, dated after
+    its original. `0888`: `reverse_gl_entry` refuses a date before the
+    original journal's; the three voids reverse on the later of today
+    and the original's date. **One exception, found by the suite after
+    the question was answered, and taken without asking again because
+    the alternative broke a tested design:** `fx_shapes.sql` reruns a
+    revaluation out of order on purpose (March, then February -- "what a
+    bookkeeper does when they reopen a prior month"), which takes
+    March's standing revaluation back on 28 February. Journals with
+    `source = 'fx_revaluation'` are left out of the rule; if that
+    should be refused too, it is one condition to remove and that test
+    to rewrite. The other internal callers already pass a day no earlier
+    than the original (`cancel_pdc`, `unmatch_bank_transaction`,
+    `void_bank_transfer`). New `reversal_after_what_it_undoes.sql` (9
+    assertions, one a real revaluation rerun). Swept 7 / 7 with a
+    control.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

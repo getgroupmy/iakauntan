@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18356
+18365
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2007,3 +2007,10 @@
 # given back or kept before it was taken, so it is all still held; it
 # is applied and given back on the day it was taken and kept the day
 # after; and a deposit taken today is used today, as before).
+#
+# 18356 -> 18365, 14 October: 0888's reversal_after_what_it_undoes.sql
+# (9: a journal is not reversed before it was made, nor the day before,
+# so it stands, and it is reversed on its own day; an invoice dated
+# ahead is voided on its own day, one already dated today as before, and
+# a deposit and a contra dated ahead on their own days; and a revaluation
+# rerun for an earlier day takes the standing one back on that day).
