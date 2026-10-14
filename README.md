@@ -2125,7 +2125,10 @@ Stated plainly so nothing here is mistaken for finished:
   counters that hold all of this -- what each line has had invoiced,
   delivered, billed and received, and the order's fulfilment -- are the
   database's alone since `0904`; a client that zeroed one could take the
-  same quantity forward again
+  same quantity forward again. So, since `0905`, are a document's
+  subtotal, tax and total: posting reads them off the header, and an
+  invoice whose line charged 80 of tax could be given a header that
+  said none
 - ~~E-mail delivery of anything.~~ Built and deployed: documents send
   through Resend, overdue invoices are chased on a schedule, and every
   send is logged per document. What is left is not code — a provider

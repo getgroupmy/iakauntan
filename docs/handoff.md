@@ -4680,6 +4680,22 @@ page and renumbering would quietly break the reference.
     owner. New `what_was_taken_forward.sql` (13 assertions, failing
     before the migration). Swept 5 / 5 with a control. **Still to read
     back.**
+173. ~~A draft's totals could be written over its lines.~~ **Raised
+    and answered 14 October** ("The totals are the lines'"). Found
+    after item 172, asking what else posting trusts that the client
+    can write: a document's `subtotal`, `tax_amount`,
+    `rounding_amount`, `total_amount` and `base_total_amount` are
+    worked out from its lines when a line changes, and posting reads
+    them off the header. Measured locally as the owner: an invoice
+    whose 8% line charged 80 was set to tax 0 / total 1,000 and posted
+    no output tax; a bill was set to tax 200 / total 1,200 and posted
+    1410 200. The app never writes them. Production: 166 sales and 49
+    purchase documents, every header agreeing with its lines. `0905`
+    adds the client-only trigger `app.document_totals_are_its_lines`
+    on both header tables: no change by a client, no insert with any
+    of the five set. `discount_amount` is left alone, as an input. New
+    `totals_are_the_lines.sql` (11 assertions, failing before the
+    migration). Swept 6 / 6 with a control. **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

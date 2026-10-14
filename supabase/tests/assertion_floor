@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18508
+18519
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2136,3 +2136,10 @@
 # the quantity back; the owner still writes them).
 # posted_document_is_frozen.sql's "progress still climbs" case now
 # writes as the owner; its count is unchanged.
+#
+# 18508 -> 18519, 14 October: 0905's totals_are_the_lines.sql (11: the
+# lines give the totals; the tax, total, subtotal, rounding and total in
+# ringgit are each refused when written over; a changed line moves them
+# and the rest of the header is written; posting charges the tax the
+# lines charged; a bill is neither inserted owing tax nor given it by
+# hand; the owner still writes them).
