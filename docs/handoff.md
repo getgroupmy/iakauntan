@@ -4011,7 +4011,13 @@ page and renumbering would quietly break the reference.
     `trigger_reachable_grants.sql` -- what a trigger calls,
     `service_role` must be able to execute; `writes_side` was granted to
     `authenticated` alone at first.
-    **Still to read back.**
+    **Applied, and read back** (14 October, read-only, after run
+    38507200001 on `3605af6` had applied the migrations):
+    `app.writes_side` hashes to `641fb245` and the trigger function,
+    not a definer, to `c535294e`, there as here; the six tables carry
+    the trigger, each for its own side; `service_role` may execute
+    `writes_side` and `anon` may not. The same run counted `6767 Dart
+    tests ran (floor 6767)`; nothing in it touched the app.
 147. ~~Any signed-in user could insert a company past `create_organization`.~~
     **Raised and answered 14 October** ("Only through its function").
     Found by listing the write policies that ask no role at all:
