@@ -3978,7 +3978,12 @@ page and renumbering would quietly break the reference.
     runs:** the first draft expected INV-2026-00001, which on or after
     1 January is INV-2027-00001; it reads the year off the product's
     clock now.
-    **Still to read back.**
+    **Applied, and read back** (14 October, read-only, after run
+    38504943384 on `98e99da` had applied the migrations):
+    `next_document_number` is a definer asking `app.can_write(p_org_id)`
+    and `can_run_payroll`, its body hashing to `ab678070` there as here.
+    The same run counted `6767 Dart tests ran (floor 6767)`; nothing in
+    it touched the app.
 146. ~~A purchaser could raise invoices and a salesperson bills.~~
     **Raised and answered 13 October** ("Each writes only its own
     side"). The README gave Sales and Purchasing "their own documents";
