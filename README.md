@@ -2111,7 +2111,14 @@ Stated plainly so nothing here is mistaken for finished:
   post — Dr Inventory, Cr 2118 Goods Received Not Invoiced, cleared by
   the bill — and **does not backfill**: a company that has used that path
   has a stock count to do, and `docs/goods-received.md` has the query
-  that says how much is at stake
+  that says how much is at stake. The sales side carried the same
+  sentence until `0902`: an invoice raised from a delivery order skipped
+  its stock movement because the delivery order had sent the goods, and
+  no delivery order ever had -- one does not post. The cost of sales
+  still left 1310, so the ledger and the shelf parted, and crediting
+  the invoice put back goods that had never gone. The invoice now moves
+  its own stock, whatever it was raised from; a delivery order stays the
+  paper that travels with the goods
 - ~~E-mail delivery of anything.~~ Built and deployed: documents send
   through Resend, overdue invoices are chased on a schedule, and every
   send is logged per document. What is left is not code — a provider

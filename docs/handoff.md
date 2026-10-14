@@ -4610,6 +4610,25 @@ page and renumbering would quietly break the reference.
     both tables (argument: the link column and its label); the credit
     functions, as owner, pass. New `credit_linked_by_crediting.sql` (9
     assertions). Swept 6 / 6 with a control. **Still to read back.**
+170. ~~An invoice raised from a delivery order moved no stock.~~
+    **Raised and answered 14 October** ("Invoice moves its stock").
+    Found reading the link columns on documents after item 169:
+    `post_sales_document_internal` skipped its stock movement when the
+    invoice's parent was a delivery order, but nothing has ever moved
+    stock on one -- a delivery order does not post. It is `0609`'s
+    goods-received defect on the sales side, and
+    `posting_an_invoice_refuses.sql` asserted it as intended, with a
+    draft delivery order of no lines. The cost of sales still left
+    1310. Measured locally as the owner: ten bought at 10; three sold
+    quotation -> invoice, 7 on hand and 1310 at 70; three more through
+    a delivery order, still 7 on hand and 1310 at 40; crediting that
+    invoice put back three that never left. Production: no delivery
+    orders. `0902` drops the skip: the invoice moves its own stock
+    whatever it was raised from. Nothing backfilled. New
+    `invoice_moves_its_own_stock.sql` (6 assertions, failing before the
+    migration on `7.00 / 50.00`); the posting test's case now asserts
+    the five leave the shelf. Swept 3 / 3 with a control. **Still to
+    read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

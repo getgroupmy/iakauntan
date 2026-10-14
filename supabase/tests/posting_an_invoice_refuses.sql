@@ -21,7 +21,8 @@
 --   * cost of sales taken for an item that carries no stock
 --   * a header discount that never reached 4300
 --   * stock moved a second time for an invoice a delivery order had
---     already delivered
+--     already delivered -- which, `0902` found, no delivery order ever
+--     had: the case now asserts the invoice moves its own
 --
 -- The double-post case is asserted here but its mutant SURVIVES, and
 -- that is recorded rather than worked around, because the guard is
@@ -203,7 +204,14 @@ begin
       where gl.entry_id = v_entry and a.code = '1210'), 900::numeric);
 
   -- ------------------------------------------------------------------
-  -- 5. Goods a delivery order already sent do not leave twice
+  -- 5. An invoice behind a delivery order moves its own stock
+  --
+  -- This asserted the opposite until `0902`: "goods a delivery order
+  -- already sent do not leave twice", with a draft delivery order and
+  -- no lines. A delivery order does not post and has never moved
+  -- stock, so the assertion was the five widgets never leaving the
+  -- shelf while the ledger took their cost. `invoice_moves_its_own_
+  -- stock.sql` sells the same thing both ways and compares.
   -- ------------------------------------------------------------------
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
@@ -225,12 +233,10 @@ begin
   perform public.post_sales_document(v_inv_do);
 
   perform pg_temp.check_eq(
-    'an invoice behind a delivery order moves no stock of its own',
-    (select count(*)::integer from public.stock_movements
-      where source_table = 'sales_documents' and source_id = v_inv_do), 0);
-  -- And the ordinary invoice above did, so the assertion above is not
-  -- passing because nothing ever moves.
-  perform pg_temp.check_eq('while an invoice standing alone does',
+    'an invoice behind a delivery order takes its five off the shelf',
+    (select sum(quantity) from public.stock_movements
+      where source_table = 'sales_documents' and source_id = v_inv_do), -5::numeric);
+  perform pg_temp.check_eq('as an invoice standing alone does',
     (select count(*)::integer from public.stock_movements
       where source_table = 'sales_documents' and source_id = v_inv), 1);
 

@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18478
+18484
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2108,3 +2108,11 @@
 # a linked draft, while a linked draft is still edited with its link
 # written back unchanged, and a typed note still posts unlinked; "credit
 # this" links the note and holds it to what is left, for a bill too).
+#
+# 18478 -> 18484, 14 October: 0902's invoice_moves_its_own_stock.sql (6:
+# ten bought at 10 are on the shelf and in 1310; three invoiced from a
+# quotation leave both; a delivery order moves nothing itself; the
+# invoice raised from it is its child; two invoiced through it leave the
+# shelf as well as the ledger; crediting it puts back the two, no more).
+# posting_an_invoice_refuses.sql's delivery-order case now asserts the
+# five leave the shelf; its count is unchanged.
