@@ -572,7 +572,9 @@ or after the satisfaction (`0897`).
 A director -- or an alternate -- is a natural person who has attained
 eighteen (Companies Act 2016, s.196(1)(a)): the register refuses a
 company, and anybody whose recorded date of birth leaves them short of
-eighteen on the day of appointment (`0899`).
+eighteen on the day of appointment (`0899`). A secretary is held to s.235
+the same way, and to one thing more: a person recorded as not resident
+in Malaysia is refused (`0900`).
 
 ### Documents are built from the registers
 

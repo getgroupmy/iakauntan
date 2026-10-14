@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18462
+18469
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2094,3 +2094,10 @@
 # on file are; nor is a minor an alternate director; an auditor that is
 # a company is not made a director, nor a director's seat handed to a
 # minor, so the board is as it was).
+#
+# 18462 -> 18469, 14 October: 0900's secretary_resident_of_eighteen.sql
+# (7: a company, somebody a day short of eighteen and somebody living
+# abroad are not appointed secretary, while an adult, one eighteen today
+# and one with no birthday on file are; somebody abroad may still be a
+# director but is not made secretary; a company is still appointed
+# auditor).

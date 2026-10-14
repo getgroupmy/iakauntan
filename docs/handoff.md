@@ -4569,6 +4569,21 @@ page and renumbering would quietly break the reference.
     control. **Noticed and not raised:** s.196(2)'s resident director
     is shown on an empty register only, and s.235's natural-person
     secretary is not asked either. **Still to read back.**
+168. ~~A company, a child or somebody abroad could be appointed
+    secretary.~~ **Raised and answered 14 October** ("Individual, 18,
+    resident"), from item 167's note. Companies Act 2016 s.235: a
+    secretary is a natural person of at least eighteen whose principal
+    or only place of residence is in Malaysia. Measured locally as the
+    owner: a ten-year-old and a company each appointed secretary.
+    Production: six secretaries, all resident individuals, none with a
+    date of birth. `0900` renames `0899`'s function and trigger to
+    `app.corp_officer_is_eligible` / `officer_is_eligible` and gives
+    the secretary the same two refusals plus one on
+    `is_resident_in_malaysia`; a director's messages are unchanged
+    (`director_of_eighteen.sql` still passes). Licensing is left: the
+    licence columns are free text. New
+    `secretary_resident_of_eighteen.sql` (7 assertions). Swept 7 / 7
+    with a control. **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
