@@ -4276,7 +4276,13 @@ page and renumbering would quietly break the reference.
     `money_names_the_account.sql` cleared one ten days early (now dated
     yesterday). The cheque list's menu still offers both actions on a
     cheque not yet due; the refusal names the day.
-    **Still to read back.**
+    **Applied, and read back** (14 October, read-only, after run
+    38531060899 on `6052619` had applied the migrations, its three
+    deploy jobs present): `clear_pdc` hashes `ed380020` and
+    `deposit_pdc` `2ed02e68`, as here, both definers and both carrying
+    the new refusal. The same run counted `6767 Dart tests ran (floor
+    6767)`, and its Android build passed -- the 429 on the run before
+    was Maven Central's.
 155. ~~A deposit could be applied or refunded before it was taken.~~
     **Raised and answered 14 October** ("Not before it was taken"). The
     same order as item 154, one register over. `create_deposit` takes
