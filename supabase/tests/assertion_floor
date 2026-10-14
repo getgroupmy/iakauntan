@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18293
+18308
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1969,3 +1969,9 @@
 # adds an employee through its module gate; an accountant still raises
 # a ticket, and so does a View Only member given the helpdesk by an
 # access type; and the View Only member still reads both).
+#
+# 18293 -> 18308, 14 October: 0883's a_clerk_prepares.sql (15: a clerk
+# takes no deposit, applies or refunds none, records, clears or bounces
+# no post-dated cheque and sets nothing off in a contra, and so puts no
+# journal in the ledger; an accountant does each, and is asked for both
+# sides of a contra).

@@ -1521,7 +1521,9 @@ begin
     '%Say which account the refund is paid out of%', '23514');
 
   -- Purchases, and sales read only: a supplier's deposit, not a customer's.
-  insert into public.org_members (org_id, user_id, role) values (v_org, v_clerk, 'sales');
+  -- An accountant, because settling a deposit posts (0883): what this
+  -- asks is which side, and the access type is what decides it.
+  insert into public.org_members (org_id, user_id, role) values (v_org, v_clerk, 'accountant');
   insert into public.access_types (org_id, name)
   values (v_org, 'Purchases only') returning id into v_type;
   insert into public.access_type_modules (access_type_id, module_code, access)

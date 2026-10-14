@@ -916,7 +916,7 @@ Assigned per company and enforced by RLS:
 | Owner | Everything, including ownership |
 | Company Admin | Everything except ownership transfer |
 | Accountant | Prepares **and posts** to the ledger; closing and reopening a period or a year is the owner's or an admin's (`set_fiscal_period_status`, `close_fiscal_year`) |
-| Accounts Clerk | Prepares documents but **cannot post** — preparation and approval stay in different hands |
+| Accounts Clerk | Prepares documents but **cannot post** — preparation and approval stay in different hands; nor take a deposit, set off a contra or record, clear or bounce a post-dated cheque, each of which posts as it is made (`0883`) |
 | Auditor | Reads everything including journals and audit trail; writes nothing |
 | HR Manager | Employee records, leave, claims, payroll and talent |
 | Employee | Self-service only — their own record, payslips, leave and claims |

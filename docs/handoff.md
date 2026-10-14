@@ -4150,6 +4150,33 @@ page and renumbering would quietly break the reference.
     beside `record_settlement`, which asks `can_post`. The README says a
     clerk "cannot post".
     **Still to read back.**
+151. ~~An Accounts Clerk could post through deposits, contras and cheques.~~
+    **Raised and answered 14 October** ("These ask can_post too"). The
+    gap item 150 left. Seven functions post a journal the moment they
+    are called and asked only `can_write_module`, which a clerk passes
+    by design: `create_contra`, `create_deposit`, `apply_deposit`,
+    `settle_deposit`, `record_pdc`, `clear_pdc`, `bounce_pdc`. None has a
+    draft. Measured locally as `authenticated`: a clerk (`can_post`
+    false) took a customer deposit and the ledger held one posted
+    journal from it. Production: one clerk, and no deposit, contra or
+    post-dated cheque. `0883` has each ask `app.can_post` straight after
+    the guard it had, refusing in one sentence ("... posts to the
+    ledger, which only somebody who may post does"); the idempotent
+    overloads call these. Voiding them already asked `can_post`, through
+    `reverse_gl_entry`. Stock transfers and landed costs also post and
+    are left as warehouse work. New `a_clerk_prepares.sql` (15
+    assertions): every refusal paired with the accountant doing the same
+    thing, and the clerk shown to have added no journal. Swept 7 / 7
+    with a control. **Caught by the full suite:** `deposits.sql` settled
+    a supplier's deposit as a `sales` member given purchases by an
+    access type, to show the side is the access type's to decide; that
+    member may not post, so it is an accountant with the same access
+    type now, and the customer's deposit is still refused by the module
+    before the posting question is asked. **Caught by the date runs:**
+    the first fixture opened this year alone, and on 28 December a
+    cheque cleared "today + 31" falls in next year; it opens both sides
+    of today now, as `post_dated_cheques.sql` does.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
