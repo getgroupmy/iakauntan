@@ -4187,6 +4187,30 @@ page and renumbering would quietly break the reference.
     may post", and their bodies hash as they do here (md5 over the
     seven `5963fae4`). The same run counted `6767 Dart tests ran (floor
     6767)`.
+152. ~~The person appraised could take a goal off; a completed
+    appraisal's goals could be rewritten.~~ **Raised and answered 14
+    October** ("Setter's goals, kept once complete"). `0379`'s goal guard
+    ("Choosing what you are measured on and then meeting it is not an
+    appraisal") fires before INSERT and UPDATE, and
+    `appraisal_goals_all` admits the person appraised to DELETE. The
+    appraisal row refuses everybody but HR once completed; its goals did
+    not. Measured locally as `authenticated`: the person appraised
+    deleted a goal their reviewer had set, mid cycle; after HR had
+    finalised, the reviewer re-weighted, retargeted, added and deleted
+    goals and the person appraised deleted one. Production: no cycle,
+    appraisal or goal. `0884` adds `app.appraisal_goal_delete_guard`,
+    BEFORE DELETE, asking a client's own statement only: the reviewer
+    or HR take a goal off, and once completed HR alone. The change guard
+    refuses anybody but HR on a completed appraisal. `reopen_appraisal`
+    clears `completed_at`, so a reopened one is the reviewer's again.
+    The goals dialog still offers its delete button to whoever opens
+    it; the refusal arrives as the database's sentence. New
+    `appraisal_goals_kept.sql` (14 assertions). Swept 7 / 8 with a
+    control: the survivor, dropping `pg_trigger_depth() > 1`, is
+    equivalent and measured -- the foreign key's cascade deleted a goal
+    as `current_user=postgres depth=2`, so the owner test alone passes
+    it; said so in the file.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

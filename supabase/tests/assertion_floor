@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18308
+18322
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1975,3 +1975,12 @@
 # no post-dated cheque and sets nothing off in a contra, and so puts no
 # journal in the ledger; an accountant does each, and is asked for both
 # sides of a contra).
+#
+# 18308 -> 18322, 14 October: 0884's appraisal_goals_kept.sql (14: the
+# person appraised deletes no goal, and the reviewer and HR do; once the
+# appraisal is completed the reviewer re-weights, adds and takes off
+# none, nor does the person appraised, and the goals are as they were;
+# HR corrects one, and the reviewer writes again once HR reopens it;
+# the reviewer who is HR Manager takes none off a completed appraisal,
+# but deleting the appraisal takes its goals with it; and the
+# database's owner removes one outside the app).

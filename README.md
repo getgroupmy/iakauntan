@@ -807,6 +807,17 @@ Verified: an accounts clerk linked to an employee record could read
 exactly one payslip and one employee row, no payroll runs at all, and
 the full directory.
 
+### An appraisal's goals
+
+What somebody is measured on is set by their reviewer or by HR, and only
+they redefine it or take a goal off it: the person appraised rates
+themselves against the goals and cannot choose them, by adding, editing
+or deleting one. Once HR completes an appraisal, its goals are part of
+the record, and only HR changes them, as only HR changes the appraisal
+itself. Reopening it (`reopen_appraisal`) returns them to the reviewer.
+Deleting an appraisal, its cycle or its company still takes its goals
+with it (`0379`, `0884`).
+
 ### An auditor asking to see payslips
 
 An auditor cannot audit payroll without seeing it, but standing access
