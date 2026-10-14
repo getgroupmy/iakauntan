@@ -562,7 +562,10 @@ declaration or cessation, not a charge's creation, lodgement or
 satisfaction, not a beneficial owner's notification or cessation, and
 not anybody's date of birth. The sheets would not pick such a day; since
 `0896` the tables refuse one too, so the register of members never shows
-an allottee whose shares are only due next month.
+an allottee whose shares are only due next month. And the dates run
+forward: an officer ceases on or after the appointment, and a charge is
+lodged and satisfied on or after its creation, its memorandum filed on
+or after the satisfaction (`0897`).
 
 ### Documents are built from the registers
 

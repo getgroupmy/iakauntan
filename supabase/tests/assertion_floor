@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18442
+18450
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2074,3 +2074,10 @@
 # date of birth are each refused dated tomorrow; one dated today is
 # entered and is the register, an officer appointed and ceasing today is
 # kept, and so are the charge, the owner and the birthday dated today).
+#
+# 18442 -> 18450, 14 October: 0897's officer_and_charge_run_forward.sql
+# (8: an officer does not cease before being appointed, nor when the
+# cessation is written later, and one ceasing the day of appointment is
+# kept; a charge is not lodged or satisfied before it was created nor
+# its memorandum filed before the satisfaction, and one dated all on one
+# day is kept, as is one with no dates beyond its creation).

@@ -4508,6 +4508,22 @@ page and renumbering would quietly break the reference.
     columns). New `register_records_what_happened.sql` (15 assertions).
     Swept 4 / 4 with a control, and the twelve trigger arguments by
     hand, each dropped in turn: 12 / 12. **Still to read back.**
+165. ~~An officer could cease before appointment, and a charge be
+    lodged or satisfied before it was created.~~ **Raised and answered
+    14 October** ("The four the sheets hold, as checks"). Found in the
+    picker sweep that found item 164, from the other end: pickers whose
+    earliest day is another field. Measured locally as the owner: a
+    director ceasing 30 days before appointment, charges lodged and
+    satisfied before creation, a memorandum before the satisfaction --
+    all stored. Production: none out of order (no officer has ceased;
+    no charges). `0897` adds `corp_officers_ceased_after_appointed_ck`,
+    `corp_charges_lodged_after_created_ck`,
+    `corp_charges_satisfied_after_created_ck` and
+    `corp_charges_memorandum_after_satisfied_ck`. New
+    `officer_and_charge_run_forward.sql` (8 assertions). Swept by hand,
+    8 / 8: each dropped, each `>=` made `>`. **Noticed and not raised:**
+    a beneficial owner ceasing before entering the register is stored
+    too, but that sheet states no such rule. **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

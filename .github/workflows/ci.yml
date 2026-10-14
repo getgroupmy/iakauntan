@@ -1338,7 +1338,8 @@ jobs:
                    supabase/tests/tax_paid_over_after_withheld.sql \
                    supabase/tests/unpaid_leave_while_employed.sql \
                    supabase/tests/overtime_while_employed.sql \
-                   supabase/tests/register_records_what_happened.sql; do
+                   supabase/tests/register_records_what_happened.sql \
+                   supabase/tests/officer_and_charge_run_forward.sql; do
             echo "== $f"
             # Captured, NOT piped. This step runs under `bash -e` with no
             # `pipefail`, so `psql ... | grep` would hand the shell grep's
