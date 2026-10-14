@@ -4081,7 +4081,13 @@ page and renumbering would quietly break the reference.
     the conversation policies dropped with the grants kept, update closed
     with insert kept, and the participant's update and delete each
     closed without the other are each caught (7 / 7).
-    **Still to read back.**
+    **Applied, and read back** (14 October, read-only, after run
+    38511266859 on `3ee53b1` had applied the migrations): neither
+    `authenticated` nor `anon` may insert, update or delete either
+    table, the only policies left on them are the two read ones, a
+    participant still reads, and the one conversation is there. The
+    same run counted `6767 Dart tests ran (floor 6767)`; nothing in it
+    touched the app.
 149. ~~A salesperson could import a supplier bill, and a purchaser quote.~~
     **Raised and answered 14 October** ("Each asks the side too").
     Item 146 named it: `0878`'s trigger answers a client's own statement
