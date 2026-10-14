@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18365
+18375
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2014,3 +2014,10 @@
 # ahead is voided on its own day, one already dated today as before, and
 # a deposit and a contra dated ahead on their own days; and a revaluation
 # rerun for an earlier day takes the standing one back on that day).
+#
+# 18365 -> 18375, 14 October: 0889's note_after_what_it_adjusts.sql (10:
+# a credit note dated before its invoice is not posted and stays a
+# draft, one dated the invoice's day posts, and one naming no invoice is
+# not asked; the same for a purchase credit note and its bill; and "credit
+# this" credits an invoice or bill dated ahead on its own day, and one
+# already dated today, as before).

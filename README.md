@@ -121,7 +121,10 @@ that would leave a month carrying the undoing without the thing undone.
 Voiding an invoice, a deposit or a contra dated ahead reverses it on its
 own day rather than today. A foreign-exchange revaluation is the one
 journal outside that rule, because a rerun for an earlier month takes
-the standing revaluation back on that month's day (`0888`).
+the standing revaluation back on that month's day (`0888`). A credit or
+debit note that names its invoice or bill is held to the same order:
+not posted dated before it, and "credit this" dates the note on the
+original's own day when that is still to come (`0889`).
 
 ### A cheque dated next month
 

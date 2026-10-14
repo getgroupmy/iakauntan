@@ -4327,6 +4327,25 @@ page and renumbering would quietly break the reference.
     assertions, one a real revaluation rerun). Swept 7 / 7 with a
     control.
     **Still to read back.**
+157. ~~A credit note could come before the invoice it credits.~~
+    **Raised and answered 14 October** ("Never before what it
+    credits"). Item 156's shape, one step over. `credit_sales_invoice`
+    (the app's "credit this invoice") and `credit_purchase_bill` dated
+    the note today; a note typed by hand that names its invoice or bill
+    posted whatever its date. Measured locally as an accountant:
+    crediting an invoice dated 3 Nov made a credit note dated 14 Oct; a
+    hand-typed credit note dated 4 Oct against an invoice dated 14 Oct
+    posted. Production: no linked note. `0889`: posting a sales note
+    with `original_invoice_id`, or a purchase note with
+    `original_bill_id`, refuses a date before that document's (in
+    `app.post_sales_document_internal` and
+    `app.post_purchase_document_internal`); the two credit functions
+    date the note on the later of today and the original's date. A note
+    naming no original is not asked. New `note_after_what_it_adjusts.sql`
+    (10 assertions). Swept 8 / 9 with a control; the survivor, dropping
+    `original_invoice_id is not null`, is equivalent -- a missing
+    original compares as null and never raises -- said so in the file.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

@@ -1330,7 +1330,8 @@ jobs:
                    supabase/tests/what_the_form_refuses.sql \
                    supabase/tests/cheque_banked_on_its_date.sql \
                    supabase/tests/deposit_used_after_taken.sql \
-                   supabase/tests/reversal_after_what_it_undoes.sql; do
+                   supabase/tests/reversal_after_what_it_undoes.sql \
+                   supabase/tests/note_after_what_it_adjusts.sql; do
             echo "== $f"
             # Captured, NOT piped. This step runs under `bash -e` with no
             # `pipefail`, so `psql ... | grep` would hand the shell grep's
