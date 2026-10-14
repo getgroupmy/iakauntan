@@ -4210,7 +4210,14 @@ page and renumbering would quietly break the reference.
     equivalent and measured -- the foreign key's cascade deleted a goal
     as `current_user=postgres depth=2`, so the owner test alone passes
     it; said so in the file.
-    **Still to read back.**
+    **Applied, and read back** (14 October, read-only, after run
+    38525452088 on `078d6ef` had applied the migrations, its three
+    deploy jobs present): `app.appraisal_goal_change_guard` hashes
+    `0b7f9041` and `app.appraisal_goal_delete_guard` `69ea5b9e`, as
+    here, neither a definer; `appraisal_goals_change_ck` (before insert
+    or update) and `appraisal_goals_delete_ck` (before delete) are both
+    there and enabled. No goal in production. The same run counted
+    `6767 Dart tests ran (floor 6767)`.
 153. ~~A resignation could be dated after the last working day, and
     a time entry charged below nothing.~~ **Raised and answered 14
     October** ("Refuse it; default to the last day" and "Refuse a
