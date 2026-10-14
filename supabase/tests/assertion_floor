@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18469
+18478
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2101,3 +2101,10 @@
 # and one with no birthday on file are; somebody abroad may still be a
 # director but is not made secretary; a company is still appointed
 # auditor).
+#
+# 18469 -> 18478, 14 October: 0901's credit_linked_by_crediting.sql (9:
+# a credit note naming its invoice, or a supplier credit its bill, is not
+# written straight in; nor is the link added to a typed note or taken off
+# a linked draft, while a linked draft is still edited with its link
+# written back unchanged, and a typed note still posts unlinked; "credit
+# this" links the note and holds it to what is left, for a bill too).

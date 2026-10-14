@@ -4589,6 +4589,20 @@ page and renumbering would quietly break the reference.
     licence columns are free text. New
     `secretary_resident_of_eighteen.sql` (7 assertions). Swept 7 / 7
     with a control. **Still to read back.**
+169. ~~A credit note could credit five times its invoice.~~ **Raised
+    and answered 14 October** ("Link only through the functions").
+    `0269` / `0376` added the link from a credit to the invoice or bill
+    it credits so the credit could be capped, and `credit_sales_invoice`
+    / `credit_purchase_bill` cap it line by line -- but the link was a
+    column a client could write on a draft. Measured locally as an
+    accountant: a typed credit note of 5,000 naming a 1,000 invoice,
+    posted, and the same for a supplier credit and its bill. A linked
+    note also drives the credited-recipe stock return. The app never
+    writes the link itself. Production: no linked notes. `0901` adds
+    the client-only trigger `app.a_credit_is_linked_by_crediting` on
+    both tables (argument: the link column and its label); the credit
+    functions, as owner, pass. New `credit_linked_by_crediting.sql` (9
+    assertions). Swept 6 / 6 with a control. **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
