@@ -4326,7 +4326,12 @@ page and renumbering would quietly break the reference.
     `void_bank_transfer`). New `reversal_after_what_it_undoes.sql` (9
     assertions, one a real revaluation rerun). Swept 7 / 7 with a
     control.
-    **Still to read back.**
+    **Applied, and read back** (14 October, read-only, after run
+    38536481503 on `0dd24ea` had applied the migrations, its three
+    deploy jobs present): `reverse_gl_entry` hashes `a92a9d5b`,
+    `void_sales_document` `63b5d510`, `void_deposit` `2f44726b` and
+    `void_contra` `5eef0ed1`, as here, each carrying the change marked
+    0888. The same run counted `6767 Dart tests ran (floor 6767)`.
 157. ~~A credit note could come before the invoice it credits.~~
     **Raised and answered 14 October** ("Never before what it
     credits"). Item 156's shape, one step over. `credit_sales_invoice`
