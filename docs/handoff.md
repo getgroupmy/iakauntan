@@ -4635,6 +4635,23 @@ page and renumbering would quietly break the reference.
     migration on `7.00 / 50.00`); the posting test's case now asserts
     the five leave the shelf. Swept 3 / 3 with a control. **Still to
     read back.**
+171. ~~A purchase order could be received twice.~~ **Raised and
+    answered 14 October** ("One road per order line"). Found after item
+    170, asking what else trusts a document's parent: a purchase order
+    goes to a goods received note (which, since `0609`, receives the
+    goods and accrues 2118) or straight to a bill (which receives them
+    itself), and the two were counted apart. Measured locally as the
+    owner: ten ordered at 25 and received on a note, then billed from
+    the order -- 20 on hand, 1310 at 500, the 250 in 2118 never
+    cleared; billing first and then receiving does the same.
+    Production: ten purchase orders, no notes, no bill from an order.
+    `0903`: `transfer_document` and `transfer_outstanding` take a note
+    and a direct bill out of the same quantity on a purchase order,
+    and say which road took it when the other is asked;
+    `app.refresh_purchase_progress` calls an order fulfilled when the
+    two together took it. New `one_road_per_order_line.sql` (11
+    assertions, failing before the migration). Swept 7 / 7 with a
+    control. **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

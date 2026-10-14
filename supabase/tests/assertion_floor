@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18484
+18495
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2116,3 +2116,12 @@
 # shelf as well as the ledger; crediting it puts back the two, no more).
 # posting_an_invoice_refuses.sql's delivery-order case now asserts the
 # five leave the shelf; its count is unchanged.
+#
+# 18484 -> 18495, 14 October: 0903's one_road_per_order_line.sql (11: an
+# order received on a note is not billed again from the order, and the
+# dialog offers none of it; billed from the note the ten arrive once and
+# 2118 clears; four on a note leave six to bill from the order and no
+# more; the order is done when the two together took it, with nothing
+# left to receive; the books close as the note's would; an order billed
+# straight through is not received again on a note, and its bill
+# received the ten).

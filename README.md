@@ -2118,7 +2118,10 @@ Stated plainly so nothing here is mistaken for finished:
   still left 1310, so the ledger and the shelf parted, and crediting
   the invoice put back goods that had never gone. The invoice now moves
   its own stock, whatever it was raised from; a delivery order stays the
-  paper that travels with the goods
+  paper that travels with the goods. And a purchase order could go both
+  ways at once -- received on a note and billed straight from the order,
+  each receiving the goods -- until `0903` made the two draw on the one
+  quantity: goods received on a note are billed from the note
 - ~~E-mail delivery of anything.~~ Built and deployed: documents send
   through Resend, overdue invoices are chased on a schedule, and every
   send is logged per document. What is left is not code — a provider
