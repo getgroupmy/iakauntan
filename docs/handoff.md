@@ -4181,7 +4181,12 @@ page and renumbering would quietly break the reference.
     the first fixture opened this year alone, and on 28 December a
     cheque cleared "today + 31" falls in next year; it opens both sides
     of today now, as `post_dated_cheques.sql` does.
-    **Still to read back.**
+    **Applied, and read back** (14 October, read-only, after run
+    38522473779 on `e99548a` had applied the migrations, its three
+    deploy jobs present): all seven functions name "only somebody who
+    may post", and their bodies hash as they do here (md5 over the
+    seven `5963fae4`). The same run counted `6767 Dart tests ran (floor
+    6767)`.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
