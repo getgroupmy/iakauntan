@@ -818,6 +818,16 @@ itself. Reopening it (`reopen_appraisal`) returns them to the reviewer.
 Deleting an appraisal, its cycle or its company still takes its goals
 with it (`0379`, `0884`).
 
+### A leaver's dates
+
+`record_departure` takes the last working day, which is what takes
+somebody off the payroll, and for a resignation the day notice was
+given. Notice is given on or before the last day: a later date is
+refused, and the employee row carries the same check for an edit made
+directly. With no date given it is today, or the last working day if
+that has already passed, so a departure recorded late does not read as
+a resignation handed in after the person left (`0371`, `0885`).
+
 ### An auditor asking to see payslips
 
 An auditor cannot audit payroll without seeing it, but standing access

@@ -4211,6 +4211,29 @@ page and renumbering would quietly break the reference.
     as `current_user=postgres depth=2`, so the owner test alone passes
     it; said so in the file.
     **Still to read back.**
+153. ~~A resignation could be dated after the last working day, and
+    a time entry charged below nothing.~~ **Raised and answered 14
+    October** ("Refuse it; default to the last day" and "Refuse a
+    negative rate"). Two rules only the app said. The departure form
+    refuses notice after the last day and its comment says the database
+    says the same last; `record_departure` took such a date, and with
+    none given filled in today, so a departure recorded a month late
+    stored "resigned 14 Oct, last day 14 Sep". The matter screen refuses
+    a negative hourly rate; `time_entries` took ten hours at -RM300,
+    amount -3,000, which billing skips and every sum of the time's value
+    counts. Measured locally as `authenticated`. Production: no departed
+    employee, and 28 time entries, none negative. `0885`:
+    `record_departure` refuses notice after the last day (a resignation
+    only; a termination's stray date is not read) and defaults to the
+    earlier of today and the last day; `employees` gains
+    `employees_resignation_before_leaving_ck`; `time_entries` gains
+    `time_entries_hourly_rate_ck` (`>= 0`; zero still means "use the
+    billing rate"). New `what_the_form_refuses.sql` (12 assertions).
+    Swept 6 / 6 in `record_departure` with a control; the two
+    constraints by hand, each dropped and the file failing at its own
+    assertion. Two of the function's mutants died on the employee
+    constraint rather than an assertion -- the two layers meet.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

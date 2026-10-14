@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18322
+18334
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1984,3 +1984,12 @@
 # the reviewer who is HR Manager takes none off a completed appraisal,
 # but deleting the appraisal takes its goals with it; and the
 # database's owner removes one outside the app).
+#
+# 18322 -> 18334, 14 October: 0885's what_the_form_refuses.sql (12:
+# notice after the last day is refused and changes nothing; a late
+# entry with no date resigns them on their last day; notice on the last
+# day is accepted; one still to come resigns them today; a termination's
+# stray date is recorded without it; an edit cannot move notice past the
+# last day, and leaves the record as it was; a negative hourly rate is
+# refused on the way in and afterwards; two hours at RM300 still come to
+# RM600, and a rate of nothing is still logged).
