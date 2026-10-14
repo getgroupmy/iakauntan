@@ -272,8 +272,10 @@ begin
   update public.statutory_schedules set is_verified = true
    where body in ('epf', 'socso', 'eis', 'pcb');
 
+  -- Bodies, not tables: EPF has two since `0906` (non-citizens from
+  -- October 2025), and both are marked above.
   perform pg_temp.check_eq('four bodies are verified and the levy is not',
-    (select count(*) from public.statutory_schedules where is_verified), 4);
+    (select count(distinct body) from public.statutory_schedules where is_verified), 4);
 
   perform public.calculate_payroll_run(v_run);
   select * into r from public.payslips

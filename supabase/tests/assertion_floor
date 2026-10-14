@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18519
+18541
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2143,3 +2143,14 @@
 # and the rest of the header is written; posting charges the tax the
 # lines charged; a bill is neither inserted owing tax nor given it by
 # hand; the owner still writes them).
+#
+# 18519 -> 18541, 14 October: 0906's epf_non_citizens_from_october_2025.sql
+# (20: KWSP's RM1,751 example is RM36 a side; RM1,741 is RM35, on the
+# wage and not the next RM20; RM2,000 is RM40, and at sixty too; a
+# September 2025 pay date reads the old table, which ends the day
+# before; a pre-1998 member keeps 11% and RM5, RM5 alone at sixty, on
+# both sides of the change; a citizen still rounds to RM20; five
+# category sortings; three payslips; a published band keeps its own
+# step and one without keeps the table's), and foreign_worker_payroll.sql
+# rewritten for the new law (13 -> 15: the pre-1998 member's eleven per
+# cent and five ringgit are asserted where the flat amount is tested).

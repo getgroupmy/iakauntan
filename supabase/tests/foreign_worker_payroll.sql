@@ -3,18 +3,18 @@
 --
 --   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/foreign_worker_payroll.sql
 --
--- `app.epf_category` sorts an employee into one of four EPF categories
--- and two of them are for people who are not Malaysian. Nothing tested
--- either: changing the non-citizen employee rate, the non-citizen rate
--- at sixty, or the RM 5.00 flat employer contribution left every
--- assertion in this directory passing.
+-- `app.epf_category` sorts an employee into an EPF category, and two
+-- of them are for people who are not Malaysian. Nothing tested either:
+-- changing the non-citizen rates left every assertion in this
+-- directory passing.
 --
--- That is not a small corner of a Malaysian payroll. The employer's
--- side is the part worth stating plainly: for a non-citizen it is a
--- flat RM 5.00 a month whatever the salary, not a percentage. An
--- engine that quietly applied 12% to a foreign worker on RM 3,000
--- would over-contribute by RM 355 a month per head and nothing in this
--- directory would have noticed.
+-- That is not a small corner of a Malaysian payroll. From October 2025
+-- wages a non-citizen pays two per cent and the employer two per cent
+-- (`0906`, Part F of the Third Schedule); a member from before August
+-- 1998 still pays eleven against a flat RM 5.00 from the employer. An
+-- engine that applied a Malaysian's rates to a foreign worker on
+-- RM 3,000 would take RM 270 too much from them a month, and nothing in
+-- this directory would have noticed.
 --
 -- The HRD Corp optional tier is here for the same reason: an employer
 -- with five to nine employees may opt in at half a per cent, and only
@@ -26,9 +26,9 @@
 -- both HRD Corp tiers, since a levy has no employee side, and the
 -- employer rate on the non-resident tax scale, since a tax scale has no
 -- employer. The fourth of that kind -- the employer rate beside the
--- non-citizen flat amount -- is asserted, because there the danger is
--- real: read alongside the amount rather than instead of it, it turns
--- RM 5.00 into RM 365.00.
+-- pre-1998 member's flat amount -- is asserted, because there the
+-- danger is real: read alongside the amount rather than instead of it,
+-- it turns RM 5.00 into RM 365.00.
 --
 -- Nothing is written; the file rolls back.
 -- =====================================================================
@@ -106,19 +106,21 @@ begin
   -- ------------------------------------------------------------------
   -- Under sixty
   --
-  -- The employee pays what a Malaysian pays. The employer does not:
-  -- RM 5.00, flat, whatever the wage.
+  -- From October 2025 wages (`0906`): two per cent from the worker and
+  -- two from the employer, on the wage itself. This said eleven and a
+  -- flat RM 5.00 until then, which is still what a member from before
+  -- August 1998 pays -- asserted below.
   -- ------------------------------------------------------------------
-  perform pg_temp.check_eq('a foreign worker contributes eleven per cent',
-    r_young.epf_employee, 330.00);
-  perform pg_temp.check_eq('and the employer five ringgit, not a percentage',
-    r_young.epf_employer, 5.00);
+  perform pg_temp.check_eq('a foreign worker contributes two per cent',
+    r_young.epf_employee, 60.00);
+  perform pg_temp.check_eq('and the employer two per cent, not five ringgit',
+    r_young.epf_employer, 60.00);
 
   -- Said as a comparison as well, because the two numbers above could
   -- both be wrong in the same direction and still look like a payslip.
-  perform pg_temp.check_eq('the employee side matches a Malaysian''s',
-    r_young.epf_employee, r_local.epf_employee);
-  perform pg_temp.check_true('and the employer side does not',
+  perform pg_temp.check_true('the employee side is not a Malaysian''s',
+    r_local.epf_employee > r_young.epf_employee);
+  perform pg_temp.check_true('and nor is the employer side',
     r_local.epf_employer > r_young.epf_employer);
   perform pg_temp.check_eq('the Malaysian employer pays thirteen per cent',
     r_local.epf_employer, 390.00);
@@ -126,29 +128,40 @@ begin
   -- ------------------------------------------------------------------
   -- Sixty and over
   --
-  -- The employee side stops, as it does for a Malaysian. The flat
-  -- employer contribution does not.
+  -- Nothing changes at sixty for a non-citizen: the two per cent runs
+  -- on, where a Malaysian's own side stops.
   -- ------------------------------------------------------------------
-  perform pg_temp.check_eq('at sixty the foreign employee stops paying',
-    r_old.epf_employee, 0);
-  perform pg_temp.check_eq('and the employer still pays the five ringgit',
-    r_old.epf_employer, 5.00);
+  perform pg_temp.check_eq('at sixty the foreign employee still pays two per cent',
+    r_old.epf_employee, 60.00);
+  perform pg_temp.check_eq('and so does the employer',
+    r_old.epf_employer, 60.00);
 
   -- ------------------------------------------------------------------
-  -- The flat amount governs, and the rate column beside it does not
+  -- The member from before August 1998, and the flat amount
   --
-  -- Both non-citizen rows carry an employer_rate of 0 and an
-  -- employer_amount of 5. Nothing reads that rate, and the danger is
-  -- somebody later making `calc_statutory` add the two together --
-  -- which on RM 3,000 would turn RM 5.00 into RM 365.00 a month per
-  -- head and look like a plausible EPF figure. So the rate is set to
-  -- something visible here and the answer must not move.
+  -- Their rows carry an employer_rate of 0 and an employer_amount of 5.
+  -- Nothing reads that rate, and the danger is somebody later making
+  -- `calc_statutory` add the two together -- which on RM 3,000 would
+  -- turn RM 5.00 into RM 365.00 a month and look like a plausible EPF
+  -- figure. So the rate is set to something visible here and the
+  -- answer must not move.
   -- ------------------------------------------------------------------
+  update public.employees set epf_pre_august_1998 = true where id = v_young;
+  update public.payroll_runs set status = 'draft' where id = v_run;
+  delete from public.payslips where run_id = v_run;
+  perform public.calculate_payroll_run(v_run);
+  select * into r_young from public.payslips
+   where run_id = v_run and employee_id = v_young;
+  perform pg_temp.check_eq('a member from before 1998 contributes eleven per cent',
+    r_young.epf_employee, 330.00);
+  perform pg_temp.check_eq('against the employer''s five ringgit',
+    r_young.epf_employer, 5.00);
+
   update public.statutory_rates r
      set employer_rate = 12
     from public.statutory_schedules s
    where s.id = r.schedule_id and s.body = 'epf'
-     and r.category like 'noncitizen%';
+     and r.category like 'noncitizen_pre1998%';
 
   update public.payroll_runs set status = 'draft' where id = v_run;
   delete from public.payslips where run_id = v_run;

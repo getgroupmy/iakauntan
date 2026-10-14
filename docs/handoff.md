@@ -4702,6 +4702,44 @@ page and renumbering would quietly break the reference.
     of the five set. `discount_amount` is left alone, as an input. New
     `totals_are_the_lines.sql` (11 assertions, failing before the
     migration). Swept 6 / 6 with a control. **Still to read back.**
+174. ~~Non-citizens were charged EPF on terms that ended in
+    September 2025.~~ **Raised and answered 14 October** ("2% schedule
+    + pre-1998 flag"). Found spot-checking the statutory seed: EPF has
+    been mandatory for non-Malaysian employees since October 2025 wages
+    at 2% employee and 2% employer, unchanged at sixty, directly on the
+    wage and each share rounded up to the ringgit (Third Schedule Part
+    F; KWSP's example RM1,751 -> RM36 a side); members from before 1
+    August 1998 keep 11% / RM5. Confirmed against KWSP's own pages
+    ("Contribution For Non-Malaysian Citizen Employees", and the
+    October 2025 announcement), not memory. The only EPF table (from
+    2024-01-01) charged every non-citizen 11% and RM5 on a wage rounded
+    up to RM20. Production: four employees, all citizens; nothing
+    recalculated. `0906`: `statutory_rates.wage_round_up_to` (a band's
+    own wage step; 0 = the wage itself), read by `calc_statutory` and
+    carried by `platform_publish_statutory_schedule`;
+    `employees.epf_pre_august_1998` and a three-argument
+    `app.epf_category` filing such a member as `noncitizen_pre1998_*`,
+    passed by `calculate_payroll_run`; the pre-1998 rows added to the
+    old table; the old table ends 30 September 2025 and a new one starts
+    1 October 2025 with non-citizens at 2% / 2% and a step of 0. Chosen
+    by pay date, like every statutory table here, so a September wage
+    paid in October reads the new table. **The flag has no field on the
+    employee form yet** -- it is set in the database until one is
+    added. Not marked verified, like the table it follows. New
+    `epf_non_citizens_from_october_2025.sql` (20 assertions);
+    `foreign_worker_payroll.sql` rewritten for the new law (13 -> 15);
+    `hrdf_levy.sql`'s precondition "four bodies are verified" counted
+    tables and now counts bodies, EPF having two. Swept 6 / 6 with a
+    control. **Noticed and not raised:** a
+    non-citizen's SOCSO and EIS. Payroll gives anyone under sixty
+    SOCSO's `act4` (0.5% / 1.75%) and EIS by default, whatever their
+    nationality. PERKESO puts foreign workers under Act 4's Third
+    Schedule (employment injury 1.25% from the employer; invalidity from
+    July 2024; a non-employment-injury phase from June 2026) and lists
+    EIS (Act 800) as for citizens and permanent residents -- but its own
+    pages disagree on dates and on temporary residents, so it wants the
+    gazetted schedules, not a search. Production has no non-citizen
+    employee. **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

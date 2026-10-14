@@ -814,6 +814,16 @@ Three employees, January 2026, hand-checked against the published rules:
 | PCB | 108.25 | 1,255.20 | 80.00 |
 | Net pay | 4,306.75 | 9,382.80 | 4,420.00 |
 
+A non-citizen is on different terms. From October 2025 wages EPF is
+mandatory for non-Malaysian employees at 2% from the worker and 2% from
+the employer, at every age, directly on the wage (Part F of the Third
+Schedule: RM1,751 is RM36 a side); a member from before 1 August 1998
+keeps 11% against a flat RM5 (`employees.epf_pre_august_1998`). Until
+`0906` the schedule charged every non-citizen the pre-1998 terms on a
+wage rounded up to RM20 -- RM220 from a foreign worker on RM2,000 where
+the law asks RM40. Domestic servants are outside it, which is
+`epf_eligible`.
+
 Every figure matched. The payroll journal balanced at RM 24,255.75:
 
 ```
