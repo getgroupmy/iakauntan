@@ -4441,7 +4441,11 @@ page and renumbering would quietly break the reference.
     withholding certificates. `0893` refuses a remittance dated before
     the certificate, naming its date. New
     `tax_paid_over_after_withheld.sql` (7 assertions). Swept 4 / 4 with
-    a control. **Still to read back.**
+    a control. **Applied, and read back** (14 October, read-only, after
+    run 38552644462 on `762188c` had applied the migrations, its three
+    deploy jobs present): `remit_withholding` hashes `4ec6d778`, as
+    here, carrying the change. The same run counted `6767 Dart tests
+    ran (floor 6767)`.
 162. ~~Payroll docked unpaid leave on days the person was not
     employed.~~ **Raised and answered 14 October** ("Clip in payroll,
     refuse new"). Found looking at leave against employment dates.
