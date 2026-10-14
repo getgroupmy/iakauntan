@@ -4046,7 +4046,12 @@ page and renumbering would quietly break the reference.
     its sentence; the privilege refuses first now, so it asks for that,
     and `0826`'s four insert mutants are recorded as equivalent (re-swept:
     8 of 13 killed, the control surviving).
-    **Still to read back.**
+    **Applied, and read back** (14 October, read-only, after run
+    38509263544 on `8a8451e` had applied the migrations): neither
+    `authenticated` nor `anon` holds insert on `organizations`, on the
+    table or a column, and its policies are the select, update and
+    delete ones; nineteen companies, as before. The same run counted
+    `6767 Dart tests ran (floor 6767)`; nothing in it touched the app.
 148. ~~One side of a direct chat could open it to a third person.~~
     **Raised and answered 14 October** ("Only through its functions").
     Found by the same listing as item 147. `0135` put every change to a
