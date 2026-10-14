@@ -4656,6 +4656,24 @@ page and renumbering would quietly break the reference.
     two together took it. New `one_road_per_order_line.sql` (11
     assertions, failing before the migration). Swept 7 / 7 with a
     control. **Still to read back.**
+172. ~~A client could reset what a line had taken forward.~~ **Raised
+    and answered 14 October** ("The database's to write"). Found
+    testing 0903's cap: the four line counters (`quantity_invoiced`,
+    `quantity_fulfilled`, `quantity_billed`, `quantity_received`) and
+    the header's `fulfilment_status`, kept by the refresh functions,
+    were ordinary columns. Measured locally as the owner: an order
+    received on a note had `quantity_received` zeroed by hand and was
+    billed again from the order for all ten; an invoiced quotation was
+    zeroed and invoiced again. The app reads them and never writes
+    them. Production: 182 sales and 104 purchase lines, all agreeing
+    with their children. `0904` adds the client-only trigger
+    `app.what_was_taken_forward_is_the_databases` (arguments
+    `column=starting value`) on both line tables and both header
+    tables: no change by a client, and no insert already counted.
+    `posted_document_is_frozen.sql`'s progress case now writes as the
+    owner. New `what_was_taken_forward.sql` (13 assertions, failing
+    before the migration). Swept 5 / 5 with a control. **Still to read
+    back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

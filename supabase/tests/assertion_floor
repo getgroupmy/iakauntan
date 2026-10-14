@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18495
+18508
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2125,3 +2125,14 @@
 # left to receive; the books close as the note's would; an order billed
 # straight through is not received again on a note, and its bill
 # received the ten).
+#
+# 18495 -> 18508, 14 October: 0904's what_was_taken_forward.sql (13: an
+# order's received and billed counters and its fulfilment are not reset
+# by hand, so it is still not billed again; the rest of a counted line
+# is still written; a line does not arrive with room made on it, nor a
+# document already fulfilled, while one starting where the database
+# would is written; a quotation's invoiced and delivered counters and
+# its fulfilment are not written by hand; taking the invoice away gives
+# the quantity back; the owner still writes them).
+# posted_document_is_frozen.sql's "progress still climbs" case now
+# writes as the owner; its count is unchanged.

@@ -2121,7 +2121,11 @@ Stated plainly so nothing here is mistaken for finished:
   paper that travels with the goods. And a purchase order could go both
   ways at once -- received on a note and billed straight from the order,
   each receiving the goods -- until `0903` made the two draw on the one
-  quantity: goods received on a note are billed from the note
+  quantity: goods received on a note are billed from the note. The
+  counters that hold all of this -- what each line has had invoiced,
+  delivered, billed and received, and the order's fulfilment -- are the
+  database's alone since `0904`; a client that zeroed one could take the
+  same quantity forward again
 - ~~E-mail delivery of anything.~~ Built and deployed: documents send
   through Resend, overdue invoices are chased on a schedule, and every
   send is logged per document. What is left is not code — a provider

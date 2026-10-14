@@ -384,11 +384,16 @@ begin
   perform pg_temp.check_eq('and somebody can still write on it',
     (select reference from public.sales_documents where id = c.inv), 'PO-77');
 
+  -- Progress is the database's to write (`0904`): the refresh functions
+  -- climb the chain as their owner, so that is who writes it here. What
+  -- this asks is that the posting freeze lets them.
+  execute 'reset role';
   update public.sales_documents set fulfilment_status = 'fulfilled'
    where id = c.inv;
   update public.sales_document_lines
      set quantity_invoiced = 10, quantity_fulfilled = 10
    where id = c.inv_line;
+  execute 'set local role authenticated';
   perform pg_temp.check_eq('and progress still climbs the chain',
     (select quantity_invoiced from public.sales_document_lines
       where id = c.inv_line), 10);
