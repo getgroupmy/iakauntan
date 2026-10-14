@@ -4588,7 +4588,14 @@ page and renumbering would quietly break the reference.
     (`director_of_eighteen.sql` still passes). Licensing is left: the
     licence columns are free text. New
     `secretary_resident_of_eighteen.sql` (7 assertions). Swept 7 / 7
-    with a control. **Still to read back.**
+    with a control. **Applied, and read back** (14 October, read-only,
+    after run 38581735689 on `681a25d` had applied the migrations, its
+    three deploy jobs present; its Android build failed on a corrupt NDK
+    download on the runner and passed when re-run, so the run is green
+    on attempt 2): `app.corp_officer_is_eligible` hashes
+    `9c66d373` and its trigger `officer_is_eligible` `b2b180b2`, as here;
+    the old name `app.corp_director_is_eligible` is gone. The same run
+    counted `6767 Dart tests ran (floor 6767)`.
 169. ~~A credit note could credit five times its invoice.~~ **Raised
     and answered 14 October** ("Link only through the functions").
     `0269` / `0376` added the link from a credit to the invoice or bill
