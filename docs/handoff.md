@@ -4507,7 +4507,13 @@ page and renumbering would quietly break the reference.
     arguments, on the five tables (insert, and an update of those
     columns). New `register_records_what_happened.sql` (15 assertions).
     Swept 4 / 4 with a control, and the twelve trigger arguments by
-    hand, each dropped in turn: 12 / 12. **Still to read back.**
+    hand, each dropped in turn: 12 / 12. **Applied, and read back** (14
+    October, read-only, after run 38562904730 on `89e754e` had applied
+    the migrations, its three deploy jobs present):
+    `app.corp_not_after_today` hashes `1175de41` and its five triggers
+    `cd788a4f` (beneficial owners), `1aeb5753` (charges), `8fa29793`
+    (officers), `62984b90` (persons) and `ad041388` (share events), as
+    here. The same run counted `6767 Dart tests ran (floor 6767)`.
 165. ~~An officer could cease before appointment, and a charge be
     lodged or satisfied before it was created.~~ **Raised and answered
     14 October** ("The four the sheets hold, as checks"). Found in the
