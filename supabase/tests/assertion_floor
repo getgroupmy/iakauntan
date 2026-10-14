@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18450
+18455
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2081,3 +2081,9 @@
 # kept; a charge is not lodged or satisfied before it was created nor
 # its memorandum filed before the satisfaction, and one dated all on one
 # day is kept, as is one with no dates beyond its creation).
+#
+# 18450 -> 18455, 14 October: 0898's transfer_arrives_after_it_leaves.sql
+# (5: a transfer dated ahead arrives on its own day, movement and
+# journal, so until then the rice is in one place only and on the day
+# it is in the shop, not the kitchen; one already dated arrives today,
+# as before, and one dated today, today).

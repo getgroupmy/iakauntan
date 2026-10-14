@@ -4530,6 +4530,18 @@ page and renumbering would quietly break the reference.
     8 / 8: each dropped, each `>=` made `>`. **Noticed and not raised:**
     a beneficial owner ceasing before entering the register is stored
     too, but that sheet states no such rule. **Still to read back.**
+166. ~~A stock transfer dated ahead arrived before it left.~~ **Raised
+    and answered 14 October** ("Receive on the later day"). The
+    0888/0889 shape in stock: `send_stock_transfer` posts out on the
+    transfer's own date, `receive_stock_transfer` posted in on today.
+    Measured locally as the owner: 20 kg on a transfer dated ten days
+    ahead, sent and received today -- the shop held it at once, the
+    kitchen gave it up ten days later (120 kg on the books where there
+    were 100), and the receipt journal preceded the dispatch it clears
+    out of transit. Production: no stock transfers. `0898` dates the
+    movement in and its journal `greatest(app.today(),
+    transfer_date)`. New `transfer_arrives_after_it_leaves.sql` (5
+    assertions). Swept 4 / 4 with a control. **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

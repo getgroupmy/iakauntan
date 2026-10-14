@@ -127,7 +127,9 @@ not posted dated before it, and "credit this" dates the note on the
 original's own day when that is still to come (`0889`).
 Withholding tax is the same again: a certificate is dated the day the
 payment was made or credited, and its remittance to LHDN is not dated
-before it (`0893`).
+before it (`0893`). A stock transfer dated ahead is received on its own day,
+not today: it is sent on that day, and could otherwise arrive at the
+shop before it left the kitchen (`0898`).
 
 ### A cheque dated next month
 
