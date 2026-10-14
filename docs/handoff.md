@@ -4609,7 +4609,13 @@ page and renumbering would quietly break the reference.
     the client-only trigger `app.a_credit_is_linked_by_crediting` on
     both tables (argument: the link column and its label); the credit
     functions, as owner, pass. New `credit_linked_by_crediting.sql` (9
-    assertions). Swept 6 / 6 with a control. **Still to read back.**
+    assertions). Swept 6 / 6 with a control. **Applied, and read back**
+    (14 October, read-only, after run 38589818109 on `8c93404` had
+    applied the migrations, its three deploy jobs present):
+    `app.a_credit_is_linked_by_crediting` hashes `bf3e863d` and its
+    triggers `0b3ef81f` (purchase documents) and `19c4fdfd` (sales
+    documents), as here. The same run counted `6767 Dart tests ran
+    (floor 6767)`.
 170. ~~An invoice raised from a delivery order moved no stock.~~
     **Raised and answered 14 October** ("Invoice moves its stock").
     Found reading the link columns on documents after item 169:
