@@ -4547,7 +4547,12 @@ page and renumbering would quietly break the reference.
     out of transit. Production: no stock transfers. `0898` dates the
     movement in and its journal `greatest(app.today(),
     transfer_date)`. New `transfer_arrives_after_it_leaves.sql` (5
-    assertions). Swept 4 / 4 with a control. **Still to read back.**
+    assertions). Swept 4 / 4 with a control. **Applied, and read back**
+    (14 October, read-only, after run 38574713887 on `72078ee` had
+    applied the migrations, its three deploy jobs present):
+    `receive_stock_transfer` hashes `867920c4` and carries the 0898
+    change, as here. The same run counted `6767 Dart tests ran (floor
+    6767)`.
 167. ~~A company, or a child, could be appointed director.~~ **Raised
     and answered 14 October** ("Refuse both"). Companies Act 2016
     s.196(1)(a): a director is a natural person who has attained
