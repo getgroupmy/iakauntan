@@ -4112,7 +4112,18 @@ page and renumbering would quietly break the reference.
     so the refusal is this guard's and no other. Swept 11 / 11 with a
     control; the quotation asking the wrong side dies by an error
     rather than an assertion (the salesperson's own quote is refused).
-    **Still to read back.**
+    **Applied, and read back** (14 October, read-only, after run
+    38513497658 on `3a011a7` had applied the migrations): `app.require_side`
+    hashes to `5ea7a55d` and `authenticated` may not call it directly;
+    all seven functions ask it, their bodies hashing name by name to
+    `aa086dcc` there as here. The same run counted `6767 Dart tests ran
+    (floor 6767)`. **Not the run it was pushed in:** `0881` went up in
+    `4fba723`, and a README fix pushed while that run was still going
+    made it stand down at "Apply the migrations" -- "Superseded by ...",
+    green, and nothing applied -- so the read-back belongs to the newer
+    run. The first read-back, against the older one, found no
+    `app.require_side` at all. Read the run's job list before believing
+    a green run deployed: a superseded one has no deploy jobs.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
