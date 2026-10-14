@@ -126,7 +126,9 @@ when it clears. So it is paid in and cleared on or after the date
 written on it, never before, and it clears no earlier than the day it
 was paid in -- "Pay it in" and "It cleared" on a cheque not yet due say
 the date it can be banked. Handing it back and recording it returned
-unpaid stay open on any day (`0886`).
+unpaid stay open on any day (`0886`). A deposit is held to the same
+order: it may be dated ahead, and is then applied, given back or kept on
+or after that day, never before it was taken (`0887`).
 
 ### The jobs that run themselves
 

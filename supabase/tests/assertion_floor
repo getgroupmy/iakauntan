@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18346
+18356
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2001,3 +2001,9 @@
 # on or after its date; it does not clear before the day it was paid in,
 # clears that day with the bank having it then, and a held one clears
 # on its own date; handed back and returned unpaid before its date).
+#
+# 18346 -> 18356, 14 October: 0887's deposit_used_after_taken.sql (10:
+# a deposit is not applied before it was taken, nor the day before, nor
+# given back or kept before it was taken, so it is all still held; it
+# is applied and given back on the day it was taken and kept the day
+# after; and a deposit taken today is used today, as before).

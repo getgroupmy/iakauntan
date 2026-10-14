@@ -4277,6 +4277,20 @@ page and renumbering would quietly break the reference.
     yesterday). The cheque list's menu still offers both actions on a
     cheque not yet due; the refusal names the day.
     **Still to read back.**
+155. ~~A deposit could be applied or refunded before it was taken.~~
+    **Raised and answered 14 October** ("Not before it was taken"). The
+    same order as item 154, one register over. `create_deposit` takes
+    any date and the form offers three years either side; "Apply" and
+    "Refund" send none, so both post today. Measured locally as an
+    accountant: a customer deposit dated 24 Oct was applied to an
+    invoice and partly refunded on 14 Oct -- the liability debited ten
+    days before it was credited. Production: no deposit. `0887`:
+    `apply_deposit` and `settle_deposit` refuse a day before the
+    deposit's own date, naming it; a deposit may still be dated ahead
+    (the user chose that over refusing a future-dated deposit). New
+    `deposit_used_after_taken.sql` (10 assertions). Swept 6 / 6 with a
+    control. No existing fixture used a deposit early.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
