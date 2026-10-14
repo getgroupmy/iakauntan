@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18334
+18346
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1993,3 +1993,11 @@
 # last day, and leaves the record as it was; a negative hourly rate is
 # refused on the way in and afterwards; two hours at RM300 still come to
 # RM600, and a rate of nothing is still logged).
+#
+# 18334 -> 18346, 14 October: 0886's cheque_banked_on_its_date.sql (12:
+# a cheque is not paid in before its date, nor the day before, nor does
+# it clear before its date or the day before, so it is still held and
+# nothing reached the bank; it is paid in on the day written on it, and
+# on or after its date; it does not clear before the day it was paid in,
+# clears that day with the bank having it then, and a held one clears
+# on its own date; handed back and returned unpaid before its date).

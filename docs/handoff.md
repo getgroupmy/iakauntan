@@ -4241,6 +4241,32 @@ page and renumbering would quietly break the reference.
     assertion. Two of the function's mutants died on the employee
     constraint rather than an assertion -- the two layers meet.
     **Still to read back.**
+154. ~~A post-dated cheque could be paid in and cleared before its
+    date.~~ **Raised and answered 14 October** ("Neither before its
+    date"). `deposit_pdc` and `clear_pdc` took any day, and the cheque
+    list's "Pay it in" and "It cleared" send none, so both default to
+    today. Measured locally as an accountant with `authenticated`: a
+    cheque dated 13 Nov was paid in and cleared on 14 Oct, the bank
+    journal dated 14 Oct -- the money in the bank a month before any
+    bank would pay it. Production: no post-dated cheque. `0886`:
+    `deposit_pdc` refuses a day before the cheque's date; `clear_pdc`
+    refuses a day before the cheque's date and before the day it was
+    paid in (that last is the same mistake one step on, not asked
+    separately). "Nor before it was received" needs no line:
+    `record_pdc` refuses a cheque dated on or before its receipt, so a
+    check on it would be dead code. Bouncing and handing back stay open
+    on any day. New `cheque_banked_on_its_date.sql` (12 assertions).
+    Swept 7 / 7 with a control; the first sweep left "not paid in on its
+    date either" alive -- no fixture paid one in on the day itself --
+    and that assertion is in. **Fixtures moved, not loosened:**
+    `post_dated_cheques.sql` paid one in the day before its date (now
+    on it), cleared three on the day they were recorded (now on their
+    date), and asserted "with no day given, it was paid in today" of a
+    cheque not due (now received ten days ago, dated today);
+    `money_names_the_account.sql` cleared one ten days early (now dated
+    yesterday). The cheque list's menu still offers both actions on a
+    cheque not yet due; the refusal names the day.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

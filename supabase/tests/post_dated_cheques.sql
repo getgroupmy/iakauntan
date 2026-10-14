@@ -114,7 +114,8 @@ begin
   -- ------------------------------------------------------------------
   -- 2. Banking it is not clearing it
   -- ------------------------------------------------------------------
-  perform public.deposit_pdc(v_pdc, pg_temp.today() + 44);
+  -- Paid in on the day written on it, the first it can be (`0886`).
+  perform public.deposit_pdc(v_pdc, pg_temp.today() + 45);
   perform pg_temp.check_eq('paid in',
     (select c.status::text from public.post_dated_cheques c where c.id = v_pdc),
     'deposited');
@@ -1290,11 +1291,12 @@ begin
   -- `can_write_module(org, case direction when incoming then sales else
   -- purchases end)`. A stranger proves the guard exists; only a company
   -- holding one module and not the other proves the derivation.
+  -- Cleared on the day written on them, the first they can (`0886`).
   v_in2 := public.record_pdc(v_org, 'incoming', v_cust, '770003',
                              pg_temp.today() + 3, 300, '[]'::jsonb, v_bank);
   perform pg_temp.sign_in_as(pg_temp.another_user('luar-cek@iakauntan.test'));
   begin
-    perform public.clear_pdc(v_in2, pg_temp.today(), v_bank);
+    perform public.clear_pdc(v_in2, pg_temp.today() + 3, v_bank);
     v_msg := null;
   exception when others then get stacked diagnostics v_msg = message_text;
   end;
@@ -1317,11 +1319,11 @@ begin
   perform pg_temp.check_refused(
     'a company that gave up Purchases cannot present its own cheque',
     format('select public.clear_pdc(%L, %L, %L)',
-           v_out, pg_temp.today(), v_bank),
+           v_out, pg_temp.today() + 3, v_bank),
     'not permitted to write for this organization', '42501');
   perform pg_temp.check_true(
     'while an incoming cheque still clears, on core Sales',
-    public.clear_pdc(v_in2, pg_temp.today(), v_bank) is not null);
+    public.clear_pdc(v_in2, pg_temp.today() + 3, v_bank) is not null);
   update public.org_modules set is_enabled = true
    where org_id = v_org and module_code = 'purchases';
 
@@ -1364,10 +1366,12 @@ begin
   v_bank := pg_temp.test_bank_account(
     v_org, 'Current account', 'current', 'MYR', 0, 0, '512345678902');
 
+  -- Received ten days ago and dated today, so they are due and may be
+  -- paid in today or after (`0886`).
   v_in := public.record_pdc(v_org, 'incoming', v_cust, '700001',
-    pg_temp.today() + 10, 100, '[]'::jsonb, v_bank, 'CIMB');
+    pg_temp.today(), 100, '[]'::jsonb, v_bank, 'CIMB', pg_temp.today() - 10);
   v_in2 := public.record_pdc(v_org, 'incoming', v_cust, '700002',
-    pg_temp.today() + 10, 100, '[]'::jsonb, v_bank, 'CIMB');
+    pg_temp.today(), 100, '[]'::jsonb, v_bank, 'CIMB', pg_temp.today() - 10);
 
   perform pg_temp.check_refused('a cheque that does not exist is said so',
     format('select public.deposit_pdc(%L)', gen_random_uuid()),
@@ -1490,7 +1494,8 @@ begin
     'Say why.', '23514');
 
   -- A cheque already paid in is the bank's now, not ours to hand back.
-  perform public.deposit_pdc(v_pdc2);
+  -- Paid in on its own date, the first day it can be (`0886`).
+  perform public.deposit_pdc(v_pdc2, pg_temp.today() + 10);
   perform pg_temp.check_refused('a cheque paid in is not handed back',
     format('select public.cancel_pdc(%L, %L)', v_pdc2, 'too late'),
     'That cheque is deposited.%', '23514');

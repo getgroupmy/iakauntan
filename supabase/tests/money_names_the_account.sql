@@ -439,12 +439,12 @@ begin
 
   -- A cheque on the register with no bank account on it: `clear_pdc`
   -- takes the argument or the cheque's own column, and here there is
-  -- neither.
+  -- neither. Dated yesterday, so it may clear today (`0886`).
   insert into public.post_dated_cheques
     (org_id, pdc_no, direction, contact_id, cheque_no, cheque_date, amount,
      received_on)
   values (v_org, 'PDC-NONE', 'incoming', v_cust, '700001',
-          v_today + 10, 2500, v_today)
+          v_today - 1, 2500, v_today - 2)
   returning id into v_pdc;
 
   perform pg_temp.check_refused(

@@ -118,6 +118,16 @@ and used it without checking — so a reversal could be dated into a
 closed month and quietly undo it. `0059` holds it to the same rules as
 every other posting.
 
+### A cheque dated next month
+
+A post-dated cheque takes the receivable off the customer the day it is
+handed over and holds it in cheques on hand; the bank has the money only
+when it clears. So it is paid in and cleared on or after the date
+written on it, never before, and it clears no earlier than the day it
+was paid in -- "Pay it in" and "It cleared" on a cheque not yet due say
+the date it can be banked. Handing it back and recording it returned
+unpaid stay open on any day (`0886`).
+
 ### The jobs that run themselves
 
 Leave carry-forward, recurring journals and the B2C consolidation all
