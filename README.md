@@ -125,6 +125,9 @@ the standing revaluation back on that month's day (`0888`). A credit or
 debit note that names its invoice or bill is held to the same order:
 not posted dated before it, and "credit this" dates the note on the
 original's own day when that is still to come (`0889`).
+Withholding tax is the same again: a certificate is dated the day the
+payment was made or credited, and its remittance to LHDN is not dated
+before it (`0893`).
 
 ### A cheque dated next month
 

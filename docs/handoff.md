@@ -4425,6 +4425,19 @@ page and renumbering would quietly break the reference.
     its own date stays open, as `0886` left it. New
     `cheque_comes_back_after.sql` (10 assertions). Swept 7 / 7 with a
     control. **Still to read back.**
+161. ~~Withholding tax could be paid over before it was withheld.~~
+    **Raised and answered 14 October** ("Not before the certificate").
+    Found in the same sweep. `remit_withholding` took any date; a
+    certificate is dated the day the payment was made or credited (by
+    default its bill's date) and its journal posts then. Measured
+    locally as an accountant: a certificate dated ten days ago remitted
+    dated thirty days ago, and one dated twenty days ahead remitted
+    today -- the withholding screen's Remit sends today -- both posted,
+    the remittance journal before the withholding one. Production: no
+    withholding certificates. `0893` refuses a remittance dated before
+    the certificate, naming its date. New
+    `tax_paid_over_after_withheld.sql` (7 assertions). Swept 4 / 4 with
+    a control. **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18406
+18413
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2045,3 +2045,9 @@
 # undoes; one paid in does not come back before that day, and does on
 # it; and one the company wrote is not stopped before it was issued, and
 # is after).
+#
+# 18406 -> 18413, 14 October: 0893's tax_paid_over_after_withheld.sql (7:
+# withholding tax is not paid over before the certificate's date, not
+# even the day before, so it is not remitted; it is paid over on the day
+# it was withheld, both journals that day; one dated ahead is not paid
+# over today, waits, and is paid over after its day).
