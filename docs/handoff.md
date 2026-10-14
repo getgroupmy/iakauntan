@@ -4568,7 +4568,12 @@ page and renumbering would quietly break the reference.
     `director_of_eighteen.sql` (7 assertions). Swept 6 / 6 with a
     control. **Noticed and not raised:** s.196(2)'s resident director
     is shown on an empty register only, and s.235's natural-person
-    secretary is not asked either. **Still to read back.**
+    secretary is not asked either. **Applied, and read back** (14
+    October, read-only, after run 38577753446 on `cde5d10` had applied
+    the migrations, its three deploy jobs present):
+    `app.corp_director_is_eligible` hashes `6cb63892` and its trigger
+    `40a24173`, as here. `0900` renames both. The same run counted
+    `6767 Dart tests ran (floor 6767)`.
 168. ~~A company, a child or somebody abroad could be appointed
     secretary.~~ **Raised and answered 14 October** ("Individual, 18,
     resident"), from item 167's note. Companies Act 2016 s.235: a
