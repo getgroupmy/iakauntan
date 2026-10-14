@@ -4442,6 +4442,26 @@ page and renumbering would quietly break the reference.
     the certificate, naming its date. New
     `tax_paid_over_after_withheld.sql` (7 assertions). Swept 4 / 4 with
     a control. **Still to read back.**
+162. ~~Payroll docked unpaid leave on days the person was not
+    employed.~~ **Raised and answered 14 October** ("Clip in payroll,
+    refuse new"). Found looking at leave against employment dates.
+    `calculate_payroll_run` prorates basic to the hire date and last
+    working day but clipped approved unpaid leave only to the period.
+    Measured locally, an April run: a leaver (last day 15 April) and a
+    joiner (hired 16 April) each paid 1,550.00 for fifteen days and
+    each docked 596.15 for five days of unpaid leave in the half they
+    were not employed -- gross 953.85. Nothing refused such leave: the
+    request function takes any dates and a client may write a draft
+    straight into `leave_requests` (`0795` leaves drafts theirs).
+    Production: no leave requests, no leavers. `0894` clips unpaid
+    leave to `v_from`..`v_to` and adds the definer trigger
+    `app.leave_within_employment` (insert, and a change of dates or
+    employee): no start before the hire date, no end after a recorded
+    last working day. Leave already booked when a departure or a hire
+    date moves stays; the clip makes it free. New
+    `unpaid_leave_while_employed.sql` (8 assertions, the payroll
+    figures among them). Swept 10 / 10 with a control.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

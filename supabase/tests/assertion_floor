@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18413
+18421
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2051,3 +2051,12 @@
 # even the day before, so it is not remitted; it is paid over on the day
 # it was withheld, both journals that day; one dated ahead is not paid
 # over today, waits, and is paid over after its day).
+#
+# 18413 -> 18421, 14 October: 0894's unpaid_leave_while_employed.sql (8:
+# an April payslip docks a leaver only the unpaid leave inside their last
+# fortnight and a joiner only the leave from their first day, 357.69 for
+# three days at 3,100.00 over 26, and a whole month the whole 596.15, as
+# before; leave starting before the hire date or ending after the last
+# working day is refused, through the function and as a draft written
+# into the table or moved there; a day on the first day and one on the
+# last are kept).

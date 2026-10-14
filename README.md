@@ -866,6 +866,16 @@ directly. With no date given it is today, or the last working day if
 that has already passed, so a departure recorded late does not read as
 a resignation handed in after the person left (`0371`, `0885`).
 
+Leave is taken while employed. A request may not start before the hire
+date nor end after a recorded last working day -- refused however it is
+written, including a draft typed straight into the table. Leave already
+on the books when a departure or a corrected hire date moves the
+boundary stays, and costs nothing: payroll counts unpaid leave only on
+the days a payslip pays for. Until `0894` it counted the whole period
+against basic already cut to those days, so a leaver gone on the
+fifteenth with unpaid leave booked for the twentieth lost five days' pay
+they were never paid.
+
 ### Leave bands and shift assignments
 
 A leave band covers years of service from a year that is not negative to
