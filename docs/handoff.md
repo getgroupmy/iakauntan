@@ -4487,6 +4487,22 @@ page and renumbering would quietly break the reference.
     full in a part month and percent-of-basic reads the contract basic,
     not the prorated one -- a pay-policy question (some allowances are
     fixed), not a defect on its face. **Still to read back.**
+164. ~~The secretarial registers took dates that had not happened.~~
+    **Raised and answered 14 October** ("Refuse what the sheets
+    refuse"). Found sweeping the date pickers that stop at today for a
+    database rule to match. The share-movement, officer, charge,
+    beneficial-owner and person sheets cap their dates at today; the
+    tables, which the client writes directly, took any. Measured
+    locally as the owner: an allotment, an appointment, a charge and a
+    beneficial owner each dated a month ahead, all stored, and that
+    day's `corp_register_of_members` already listed the allottee with
+    900 shares. Production: eight share movements and seventeen
+    officers, none ahead. `0896` adds `app.corp_not_after_today`, a
+    trigger function given each table's capped columns as `col=Label`
+    arguments, on the five tables (insert, and an update of those
+    columns). New `register_records_what_happened.sql` (15 assertions).
+    Swept 4 / 4 with a control, and the twelve trigger arguments by
+    hand, each dropped in turn: 12 / 12. **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

@@ -556,6 +556,14 @@ Holder has 60 shares of that class on 2026-03-01, cannot move 1000
 Anything over 20% is flagged against the s.60B tests rather than left
 for the secretary to eyeball percentages.
 
+A register records what has happened, so none of its dates is after
+today: not a movement of shares, not an officer's appointment, consent,
+declaration or cessation, not a charge's creation, lodgement or
+satisfaction, not a beneficial owner's notification or cessation, and
+not anybody's date of birth. The sheets would not pick such a day; since
+`0896` the tables refuse one too, so the register of members never shows
+an allottee whose shares are only due next month.
+
 ### Documents are built from the registers
 
 A resolution that disagrees with the register is worse than no

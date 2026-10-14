@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18427
+18442
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2066,3 +2066,11 @@
 # first, and the last day and the first are clocked; a leaver whose login
 # still works cannot clock in either; three hours worked while employed
 # pay 67.07, and the same three hours after the last day pay nothing).
+#
+# 18427 -> 18442, 14 October: 0896's register_records_what_happened.sql
+# (15: a share movement, an appointment, its consent and declaration, a
+# cessation written later, a charge, its lodgement, satisfaction and
+# memorandum, a beneficial owner's notification and cessation, and a
+# date of birth are each refused dated tomorrow; one dated today is
+# entered and is the register, an officer appointed and ceasing today is
+# kept, and so are the charge, the owner and the birthday dated today).
