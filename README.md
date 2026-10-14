@@ -926,6 +926,14 @@ Assigned per company and enforced by RLS:
 Verified: a clerk can write but not post, an auditor can read the ledger
 but every write is refused by RLS.
 
+The read-only rows are held the same way (`0882`): with no access
+type, `app.module_access` answers View Only and Auditor `read` on every
+module, and the HR Manager `write` on HR and payroll and `read` on the
+rest. Until then it answered every one of them `write`, and the
+functions that ask `can_write_module` and nothing else -- 114 of them:
+the till, tickets, stock transfers, deposits -- let a View Only member
+or an auditor write. `supabase/tests/read_only_roles_read.sql`.
+
 An Employee with no access type is held to that row of the table by
 `app.module_access` (`0871`): `write` in HR, where she files her own
 leave and claims, `read` in payroll, where her payslips are, and `none`

@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18281
+18293
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -1961,3 +1961,11 @@
 # stopped on his own side only by each function's next question; a
 # purchaser given the sales side by an access type quotes; and what was
 # made is what each side was allowed to make).
+#
+# 18281 -> 18293, 14 October: 0882's read_only_roles_read.sql (12: what
+# module_access answers a View Only member, an auditor, the HR Manager,
+# a clerk and an accountant; a View Only member, an auditor and the HR
+# Manager raise no ticket through create_ticket; the HR Manager still
+# adds an employee through its module gate; an accountant still raises
+# a ticket, and so does a View Only member given the helpdesk by an
+# access type; and the View Only member still reads both).

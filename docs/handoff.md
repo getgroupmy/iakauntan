@@ -4124,6 +4124,32 @@ page and renumbering would quietly break the reference.
     run. The first read-back, against the older one, found no
     `app.require_side` at all. Read the run's job list before believing
     a green run deployed: a superseded one has no deploy jobs.
+150. ~~A View Only member and an auditor could write through 114 functions.~~
+    **Raised and answered 14 October** ("Read-only roles read; HR writes
+    HR"). `app.module_access` answered every member with no access type
+    `write` on every module -- `0871` took the Employee out, nobody
+    else -- and `app.can_write_module` is that answer alone. The tables
+    were never at risk: each write policy asks a role too and the module
+    gate only narrows it. But 114 definer functions ask
+    `can_write_module` and nothing else. Measured locally as
+    `authenticated`: a `viewer` and an `auditor` each raised a ticket
+    through `create_ticket`; the same door opens the till, promotions,
+    stock transfers, and deposits and post-dated cheques that post
+    journals. The HR Manager, not a `can_write` role, had `write`
+    everywhere too. Production: one `auditor` with no access type, no
+    `viewer`, no `hr_manager`. `0882` re-creates `module_access` with
+    one branch: with no access type a `viewer` and an `auditor` are
+    answered `read`, an `hr_manager` `write` on `hr` and `payroll` and
+    `read` elsewhere; everyone else as before, and an access type still
+    decides. New `read_only_roles_read.sql` (12 assertions). Swept
+    6 / 6 with a control.
+    **Not closed by this, and the next place to look:** the Accounts
+    Clerk passes `can_write_module` by design, and `create_contra`,
+    `create_deposit`, `apply_deposit`, `settle_deposit`, `record_pdc`,
+    `clear_pdc` and `bounce_pdc` post journals asking nothing more --
+    beside `record_settlement`, which asks `can_post`. The README says a
+    clerk "cannot post".
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
