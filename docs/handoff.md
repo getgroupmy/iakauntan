@@ -4380,7 +4380,12 @@ page and renumbering would quietly break the reference.
     two open rows for one component, which `calculate_payroll_run` would
     both pay -- but nothing in the app assigns salary components yet
     (only the demo does), so it waits for the screen that will.
-    **Still to read back.**
+    **Applied, and read back** (14 October, read-only, after run
+    38541678770 on `3cea00f` had applied the migrations, its three
+    deploy jobs present): `employee_shifts_dates_ck` hashes `40ed6e6b`,
+    `leave_entitlement_bands_days_ck` `62ea7446` and
+    `leave_entitlement_bands_years_ck` `d7fa6dda`, as here, all three
+    validated. The same run counted `6767 Dart tests ran (floor 6767)`.
 159. ~~A client-money payment could be dated before the money it spent.~~
     **Raised and answered 14 October** ("Never short on any day").
     Found sweeping the functions that take a date for a dated thing they
