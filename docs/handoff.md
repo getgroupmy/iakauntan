@@ -4466,6 +4466,22 @@ page and renumbering would quietly break the reference.
     `unpaid_leave_while_employed.sql` (8 assertions, the payroll
     figures among them). Swept 10 / 10 with a control.
     **Still to read back.**
+163. ~~Overtime was paid for days after the last working day.~~
+    **Raised and answered 14 October** ("Refuse at the clock, clip in
+    pay"). The same window as item 162, for overtime. `clock_in` had no
+    check against the hire date or the last working day, and payroll
+    read attendance across the whole period. Measured locally: a leaver
+    three days gone clocked in by HR (their own login could too), the
+    day corrected to 09:00-21:00, three hours of overtime credited and
+    67.07 paid on the month's payslip over basic prorated to the last
+    day. Production: no attendance records. `0895` makes `clock_in`
+    refuse a day before the hire date or after a recorded last working
+    day, and cuts the overtime read to `v_from`..`v_to`. New
+    `overtime_while_employed.sql` (6 assertions). Swept 7 / 7 with a
+    control. **Noticed and not raised:** salary components are paid in
+    full in a part month and percent-of-basic reads the contract basic,
+    not the prorated one -- a pay-policy question (some allowances are
+    fixed), not a defect on its face. **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

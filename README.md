@@ -874,7 +874,9 @@ boundary stays, and costs nothing: payroll counts unpaid leave only on
 the days a payslip pays for. Until `0894` it counted the whole period
 against basic already cut to those days, so a leaver gone on the
 fifteenth with unpaid leave booked for the twentieth lost five days' pay
-they were never paid.
+they were never paid. Overtime is held to the same days (`0895`): nobody clocks in
+before their hire date or after a recorded last working day, and payroll
+pays overtime only on the days the payslip pays for.
 
 ### Leave bands and shift assignments
 

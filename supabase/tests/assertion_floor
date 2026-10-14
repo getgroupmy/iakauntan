@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18421
+18427
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2060,3 +2060,9 @@
 # working day is refused, through the function and as a draft written
 # into the table or moved there; a day on the first day and one on the
 # last are kept).
+#
+# 18421 -> 18427, 14 October: 0895's overtime_while_employed.sql (6: HR
+# cannot clock a leaver in after their last day nor anybody before their
+# first, and the last day and the first are clocked; a leaver whose login
+# still works cannot clock in either; three hours worked while employed
+# pay 67.07, and the same three hours after the last day pay nothing).
