@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18396
+18406
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2037,3 +2037,11 @@
 # came is allowed; a transfer to another matter or to office dated before
 # the money is refused; a void or a move that leaves an earlier payment
 # unfunded is refused, though the total stays in credit).
+#
+# 18396 -> 18406, 14 October: 0892's cheque_comes_back_after.sql (10: a
+# cheque does not come back before it was received, not even the day
+# before, so it stays held; it can come back the day it was received,
+# before its own date, and the returned journal is not before the one it
+# undoes; one paid in does not come back before that day, and does on
+# it; and one the company wrote is not stopped before it was issued, and
+# is after).

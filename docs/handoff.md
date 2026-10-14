@@ -4407,6 +4407,20 @@ page and renumbering would quietly break the reference.
     payment unfunded though the total is in credit, the exact-to-the-sen
     day, and of two short days the first named). Swept 8 / 8 with a
     control. **Still to read back.**
+160. ~~A cheque could come back before it came in.~~ **Raised and
+    answered 14 October** ("Not before received or paid in"). Found in
+    the same sweep. `bounce_pdc` took any date: measured locally as an
+    accountant, a cheque received five days ago was marked bounced
+    twenty days ago and one paid in today bounced ten days ago, both
+    stored; where the cheque settles an invoice, the "returned" journal
+    then precedes the receipt journal it undoes (what `0888` refuses for
+    a journal reversed by hand). The cheque list's "Bounced" sends no
+    date, so only the API reached it. Production: no cheques. `0892`
+    refuses a bounce dated before the cheque was received (for one the
+    company wrote, issued) and, once paid in, before that day; before
+    its own date stays open, as `0886` left it. New
+    `cheque_comes_back_after.sql` (10 assertions). Swept 7 / 7 with a
+    control. **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

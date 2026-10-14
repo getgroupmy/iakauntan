@@ -133,10 +133,14 @@ handed over and holds it in cheques on hand; the bank has the money only
 when it clears. So it is paid in and cleared on or after the date
 written on it, never before, and it clears no earlier than the day it
 was paid in -- "Pay it in" and "It cleared" on a cheque not yet due say
-the date it can be banked. Handing it back and recording it returned
-unpaid stay open on any day (`0886`). A deposit is held to the same
-order: it may be dated ahead, and is then applied, given back or kept on
-or after that day, never before it was taken (`0887`).
+the date it can be banked. Handing it back stays open on any day.
+Recording it returned unpaid is open even before its date -- a cheque
+presented early comes back for exactly that reason -- but not before
+the day it was received (or, for one the company wrote, issued), and
+once paid in, not before that day (`0886`, `0892`). A deposit is
+held to the same order: it may be dated ahead, and is then applied,
+given back or kept on or after that day, never before it was taken
+(`0887`).
 
 ### The jobs that run themselves
 
