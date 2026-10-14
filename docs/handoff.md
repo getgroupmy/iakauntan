@@ -4296,7 +4296,11 @@ page and renumbering would quietly break the reference.
     (the user chose that over refusing a future-dated deposit). New
     `deposit_used_after_taken.sql` (10 assertions). Swept 6 / 6 with a
     control. No existing fixture used a deposit early.
-    **Still to read back.**
+    **Applied, and read back** (14 October, read-only, after run
+    38533613240 on `9f55fda` had applied the migrations, its deploy jobs
+    present): `apply_deposit` hashes `cf4a8eb1` and `settle_deposit`
+    `cece5d03`, as here, both carrying the refusal. The same run counted
+    `6767 Dart tests ran (floor 6767)`.
 156. ~~A journal could be reversed before it was made.~~ **Raised and
     answered 14 October** ("Never before what it undoes"). The same
     order again, in the ledger itself. `reverse_gl_entry` asked only
