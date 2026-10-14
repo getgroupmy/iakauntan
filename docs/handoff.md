@@ -4240,7 +4240,17 @@ page and renumbering would quietly break the reference.
     constraints by hand, each dropped and the file failing at its own
     assertion. Two of the function's mutants died on the employee
     constraint rather than an assertion -- the two layers meet.
-    **Still to read back.**
+    **Applied, and read back** (14 October, read-only, after run
+    38528369828 on `0c3efc3` had applied the migrations, its three
+    deploy jobs present): `record_departure` hashes `f9b9b305`, as
+    here, still a definer; `employees_resignation_before_leaving_ck`
+    and `time_entries_hourly_rate_ck` are there and validated, their
+    definitions hashing as here. The same run counted `6767 Dart tests
+    ran (floor 6767)`. **That run's "Build the Android app" failed, and
+    not on anything here:** Gradle could not fetch
+    `kotlin-gradle-plugins-bom:2.2.20` because `repo.maven.apache.org`
+    answered `429 Too Many Requests`. The next push's Android build is
+    the re-run.
 154. ~~A post-dated cheque could be paid in and cleared before its
     date.~~ **Raised and answered 14 October** ("Neither before its
     date"). `deposit_pdc` and `clear_pdc` took any day, and the cheque
