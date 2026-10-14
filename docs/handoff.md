@@ -4406,7 +4406,11 @@ page and renumbering would quietly break the reference.
     matters, transfer to office, a void and a move that leave an earlier
     payment unfunded though the total is in credit, the exact-to-the-sen
     day, and of two short days the first named). Swept 8 / 8 with a
-    control. **Still to read back.**
+    control. **Applied, and read back** (14 October, read-only, after
+    run 38545214716 on `a58773d` had applied the migrations, its three
+    deploy jobs present): `app.assert_client_funds` hashes `79ee66d9`,
+    as here, carrying the change. The same run counted `6767 Dart tests
+    ran (floor 6767)`.
 160. ~~A cheque could come back before it came in.~~ **Raised and
     answered 14 October** ("Not before received or paid in"). Found in
     the same sweep. `bounce_pdc` took any date: measured locally as an
