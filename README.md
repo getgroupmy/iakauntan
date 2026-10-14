@@ -848,6 +848,14 @@ directly. With no date given it is today, or the last working day if
 that has already passed, so a departure recorded late does not read as
 a resignation handed in after the person left (`0371`, `0885`).
 
+### Leave bands and shift assignments
+
+A leave band covers years of service from a year that is not negative to
+one no earlier, and grants nothing or more; a shift assignment ends on
+or after the day it starts. The dialogs say so, and since `0890` so do
+the tables -- a band that ran backwards never matched, and the employee
+quietly got the leave type's default days instead.
+
 ### An auditor asking to see payslips
 
 An auditor cannot audit payroll without seeing it, but standing access

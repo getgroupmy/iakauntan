@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18375
+18382
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2021,3 +2021,10 @@
 # not asked; the same for a purchase credit note and its bill; and "credit
 # this" credits an invoice or bill dated ahead on its own day, and one
 # already dated today, as before).
+#
+# 18375 -> 18382, 14 October: 0890's bands_and_shifts_run_forward.sql
+# (7: a leave band that ends before it starts, starts before nought or
+# grants fewer than no days is refused; bands that run forward are kept
+# and the third year reads its band, not the default; a shift assignment
+# ending before it starts is refused, and one ending the day it starts
+# is kept, with an open one).

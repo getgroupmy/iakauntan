@@ -4351,6 +4351,30 @@ page and renumbering would quietly break the reference.
     `original_invoice_id is not null`, is equivalent -- a missing
     original compares as null and never raises -- said so in the file.
     **Still to read back.**
+158. ~~A leave band and a shift assignment could run backwards.~~
+    **Raised and answered 14 October** ("Add them as checks"). Found
+    sweeping every pair of start/end columns for a missing order check,
+    then keeping the pairs a dialog already refuses: the leave-band
+    dialog refuses a band ending before it starts and negative days, the
+    shift dialog an assignment ending before it starts; the tables took
+    all three. A backwards band never matches, so `app.leave_entitlement`
+    gives the default days instead. Measured locally as the owner.
+    Production: six bands, none bad; no shift assignment. `0890` adds
+    `leave_entitlement_bands_years_ck`, `leave_entitlement_bands_days_ck`
+    and `employee_shifts_dates_ck`. New `bands_and_shifts_run_forward.sql`
+    (7 assertions, one reading the band through `leave_entitlement`).
+    Constraints swept by hand, 8 / 8: each dropped, each half of the
+    years check alone, and each `>=` made `>`, every one failing the
+    file. **Noticed and not raised:** the other start/end pairs the sweep
+    found with no check (`appraisal_cycles`, `pos_promotions`,
+    `pos_menu_schedules`, `recurring_documents`, `recurring_journals`,
+    `statutory_schedules`, `payslip_access_requests`, and three system
+    tables) have no dialog rule to match and a backwards row there only
+    never applies; and `employee_salary_components` has no check against
+    two open rows for one component, which `calculate_payroll_run` would
+    both pay -- but nothing in the app assigns salary components yet
+    (only the demo does), so it waits for the screen that will.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
