@@ -4529,7 +4529,13 @@ page and renumbering would quietly break the reference.
     `officer_and_charge_run_forward.sql` (8 assertions). Swept by hand,
     8 / 8: each dropped, each `>=` made `>`. **Noticed and not raised:**
     a beneficial owner ceasing before entering the register is stored
-    too, but that sheet states no such rule. **Still to read back.**
+    too, but that sheet states no such rule. **Applied, and read back**
+    (14 October, read-only, after run 38566432623 on `de26267` had
+    applied the migrations, its three deploy jobs present): the four
+    constraints are validated and hash `770d1a95` (officers),
+    `388df700` (lodged), `cd004c99` (satisfied) and `0bc41337`
+    (memorandum), as here. The same run counted `6767 Dart tests ran
+    (floor 6767)`.
 166. ~~A stock transfer dated ahead arrived before it left.~~ **Raised
     and answered 14 October** ("Receive on the later day"). The
     0888/0889 shape in stock: `send_stock_transfer` posts out on the
