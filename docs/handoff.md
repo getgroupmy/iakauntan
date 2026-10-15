@@ -4655,7 +4655,13 @@ page and renumbering would quietly break the reference.
     `app.refresh_purchase_progress` calls an order fulfilled when the
     two together took it. New `one_road_per_order_line.sql` (11
     assertions, failing before the migration). Swept 7 / 7 with a
-    control. **Still to read back.**
+    control. **Applied, and read back** (15 October, read-only, after
+    run 38688917380 on `abb36b6` had applied the migrations, its three
+    deploy jobs present): `app.refresh_purchase_progress` hashes
+    `3a0c2df4`, `transfer_document` `2a501630` and
+    `transfer_outstanding` `58900071`, each carrying the `0903`
+    marker, as here. The same run counted `6767 Dart tests ran (floor
+    6767)`.
 172. ~~A client could reset what a line had taken forward.~~ **Raised
     and answered 14 October** ("The database's to write"). Found
     testing 0903's cap: the four line counters (`quantity_invoiced`,
