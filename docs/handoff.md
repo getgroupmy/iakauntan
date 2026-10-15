@@ -4701,7 +4701,13 @@ page and renumbering would quietly break the reference.
     on both header tables: no change by a client, no insert with any
     of the five set. `discount_amount` is left alone, as an input. New
     `totals_are_the_lines.sql` (11 assertions, failing before the
-    migration). Swept 6 / 6 with a control. **Still to read back.**
+    migration). Swept 6 / 6 with a control. **Applied, and read back**
+    (15 October, read-only, after run 38725068150 on `d257260` had
+    applied the migrations, its three deploy jobs present):
+    `app.document_totals_are_its_lines` hashes `a80f7e5c` and its
+    triggers `5155c6f6` (purchase documents) and `2fdd163d` (sales
+    documents), as here. The same run counted `6767 Dart tests ran
+    (floor 6767)`.
 174. ~~Non-citizens were charged EPF on terms that ended in
     September 2025.~~ **Raised and answered 14 October** ("2% schedule
     + pre-1998 flag"). Found spot-checking the statutory seed: EPF has
