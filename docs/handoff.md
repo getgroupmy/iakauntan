@@ -4678,8 +4678,14 @@ page and renumbering would quietly break the reference.
     tables: no change by a client, and no insert already counted.
     `posted_document_is_frozen.sql`'s progress case now writes as the
     owner. New `what_was_taken_forward.sql` (13 assertions, failing
-    before the migration). Swept 5 / 5 with a control. **Still to read
-    back.**
+    before the migration). Swept 5 / 5 with a control. **Applied, and
+    read back** (15 October, read-only, after run 38691141244 on
+    `cde6711` had applied the migrations, its three deploy jobs
+    present): `app.what_was_taken_forward_is_the_databases` hashes
+    `0a61197e` and its triggers `444057e9` (purchase document lines),
+    `9658d60c` (purchase documents), `04a5b824` (sales document lines)
+    and `1dba7274` (sales documents), as here. The same run counted
+    `6767 Dart tests ran (floor 6767)`.
 173. ~~A draft's totals could be written over its lines.~~ **Raised
     and answered 14 October** ("The totals are the lines'"). Found
     after item 172, asking what else posting trusts that the client
