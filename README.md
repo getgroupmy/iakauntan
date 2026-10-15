@@ -2146,7 +2146,12 @@ Stated plainly so nothing here is mistaken for finished:
   amount, in ringgit, and made out to the same customer or supplier. An
   invoice approved at RM6,000 could be raised to RM600,000 and posted,
   past the director a RM100,000 rule names, and a rule's ringgit amount
-  was compared with a foreign document's own-currency total
+  was compared with a foreign document's own-currency total. And a
+  draft's discount, shipping or rate changed on its header alone works
+  its totals out again (`0909`): until then the totals waited for a
+  line to move, so shipping left the journal unbalanced, a percentage
+  was never taken off, and a new rate reached the ledger but not the
+  ringgit total the dashboard adds up
 - ~~E-mail delivery of anything.~~ Built and deployed: documents send
   through Resend, overdue invoices are chased on a schedule, and every
   send is logged per document. What is left is not code — a provider

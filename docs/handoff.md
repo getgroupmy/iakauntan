@@ -4809,6 +4809,27 @@ page and renumbering would quietly break the reference.
     before the migration); swept 10 / 10 with a control. **Noticed:**
     `base_total_amount` stays at the old rate after a header-only rate
     change, until a line moves. **Still to read back.**
+177. ~~A header changed on its own left the totals behind.~~ **Raised
+    and answered 15 October** ("Recalculate on header"). Followed from
+    item 176's noticed stale ringgit total: the recalculation reads four
+    header inputs -- discount percentage, discount amount, shipping,
+    exchange rate -- and ran only when a line or the rounding method
+    changed. Measured locally as the owner, each on a draft RM1,000
+    invoice with the header alone changed: shipping 500 left the total
+    1,000 and posting refused it unbalanced; 10% was never taken off and
+    it posted 1,000; USD 4.4 -> 4.6 posted RM4,600 with
+    `base_total_amount` at RM4,400. The app re-sends every line on
+    every save, so only the API road was open. Production: 216
+    documents consistent; none with shipping or a foreign rate. `0909`
+    adds `app.recalc_totals_on_a_clients_header_change` and an `after
+    update of` the four trigger on both header tables, `when` one of
+    them moved. Client statements only: `complete_pos_sale` writes the
+    discount and shipping and then its own totals -- the service
+    charge's tax, which the recalculation would drop -- as the owner.
+    The `when` ends the recursion. New
+    `a_header_change_moves_the_totals.sql` (11 assertions, failing
+    before the migration); swept 4 / 4 with a control. **Still to read
+    back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

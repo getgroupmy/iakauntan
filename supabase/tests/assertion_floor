@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18565
+18576
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2172,3 +2172,10 @@
 # rule, does not post unsent and is asked for in ringgit, and at another
 # rate is another amount; a USD quotation is not transferred unapproved,
 # nor once it has doubled).
+#
+# 18565 -> 18576, 15 October: 0909's a_header_change_moves_the_totals.sql
+# (11: shipping on an invoice's header is in its total at once and posts
+# to its own account; a percentage is taken off and posts what it says;
+# an amount off too; a new rate moves the ringgit total, which is what
+# the ledger takes; a bill's shipping and new rate likewise; a note
+# changes nothing else; the owner's own write is not worked over).
