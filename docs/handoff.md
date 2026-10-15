@@ -4633,8 +4633,12 @@ page and renumbering would quietly break the reference.
     whatever it was raised from. Nothing backfilled. New
     `invoice_moves_its_own_stock.sql` (6 assertions, failing before the
     migration on `7.00 / 50.00`); the posting test's case now asserts
-    the five leave the shelf. Swept 3 / 3 with a control. **Still to
-    read back.**
+    the five leave the shelf. Swept 3 / 3 with a control. **Applied,
+    and read back** (15 October, read-only, after run 38593568188 on
+    `b2c68e8` had applied the migrations, its three deploy jobs
+    present): `app.post_sales_document_internal` hashes `f72eb948`,
+    carries the `0902` marker and no longer has `v_from_do`, as here.
+    The same run counted `6767 Dart tests ran (floor 6767)`.
 171. ~~A purchase order could be received twice.~~ **Raised and
     answered 14 October** ("One road per order line"). Found after item
     170, asking what else trusts a document's parent: a purchase order
