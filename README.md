@@ -2141,7 +2141,12 @@ Stated plainly so nothing here is mistaken for finished:
   said none. And since `0907` so is an invoice's applied amount, which
   nothing ever wrote but the balance subtracted: typed in by hand it
   left an invoice of RM1,080 owing RM80 to the credit limit, the portal
-  and the reminders, the receivable still holding all of it
+  and the reminders, the receivable still holding all of it. An
+  approval, since `0908`, covers what was approved: no more than its
+  amount, in ringgit, and made out to the same customer or supplier. An
+  invoice approved at RM6,000 could be raised to RM600,000 and posted,
+  past the director a RM100,000 rule names, and a rule's ringgit amount
+  was compared with a foreign document's own-currency total
 - ~~E-mail delivery of anything.~~ Built and deployed: documents send
   through Resend, overdue invoices are chased on a schedule, and every
   send is logged per document. What is left is not code — a provider

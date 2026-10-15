@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18550
+18565
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2162,3 +2162,13 @@
 # the header is written; posted, the credit limit reads what the
 # receivable holds; a bill is created and written as before; one that
 # names nothing set against it is created; the owner still writes it).
+#
+# 18550 -> 18565, 15 October: 0908's an_approval_covers_what_was_approved.sql
+# (15: sent at RM6,000 for one customer with one step, and approved;
+# raised to RM600,000 it is no longer approved, does not post and is told
+# what was approved; sent again it goes to the director too, the manager
+# alone does not cover it, both do; brought down it still posts; made out
+# to another customer it does not; USD 2,000 at 4.4 is over a RM5,000
+# rule, does not post unsent and is asked for in ringgit, and at another
+# rate is another amount; a USD quotation is not transferred unapproved,
+# nor once it has doubled).

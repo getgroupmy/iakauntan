@@ -4775,6 +4775,35 @@ page and renumbering would quietly break the reference.
     assertions, failing before the migration). Swept 5 / 5 with a
     control, one mutant reading the column off the row as a bill has
     none. **Still to read back.**
+176. ~~An approval covered whatever the document became.~~ **Raised
+    and answered 15 October** ("Amount and party", "Compare in
+    ringgit"). Found asking what posting trusts besides the columns:
+    `app.is_approved` asked only whether an approved request existed,
+    and a request's steps are built from the amount when it is sent.
+    Measured locally as the owner: rules of RM5,000 (manager) and
+    RM100,000 (director after); an invoice sent at RM6,000, approved by
+    the manager, raised to RM600,000 and posted -- 1210 RM600,000, the
+    director never asked. And every reader compared the rule's ringgit
+    amount with `total_amount` in the document's own currency: USD 2,000
+    at 4.4 posted under RM5,000 unsent. Production: one rule; two
+    requests, both on ringgit bills unchanged since sent. `0908` adds
+    `approval_requests.contact_id`, `app.approval_amount` (total x rate,
+    worked out, because `base_total_amount` is not recomputed when only
+    the header's rate changes -- only that case killed the mutant that
+    read it) and `app.approval_party`, neither a definer, the second
+    executable by `authenticated` because the posting gate runs as the
+    caller and names the party; `contact_id` keys on `(org_id,
+    contact_id)`, as `tenant_foreign_keys.sql` asks; `is_approved` holds only
+    for no more than was approved and the same party; submitting, the
+    posting gate, `approval_state` and `transfer_document` read ringgit;
+    the gate names what the stale approval was for. Existing requests
+    take their document's party, and their ringgit amount where the
+    total is still what was sent. A request that goes stale while it
+    waits can still be approved; it then covers what was sent. New
+    `an_approval_covers_what_was_approved.sql` (15 assertions, failing
+    before the migration); swept 10 / 10 with a control. **Noticed:**
+    `base_total_amount` stays at the old rate after a header-only rate
+    change, until a line moves. **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
