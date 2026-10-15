@@ -2138,7 +2138,10 @@ Stated plainly so nothing here is mistaken for finished:
   same quantity forward again. So, since `0905`, are a document's
   subtotal, tax and total: posting reads them off the header, and an
   invoice whose line charged 80 of tax could be given a header that
-  said none
+  said none. And since `0907` so is an invoice's applied amount, which
+  nothing ever wrote but the balance subtracted: typed in by hand it
+  left an invoice of RM1,080 owing RM80 to the credit limit, the portal
+  and the reminders, the receivable still holding all of it
 - ~~E-mail delivery of anything.~~ Built and deployed: documents send
   through Resend, overdue invoices are chased on a schedule, and every
   send is logged per document. What is left is not code — a provider

@@ -4746,6 +4746,24 @@ page and renumbering would quietly break the reference.
     pages disagree on dates and on temporary residents, so it wants the
     gazetted schedules, not a search. Production has no non-citizen
     employee. **Still to read back.**
+175. ~~An invoice's applied amount could be typed in, and its balance
+    followed.~~ **Raised and answered 14 October** ("Guard it like
+    0905"). Found sweeping running figures no guard covers:
+    `sales_documents.applied_amount` (`0005`, "for credit notes") is
+    written by nothing -- credit notes go through `payment_allocations`
+    into `paid_amount` -- but `app.recalc_sales_totals_for` subtracts it
+    from the balance. Measured locally as the owner: a RM1,080 draft
+    given 1,000 by hand posted with a balance of RM80 against RM1,080
+    in 1210, and `customer_credit_status` -- the credit limit's reading
+    -- said RM80; `report_ar_aging` works its own figure and said
+    RM1,080. Production: 167 invoices, none with an applied amount.
+    `0907` replaces `0781`'s `app.document_state_is_the_databases` to
+    refuse a client's change of `applied_amount` and a client's insert
+    with one, read through `to_jsonb` because purchase documents have
+    no such column. New `applied_amount_is_the_databases.sql` (9
+    assertions, failing before the migration). Swept 5 / 5 with a
+    control, one mutant reading the column off the row as a bill has
+    none. **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18541
+18550
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2154,3 +2154,11 @@
 # step and one without keeps the table's), and foreign_worker_payroll.sql
 # rewritten for the new law (13 -> 15: the pre-1998 member's eleven per
 # cent and five ringgit are asserted where the flat amount is tested).
+#
+# 18541 -> 18550, 14 October: 0907's applied_amount_is_the_databases.sql
+# (9: the invoice owes what its lines come to; nothing is set against it
+# by hand, nor is one created with something set against it, nor with
+# less than nothing; a changed line moves the balance and the rest of
+# the header is written; posted, the credit limit reads what the
+# receivable holds; a bill is created and written as before; one that
+# names nothing set against it is created; the owner still writes it).
