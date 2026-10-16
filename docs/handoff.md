@@ -4745,7 +4745,18 @@ page and renumbering would quietly break the reference.
     EIS (Act 800) as for citizens and permanent residents -- but its own
     pages disagree on dates and on temporary residents, so it wants the
     gazetted schedules, not a search. Production has no non-citizen
-    employee. **Still to read back.**
+    employee. **Applied, and read back** (16 October, read-only, after
+    run 38727539205 on `97fac40` had applied the migrations, its three
+    deploy jobs present): `app.calc_statutory` hashes `c01efb2f`, the
+    three-argument `app.epf_category` `86dbb289`,
+    `calculate_payroll_run` `999679de` and
+    `platform_publish_statutory_schedule` `45792ce4`, as here; the EPF
+    tables read as here -- the old one ends 2025-09-30, the new one from
+    2025-10-01 has `noncitizen_under60` and `noncitizen_60plus` at 2 / 2
+    with a step of 0, and the pre-1998 rows keep 11% and RM5 on both;
+    `employees.epf_pre_august_1998` and
+    `statutory_rates.wage_round_up_to` exist with the defaults built. The
+    same run counted `6767 Dart tests ran (floor 6767)`.
 175. ~~An invoice's applied amount could be typed in, and its balance
     followed.~~ **Raised and answered 14 October** ("Guard it like
     0905"). Found sweeping running figures no guard covers:
