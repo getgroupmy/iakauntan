@@ -4808,7 +4808,19 @@ page and renumbering would quietly break the reference.
     `an_approval_covers_what_was_approved.sql` (15 assertions, failing
     before the migration); swept 10 / 10 with a control. **Noticed:**
     `base_total_amount` stays at the old rate after a header-only rate
-    change, until a line moves. **Still to read back.**
+    change, until a line moves (`0909` is the fix). **Applied, and read
+    back** (16 October, read-only, after run 38854130510 on `8a3f7ff`
+    had applied the migrations, its three deploy jobs present):
+    `app.approval_amount` `60eb753f`, `app.approval_party`
+    `90c7586d`, `app.is_approved` `904a805b`,
+    `app.refuse_unapproved_posting` `4e5e96f0`, `approval_state`
+    `6e81972c`, `submit_for_approval` `2f3ad6a8` and
+    `transfer_document` `c9897ddc`, as here; `contact_id` and its
+    `(org_id, contact_id)` key exist; `approval_party` is executable by
+    `authenticated` and `service_role`, `approval_amount` is not. The
+    backfill: both production requests (pending RM28,400, approved
+    RM46,500) now carry their bill's supplier, their amounts as they
+    were. The same run counted `6767 Dart tests ran (floor 6767)`.
 177. ~~A header changed on its own left the totals behind.~~ **Raised
     and answered 15 October** ("Recalculate on header"). Followed from
     item 176's noticed stale ringgit total: the recalculation reads four
