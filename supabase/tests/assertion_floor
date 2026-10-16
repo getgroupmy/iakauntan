@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18576
+18587
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2179,3 +2179,11 @@
 # an amount off too; a new rate moves the ringgit total, which is what
 # the ledger takes; a bill's shipping and new rate likewise; a note
 # changes nothing else; the owner's own write is not worked over).
+#
+# 18576 -> 18587, 16 October: 0910's only_an_import_tags_a_row.sql (11:
+# the clerk can see the open import; a contact the company typed is not
+# tagged into it, nor an item, nor given a source and reference, nor an
+# imported date; a contact does not arrive tagged, nor an invoice with
+# an import's reference; the rest of a contact is still written; rolled
+# back, the import leaves the company's own rows; the owner still tags;
+# every client-writable table an import reaches is guarded).

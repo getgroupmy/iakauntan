@@ -2152,6 +2152,10 @@ Stated plainly so nothing here is mistaken for finished:
   line to move, so shipping left the journal unbalanced, a percentage
   was never taken off, and a new rate reached the ledger but not the
   ringgit total the dashboard adds up
+- An import is rolled back by deleting what it tagged, so since `0910`
+  only an import tags a row. Until then anybody who could edit a contact
+  could set its `import_batch_id` to an open import, and the owner's
+  rollback deleted a customer the company had typed itself
 - ~~E-mail delivery of anything.~~ Built and deployed: documents send
   through Resend, overdue invoices are chased on a schedule, and every
   send is logged per document. What is left is not code — a provider

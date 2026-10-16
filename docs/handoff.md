@@ -4842,6 +4842,28 @@ page and renumbering would quietly break the reference.
     `a_header_change_moves_the_totals.sql` (11 assertions, failing
     before the migration); swept 4 / 4 with a control. **Still to read
     back.**
+178. ~~A clerk could tag the company's own rows into an import, and its
+    rollback deleted them.~~ **Raised and answered 16 October** ("Only
+    imports tag rows"). Found reading what else a function trusts that a
+    client writes: `rollback_import_batch` deletes, table by table,
+    every row whose `import_batch_id` is the batch's, and the four
+    provenance columns `0610` added were ordinary columns to a client on
+    fifteen of the nineteen tables it reaches. Measured locally: an
+    accounts clerk tagged a hand-made contact and item with the owner's
+    open batch (which every staff member can read); the owner's rollback
+    deleted both. The importers run as their owner; the app reads the
+    columns and never writes them. Production: no import batches, no
+    tagged row. `0910` adds the client-only trigger
+    `app.provenance_is_the_imports` -- no insert with any of the four
+    set, no change of one -- on every table in
+    `app.import_target_tables()` a client may insert into or update,
+    taken from the grants and counted (fifteen) so a missed table stops
+    the migration. New `only_an_import_tags_a_row.sql` (11 assertions,
+    failing before the migration, one of them structural); swept 6 / 6
+    with a control. `import_batch_final.sql` stood in for an import by
+    inserting a tagged contact as a client, which this now refuses; it
+    does so through a definer helper, as an importer runs. **Still to
+    read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

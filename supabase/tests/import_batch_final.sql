@@ -66,6 +66,15 @@ begin
     'posted / rolled_back / staging');
 end $$;
 
+-- A row arrives tagged with a batch only by an import, and every import
+-- runs as its owner (`0910`). This stands in for one, the way one runs.
+create or replace function pg_temp.ib_import_a_contact(p_org uuid, p_batch uuid)
+returns void language sql security definer as $$
+  insert into public.contacts
+    (org_id, code, name, contact_type, import_source, import_ref, import_batch_id, imported_at)
+  values (p_org, 'D-3', 'Cubaan Ketiga', 'customer', 'autocount', 'DEBTOR-3', p_batch, now());
+$$;
+
 select set_config('request.jwt.claims',
   json_build_object('sub', pg_temp.test_user(), 'role', 'authenticated')::text, true);
 set local role authenticated;
@@ -115,9 +124,7 @@ begin
   perform public.finish_import_batch(d.open, 'reconciling', 'Dry run read');
   perform public.finish_import_batch(d.open, 'posted', 'Went live after all');
   v_failing := public.start_import_batch(d.org, 'autocount', 'Third rehearsal');
-  insert into public.contacts
-    (org_id, code, name, contact_type, import_source, import_ref, import_batch_id, imported_at)
-  values (d.org, 'D-3', 'Cubaan Ketiga', 'customer', 'autocount', 'DEBTOR-3', v_failing, now());
+  perform pg_temp.ib_import_a_contact(d.org, v_failing);
   perform public.finish_import_batch(v_failing, 'failed', 'Gave up');
   perform public.rollback_import_batch(v_failing);
   -- One more, left staging for the owner below.
