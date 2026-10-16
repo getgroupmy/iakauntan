@@ -2156,6 +2156,11 @@ Stated plainly so nothing here is mistaken for finished:
   only an import tags a row. Until then anybody who could edit a contact
   could set its `import_batch_id` to an open import, and the owner's
   rollback deleted a customer the company had typed itself
+- What a document was raised from is set by transferring or crediting it,
+  since `0911`, and not by hand. A bill raised from a goods received note
+  clears what the note accrued instead of receiving the goods again, and
+  it decides that from its parent; cut from its note by one update, a
+  bill for ten took ten more onto the shelf and doubled the inventory
 - ~~E-mail delivery of anything.~~ Built and deployed: documents send
   through Resend, overdue invoices are chased on a schedule, and every
   send is logged per document. What is left is not code — a provider

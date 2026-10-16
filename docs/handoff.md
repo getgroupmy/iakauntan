@@ -4869,6 +4869,27 @@ page and renumbering would quietly break the reference.
     inserting a tagged contact as a client, which this now refuses; it
     does so through a definer helper, as an importer runs. **Still to
     read back.**
+179. ~~A bill cut from its goods received note received the goods
+    again.~~ **Raised and answered 16 October** ("Set only by
+    transferring"). Found looking at the links documents carry:
+    `app.post_purchase_document_internal` asks whether a bill's
+    `parent_id` is a goods received note -- if so it clears the note's
+    accrual (2118) and moves no stock -- and `parent_id` was an ordinary
+    column to a client. Measured locally as the owner: 10 ordered,
+    received on a posted note, billed from it; the bill's parent set to
+    null by one UPDATE; posted: 20 on hand, 1310 RM500, 2118 never
+    cleared. Only `transfer_document`, `credit_sales_invoice` and
+    `credit_purchase_bill` set it, as their owner; the app never writes
+    it. Production: no document with a parent. `0911` adds the
+    client-only trigger `app.a_document_is_raised_by_transferring` on
+    both header tables: no insert naming a parent, no change of one.
+    New `a_document_is_raised_by_transferring.sql` (9 assertions,
+    failing before the migration); swept 5 / 5 with a control.
+    **Noticed, not raised:** a line's `source_line_id` is still a
+    client's to write -- the app re-sends it when it re-saves lines --
+    and the progress counters count every child that names a line, so
+    a hand-made link can mark an order received without a note.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

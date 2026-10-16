@@ -1352,7 +1352,8 @@ jobs:
                    supabase/tests/applied_amount_is_the_databases.sql \
                    supabase/tests/an_approval_covers_what_was_approved.sql \
                    supabase/tests/a_header_change_moves_the_totals.sql \
-                   supabase/tests/only_an_import_tags_a_row.sql; do
+                   supabase/tests/only_an_import_tags_a_row.sql \
+                   supabase/tests/a_document_is_raised_by_transferring.sql; do
             echo "== $f"
             # Captured, NOT piped. This step runs under `bash -e` with no
             # `pipefail`, so `psql ... | grep` would hand the shell grep's

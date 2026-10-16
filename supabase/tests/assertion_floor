@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18587
+18596
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2187,3 +2187,10 @@
 # an import's reference; the rest of a contact is still written; rolled
 # back, the import leaves the company's own rows; the owner still tags;
 # every client-writable table an import reaches is guarded).
+#
+# 18587 -> 18596, 16 October: 0911's a_document_is_raised_by_transferring.sql
+# (9: a bill is raised from its note; it is not cut from it, nor pointed
+# at the order; a bill does not arrive naming somebody's note, nor an
+# invoice a quotation; the rest of the bill is still written; posted from
+# its note it receives nothing again and clears what the note accrued;
+# the owner still writes it).
