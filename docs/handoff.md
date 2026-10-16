@@ -4774,7 +4774,12 @@ page and renumbering would quietly break the reference.
     no such column. New `applied_amount_is_the_databases.sql` (9
     assertions, failing before the migration). Swept 5 / 5 with a
     control, one mutant reading the column off the row as a bill has
-    none. **Still to read back.**
+    none. **Applied, and read back** (16 October, read-only, after run
+    38851836552 on `7b40c28` had applied the migrations, its three
+    deploy jobs present): `app.document_state_is_the_databases` hashes
+    `8343d0c7`, carries both `0907` markers and the `0781, 0907`
+    comment, as here. The same run counted `6767 Dart tests ran (floor
+    6767)`.
 176. ~~An approval covered whatever the document became.~~ **Raised
     and answered 15 October** ("Amount and party", "Compare in
     ringgit"). Found asking what posting trusts besides the columns:
