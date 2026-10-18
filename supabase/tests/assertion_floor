@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18596
+18617
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2194,3 +2194,15 @@
 # invoice a quotation; the rest of the bill is still written; posted from
 # its note it receives nothing again and clears what the note accrued;
 # the owner still writes it).
+#
+# 18596 -> 18617, 18 October: 0912's an_account_fits_where_it_is_used.sql
+# (21: a customer's receivable is not the bank, nor a heading of
+# receivables, nor a retired one, nor a payables account; a supplier's
+# payable is not a receivables account; a customer does not arrive with
+# the till; a second receivables and payables account stand; a contact
+# already naming the bank is still saved whole; an invoice line is not
+# the bank, nor 1210, nor a heading, nor moved onto the bank; so the
+# invoice posts to the customer's own receivable and the line's own
+# account; a bill line is not 2110, nor the till; an item's four
+# accounts are each refused one; other income stands; the database's
+# owner is refused too).

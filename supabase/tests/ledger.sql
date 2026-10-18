@@ -406,6 +406,12 @@ end $$;
 -- The control beside each refusal is the same thing on a leaf, and the
 -- trial balance is read afterwards: the leaves balance, which is what
 -- the heading line broke.
+--
+-- Since `0912` a document line cannot be WRITTEN onto a heading
+-- (`an_account_fits_where_it_is_used.sql`), but it asks only when the
+-- account is set or changed, so a line written before it still reaches
+-- the poster -- and this guard is what stops it there. The two heading
+-- lines below are written that way, with `0912`'s trigger off.
 -- ---------------------------------------------------------------------
 do $$
 declare
@@ -454,9 +460,11 @@ begin
     contact_id, currency, exchange_rate, status)
   values (v_org, 'invoice', 'INV-KPL-1', v_today, v_today, v_cust, 'MYR', 1, 'draft')
   returning id into v_inv;
+  alter table public.sales_document_lines disable trigger an_account_fits_where_it_is_used;
   insert into public.sales_document_lines (org_id, document_id, line_no, line_type,
     description, quantity, unit_price, account_id, tax_rate)
   values (v_org, v_inv, 1, 'item', 'Yuran', 1, 70, v_rev_head, 0);
+  alter table public.sales_document_lines enable trigger an_account_fits_where_it_is_used;
   perform pg_temp.check_refused(
     'an invoice line on the revenue heading does not post',
     format('select public.post_sales_document(%L)', v_inv),
@@ -478,9 +486,11 @@ begin
     contact_id, currency, exchange_rate, status)
   values (v_org, 'bill', 'B-KPL-1', v_today, v_today, v_supp, 'MYR', 1, 'draft')
   returning id into v_bill;
+  alter table public.purchase_document_lines disable trigger an_account_fits_where_it_is_used;
   insert into public.purchase_document_lines (org_id, document_id, line_no, line_type,
     description, quantity, unit_price, account_id, tax_rate)
   values (v_org, v_bill, 1, 'item', 'Bekalan', 1, 50, v_cos_head, 0);
+  alter table public.purchase_document_lines enable trigger an_account_fits_where_it_is_used;
   perform pg_temp.check_refused(
     'a bill line on the cost-of-sales heading does not post',
     format('select public.post_purchase_document(%L)', v_bill),

@@ -2161,6 +2161,13 @@ Stated plainly so nothing here is mistaken for finished:
   clears what the note accrued instead of receiving the goods again, and
   it decides that from its parent; cut from its note by one update, a
   bill for ten took ten more onto the shelf and doubled the inventory
+- An account fits where it is used, since `0912`, for every writer: a
+  customer's receivable account is an active receivables account that
+  is not a heading, and a supplier's payable the same for payables; a
+  document line's account and an item's four are not a heading, a bank,
+  a till, a receivable or a payable. Until then a customer whose
+  receivable was the bank posted RM1,000 of invoice as money in the
+  bank, and the invoice still said it was owed
 - ~~E-mail delivery of anything.~~ Built and deployed: documents send
   through Resend, overdue invoices are chased on a schedule, and every
   send is logged per document. What is left is not code — a provider

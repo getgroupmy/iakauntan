@@ -4904,6 +4904,39 @@ page and renumbering would quietly break the reference.
     hashes `381ffeee` and its triggers `bcf8b236` (sales documents)
     and `ce827183` (purchase documents), as here. The same run counted
     `6767 Dart tests ran (floor 6767)`.
+180. ~~A customer whose receivable account was the bank posted its
+    invoices into the bank.~~ **Raised and answered 18 October**
+    ("Contacts and lines"). Found reading what posting takes on trust:
+    `app.post_sales_document_internal` debits the customer's
+    `receivable_account_id`, bills credit the supplier's
+    `payable_account_id`, and `app.resolve_account` gives each line
+    the account it names or its item's -- none of them checked.
+    Measured locally as the owner with `authenticated`, each on an
+    invoice of RM1,000: the customer's receivable set to 1120 posted
+    1120 1,000 / 4100 -1,000 with the invoice still owing RM1,000; a
+    line on 1120 posted 1120 -1,000 / 1210 1,000; a line on 1210 left
+    1210 at nothing. The app's `control_account.dart` already offers a
+    contact only active, non-heading receivables or payables accounts
+    -- in Dart. Production: two customers with a receivable of their
+    own, both receivables accounts; every line and item account a
+    revenue or expense account. `0912` adds the SECURITY DEFINER
+    trigger `app.an_account_fits_where_it_is_used` on contacts, both
+    line tables and items, for every writer, asked only when the
+    account is set or changed: `Contact.toJson` re-sends both control
+    accounts with every save, so a contact already naming one is still
+    saved. A heading on a line was already refused at posting by
+    `0765`; this refuses it when it is written. New
+    `an_account_fits_where_it_is_used.sql` (21 assertions, failing
+    before the migration); swept 14 / 14 with a control -- the one
+    survivor of the first sweep was the whole-row save, which a test
+    setting `name` alone never fired the trigger for. Two files changed
+    with it: `ledger.sql`'s 0765 section writes its two heading lines
+    with 0912's trigger off, as a line written before 0912 got there,
+    so the ledger's own refusal at posting is still asserted; and
+    `statutory_charges.sql` expects 0912's refusal from
+    `bill_statutory_charge` on a heading, which still leaves no bill.
+    Whole suite 493 files / 18617; the eight default dates green.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

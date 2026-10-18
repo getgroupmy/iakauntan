@@ -497,10 +497,12 @@ begin
      amount, due_date)
   values (v_org, v_site, 'assessment', 'Majlis', 'AS-9', v_year, 1, 240, v_today + 30)
   returning id into v_half;
+  -- Refused as the bill's line is written (`0912`); until then it was
+  -- the ledger that refused it, when the bill posted (`0765`).
   perform pg_temp.check_refused('a heading named as the account is refused',
     format('select public.bill_statutory_charge(%L, %L, null, null, %L)', v_half, v_land,
       (select id from public.accounts where org_id = v_org and code = '6000')),
-    'Account 6000 (EXPENSES) is a heading.%', '23514');
+    'A purchase document line''s account may not be 6000 EXPENSES, which is a heading%', '23514');
   perform pg_temp.check_true('and the charge is still unbilled, with no bill left behind',
     (select bill_document_id is null from public.property_statutory_charges where id = v_half)
     and not exists (select 1 from public.purchase_documents where org_id = v_org));
