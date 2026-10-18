@@ -55,8 +55,14 @@ begin
   r.org := pg_temp.test_org('Lebih Masa Sdn Bhd');
   perform public.create_fiscal_year(r.org, date_trunc('year', pg_temp.today())::date);
   perform pg_temp.open_years(r.org, pg_temp.today() - 30, pg_temp.today() + 30);
-  insert into public.work_shifts (org_id, code, name, start_time, end_time)
-  values (r.org, 'PG', 'Pagi', '09:00', '18:00') returning id into v_shift;
+  -- Every day a working day -- in `dow`, Sunday 0, as `work_days` is
+  -- written throughout. The overtime is worked today, whatever day the
+  -- suite runs; on the default Monday-to-Friday shift a Saturday or a
+  -- Sunday made it rest-day overtime at double time, and 67.07 read
+  -- 89.42 -- in CI on Sunday 18 October 2026.
+  insert into public.work_shifts (org_id, code, name, start_time, end_time, work_days)
+  values (r.org, 'PG', 'Pagi', '09:00', '18:00', array[0, 1, 2, 3, 4, 5, 6])
+  returning id into v_shift;
 
   r.stayer    := pg_temp.ow_employee(r.org, 'S1', 'Kekal', date '2020-01-01', v_shift);
   r.leaver    := pg_temp.ow_employee(r.org, 'L1', 'Pergi Semalam', date '2020-01-01', v_shift);

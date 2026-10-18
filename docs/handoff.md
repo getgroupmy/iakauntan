@@ -4919,6 +4919,7 @@ What failed, and what was done (test files only, except `0771`):
 | The demo rebuild itself | demo_rebuild, demo_modules, demo_practice, demo_shop_and_factory, reports_refuse_strangers | `0771` (item 38) |
 | The demo is year-to-date, so January is thin | demo_practice ("> 20" invoices, receipts), demo_rebuild (settled some, payroll runs, depreciating, payroll probe), reports_refuse_strangers (floor) | each asks the BUILDER's rule for the day -- one invoice a month so far, payroll once per closed month, paid at 60 days -- instead of October's count; the report floor is 51 in January and 59 after, both measured on the first of every month |
 | `p_asset_id` was `limit 1` -- on 1 April an asset with no depreciation yet | reports_refuse_strangers | the asset with the most depreciation behind it |
+| Works overtime TODAY on the default Monday-to-Friday shift -- double time on every Saturday and Sunday. Red in CI on Sunday 18 October 2026 (67.07 read 89.42), and none of the default days had ever been a weekend; the whole suite run locally on that Sunday found no other | overtime_while_employed | a shift working every day, in `dow` (0-6); `run_at_dates.sh` now adds the first Saturday after 5 January and the Sunday after it |
 
 One apparent failure was the harness: `statutory.sql`'s "a table made
 after this one is shut too" failed on two clusters because the runner

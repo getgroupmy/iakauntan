@@ -81,8 +81,16 @@ else
   # 1 January because "yesterday" is last year on it and on no other
   # day: pos_food_court.sql settled yesterday into a year it had not
   # opened, and failed on that one day alone (measured, 9 October).
-  days=("$y-12-28" "$((y + 1))-01-01" "$((y + 1))-01-05" "$((y + 1))-02-15"
-        "$((y + 1))-03-10" "$((y + 1))-06-01")
+  # And a weekend. None of the days above is one, and on Sunday 18
+  # October 2026 overtime_while_employed.sql went red in CI: it worked
+  # its overtime today on a Monday-to-Friday shift, so every Saturday and
+  # Sunday paid it at the rest-day rate. The first Saturday after 5
+  # January, and the Sunday after it.
+  w=$(date -d "$((y + 1))-01-06" +%w)
+  sat=$(date -d "$((y + 1))-01-06 +$(( (6 - w + 7) % 7 )) days" +%F)
+  sun=$(date -d "$sat +1 day" +%F)
+  days=("$y-12-28" "$((y + 1))-01-01" "$((y + 1))-01-05" "$sat" "$sun"
+        "$((y + 1))-02-15" "$((y + 1))-03-10" "$((y + 1))-06-01")
 fi
 
 # The list CI runs, exactly as `run_locally.sh` reads it.
