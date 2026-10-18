@@ -4840,8 +4840,13 @@ page and renumbering would quietly break the reference.
     charge's tax, which the recalculation would drop -- as the owner.
     The `when` ends the recursion. New
     `a_header_change_moves_the_totals.sql` (11 assertions, failing
-    before the migration); swept 4 / 4 with a control. **Still to read
-    back.**
+    before the migration); swept 4 / 4 with a control. **Applied, and
+    read back** (18 October, read-only, after run 38907642273 on
+    `3f1446a` had applied the migrations, its three deploy jobs
+    present): `app.recalc_totals_on_a_clients_header_change` hashes
+    `c7cc77d3` and its triggers `9e451b93` (sales documents) and
+    `d37e3928` (purchase documents), as here. The same run counted
+    `6767 Dart tests ran (floor 6767)`.
 178. ~~A clerk could tag the company's own rows into an import, and its
     rollback deleted them.~~ **Raised and answered 16 October** ("Only
     imports tag rows"). Found reading what else a function trusts that a
