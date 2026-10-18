@@ -4867,8 +4867,17 @@ page and renumbering would quietly break the reference.
     failing before the migration, one of them structural); swept 6 / 6
     with a control. `import_batch_final.sql` stood in for an import by
     inserting a tagged contact as a client, which this now refuses; it
-    does so through a definer helper, as an importer runs. **Still to
-    read back.**
+    does so through a definer helper, as an importer runs. Its first CI
+    run, 39102519743, went red on a Sunday in an unrelated file and
+    applied nothing; `0e1e9d4` fixed that file. **Applied, and read
+    back** (18 October, read-only, after run 39144950474 on `0e1e9d4`
+    had applied the migrations, its three deploy jobs present):
+    `app.provenance_is_the_imports` hashes `a156b5b4`, as here, and its
+    trigger stands on the same fifteen tables -- accounts, contacts,
+    departments, employees, item categories, items, payment terms,
+    positions, price levels, projects, both document headers, salary
+    components, tax codes and warehouses. The same run counted
+    `6767 Dart tests ran (floor 6767)`.
 179. ~~A bill cut from its goods received note received the goods
     again.~~ **Raised and answered 16 October** ("Set only by
     transferring"). Found looking at the links documents carry:
