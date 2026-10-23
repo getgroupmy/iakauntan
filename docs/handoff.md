@@ -4898,7 +4898,12 @@ page and renumbering would quietly break the reference.
     client's to write -- the app re-sends it when it re-saves lines --
     and the progress counters count every child that names a line, so
     a hand-made link can mark an order received without a note.
-    **Still to read back.**
+    **Applied, and read back** (22 October, read-only, after run
+    39154029556 on `2cd5d0b` had applied the migrations, its three
+    deploy jobs present): `app.a_document_is_raised_by_transferring`
+    hashes `381ffeee` and its triggers `bcf8b236` (sales documents)
+    and `ce827183` (purchase documents), as here. The same run counted
+    `6767 Dart tests ran (floor 6767)`.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
