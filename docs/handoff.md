@@ -4943,6 +4943,35 @@ page and renumbering would quietly break the reference.
     triggers `03e25d27` (contacts), `8eccaaa9` (sales document lines),
     `0633a84c` (purchase document lines) and `0e0ef342` (items), as
     here. The same run counted `6767 Dart tests ran (floor 6767)`.
+181. ~~A typed bill could mark a goods received note billed, and then
+    receive its goods again.~~ **Raised and answered 22 October**
+    ("Only a line of its parent"); the "noticed, not raised" of item
+    179. The progress counters `0904` made the database's are counted
+    from the lines that name a line through `source_line_id`, and the
+    links were a client's to write. Measured locally as the owner with
+    `authenticated`: ten ordered at 25 and received on a posted note; a
+    bill typed by hand, its one line naming the note's line -- the note
+    read fully billed, billing it was refused ("Nothing left to
+    transfer"), and the typed bill, having no parent, received the ten
+    again when it posted: 20 on hand, 1310 RM500, the note's RM250 in
+    2118 never cleared. A typed invoice naming a quotation's line
+    marked the quotation partly invoiced. The app writes the column
+    only back -- `line_draft.dart` saves a draft by deleting its lines
+    and inserting them again, each with the link it was loaded with,
+    and the editor re-saves only the document it loaded. Production: 30
+    linked lines, all in the Sinar Teknologi demo, whose forecasting
+    seeder (`0203`) links bills to orders as their owner without a
+    parent; it is not asked. `0913` adds the client-only trigger
+    `app.a_line_carries_its_parents_line` on both line tables: a
+    client's line may name only a line of the document its header was
+    raised from (`parent_id`, the database's since `0911`), on insert
+    and when its link or its document changes. New
+    `a_line_carries_its_parents_line.sql` (15 assertions, failing
+    before the migration, the app's delete-and-reinsert save among
+    them); swept 8 / 8 with a control. The first sweep's move mutant
+    was "killed" by a duplicate `line_no`, not by the link; the move
+    now takes a number of its own. Whole suite 494 files / 18632; the
+    eight default dates green. **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

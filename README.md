@@ -2168,6 +2168,12 @@ Stated plainly so nothing here is mistaken for finished:
   a till, a receivable or a payable. Until then a customer whose
   receivable was the bank posted RM1,000 of invoice as money in the
   bank, and the invoice still said it was owed
+- A line carries forward a line of the document its own was raised
+  from, and nothing else, since `0913`. The progress counters and what
+  can still be transferred are counted from those links; until then a
+  bill typed by hand could name a goods received note's line, mark the
+  note billed so that billing it was refused, and receive the goods a
+  second time itself
 - ~~E-mail delivery of anything.~~ Built and deployed: documents send
   through Resend, overdue invoices are chased on a schedule, and every
   send is logged per document. What is left is not code — a provider

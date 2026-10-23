@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18617
+18632
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2206,3 +2206,13 @@
 # account; a bill line is not 2110, nor the till; an item's four
 # accounts are each refused one; other income stands; the database's
 # owner is refused too).
+#
+# 18617 -> 18632, 22 October: 0913's a_line_carries_its_parents_line.sql
+# (15: a typed bill's line does not name a note's line, nor is pointed at
+# it afterwards, so the note is still unbilled; the note is billed by
+# transferring it, the bill is re-saved as the app saves it with its
+# link, and takes a line of its own; it does not carry forward the order
+# the note came from, nor is its linked line moved onto the typed bill;
+# posted, it moves no stock and clears the accrual; a typed invoice does
+# not mark a quotation invoiced, which stays pending; an invoice raised
+# from it is re-saved with its link and counted; the owner still links).
