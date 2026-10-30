@@ -4936,7 +4936,13 @@ page and renumbering would quietly break the reference.
     `statutory_charges.sql` expects 0912's refusal from
     `bill_statutory_charge` on a heading, which still leaves no bill.
     Whole suite 493 files / 18617; the eight default dates green.
-    **Still to read back.**
+    **Applied, and read back** (23 October, read-only, after run
+    39999245491 on `f61108f` had applied the migrations, its three
+    deploy jobs present; read again on 30 October, unchanged):
+    `app.an_account_fits_where_it_is_used` hashes `98dbae24` and its
+    triggers `03e25d27` (contacts), `8eccaaa9` (sales document lines),
+    `0633a84c` (purchase document lines) and `0e0ef342` (items), as
+    here. The same run counted `6767 Dart tests ran (floor 6767)`.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
