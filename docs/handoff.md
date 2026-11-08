@@ -4971,7 +4971,17 @@ page and renumbering would quietly break the reference.
     them); swept 8 / 8 with a control. The first sweep's move mutant
     was "killed" by a duplicate `line_no`, not by the link; the move
     now takes a number of its own. Whole suite 494 files / 18632; the
-    eight default dates green. **Still to read back.**
+    eight default dates green. Its first CI run, 41018840724 on 30
+    October, failed before any job had a runner -- no steps, no logs --
+    with Actions stopped across the account; the repository's scheduled
+    workflows ran green again from 6 November, and the same run was
+    re-run on 8 November. **Applied, and read back** (8 November,
+    read-only, after that re-run on `2a58d54` had applied the
+    migrations, its three deploy jobs present):
+    `app.a_line_carries_its_parents_line` hashes `1cf8db54` and its
+    triggers `d65ce62a` (sales document lines) and `e36a5492`
+    (purchase document lines), as here. The same run counted
+    `6767 Dart tests ran (floor 6767)`.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
