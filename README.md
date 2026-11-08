@@ -2174,6 +2174,11 @@ Stated plainly so nothing here is mistaken for finished:
   bill typed by hand could name a goods received note's line, mark the
   note billed so that billing it was refused, and receive the goods a
   second time itself
+- An item holding stock keeps tracking it, since `0914`, for every
+  writer: it may not stop tracking inventory, nor stop being a stock
+  item, while any warehouse holds some. Posting moves stock and books its
+  cost only for a tracked item; until then one switch let ten units sell
+  with no cost of sales and stay on the shelf
 - ~~E-mail delivery of anything.~~ Built and deployed: documents send
   through Resend, overdue invoices are chased on a schedule, and every
   send is logged per document. What is left is not code — a provider

@@ -4982,6 +4982,38 @@ page and renumbering would quietly break the reference.
     triggers `d65ce62a` (sales document lines) and `e36a5492`
     (purchase document lines), as here. The same run counted
     `6767 Dart tests ran (floor 6767)`.
+182. ~~An item could stop tracking the stock it held.~~ **Raised and
+    answered 8 November** ("Refuse while stock is on hand"). Posting
+    moves stock and books cost of sales only for an item whose
+    `track_inventory` is on, and nothing stopped the flag -- or
+    `item_type`, which the item screen turns it off with -- changing
+    while the item held stock. Measured locally as the owner with
+    `authenticated`: ten bought at 25 (10 on hand, 1310 RM250);
+    tracking switched off by one update, as the item screen's switch
+    does; all ten sold at 40 with no stock out and no cost of sales --
+    still 10 on hand, 1310 still RM250, profit overstated by RM250.
+    Switched back on, the sold ten were on hand again; made a service
+    with ten on hand, accepted too. `create_item_variants` already
+    refused a style holding stock (`0571`). Production: 23 stock items,
+    every one holding stock; no untracked item holding any. `0914` adds
+    the SECURITY DEFINER trigger `app.an_item_with_stock_keeps_tracking_it`
+    on items, for every writer: no tracking switched off and no move
+    away from `stock` while any one warehouse's movements add up to
+    anything but nothing. Turning tracking on is never asked. New
+    `an_item_with_stock_keeps_tracking_it.sql` (11 assertions, failing
+    before the migration); swept 5 / 5 with a control. The first sweep
+    had a survivor -- no fixture held stock it never tracked, so
+    "turning tracking on is asked too" passed; a service now holds
+    three -- and an "app only" mutant that `current_user` inside a
+    SECURITY DEFINER function made exempt everyone, now written on the
+    session's `role`. Whole suite 495 files / 18643; the eight default
+    dates green.
+    The container this was built in arrived without pg_cron, libfaketime
+    or Flutter. `apt-get install -y postgresql-16-cron libfaketime` gave
+    `run_locally.sh` and `run_at_dates.sh` back (whole suite green,
+    494 / 18632, before this); without Flutter, `check_xlsx.py` and
+    `check_android_compile_sdk.py` fail locally for want of it, as
+    `check_web_boots.py` always does. **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
