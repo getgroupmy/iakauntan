@@ -5013,7 +5013,12 @@ page and renumbering would quietly break the reference.
     `run_locally.sh` and `run_at_dates.sh` back (whole suite green,
     494 / 18632, before this); without Flutter, `check_xlsx.py` and
     `check_android_compile_sdk.py` fail locally for want of it, as
-    `check_web_boots.py` always does. **Still to read back.**
+    `check_web_boots.py` always does. **Applied, and read back**
+    (8 November, read-only, after run 42446401623 on `c2c10d5` had
+    applied the migrations, its three deploy jobs present):
+    `app.an_item_with_stock_keeps_tracking_it` hashes `6401c442` and
+    its trigger on items `4db43117`, as here. The same run counted
+    `6767 Dart tests ran (floor 6767)`.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
