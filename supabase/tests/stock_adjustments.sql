@@ -280,11 +280,18 @@ begin
                    where org_id = v_org and code = '5900'), 1500)
   returning id into v_adj_acct;
 
+  -- Since `0915` an item's stock account is 1310 or none
+  -- (`stock_is_kept_in_1310.sql`). It asks only when the account is set,
+  -- and an adjustment still posts to an account an item named before
+  -- it, so the item is written the way such an item was, with `0915`'s
+  -- trigger off.
+  alter table public.items disable trigger stock_is_kept_in_1310;
   insert into public.items
     (org_id, code, name, item_type, track_inventory, uom_code,
      unit_price, cost_price, inventory_account_id)
   values (v_org, 'BARANG', 'Widget', 'stock', true, 'C62', 20, 10, v_inv)
   returning id into v_item;
+  alter table public.items enable trigger stock_is_kept_in_1310;
   insert into public.items
     (org_id, code, name, item_type, track_inventory, uom_code,
      unit_price, cost_price)
@@ -482,11 +489,14 @@ begin
     format('select public.post_stock_adjustment(%L)', v_adj),
     '%inventory account (1310)%', 'P0002');
 
-  -- And again, the way round it: the ITEM may carry its own.
+  -- And again, the way round it: the ITEM may carry its own -- one it
+  -- named before `0915`, which refuses naming any but 1310 now.
+  alter table public.items disable trigger stock_is_kept_in_1310;
   update public.items
      set inventory_account_id = (select id from public.accounts
                                   where org_id = v_poor and code = '1311')
    where id = v_item;
+  alter table public.items enable trigger stock_is_kept_in_1310;
   perform pg_temp.check_true('an item carrying its own account posts',
     public.post_stock_adjustment(v_adj) is not null);
 

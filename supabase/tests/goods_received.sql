@@ -460,12 +460,20 @@ begin
   values (v_org, 'SUP', 'Pembekal Sirap', 'supplier') returning id into v_sup;
 
   -- Stocked in pieces, bought in cartons of 24.
+  --
+  -- Since `0915` an item's stock account is 1310 or none
+  -- (`stock_is_kept_in_1310.sql`). It asks only when the account is set,
+  -- and a note still receives into an account an item named before it,
+  -- so the item is written the way such an item was, with `0915`'s
+  -- trigger off.
+  alter table public.items disable trigger stock_is_kept_in_1310;
   insert into public.items
     (org_id, code, name, item_type, track_inventory, uom_code, unit_price,
      inventory_account_id)
   values (v_org, 'SIRAP', 'Sirap bandung', 'stock', true, 'C62', 12.00,
           v_acct)
   returning id into v_item;
+  alter table public.items enable trigger stock_is_kept_in_1310;
   perform pg_temp.gr_pack(v_org, v_item, 'CT', 24);
 
   insert into public.items

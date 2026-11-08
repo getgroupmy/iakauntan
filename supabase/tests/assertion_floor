@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18643
+18651
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2224,3 +2224,9 @@
 # item is still written; sold, the ten leave the shelf and their cost
 # leaves 1310; with none left it may become a service; a service holding
 # stock may start tracking it; the database's owner is refused too).
+#
+# 18643 -> 18651, 8 November: 0915's stock_is_kept_in_1310.sql (8: an
+# item's stock account is not moved to 1320, nor does an item arrive
+# naming it, nor is it another company's 1310; naming 1310 stands, and
+# naming none; an item already naming 1320 is still written; bought and
+# sold, the stock account is back at nothing; the owner is refused too).

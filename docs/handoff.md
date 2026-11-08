@@ -5019,6 +5019,37 @@ page and renumbering would quietly break the reference.
     `app.an_item_with_stock_keeps_tracking_it` hashes `6401c442` and
     its trigger on items `4db43117`, as here. The same run counted
     `6767 Dart tests ran (floor 6767)`.
+183. ~~An item with a stock account of its own took goods in on one
+    account and out on another.~~ **Raised and answered 8 November**
+    ("Stock lives in 1310 only"). Found measuring 0914: three paths
+    honour an item's `inventory_account_id` --
+    `app.post_purchase_document_internal` and
+    `app.post_goods_received_internal` receive into it and
+    `post_stock_adjustment` adjusts it -- and eight post stock to 1310
+    by number (selling, both transfer functions,
+    `post_manufacturing_order`, `post_landed_cost_run`, the two POS
+    recipe functions, the bundles). The question as asked said eleven
+    by number, counting adjustments among them; the suite corrected it,
+    and the rule chosen is unchanged by it. Measured
+    locally as the owner with `authenticated`: an item given 1320, ten
+    bought at 25 (Dr 1320 250), all ten sold -- 1310 at -250 and 1320
+    at 250 with nothing on hand. The app never sets the column.
+    Production: every item's stock account 1310 or unset. `0915` adds
+    the SECURITY DEFINER trigger `app.stock_is_kept_in_1310` on items,
+    for every writer, asked when the account is set or changed: it is
+    the company's 1310, or none. Per-item stock accounts would be their
+    own change, through the eight paths above. New
+    `stock_is_kept_in_1310.sql` (8 assertions, failing before the
+    migration); swept 6 / 6 with a control -- the company check's mutant
+    only by message, since the tenant foreign key refuses another
+    company's 1310 too. Three files that give an item its own stock
+    account on purpose, so the item's account and 1310 are different
+    answers -- `posting_a_bill.sql`, `goods_received.sql`,
+    `stock_adjustments.sql` (twice) -- now write those items with
+    0915's trigger off, as items that named one before it: the three
+    paths still honour such an item, and 1310 there would collapse the
+    two answers into one. Whole suite 496 files / 18651; the eight
+    default dates green on the four files. **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

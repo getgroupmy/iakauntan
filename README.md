@@ -2179,6 +2179,11 @@ Stated plainly so nothing here is mistaken for finished:
   item, while any warehouse holds some. Posting moves stock and books its
   cost only for a tracked item; until then one switch let ten units sell
   with no cost of sales and stay on the shelf
+- Stock is kept in 1310, since `0915`, for every writer: an item's stock
+  account, when it names one, is the company's 1310. Receiving and
+  adjusting honoured an item's own account and the eight other stock
+  paths post to 1310 by number, so an item given 1320 took goods in on
+  1320 and out of 1310
 - ~~E-mail delivery of anything.~~ Built and deployed: documents send
   through Resend, overdue invoices are chased on a schedule, and every
   send is logged per document. What is left is not code — a provider

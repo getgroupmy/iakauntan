@@ -115,11 +115,18 @@ begin
   values (v_org, '5150', 'Belian Khidmat', 'expense', 'cost_of_sales')
   returning id into v_ownexp;
 
+  --
+  -- Since `0915` an item's stock account is 1310 or none
+  -- (`stock_is_kept_in_1310.sql`). It asks only when the account is set,
+  -- and a bill still debits an account an item named before it, so the
+  -- item is written the way such an item was, with `0915`'s trigger off.
+  alter table public.items disable trigger stock_is_kept_in_1310;
   insert into public.items
     (org_id, code, name, item_type, track_inventory, uom_code, unit_price,
      inventory_account_id)
   values (v_org, 'SIMEN', 'Simen', 'stock', true, 'C62', 20.00, v_own)
   returning id into v_stock;
+  alter table public.items enable trigger stock_is_kept_in_1310;
   insert into public.items
     (org_id, code, name, item_type, track_inventory, uom_code, unit_price,
      purchase_account_id)
