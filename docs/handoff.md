@@ -5049,7 +5049,15 @@ page and renumbering would quietly break the reference.
     0915's trigger off, as items that named one before it: the three
     paths still honour such an item, and 1310 there would collapse the
     two answers into one. Whole suite 496 files / 18651; the eight
-    default dates green on the four files. **Still to read back.**
+    default dates green on the four files. Its CI run, 42465274498 on
+    `467d0e1`, went red on 8 November on two downloads that timed out
+    upstream -- the Gradle distribution and mediasoup's build files,
+    both HTTP 504 -- with every SQL assertion green and the deploy jobs
+    skipped, so nothing was applied. **Applied, and read back** (14
+    November, read-only, after its failed jobs were re-run and passed
+    and the deploy jobs ran): `app.stock_is_kept_in_1310` hashes
+    `ae8ebcc3` and its trigger on items `1b6b3a0e`, as here. The run
+    counted `6767 Dart tests ran (floor 6767)`.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
