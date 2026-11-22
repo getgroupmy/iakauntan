@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18651
+18665
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2230,3 +2230,14 @@
 # naming it, nor is it another company's 1310; naming 1310 stands, and
 # naming none; an item already naming 1320 is still written; bought and
 # sold, the stock account is back at nothing; the owner is refused too).
+#
+# 18651 -> 18665, 22 November: 0916's tracking_changes_with_none_on_hand.sql
+# (14: the fixture's ghost has none on hand and three in its batch; batch
+# tracking is not turned on with ten on hand, nor serial numbers, nor for
+# one with stock in one warehouse and short in another; it is not turned
+# off with ten in a batch, nor changed from batch to serial, nor turned
+# back on while a batch still says it holds some; the rest of the item is
+# still written; the ten unnumbered units still sell and tracking is then
+# turned on; the ten in LOT-MAC sell by name and tracking is then turned
+# off; an item that never held stock changes freely; the database's
+# owner is refused too).

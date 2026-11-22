@@ -384,7 +384,13 @@ begin
   -- no units. A landed cost movement moves no units at all, so there is
   -- nothing to name -- and before 0271 put the condition on the trigger
   -- this raised and the whole run failed.
+  -- Since `0916` tracking changes only with none on hand
+  -- (`tracking_changes_with_none_on_hand.sql`). This fixture gets stock
+  -- into a tracked item the short way -- stock first, tracking after --
+  -- so it steps round that rule here, as the fixture's owner.
+  alter table public.items disable trigger tracking_changes_with_none_on_hand;
   update public.items set tracking = 'batch' where id = v_tap;
+  alter table public.items enable trigger tracking_changes_with_none_on_hand;
   select count(*) into v_n from public.stock_movements
    where item_id = v_tap and movement_type = 'landed_cost';
 

@@ -666,7 +666,13 @@ begin
   values (v_org, 'VK-0002', pg_temp.today(), 'opening_balance', v_tracked, v_a, 6, 9)
   returning id into v_mv;
 
+  -- Since `0916` tracking changes only with none on hand
+  -- (`tracking_changes_with_none_on_hand.sql`). This fixture gets stock
+  -- into a tracked item the short way -- stock first, tracking after --
+  -- so it steps round that rule here, as the fixture's owner.
+  alter table public.items disable trigger tracking_changes_with_none_on_hand;
   update public.items set tracking = 'batch' where id = v_tracked;
+  alter table public.items enable trigger tracking_changes_with_none_on_hand;
   insert into public.stock_lots (org_id, item_id, lot_ref, kind, expiry_date)
   values (v_org, v_tracked, 'LOT-A', 'batch', pg_temp.today() + 365)
   returning id into v_lot;
@@ -1455,7 +1461,11 @@ begin
     (org_id, movement_no, movement_date, movement_type, item_id,
      warehouse_id, quantity, unit_cost)
   values (v_org, 'RC-2', pg_temp.today(), 'opening_balance', v_bchicken, v_kitchen, 4, 12.00);
+  -- Stepped round `0916` as above: four on hand that no batch holds is
+  -- the state this assertion needs, and the one `0916` now prevents.
+  alter table public.items disable trigger tracking_changes_with_none_on_hand;
   update public.items set tracking = 'batch' where id = v_bchicken;
+  alter table public.items enable trigger tracking_changes_with_none_on_hand;
   v_bconv := public.upsert_item_conversion(
     null, v_org, 'AYAMB2', 'Potong berkelompok', v_bchicken, 1, 'C62',
     jsonb_build_array(jsonb_build_object('item', v_bbreast, 'quantity', 2, 'share', 100)));

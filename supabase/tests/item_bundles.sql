@@ -204,7 +204,13 @@ begin
   --
   -- The one arm this migration adds to the lot invariant. Without it a
   -- tracked part inside a bundle raises and the whole invoice fails.
+  -- Since `0916` tracking changes only with none on hand
+  -- (`tracking_changes_with_none_on_hand.sql`). This fixture gets stock
+  -- into a tracked item the short way -- stock first, tracking after --
+  -- so it steps round that rule here, as the fixture's owner.
+  alter table public.items disable trigger tracking_changes_with_none_on_hand;
   update public.items set tracking = 'batch' where id = v_tin;
+  alter table public.items enable trigger tracking_changes_with_none_on_hand;
   insert into public.stock_lots (org_id, item_id, lot_ref, kind, expiry_date)
   values (v_org, v_tin, 'OLD', 'batch', pg_temp.today() + 30),
          (v_org, v_tin, 'NEW', 'batch', pg_temp.today() + 300);

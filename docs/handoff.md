@@ -5058,6 +5058,42 @@ page and renumbering would quietly break the reference.
     and the deploy jobs ran): `app.stock_is_kept_in_1310` hashes
     `ae8ebcc3` and its trigger on items `1b6b3a0e`, as here. The run
     counted `6767 Dart tests ran (floor 6767)`.
+184. ~~Batch or serial tracking could be switched while the item held
+    stock, and broke it either way.~~ **Raised and answered 22
+    November** ("Refuse while stock is on hand"). The third of the
+    item settings that decide how stock moves, after `0914` and
+    `0915`. `app.check_movement_lots` makes every movement of a tracked
+    item name its units and refuses one that takes a batch below
+    nothing; `v_lot_balances`, derived from those names, is what the
+    expiry and recall lists read. Measured locally as the owner with
+    `authenticated`: tracking turned ON with ten on hand -- the ten
+    could not leave, a sale naming no batch refused and a sale naming
+    one refused because the batch would stand at -5; turned OFF with
+    ten in LOT-MAC -- all ten sold unnamed and LOT-MAC went on saying
+    ten were on the shelf. **The lot check is a deferred constraint:**
+    the first measurement, rolled back, saw the named sale "post" and
+    a batch at -5, which a commit would have refused. Measure and
+    assert these with `set constraints all immediate` after each
+    posting. Production: no item tracked, no batch with a balance, 23
+    untracked items holding stock. `0916` adds the SECURITY DEFINER
+    trigger `app.tracking_changes_with_none_on_hand` on items, for
+    every writer, asked only when `tracking` changes: refused while
+    any one warehouse's movements add up to anything but nothing, or
+    any batch still has a balance. New
+    `tracking_changes_with_none_on_hand.sql` (14 assertions, failing
+    before the migration); swept 8 / 8 with a control. Four fixtures in
+    three files -- `item_bundles.sql`, `landed_cost.sql`,
+    `stock_transfers.sql` (twice) -- get stock into a tracked item the
+    short way, stock first and tracking after; they step round the
+    rule with the trigger off, and two of them need exactly the state
+    it prevents (stock on hand that no batch holds).
+    **Not looked at:** `costing_method` is read by nothing but
+    `create_item_variants`, which copies it -- every item costs at
+    weighted average whatever it says (`0106` says so too); and an
+    item's `uom_code` changed with stock on hand, which is the next
+    of this family to measure. Whole suite 497 files / 18665; the
+    eight default dates green on the four files. **Still to read
+    back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

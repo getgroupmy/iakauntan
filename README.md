@@ -2184,6 +2184,12 @@ Stated plainly so nothing here is mistaken for finished:
   adjusting honoured an item's own account and the eight other stock
   paths post to 1310 by number, so an item given 1320 took goods in on
   1320 and out of 1310
+- How an item is tracked -- not at all, by batch, by serial number --
+  changes only with none on hand, since `0916`, for every writer. Turned
+  on with ten on the shelf, the ten could not be sold, named or unnamed;
+  turned off with ten in a batch, they sold unnamed and the batch went on
+  saying they were there. Adjust the stock out, change it, adjust it
+  back in
 - ~~E-mail delivery of anything.~~ Built and deployed: documents send
   through Resend, overdue invoices are chased on a schedule, and every
   send is logged per document. What is left is not code — a provider
