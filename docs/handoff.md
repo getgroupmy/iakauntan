@@ -5162,7 +5162,14 @@ page and renumbering would quietly break the reference.
     since `0918`; an item hidden before it, holding stock, would still
     be unseen -- production has none. Whole suite 499 files / 18692,
     with no existing test relying on either road; the eight default
-    dates green. **Still to read back.**
+    dates green. **Applied, and read back** (22 November, read-only,
+    after run 45025413967 on `22753c0` had applied the migrations, its
+    three deploy jobs present):
+    `app.an_item_holding_stock_is_not_hidden` hashes `feb07960` and its
+    trigger on items `4249456c`; `app.a_hidden_item_takes_no_stock`
+    hashes `a52d211a` and its trigger on `stock_movements` `bbefe8f4`,
+    all four as here. Production still has no hidden item holding
+    stock. The same run counted `6767 Dart tests ran (floor 6767)`.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
