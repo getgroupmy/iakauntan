@@ -5207,7 +5207,13 @@ page and renumbering would quietly break the reference.
     from an expense account into an asset; the payroll then posted
     1,200 to the closed account and 5,000 to the asset. Whole suite
     500 files / 18722, no existing test or seeder naming a payroll
-    account; the eight default dates green. **Still to read back.**
+    account; the eight default dates green. **Applied, and read back**
+    (22 November, read-only, after run 45027877009 on `adab77b` had
+    applied the migrations, its three deploy jobs present):
+    `app.a_payroll_account_fits_its_line` hashes `d67e8062` and its
+    trigger on `payroll_settings` `9992b54e`, as here. Production
+    still has no `payroll_settings` row. The same run counted
+    `6767 Dart tests ran (floor 6767)`.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
