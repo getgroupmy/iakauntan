@@ -5098,6 +5098,36 @@ page and renumbering would quietly break the reference.
     `app.tracking_changes_with_none_on_hand` hashes `b0f3c48b` and its
     trigger on items `f02d14c3`, as here. The same run counted
     `6767 Dart tests ran (floor 6767)`.
+185. ~~An item's unit could be changed under its stock.~~ **Raised and
+    answered 22 November** ("Refuse with stock or pack sizes"). The
+    fourth and last of the item settings stock is read through, named
+    as not looked at in item 184. Every `stock_movements.quantity` and
+    the running average cost are in `items.uom_code`; `app.uom_qty`
+    turns a quantity written in another unit into it, and
+    `item_uom_packs.qty_in_stock_uom` is how many of it a carton holds.
+    Measured locally as the owner with `authenticated`: ten litres
+    bought at 25; the unit changed LTR -> MLT by one update, as the
+    item screen's unit field does; one litre sold -- 1,000 units out of
+    the ten, -990 on hand, RM25,000 of cost of sales against a sale of
+    RM40. Nothing in the schema rewrites an item's unit; only a direct
+    write does. Production: 23 items holding stock (C62, H87, SET,
+    LTR), none with a pack size. `0917` adds the SECURITY DEFINER
+    trigger `app.an_items_unit_changes_with_nothing_counted` on items,
+    for every writer, asked only when the unit changes: refused while
+    any one warehouse's movements add up to anything but nothing, or
+    the item has a pack size. New
+    `an_items_unit_changes_with_nothing_counted.sql` (10 assertions,
+    failing before the migration); swept 6 / 6 with a control. No
+    existing test or seeder changes an item's unit.
+    **Not closed, and said so:** a bill-of-materials line (`bom_lines`,
+    `mo_components`) carries a quantity and no unit, so it is in the
+    component's own unit and is read in the new one after a change made
+    with nothing on hand. Recipe, bundle and conversion lines name
+    their unit (`pos_recipe_lines`, `item_conversion_outputs`) and
+    convert, or refuse where no conversion exists. `reorder_level` and
+    `reorder_quantity` are in the unit too and are not asked about.
+    `costing_method` remains read by nothing. Whole suite 498 files /
+    18675; the eight default dates green. **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

@@ -2190,6 +2190,11 @@ Stated plainly so nothing here is mistaken for finished:
   turned off with ten in a batch, they sold unnamed and the batch went on
   saying they were there. Adjust the stock out, change it, adjust it
   back in
+- An item's unit changes only with nothing counted in it, since `0917`,
+  for every writer: no stock on hand in any warehouse and no pack size
+  set. Stock, its cost and the pack sizes are all counted in the unit;
+  ten litres at RM25 relabelled millilitres let one litre sold take a
+  thousand of them and book RM25,000 of cost
 - ~~E-mail delivery of anything.~~ Built and deployed: documents send
   through Resend, overdue invoices are chased on a schedule, and every
   send is logged per document. What is left is not code — a provider

@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18665
+18675
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2241,3 +2241,12 @@
 # turned on; the ten in LOT-MAC sell by name and tracking is then turned
 # off; an item that never held stock changes freely; the database's
 # owner is refused too).
+#
+# 18665 -> 18675, 22 November: 0917's an_items_unit_changes_with_nothing_counted.sql
+# (10: litres do not become millilitres with ten on hand, nor for one
+# with stock in one warehouse and short in another, nor with a pack size
+# set though nothing is on hand; the rest of the item is still written;
+# a litre sold takes one of the ten at its cost, and five hundred
+# millilitres half of one; with none left litres become millilitres;
+# with its pack size removed pieces become dozens; an item with nothing
+# counted in it changes freely; the database's owner is refused too).
