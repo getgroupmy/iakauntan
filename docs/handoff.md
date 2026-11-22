@@ -5127,7 +5127,12 @@ page and renumbering would quietly break the reference.
     convert, or refuse where no conversion exists. `reorder_level` and
     `reorder_quantity` are in the unit too and are not asked about.
     `costing_method` remains read by nothing. Whole suite 498 files /
-    18675; the eight default dates green. **Still to read back.**
+    18675; the eight default dates green. **Applied, and read back**
+    (22 November, read-only, after run 45017612299 on `684b4e3` had
+    applied the migrations, its three deploy jobs present):
+    `app.an_items_unit_changes_with_nothing_counted` hashes `a57657c3`
+    and its trigger on items `249340e8`, as here. The same run counted
+    `6767 Dart tests ran (floor 6767)`.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
