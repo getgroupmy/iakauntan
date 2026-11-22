@@ -5133,6 +5133,36 @@ page and renumbering would quietly break the reference.
     `app.an_items_unit_changes_with_nothing_counted` hashes `a57657c3`
     and its trigger on items `249340e8`, as here. The same run counted
     `6767 Dart tests ran (floor 6767)`.
+186. ~~An item could be hidden with stock in it, and stock could arrive
+    in a hidden item.~~ **Raised and answered 22 November** ("Refuse
+    hiding with stock", then "Close both roads"). `stock_on_hand` --
+    the stock listing, and what a stock take starts from -- leaves out
+    an item with `is_active` off or `deleted_at` set. Measured locally
+    as the owner with `authenticated`: two items, ten each at 25 (1310
+    at 500); one switched off, the listing showed 250; soft-deleted,
+    the same; deleted outright, already refused by the posted line.
+    The second road was found before the first was built: an item
+    hidden with nothing on hand, a bill for ten posted -- listing 0,
+    1310 at 500. The app has no button for either. Production: no
+    hidden item, 23 live items holding stock. `0918` adds two SECURITY
+    DEFINER triggers, both for every writer:
+    `app.an_item_holding_stock_is_not_hidden` on items (no switching
+    off or soft delete while any one warehouse's movements add up to
+    anything but nothing), and `app.a_hidden_item_takes_no_stock` on
+    `stock_movements` (a movement may not leave a hidden item's stock
+    in a warehouse anywhere but between what it holds there and
+    nothing -- so what it holds can still leave, and a movement of no
+    units passes). New `a_hidden_item_holds_no_stock.sql` (17
+    assertions, failing without either rule); swept 13 / 13 with a
+    control in each function.
+    **Measured and not a defect:** a warehouse switched off -- its
+    stock still lists and still sells, and `warehouses` has no
+    `deleted_at`. **Not changed:** the stock listing itself still
+    leaves a hidden item out, which is now always right for one hidden
+    since `0918`; an item hidden before it, holding stock, would still
+    be unseen -- production has none. Whole suite 499 files / 18692,
+    with no existing test relying on either road; the eight default
+    dates green. **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

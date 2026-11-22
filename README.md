@@ -2195,6 +2195,11 @@ Stated plainly so nothing here is mistaken for finished:
   set. Stock, its cost and the pack sizes are all counted in the unit;
   ten litres at RM25 relabelled millilitres let one litre sold take a
   thousand of them and book RM25,000 of cost
+- A hidden item holds no stock, since `0918`, for every writer. The stock
+  listing leaves out an item that is switched off or soft-deleted, so an
+  item holding stock may not be hidden, and a hidden one takes no stock
+  -- what it already holds can still leave. Until then either road left
+  the listing short of what account 1310 held
 - ~~E-mail delivery of anything.~~ Built and deployed: documents send
   through Resend, overdue invoices are chased on a schedule, and every
   send is logged per document. What is left is not code — a provider

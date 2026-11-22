@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18675
+18692
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2250,3 +2250,15 @@
 # millilitres half of one; with none left litres become millilitres;
 # with its pack size removed pieces become dozens; an item with nothing
 # counted in it changes freely; the database's owner is refused too).
+#
+# 18675 -> 18692, 22 November: 0918's a_hidden_item_holds_no_stock.sql
+# (17: an item with ten on hand is not switched off, nor soft-deleted,
+# nor one with stock in one warehouse and short in another; the rest of
+# the item is still written; a bill does not bring ten into an item that
+# is switched off, nor into one that has been removed; four of the ten a
+# hidden item holds are sold, but it is not sold past nothing, nor topped
+# up, nor sold from a warehouse where it has none; with the last of it
+# gone the listing agrees with the books, at the ten still on the shelf;
+# sold out, the item is switched off; one switched back on takes stock
+# again; the database's owner does not hide an item with stock, nor
+# write stock into a hidden one; a movement of no units passes).
