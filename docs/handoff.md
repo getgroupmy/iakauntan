@@ -5092,8 +5092,12 @@ page and renumbering would quietly break the reference.
     weighted average whatever it says (`0106` says so too); and an
     item's `uom_code` changed with stock on hand, which is the next
     of this family to measure. Whole suite 497 files / 18665; the
-    eight default dates green on the four files. **Still to read
-    back.**
+    eight default dates green on the four files. **Applied, and read
+    back** (22 November, read-only, after run 45013826037 on `f525da6`
+    had applied the migrations, its three deploy jobs present):
+    `app.tracking_changes_with_none_on_hand` hashes `b0f3c48b` and its
+    trigger on items `f02d14c3`, as here. The same run counted
+    `6767 Dart tests ran (floor 6767)`.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
