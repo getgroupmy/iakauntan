@@ -2200,6 +2200,13 @@ Stated plainly so nothing here is mistaken for finished:
   item holding stock may not be hidden, and a hidden one takes no stock
   -- what it already holds can still leave. Until then either road left
   the listing short of what account 1310 held
+- A payroll account fits its line, since `0919`, for every writer.
+  `payroll_settings` may name an account for each of payroll's five
+  expense lines and six payable lines; each is now an active account of
+  its line's kind -- expense or liability -- that is not a heading,
+  asked when it is set or changed. Until then EPF owed could be the
+  bank and net salaries owed a revenue account, and a payroll posted
+  there. Unset still means the chart's numbered account
 - ~~E-mail delivery of anything.~~ Built and deployed: documents send
   through Resend, overdue invoices are chased on a schedule, and every
   send is logged per document. What is left is not code — a provider

@@ -5170,6 +5170,44 @@ page and renumbering would quietly break the reference.
     hashes `a52d211a` and its trigger on `stock_movements` `bbefe8f4`,
     all four as here. Production still has no hidden item holding
     stock. The same run counted `6767 Dart tests ran (floor 6767)`.
+187. ~~Payroll settings could name any account for any line.~~ **Raised
+    and answered 22 November** ("Each account must fit its line").
+    `post_payroll_run` posts eleven lines to accounts `payroll_settings`
+    may name -- five expenses, six payables -- and
+    `app.payroll_gl_line` takes each as given, falling back to a
+    numbered account only where none is named. Whoever may run payroll
+    may write the settings, and nothing asked what kind of account each
+    was. Measured locally as the owner with `authenticated`: EPF
+    payable and salary expense set to the bank (1120), net salaries
+    payable to sales (4100), PCB payable to a heading -- all accepted;
+    a payroll of RM5,000 then posted 1120 +3,800 and 4100 -4,415, with
+    no salary expense and no EPF owed. The app has no screen for these
+    columns. Production: no `payroll_settings` row at all. `0919` adds
+    `app.a_payroll_account_fits_its_line`, a SECURITY DEFINER trigger
+    for every writer on insert or a change of any of the eleven
+    columns: an expense line's account is an active, non-heading
+    expense account and a payable line's an active, non-heading
+    liability account. Asked only when an account is set or changed,
+    so a row that already names one is still saved whole; unset still
+    means the numbered account. Another company's account is looked up
+    by nobody and left to each column's composite foreign key, so its
+    name is in no refusal. New `a_payroll_account_fits_its_line.sql`
+    (30 assertions, failing before the migration); swept 22 / 22 with
+    a control. The date runs earned their keep: the first draft compared
+    the whole payroll journal, which moves with the month -- PCB spreads
+    a year's tax over the months left in it, so the same RM5,000 carries
+    none in November and some from January to March -- and six of the
+    eight dates went red until the assertion was narrowed to the
+    accounts under test. **Measured next, and to be raised
+    separately:** the rule is asked of the settings, not of the account
+    afterwards. `retire_account` closed 2155 while the settings named
+    it (it looks at a balance, accounts under it, an active bank
+    account's ledger account and the accounts posted to by number --
+    not at what names an account), and a direct update turned 6105
+    from an expense account into an asset; the payroll then posted
+    1,200 to the closed account and 5,000 to the asset. Whole suite
+    500 files / 18722, no existing test or seeder naming a payroll
+    account; the eight default dates green. **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

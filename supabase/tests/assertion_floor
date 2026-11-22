@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18692
+18722
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2262,3 +2262,18 @@
 # sold out, the item is switched off; one switched back on takes stock
 # again; the database's owner does not hide an item with stock, nor
 # write stock into a hidden one; a movement of no units passes).
+#
+# 18692 -> 18722, 22 November: 0919's a_payroll_account_fits_its_line.sql
+# (30: settings first written do not name the bank for EPF owed; each of
+# the five expense lines is not kept in a liability account and each of
+# the six payable lines not in an expense account, by its own name; the
+# salary expense is not the bank, net salaries owed are not sales, zakat
+# owed is not share capital; PCB owed is not a heading, nor a line a
+# retired account of its own kind; another company's account is the
+# tenant key's to refuse whatever its kind, as is one that does not
+# exist; after all of it the company names no account; an account that
+# fits is taken and a payroll of 5,000 posts to it, the lines with no
+# account named still going to their numbered ones; settings are still
+# saved whole; settings that named the bank before the rule are still
+# saved whole, are not given the bank afresh, and are put right by an
+# account that fits or by none; the database's owner is refused too).
