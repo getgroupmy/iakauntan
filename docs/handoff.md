@@ -5335,6 +5335,44 @@ page and renumbering would quietly break the reference.
     deploy jobs present): `retire_account` hashes `b7eecb14`, as
     here; production still has three closed accounts. The same run
     counted `6767 Dart tests ran (floor 6767)`.
+190. ~~An account could be closed while a draft still named it.~~
+    **Raised and answered 23 November** ("Close both doors"; this is
+    the first, `0923` the second). A line's account is fixed when the
+    line is written and read when the document posts, and
+    `retire_account` asked nothing of what was written and not yet
+    posted. Measured locally as the owner with `authenticated` -- each
+    account closed, then posted into: a draft invoice's line (RM100),
+    a draft bill's (RM60), a draft expense's own account (RM40), one
+    line of an expense split in two (RM70), a draft stock adjustment's
+    own account (RM100), and a sales order's and a purchase order's
+    lines, which `transfer_document` carried into an invoice and a
+    bill that posted RM200 and RM60 there. An order does not post
+    (`Document type sales_order does not post to the ledger`) and
+    stays a draft; what marks it done is `fulfilment_status`.
+    Production: two documents not yet posted, one line of them naming
+    an account, no expense waiting and no stock adjustment naming an
+    account; nothing of the kind names a closed one. `0922` restates
+    `retire_account` (from `0921`'s text, by `pg_get_functiondef`,
+    only the lines marked 0922 added): it also refuses while a sales
+    or purchase document that is a draft, pending or approved names
+    the account on a line -- one that posts until it does ("unposted
+    invoice INV-1"), one that only carries its lines on until
+    `fulfilment_status` says all of it has been carried or it is
+    cancelled ("open sales order SO-1") -- an expense by its own
+    account or a line of its split, and a stock adjustment. Removed,
+    voided and rejected ones are not counted. New
+    `an_account_a_draft_still_names_is_not_closed.sql` (27
+    assertions, failing before the migration); swept 24 / 24 with a
+    control, both sides of the document rule separately.
+    **Not covered, and why:** a goods received note or delivery order
+    that has already posted carries its lines' accounts on to the bill
+    or invoice the same way and is not asked -- one that is never
+    billed would hold its account open for good; and a landed cost
+    run's charges were not measured.
+    Whole suite 503 files / 18826, with no existing test closing an
+    account a draft still names; the eight default dates green on
+    this file and on `0921`'s.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

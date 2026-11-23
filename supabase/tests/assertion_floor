@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18799
+18826
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2315,3 +2315,17 @@
 # and one a claim type still names is still held; revenue taken back
 # in full holds nothing open; a year is released in twelve entries, the
 # account is then kept for its balance, and journalled on it is closed).
+#
+# 18799 -> 18826, 23 November: 0922's
+# an_account_a_draft_still_names_is_not_closed.sql (27: an account on a
+# draft invoice's line is not closed, nor a draft bill's, a sales
+# order's or a purchase order's still to be carried on, a draft
+# expense's, either line of an expense split in two, nor a draft stock
+# adjustment's; nor one on an invoice waiting for approval, a bill
+# approved, or an invoice or a bill whose goods have all moved; nothing
+# was closed; an account only a voided or removed invoice, an order all
+# carried on or cancelled on either side, a rejected or removed bill, a
+# voided or removed expense, or a voided stock adjustment names is
+# closed; moved off the invoice's line, the account is closed; an order
+# carried on hands its account to the invoice it became; a bill once
+# posted keeps its account by the balance it left).

@@ -2225,6 +2225,13 @@ Stated plainly so nothing here is mistaken for finished:
   landing in an account closed under them. Not asked, because no
   posting reads them: an item's cost of sales account, a tax code's
   two accounts and a salary component's
+- An account a draft still names is not closed, since `0922`. A
+  line's account is fixed when the line is written and read when the
+  document posts, so `retire_account` also refuses an account that a
+  sales or purchase document not yet posted, an expense or its split,
+  or a stock adjustment still names, and says which. An order counts
+  until its lines have all been carried on into the invoice or bill;
+  one voided, rejected, cancelled or removed does not
 - ~~E-mail delivery of anything.~~ Built and deployed: documents send
   through Resend, overdue invoices are chased on a schedule, and every
   send is logged per document. What is left is not code — a provider
