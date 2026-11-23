@@ -5330,8 +5330,11 @@ page and renumbering would quietly break the reference.
     `bank_lines_unexplained`, and none of them posts.
     Whole suite 502 files / 18799, with no existing test closing an
     account that something still names; the eight default dates
-    green.
-    **Still to read back.**
+    green. **Applied, and read back** (23 November, read-only, after
+    run 45100073224 on `cae6b8d` had applied the migrations, its three
+    deploy jobs present): `retire_account` hashes `b7eecb14`, as
+    here; production still has three closed accounts. The same run
+    counted `6767 Dart tests ran (floor 6767)`.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
