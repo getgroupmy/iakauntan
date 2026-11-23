@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18749
+18799
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2295,3 +2295,23 @@
 # account_balance_is_the_ledgers.sql (3), whose control was a client's
 # direct insert of a plain account: it is now asserted refused by 0920
 # and not by the guard under test, and made through upsert_account.
+#
+# 18749 -> 18799, 23 November: 0921's
+# an_account_still_named_is_not_closed.sql (50: a customer's receivable
+# account is not closed, nor a supplier's payable account, an item's
+# sales or purchase account, a claim type's expense account, a fixed
+# asset's three accounts, the asset account of one fully depreciated
+# and still owned, a payment method's charge account, either side of a
+# recurring journal, a line of a recurring invoice, nor the account
+# deferred revenue is still to be released into, on either of two
+# invoices; an account named by each of the eleven payroll lines in
+# turn is not closed; seven customers on one account are named five and
+# counted two; nothing was closed; an account only a removed contact,
+# supplier, item or payment method, a disposed asset, an asset removed
+# from the register, or a recurring journal or invoice switched off or
+# past its end names is closed, as is an item's cost of sales account,
+# a tax code's, a salary component's and one nothing names; unnamed, a
+# customer's, an item's and the payroll settings' accounts are closed,
+# and one a claim type still names is still held; revenue taken back
+# in full holds nothing open; a year is released in twelve entries, the
+# account is then kept for its balance, and journalled on it is closed).

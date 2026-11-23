@@ -5272,6 +5272,66 @@ page and renumbering would quietly break the reference.
     `app.the_chart_is_shaped_by_upsert_account` hashes `bf281217`, is
     not a definer, and its trigger on `accounts` hashes `b3991786`, as
     here. The same run counted `6767 Dart tests ran (floor 6767)`.
+189. ~~An account could be closed while a setting still named it.~~
+    **Raised and answered 23 November** ("Refuse closing while
+    named"), the second road of 187. `retire_account` refused a
+    posting code, accounts under it, a balance and an active bank
+    account's ledger account (`0828`), and did not look at the
+    settings that name an account for postings still to come.
+    Measured locally as the owner with `authenticated` -- each closed,
+    and then posted into: 2155 named by payroll settings as EPF
+    payable (a payroll, RM1,200); a customer's receivable account (an
+    invoice, RM100); a supplier's payable account (a bill, RM100); an
+    item's sales account (RM100); a claim type's expense account (a
+    claim, RM50, through its approval chain); a fixed asset's
+    depreciation expense and accumulated depreciation (a run, RM800
+    each) and its asset account (a disposal crediting RM12,000). An
+    item's purchase account is read the same way. **The answer was to
+    measure each table before covering it, and the list changed both
+    ways.** Three settings the question named dropped out, because no
+    posting reads them: an item's `cogs_account_id` (the sales posting
+    selects it and posts cost to 5200 by number), a tax code's
+    `sales_tax_account_id` and `purchase_tax_account_id` (tax goes to
+    2130 and 1410 by number), and a salary component's `account_id`
+    (a RM200 allowance naming 6107 posted to 6100 with the rest of
+    the pay). No screen writes any of the three, and in production
+    every one that is set names exactly the account the posting uses
+    anyway -- four items on 5200, 144 tax codes on 2130, 108 on 1410,
+    no component -- so nothing is mis-posted today; a company that
+    set one to something else would be ignored without being told.
+    **That is recorded, not fixed.** And four the question did not
+    name were found by looking for every column and template that
+    carries an account, and measured the same way: a recurring
+    journal (its month's RM100 into the closed account), a recurring
+    invoice (raised and posted, RM300), a revenue schedule
+    (`recognise_revenue` released a year's RM1,200) and a payment
+    method's charge account (`app.bank_charge_account`, which every
+    charge posting asks, went on answering with the closed account).
+    All four are covered. Production: three closed accounts, and no
+    live row names one. `0921` restates `retire_account` from
+    `pg_get_functiondef` with only the lines marked 0921 added: it
+    refuses while any of those nine still names the account, and says
+    which -- the first five, by kind and then by name, "and N more"
+    past that. What is no longer in use is not counted: a contact,
+    item or payment method that has been removed; an asset disposed
+    of, written off or removed from the register (a fully depreciated
+    one still counts, its disposal being yet to post); a recurring
+    journal or document switched off, or a journal past its end, as
+    the runs themselves choose; revenue already recognised or taken
+    back in full, as `recognise_revenue` chooses. New
+    `an_account_still_named_is_not_closed.sql` (50 assertions,
+    failing before the migration); swept 45 / 45 with a control.
+    **Not changed:** the platform console's own close
+    (`platform_close_account`) asks none of `retire_account`'s
+    questions; a draft document's line may still name an account
+    that is then closed; and a bank rule's account is not asked --
+    by reading, not by measuring, the only functions that mention
+    `bank_rules` are `suggest_bank_coding`, `bank_rule_coverage` and
+    `bank_lines_unexplained`, and none of them posts.
+    Whole suite 502 files / 18799, with no existing test closing an
+    account that something still names; the eight default dates
+    green.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

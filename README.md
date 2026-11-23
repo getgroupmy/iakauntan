@@ -2215,6 +2215,16 @@ Stated plainly so nothing here is mistaken for finished:
   one update. Its name, description and tax treatment are written as
   before; the functions and the importers pass. `0829` did the same
   for closing an account
+- An account still named is not closed, since `0921`. `retire_account`
+  refuses an account that payroll settings, a contact, an item, a
+  claim type, a fixed asset, a payment method, a recurring journal or
+  document, or revenue still to recognise names for a posting, and
+  says which: those are read every time something posts through them,
+  and a payroll, an invoice, a claim, a month's depreciation, a
+  recurring journal and a year of deferred revenue were each measured
+  landing in an account closed under them. Not asked, because no
+  posting reads them: an item's cost of sales account, a tax code's
+  two accounts and a salary component's
 - ~~E-mail delivery of anything.~~ Built and deployed: documents send
   through Resend, overdue invoices are chased on a schedule, and every
   send is logged per document. What is left is not code — a provider
