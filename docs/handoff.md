@@ -5266,8 +5266,12 @@ page and renumbering would quietly break the reference.
     a document line names an account before it posts. Whole suite 501
     files / 18749; `check_write_doors.py` still passes with its entry
     for `accounts` unchanged; the eight default dates green on all
-    four files.
-    **Still to read back.**
+    four files. **Applied, and read back** (23 November, read-only,
+    after run 45097259246 on `184a0ab` had applied the migrations, its
+    three deploy jobs present):
+    `app.the_chart_is_shaped_by_upsert_account` hashes `bf281217`, is
+    not a definer, and its trigger on `accounts` hashes `b3991786`, as
+    here. The same run counted `6767 Dart tests ran (floor 6767)`.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
