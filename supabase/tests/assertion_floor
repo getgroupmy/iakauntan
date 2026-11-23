@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18826
+18859
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2329,3 +2329,21 @@
 # closed; moved off the invoice's line, the account is closed; an order
 # carried on hands its account to the invoice it became; a bill once
 # posted keeps its account by the balance it left).
+#
+# 18826 -> 18859, 23 November: 0923's
+# a_closed_account_takes_no_new_name.sql (33: a new item does not take a
+# closed account for its sales or its purchases, nor is one already
+# there given one, nor one only ever switched off; a new invoice line,
+# a line already there and a new bill line do not name one; nor a new
+# expense, one already there, or a split; nor a claim type new or
+# there, a payment method's charge, each of a fixed asset's three, a
+# stock adjustment; nor a recurring journal new, rewritten, switched
+# back on or naming a dormant account, nor a new recurring document;
+# another company's closed account is the tenant key's on a column and
+# is not described in a template; nothing new names a closed account;
+# an item already naming one is still saved whole, as is a recurring
+# journal switched off, with its template unchanged or its amounts
+# rewritten; an order's line is carried into its invoice with its
+# account, but a line citing it may not name a different closed one; an
+# open account is taken by each as before; the database's owner is
+# refused too, on a column and on a template).

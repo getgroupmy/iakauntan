@@ -5377,6 +5377,61 @@ page and renumbering would quietly break the reference.
     `retire_account` hashes `fcf585be`, as here; production still has
     three closed accounts. The same run counted
     `6767 Dart tests ran (floor 6767)`.
+191. ~~An account already closed could still be named.~~ **Raised and
+    answered 23 November** ("Close both doors"; this is the second,
+    `0922` the first). A contact (`0912`), payroll settings (`0919`)
+    and a manual journal refused a closed account; nothing else asked.
+    Measured locally as the owner with `authenticated`, each against
+    an account closed beforehand with `retire_account`, every one
+    accepted: an item, new or existing, as its sales or purchase
+    account; a new invoice line and a new bill line; a draft expense,
+    and `set_expense_split` for a line of a split; a claim type, new
+    or existing; `save_payment_method` as the charge account; a fixed
+    asset as each of its three; a draft stock adjustment; a recurring
+    journal and a recurring document as a line of the template. The
+    app's pickers list only open accounts, so each needs a direct
+    write or a function handed an id. Production: three closed
+    accounts, nothing of these kinds naming one. `0923` adds two
+    SECURITY DEFINER trigger functions, both for every writer:
+    `app.a_closed_account_takes_no_new_name`, attached to nine tables
+    with its columns and their names as arguments, refuses a closed
+    account (`deleted_at` set or `is_active` off) where one of those
+    columns is set or changed; and
+    `app.a_recurring_template_names_no_closed_account`, on the two
+    recurring tables, refuses a template that newly names one, and
+    one switched back on while naming one -- a journal switched off
+    is not held open by `0921`, so an account it names may have
+    closed since. **Let through on purpose:** a row that already
+    names a closed account is still saved whole; a line carried on
+    from its `source_line_id` keeps that line's account (so
+    `transfer_document` still raises the bill for a goods received
+    note `0922` does not ask), and is refused only if it names a
+    different closed one; and another company's account is looked up
+    by neither function -- on a column the tenant key refuses it, in a
+    template nothing here does, and measured, the run then posts
+    nothing and keeps `gl_lines`' own tenant key refusal in
+    `last_error`. New `a_closed_account_takes_no_new_name.sql` (33
+    assertions, failing before the migration); swept 20 / 20 with a
+    control in each function. Every one of the 503 files already in
+    the list was run against it one by one before the suite and none
+    was disturbed. **Not in this:** a contact, item or payment method
+    removed and restored is not asked again; the three settings no
+    posting reads (`0921`); a landed cost run's charges. **Found
+    while measuring, raised and answered the same day, still to
+    build:** (a) `0912`'s refusal looks an account up by id alone, so
+    given another company's account of the wrong kind it describes it
+    -- "An item's sales account may not be 1120 Bank Accounts, a bank
+    account" was that company's 1120. Answered "Look up own accounts
+    only"; that is `0925`. (b) `credit_sales_invoice` writes the
+    note's lines with no account, so a credit does not go back where
+    the sale was booked: an invoice of RM100 on a line naming 4150,
+    credited in full, left 4150 -100 and 4100 +100.
+    `credit_purchase_bill` carries the account and is right.
+    Production has no sales credit note; five posted invoice lines in
+    four companies name 4840 and would be credited to 4100. Answered
+    "Carry the line's account"; that is `0924`.
+    Whole suite 504 files / 18859; the eight default dates green.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

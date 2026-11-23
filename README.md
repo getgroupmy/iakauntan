@@ -2232,6 +2232,14 @@ Stated plainly so nothing here is mistaken for finished:
   or a stock adjustment still names, and says which. An order counts
   until its lines have all been carried on into the invoice or bill;
   one voided, rejected, cancelled or removed does not
+- A closed account takes no new name, since `0923`, for every writer.
+  An item, a document line, an expense or its split, a claim type, a
+  payment method, a fixed asset, a stock adjustment and a recurring
+  journal or document each refuse an account that is closed already,
+  asked when the account is set or changed -- the other door to
+  `0921` and `0922`. A line carried on from the line it came from
+  keeps that line's account, so a document already in train can still
+  be finished
 - ~~E-mail delivery of anything.~~ Built and deployed: documents send
   through Resend, overdue invoices are chased on a schedule, and every
   send is logged per document. What is left is not code — a provider
