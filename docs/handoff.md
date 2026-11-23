@@ -5475,6 +5475,34 @@ page and renumbering would quietly break the reference.
     Whole suite 505 files / 18871; the eight default dates green on
     this file and on `0923`'s.
     **Still to read back.**
+193. ~~`0912`'s refusal described another company's account.~~
+    **Raised and answered 23 November** ("Look up own accounts
+    only"), found while measuring `0923`. `0912`'s trigger says what
+    it found -- "An item's sales account may not be 1120 Bank
+    Accounts, a bank account" -- and looked the account up by id alone.
+    Given the id of another company's account of the wrong kind, it
+    named that company's account. Measured locally as the owner of two
+    companies with `authenticated`: an item and a contact in one, given
+    the other's 1120, were refused with its number and name in the
+    message. The write never succeeds -- each column's tenant key
+    refuses it anyway -- and the id has to be known first; but the
+    refusal told one company something of another's chart. The test
+    renames the other company's accounts ("Bank Mereka"), so a
+    refusal that read them cannot pass for one that read the writer's
+    own. An account that does not exist was "described" too, as nothing.
+    `0925` restates `app.an_account_fits_where_it_is_used` from `0912`
+    with only the lines marked 0925 changed: it reads an account only
+    where it belongs to the row's own company, and leaves the rest to
+    the tenant key. `0919` and `0923` were written that way from the
+    start. New `an_account_is_described_only_to_its_own_company.sql`
+    (11 assertions, failing before the migration); 3 / 3 new mutants
+    killed, and `0912`'s own fourteen re-run against the restated text
+    with `0912`'s test, all killed, a control surviving in each sweep.
+    `an_account_fits_where_it_is_used.sql`, `ledger.sql` and
+    `statutory_charges.sql`, which exercise the rule, are unchanged.
+    Whole suite 506 files / 18882; the eight default dates green on
+    this file and on `0912`'s.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

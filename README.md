@@ -2248,6 +2248,12 @@ Stated plainly so nothing here is mistaken for finished:
   did. On both, a line whose account has been closed since names none
   and posts as a line without one does -- `0923` would otherwise
   refuse the whole credit
+- An account is described only to its own company, since `0925`.
+  `0912`'s refusal says what kind of account it found, and looked the
+  account up by id alone: given another company's account of the wrong
+  kind, it named that company's account in the message. It now reads
+  only the row's own company's accounts and leaves the rest to the
+  tenant key, which names none, as `0919` and `0923` already did
 - ~~E-mail delivery of anything.~~ Built and deployed: documents send
   through Resend, overdue invoices are chased on a schedule, and every
   send is logged per document. What is left is not code — a provider

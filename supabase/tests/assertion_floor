@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18871
+18882
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2361,3 +2361,15 @@
 # line's account and puts the expense and the payable back; a bill
 # whose account has closed is still credited, its line naming none, the
 # credit landing in Purchases).
+#
+# 18871 -> 18882, 23 November: 0925's
+# an_account_is_described_only_to_its_own_company.sql (11: an item
+# given another company's bank account is told nothing of it, nor a
+# customer given it as its receivable account, a supplier given another
+# company's receivables as its payable account, an invoice line put on
+# another company's heading, or a bill line on its receivables -- each
+# refused by the tenant key naming no account; another company's sales
+# account refused the same way as it always was; an account that does
+# not exist is the foreign key's, not a sentence about nothing; the
+# company's own bank account on an item and on a customer, and its own
+# heading on an invoice line, are still described; nothing was named).
