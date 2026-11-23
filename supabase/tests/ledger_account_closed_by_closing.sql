@@ -113,8 +113,18 @@ begin
   perform pg_temp.check_eq('the chart still sets an account''s tax treatment and name',
     (select tax_treatment || '/' || name from public.accounts where id = d.spare),
     'entertainment/Ganti nama');
-  insert into public.accounts (org_id, code, name, account_type, account_subtype)
-  values (d.org, '6194', 'Baharu', 'expense', 'operating_expense');
+  -- An open account by direct insert was the control here until `0920`,
+  -- which refuses a client's direct insert of any account. The control
+  -- is now that the refusal is that rule's and not this guard's -- one
+  -- that refused every insert would say "A new account is open" first,
+  -- the triggers firing in name order -- and that `upsert_account`
+  -- still opens one.
+  perform pg_temp.check_refused('an open account by direct insert is refused by 0920, not by this guard',
+    format($q$insert into public.accounts (org_id, code, name, account_type, account_subtype)
+              values (%L, '6194', 'Baharu', 'expense', 'operating_expense')$q$, d.org),
+    'An account is opened with upsert_account%', '42501');
+  perform public.upsert_account('6194', 'Baharu', 'expense', 'operating_expense',
+    p_org_id => d.org);
   perform pg_temp.check_true('and an open account is still made',
     (select is_active and deleted_at is null from public.accounts
       where org_id = d.org and code = '6194'));

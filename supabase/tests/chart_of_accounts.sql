@@ -472,10 +472,21 @@ begin
   perform pg_temp.check_eq('an ordinary edit still goes through',
     (select name from public.accounts where id = v_id), 'Kas Kecil');
 
+  -- A direct insert of a plain account was the control here until
+  -- `0920`, which refuses a client's direct insert of any account. So
+  -- the control is now two things: that refusal is `0920`'s and not
+  -- this guard's -- a guard that refused every insert would answer
+  -- with its own sentence first, the triggers firing in name order --
+  -- and `upsert_account` still opens one.
   set local role authenticated;
-  insert into public.accounts
-    (org_id, code, name, account_type, account_subtype)
-  values (v_org, '1098', 'Kas Baru', 'asset', 'current_asset');
+  perform pg_temp.check_refused(
+    'a plain account by direct insert is refused by 0920, not by this guard',
+    format($q$insert into public.accounts
+              (org_id, code, name, account_type, account_subtype)
+              values (%L, '1098', 'Kas Baru', 'asset', 'current_asset')$q$, v_org),
+    'An account is opened with upsert_account%', '42501');
+  perform public.upsert_account('1098', 'Kas Baru', 'asset', 'current_asset',
+                                p_org_id => v_org);
   reset role;
   perform pg_temp.check_true('and an account can still be created',
     exists (select 1 from public.accounts

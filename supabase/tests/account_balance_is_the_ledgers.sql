@@ -62,9 +62,19 @@ begin
   -- the balance moved by posting. Read through `account_balances`: since
   -- `0856` no client reads the column itself, and the owner reads the
   -- ledger.
+  --
+  -- The account is made through `upsert_account`: since `0920` a
+  -- client's direct insert opens none. That refusal is `0920`'s and
+  -- not this guard's -- one that refused every insert would say "A new
+  -- account starts with nothing on it" first, the triggers firing in
+  -- name order.
   update public.accounts set name = 'Maybank operating' where id = d.cash;
-  insert into public.accounts (org_id, code, name, account_type, account_subtype)
-  values (d.org, '1998', 'Petty cash, front desk', 'asset', 'cash');
+  perform pg_temp.check_refused('an account with nothing on it, by direct insert, is refused by 0920 and not by this guard',
+    format($q$insert into public.accounts (org_id, code, name, account_type, account_subtype)
+              values (%L, '1998', 'Petty cash, front desk', 'asset', 'cash')$q$, d.org),
+    'An account is opened with upsert_account%', '42501');
+  perform public.upsert_account('1998', 'Petty cash, front desk', 'asset', 'cash',
+                                p_org_id => d.org);
   perform pg_temp.check_eq('an account is still renamed, and made with nothing on it',
     (select name from public.accounts where id = d.cash) || ' / ' ||
     (select b.current_balance::text from public.account_balances(d.org) b

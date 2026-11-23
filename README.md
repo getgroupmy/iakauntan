@@ -2207,6 +2207,14 @@ Stated plainly so nothing here is mistaken for finished:
   asked when it is set or changed. Until then EPF owed could be the
   bank and net salaries owed a revenue account, and a payroll posted
   there. Unset still means the chart's numbered account
+- The chart is shaped by `upsert_account`, since `0920`. A client's own
+  statement no longer inserts an account, or changes one's number,
+  kind, subtype, heading flag or parent: `upsert_account` holds the
+  rules for all of those, and a direct write by the same person stepped
+  round every one -- an account holding revenue became a liability by
+  one update. Its name, description and tax treatment are written as
+  before; the functions and the importers pass. `0829` did the same
+  for closing an account
 - ~~E-mail delivery of anything.~~ Built and deployed: documents send
   through Resend, overdue invoices are chased on a schedule, and every
   send is logged per document. What is left is not code — a provider

@@ -5214,6 +5214,60 @@ page and renumbering would quietly break the reference.
     trigger on `payroll_settings` `9992b54e`, as here. Production
     still has no `payroll_settings` row. The same run counted
     `6767 Dart tests ran (floor 6767)`.
+188. ~~Every rule in `upsert_account` could be stepped round by a direct
+    write.~~ **Raised and answered 23 November** ("Refuse the direct
+    write"). `upsert_account` is what the chart screen calls and holds
+    the chart's rules; `0459`'s policies let anybody who may post
+    insert an account and update any column of one. `0829` closed
+    that door for closing an account, and item 96 said so; the rest of
+    the row was still open. Measured locally as the owner with
+    `authenticated`, each beside `upsert_account` refusing the same:
+    one update renumbered 4100 Sales; one turned 4150, holding RM100
+    of revenue, into a liability (profit and loss nothing, balance
+    sheet a RM100 liability); one made it a heading and it left the
+    trial balance; one gave Rental the subtype `sales`; one filed it
+    under a non-heading, one under itself; one made the heading 4000
+    postable with accounts under it; and a direct insert opened an
+    asset with the subtype `sales`, an account under a non-heading and
+    one with no number. The app writes only `tax_treatment` directly.
+    Production: 1,566 accounts in eighteen companies, no heading with
+    postings, no kind at odds with its subtype, no own-parent or
+    numberless account; twelve accounts sit under a parent that is not
+    a heading (1120, 1150, 1200, 1300, 2300, 5100), which
+    `upsert_account` leaves alone and so does this. `0920` adds
+    `app.the_chart_is_shaped_by_upsert_account`, a trigger that is NOT
+    security definer and asks only a client (`authenticated`, `anon`):
+    its own insert is refused, and so is its own change of `code`,
+    `account_type`, `account_subtype`, `is_group` or `parent_id`, the
+    refusal naming what moved. Name, description and tax treatment are
+    written as before, and a row saved whole with the five sent back
+    unchanged passes. Every function that writes the chart is a
+    definer (checked: `upsert_account`, `add_sub_account`,
+    `upsert_bank_account`, `setup_legal_module`, `retire_account`, the
+    console's pair, the seeders and the `app.*_account` helpers that
+    open an account on demand) and passes. New
+    `the_chart_is_shaped_by_upsert_account.sql` (24 assertions,
+    failing before the migration); swept 14 / 14 with a control.
+    **Three existing tests changed, on purpose:**
+    `chart_of_accounts.sql`, `ledger_account_closed_by_closing.sql`
+    and `account_balance_is_the_ledgers.sql` each used a client's
+    direct insert of a plain account as the control for an older
+    guard on the same table. Each now asserts that insert refused by
+    `0920` and not by the guard under test -- the triggers fire in
+    name order, so a guard that refused every insert would answer
+    first with its own sentence -- and makes the account through
+    `upsert_account`. The every-insert mutant of each older guard was
+    re-run against its changed control and is killed. **Measured and
+    not in this:** `is_system`, `currency`, `sort_order` and
+    `tax_code_id` are still written directly, the last of them to
+    another company's tax code -- there is no tenant key on that
+    column, and by a search of the migrations and the app's `Account`
+    model nothing that posts reads it. Drafts are not in this either:
+    a document line names an account before it posts. Whole suite 501
+    files / 18749; `check_write_doors.py` still passes with its entry
+    for `accounts` unchanged; the eight default dates green on all
+    four files.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

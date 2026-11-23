@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18722
+18749
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2277,3 +2277,21 @@
 # saved whole; settings that named the bank before the rule are still
 # saved whole, are not given the bank afresh, and are put right by an
 # account that fits or by none; the database's owner is refused too).
+#
+# 18722 -> 18749, 23 November: 0920's
+# the_chart_is_shaped_by_upsert_account.sql (24: upsert_account opens an
+# account and still refuses a change of kind under postings; a direct
+# insert opens none; a direct update does not renumber 4100, turn
+# revenue into a liability, change the kind or the subtype alone, make
+# an account with postings a heading or a heading with accounts under
+# it postable, or file an account under a non-heading, itself or
+# nothing, and all five are named together; the four accounts are
+# shaped as they were and the RM100 is still revenue; the tax treatment,
+# a name and a description, and a row saved whole are still written;
+# upsert_account renumbers, changes a subtype and makes a heading,
+# add_sub_account and upsert_bank_account open accounts; the database's
+# owner renumbers directly) -- and one more in each of
+# chart_of_accounts.sql, ledger_account_closed_by_closing.sql and
+# account_balance_is_the_ledgers.sql (3), whose control was a client's
+# direct insert of a plain account: it is now asserted refused by 0920
+# and not by the guard under test, and made through upsert_account.
