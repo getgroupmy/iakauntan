@@ -5441,7 +5441,8 @@ page and renumbering would quietly break the reference.
     Android app" alone, before any of this project's code ran:
     `actions/setup-java` hit GitHub's API rate limit for the runner's
     address while resolving a Java version. The failed job was
-    re-run.
+    re-run; the second attempt hit the same limit from another
+    address, and the third got its JDK first time and went green.
 192. ~~A sales credit note did not go back to the account the sale was
     booked to.~~ **Raised and answered 23 November** ("Carry the
     line's account"). `credit_sales_invoice` -- the door that credits
@@ -5473,8 +5474,13 @@ page and renumbering would quietly break the reference.
     control in each function. The seven existing files that credit an
     invoice or a bill were run against it and none moved.
     Whole suite 505 files / 18871; the eight default dates green on
-    this file and on `0923`'s.
-    **Still to read back.**
+    this file and on `0923`'s. **Applied, and read back** (23
+    November, read-only, after run 45130245952 on `19178d7` had
+    applied the migrations, its three deploy jobs present):
+    `credit_sales_invoice` hashes `0b499588` and `credit_purchase_bill`
+    `a8c753ba`, as here. The same run counted
+    `6767 Dart tests ran (floor 6767)`, and its Android build got its
+    JDK first time.
 193. ~~`0912`'s refusal described another company's account.~~
     **Raised and answered 23 November** ("Look up own accounts
     only"), found while measuring `0923`. `0912`'s trigger says what
