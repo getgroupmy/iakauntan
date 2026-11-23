@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18859
+18871
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2347,3 +2347,17 @@
 # account, but a line citing it may not name a different closed one; an
 # open account is taken by each as before; the database's owner is
 # refused too, on a column and on a template).
+#
+# 18859 -> 18871, 23 November: 0924's
+# a_credit_note_goes_back_where_the_sale_was_booked.sql (12: an invoice
+# books one line to the account it names and one to Sales; its credit
+# note names the same account on the same line and none on the other,
+# and credited in full every account is back where it started; one of
+# four credited takes a quarter out of the account and none out of
+# Sales; an account emptied by journal is closed though a posted
+# invoice named it, its credit note is still made naming none, and the
+# credit lands in Sales; a sale on an account since switched off is
+# credited the same way; a bill's credit note still names the bill
+# line's account and puts the expense and the payable back; a bill
+# whose account has closed is still credited, its line naming none, the
+# credit landing in Purchases).

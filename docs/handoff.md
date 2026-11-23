@@ -5442,6 +5442,39 @@ page and renumbering would quietly break the reference.
     `actions/setup-java` hit GitHub's API rate limit for the runner's
     address while resolving a Java version. The failed job was
     re-run.
+192. ~~A sales credit note did not go back to the account the sale was
+    booked to.~~ **Raised and answered 23 November** ("Carry the
+    line's account"). `credit_sales_invoice` -- the door that credits
+    an invoice -- wrote its credit lines with no account, so the
+    credit posted to the item's or the default sales account whatever
+    the invoice's line had named. Measured locally as the owner with
+    `authenticated`: an invoice of RM100 on a line naming 4150,
+    credited in full, left 4150 -100 and 4100 +100.
+    `credit_purchase_bill` carries the bill line's account and was
+    right. Production: no sales credit note yet; of 198 posted invoice
+    lines 171 name 4100, 22 none, and five in four companies 4840.
+    `0924` restates both functions from `pg_get_functiondef`, only the
+    lines marked 0924 changed: the sales door now carries each line's
+    account. **And it mends something `0923` did to both doors.** A
+    line may no longer name a closed account, so a credit for a
+    document whose line's account had closed since it posted was
+    refused outright -- measured on the purchase side between the two
+    migrations: a bill of RM60 on 6291, journalled on, the account
+    closed, and the credit refused with "choose one that is open",
+    which the credit door gives nobody the chance to do. That stood in
+    production from the moment `0923` applied until this did, with no
+    credit note and no closed account that a posted line names. Both
+    doors now leave such a line with no account of its own, and it
+    posts as any line without one does -- to Sales, or to Purchases.
+    That is the old wrong answer kept for the one case where the right
+    one is not available: the account the sale went to takes no more
+    postings. New `a_credit_note_goes_back_where_the_sale_was_booked.sql`
+    (12 assertions, failing before the migration); swept 5 / 5 with a
+    control in each function. The seven existing files that credit an
+    invoice or a bill were run against it and none moved.
+    Whole suite 505 files / 18871; the eight default dates green on
+    this file and on `0923`'s.
+    **Still to read back.**
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

@@ -2240,6 +2240,14 @@ Stated plainly so nothing here is mistaken for finished:
   `0921` and `0922`. A line carried on from the line it came from
   keeps that line's account, so a document already in train can still
   be finished
+- A credit note goes back where the sale was booked, since `0924`.
+  `credit_sales_invoice` wrote its credit lines with no account, so a
+  credit posted to Sales whatever the invoice's line had named: an
+  invoice on 4150 credited in full left 4150 -100 and 4100 +100. It
+  now carries each line's account, as `credit_purchase_bill` always
+  did. On both, a line whose account has been closed since names none
+  and posts as a line without one does -- `0923` would otherwise
+  refuse the whole credit
 - ~~E-mail delivery of anything.~~ Built and deployed: documents send
   through Resend, overdue invoices are chased on a schedule, and every
   send is logged per document. What is left is not code — a provider
