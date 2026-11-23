@@ -5371,8 +5371,12 @@ page and renumbering would quietly break the reference.
     run's charges were not measured.
     Whole suite 503 files / 18826, with no existing test closing an
     account a draft still names; the eight default dates green on
-    this file and on `0921`'s.
-    **Still to read back.**
+    this file and on `0921`'s. **Applied, and read back** (23
+    November, read-only, after run 45122681154 on `02d9147` had
+    applied the migrations, its three deploy jobs present):
+    `retire_account` hashes `fcf585be`, as here; production still has
+    three closed accounts. The same run counted
+    `6767 Dart tests ran (floor 6767)`.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
