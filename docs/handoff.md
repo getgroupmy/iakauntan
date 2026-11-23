@@ -5431,7 +5431,17 @@ page and renumbering would quietly break the reference.
     four companies name 4840 and would be credited to 4100. Answered
     "Carry the line's account"; that is `0924`.
     Whole suite 504 files / 18859; the eight default dates green.
-    **Still to read back.**
+    **Applied, and read back** (23 November, read-only, after run
+    45125314705 on `12079b5` had applied the migrations, its three
+    deploy jobs present): `app.a_closed_account_takes_no_new_name`
+    hashes `8dcc0f1c` and `app.a_recurring_template_names_no_closed_account`
+    `e72f4914`, both definers, and the eleven triggers hash together
+    to `94117d68`, as here. The same run counted
+    `6767 Dart tests ran (floor 6767)`. It went red on "Build the
+    Android app" alone, before any of this project's code ran:
+    `actions/setup-java` hit GitHub's API rate limit for the runner's
+    address while resolving a Java version. The failed job was
+    re-run.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
