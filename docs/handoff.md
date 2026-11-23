@@ -5507,8 +5507,12 @@ page and renumbering would quietly break the reference.
     `an_account_fits_where_it_is_used.sql`, `ledger.sql` and
     `statutory_charges.sql`, which exercise the rule, are unchanged.
     Whole suite 506 files / 18882; the eight default dates green on
-    this file and on `0912`'s.
-    **Still to read back.**
+    this file and on `0912`'s. **Applied, and read back** (23
+    November, read-only, after run 45160661359 on `bf9fe85` had
+    applied the migrations, its three deploy jobs present):
+    `app.an_account_fits_where_it_is_used` hashes `9898f0f9`, still a
+    definer, as here. The same run counted
+    `6767 Dart tests ran (floor 6767)`.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
