@@ -5513,6 +5513,64 @@ page and renumbering would quietly break the reference.
     `app.an_account_fits_where_it_is_used` hashes `9898f0f9`, still a
     definer, as here. The same run counted
     `6767 Dart tests ran (floor 6767)`.
+194. ~~Ten columns that name a posting's account asked nothing of it.~~
+    **Raised and answered 24 November** ("Every remaining door"),
+    found sweeping every column that names an account for the guards
+    on it. `0912`'s rule -- not a heading, a bank, a till, a
+    receivable or a payable -- covered contacts, items and document
+    lines. An expense and each line of its split, a claim type's
+    expense account, a payment method's charge account, a fixed
+    asset's three accounts, a stock adjustment's account and a landed
+    cost charge's account asked nothing, and `upsert_landed_cost_run`
+    only that a charge's account is the company's and not a heading.
+    Measured locally as the owner with `authenticated`: an expense on
+    receivables posted 1210 100 with no customer; an expense on the
+    bank it was paid from posted 1121 100 and -100, never reaching the
+    profit and loss; a fixed asset depreciating to the bank raised it
+    by 40; a claim type, a payment method and a stock adjustment each
+    took a bank or a receivable; a landed cost charge was credited
+    whatever it named -- bank, receivables, payables, an account closed
+    beforehand, and 1310 itself, which posted 1310 50 and -50 while the
+    stock moved: stock 1,300 against 1,250 in the ledger. Production on
+    24 November: one expense, seven fixed assets, all on the right
+    kinds; no landed cost charge at all. `0926` attaches `0912`'s
+    function to the ten, and `0923`'s closed-account trigger to the
+    landed cost charge it missed; a new definer,
+    `app.the_stock_is_not_its_own_other_side`, refuses the company's
+    1310 as a stock adjustment's or a landed cost charge's account.
+    Both post the stock to 1310 and take the other side from that
+    account, and `0915` keeps every item's stock in 1310, so the
+    question put as "refused at posting" for a stock adjustment is
+    asked when the account is written instead -- the same 1310, asked
+    earlier; no adjustment in production names an account. 1320 Goods
+    in Transit is still a charge's account, and the test posts one:
+    1320 -50, 1310 50, the ledger's stock the stock's own 1,050. Asked
+    when the account is set or changed, so a row already naming one is
+    saved whole -- the test saves an expense and an adjustment whole,
+    the account sent back unchanged in the SET list, as the app does;
+    updating only another column never fires a trigger declared on
+    `update of account_id`, and a first draft of the test that did so
+    let the "every write is asked" mutant survive. New
+    `every_account_fits_where_it_is_used.sql` (32 assertions, failing
+    before the migration at its first: an expense coded to receivables
+    "was not refused at all"); 10 / 10 mutants of the new function
+    killed, a control surviving. The harness mutates functions, not
+    triggers, so each of the ten triggers `0926` creates was dropped in
+    turn inside the test's own transaction, and each of the fixed
+    asset's three arguments removed in turn: 13 / 13 killed, a comment
+    on a trigger as the control surviving. Whole suite 507 files /
+    18914; the eight default dates green on this file, on `0912`'s
+    and `0923`'s, and on `landed_cost.sql`. Locally
+    `app.the_stock_is_not_its_own_other_side` hashes `9be50af7`, a
+    definer, and the 23 triggers named
+    `an_account_fits_where_it_is_used`,
+    `a_closed_account_takes_no_new_name` and
+    `the_stock_is_not_its_own_other_side` hash together to
+    `5e527add` (md5 over relation and definition, ordered by
+    relation then name). Not in this: `retire_account` does not ask a
+    draft landed cost run (`0922`'s question), so a charge's account
+    can close under a draft and `post_landed_cost_run` would still
+    credit it.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does

@@ -2254,6 +2254,16 @@ Stated plainly so nothing here is mistaken for finished:
   kind, it named that company's account in the message. It now reads
   only the row's own company's accounts and leaves the rest to the
   tenant key, which names none, as `0919` and `0923` already did
+- Every account fits where it is used, since `0926`. `0912`'s rule --
+  no heading, bank, till, receivable or payable -- now asks an
+  expense and its split, a claim type, a payment method's charge, a
+  fixed asset's three accounts, a stock adjustment and a landed cost
+  charge, for every writer. An expense on receivables posted a
+  receivable with no customer; a landed cost charge took anything,
+  1310 itself included, which moved the stock with nothing in the
+  ledger. A landed cost charge now also refuses a closed account, and
+  neither it nor a stock adjustment may be 1310, the stock they post
+  the other side of; 1320 Goods in Transit is still a charge's account
 - ~~E-mail delivery of anything.~~ Built and deployed: documents send
   through Resend, overdue invoices are chased on a schedule, and every
   send is logged per document. What is left is not code — a provider

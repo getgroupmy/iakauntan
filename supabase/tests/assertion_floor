@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18882
+18914
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2373,3 +2373,21 @@
 # not exist is the foreign key's, not a sentence about nothing; the
 # company's own bank account on an item and on a customer, and its own
 # heading on an invoice line, are still described; nothing was named).
+#
+# 18882 -> 18914, 24 November: 0926's
+# every_account_fits_where_it_is_used.sql (32: an expense is not coded
+# to receivables, nor to the bank it was paid from, nor moved onto the
+# till, nor split onto payables; a claim type is not charged to
+# receivables nor moved onto the bank; a payment method does not take
+# its charges out of the bank; a fixed asset's asset, accumulated and
+# expense accounts are not a receivable, a heading or a bank; a stock
+# adjustment is not set against receivables nor against the stock,
+# new or moved; a landed cost charge does not come off the bank,
+# receivables, payables, a closed account or the stock it lands on,
+# and another company's stock account is not described; nothing was
+# written; the right kinds are taken by each; a charge held in Goods in
+# Transit comes off it and onto the stock, the ledger's stock the
+# stock's own 1,050; the database's owner is refused a charge on the
+# bank, on a heading and on the stock, and an expense on receivables;
+# another company's stock account is left to the tenant key; a row
+# already naming one, an expense and an adjustment, is saved whole).
