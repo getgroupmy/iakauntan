@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18914
+18921
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2391,3 +2391,11 @@
 # bank, on a heading and on the stock, and an expense on receivables;
 # another company's stock account is left to the tenant key; a row
 # already naming one, an expense and an adjustment, is saved whole).
+#
+# 18914 -> 18921, 24 November: 0927's
+# an_account_a_landed_cost_run_names_is_not_closed.sql (7: an account a
+# draft run's charge names is not closed, nor one its second charge
+# names; both are still open; while it is drafted an account it does
+# not name still closes; the run posts its freight off an open
+# account; an account a posted run named, emptied by journal, is
+# closed; and one only a cancelled run names).

@@ -2264,6 +2264,11 @@ Stated plainly so nothing here is mistaken for finished:
   ledger. A landed cost charge now also refuses a closed account, and
   neither it nor a stock adjustment may be 1310, the stock they post
   the other side of; 1320 Goods in Transit is still a charge's account
+- An account a landed cost run names is not closed, since `0927`.
+  `retire_account` closed an account a draft run's charge named, and
+  the run, posted after, credited the closed account. It now refuses
+  while a draft run names it, as it does for a draft invoice, bill,
+  expense or stock adjustment since `0922`
 - ~~E-mail delivery of anything.~~ Built and deployed: documents send
   through Resend, overdue invoices are chased on a schedule, and every
   send is logged per document. What is left is not code — a provider

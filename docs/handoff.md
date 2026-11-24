@@ -5579,6 +5579,31 @@ page and renumbering would quietly break the reference.
     whole suite here had passed. It now names 6900. A scan of every
     test and migration for an account picked by `limit 1` with no
     number, type or subtype found no other feeding a guarded column.
+195. ~~An account a draft landed cost run named could be closed.~~
+    **Raised and answered 24 November** ("Refuse closing while
+    drafted"), the gap `0926` recorded as not in it. `0922` made
+    `retire_account` refuse an account a document not yet posted
+    names; a landed cost run is written and posted the same way and
+    was not asked. Measured locally as the owner with `authenticated`:
+    a draft run with one charge of 50 on 5491; `retire_account(5491)`
+    answered "closed"; the run then posted 1310 50 and 5491 -50, into
+    an account closed under it, which now carried a balance. Production
+    on 24 November: no landed cost run at all. `0927` restates
+    `retire_account` from `pg_get_functiondef` with only the lines
+    marked 0927 added: it refuses while a draft run has a charge on the
+    account, naming the run in `0922`'s words ("unposted landed cost
+    run LC-..."). A run posted or cancelled is not counted. New
+    `an_account_a_landed_cost_run_names_is_not_closed.sql` (7
+    assertions, failing before the migration at its first: "it was not
+    refused at all"); 6 / 6 mutants killed, a control surviving -- one
+    of them, "a draft run holds every account, named or not", needed
+    the assertion that an account the run does not name still closes
+    while it is drafted. The clause's company filter is not mutated: a
+    charge naming the account is the account's company's by its tenant
+    key, so dropping it is equivalent. Whole suite 508 files / 18921;
+    the eight default dates green on this file, on `0921`'s and
+    `0922`'s, and on `landed_cost.sql`. Locally `retire_account`
+    hashes `a1250d83`, a definer.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
