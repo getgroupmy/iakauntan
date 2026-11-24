@@ -5613,6 +5613,14 @@ page and renumbering would quietly break the reference.
     the eight default dates green on this file, on `0921`'s and
     `0922`'s, and on `landed_cost.sql`. Locally `retire_account`
     hashes `a1250d83`, a definer.
+    **Applied, and read back** (24 November, read-only, after run
+    45396574189 on `6ba577c` had applied the migrations, its three
+    deploy jobs present; its Android build hit the GitHub API rate
+    limit at `setup-java` again, 3.42.157.123, through both of the
+    workflow's waits, and was re-run, green on the second attempt):
+    `retire_account` hashes
+    `a1250d83`, still a definer, as here. The same run counted
+    `6767 Dart tests ran (floor 6767)`.
 196. ~~A landed cost run could be dated before its goods arrived.~~
     **Raised and answered 24 November** ("Not before goods arrived").
     A run's journal and stock movement are dated by the run, and
