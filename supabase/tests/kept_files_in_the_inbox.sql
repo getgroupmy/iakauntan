@@ -233,8 +233,12 @@ begin
     (org_id, expense_no, expense_date, amount, total_amount, status,
      account_id)
   values (v_org, 'EXP-1', pg_temp.today(), 100, 100, 'draft',
+          -- An expense account by its number. This read "the first
+          -- account that is not a heading", which on CI's database
+          -- was 1210 -- refused by `0926`, as an expense on
+          -- receivables should be -- and locally was something else.
           (select id from public.accounts
-            where org_id = v_org and not is_group limit 1))
+            where org_id = v_org and code = '6900' and not is_group))
   returning id into v_exp;
 
   -- The older reading posted an expense; the newer one did not.

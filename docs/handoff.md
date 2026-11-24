@@ -5571,6 +5571,14 @@ page and renumbering would quietly break the reference.
     draft landed cost run (`0922`'s question), so a charge's account
     can close under a draft and `post_landed_cost_run` would still
     credit it.
+    Its first CI run, 45386181994 on `5661fd8`, went red at
+    `kept_files_in_the_inbox.sql`, and the migrations were not
+    applied: that file's expense took "the first account that is not
+    a heading", an unordered `limit 1`, which on CI's database was
+    1210 -- refused by `0926`, rightly -- and locally was not, so the
+    whole suite here had passed. It now names 6900. A scan of every
+    test and migration for an account picked by `limit 1` with no
+    number, type or subtype found no other feeding a guarded column.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
