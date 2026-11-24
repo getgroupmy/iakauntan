@@ -5579,6 +5579,15 @@ page and renumbering would quietly break the reference.
     whole suite here had passed. It now names 6900. A scan of every
     test and migration for an account picked by `limit 1` with no
     number, type or subtype found no other feeding a guarded column.
+    Its second, 45388326168 on `1a18711`, went green in SQL and
+    **applied the migrations**, its three deploy jobs present; its
+    Android build hit the GitHub API rate limit at `setup-java`
+    (3.42.157.117, both tries around the 180-second wait) and was
+    re-run, the documented flake, green on the second attempt.
+    **Applied, and read back** (24
+    November, read-only): `app.the_stock_is_not_its_own_other_side`
+    hashes `9be50af7`, a definer, and the 23 triggers `5e527add`, as
+    here. The same run counted `6767 Dart tests ran (floor 6767)`.
 195. ~~An account a draft landed cost run named could be closed.~~
     **Raised and answered 24 November** ("Refuse closing while
     drafted"), the gap `0926` recorded as not in it. `0922` made
