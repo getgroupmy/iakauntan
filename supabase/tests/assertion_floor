@@ -968,7 +968,7 @@
 # set-off, a deposit and a cheque as payment of service tax (5).
 # Measured:
 # `all SQL assertions passed (386 files, 15066 assertions executed)`.
-18921
+18937
 #
 # 15066 -> 15200, 6 October: the rest of 0739's functions and the
 # statutory dates, rule by rule -- bank transfers, sales by person, the
@@ -2399,3 +2399,16 @@
 # not name still closes; the run posts its freight off an open
 # account; an account a posted run named, emptied by journal, is
 # closed; and one only a cancelled run names).
+#
+# 18921 -> 18937, 24 November: 0928's
+# a_landed_cost_run_follows_its_goods.sql (16: the note, not its bill,
+# moved the goods it received; a run is not dated the day before its
+# bill's goods arrived, nor before a goods received note brought in
+# what its bill names; a run over two bills follows the later; a bill
+# that received nothing is taken at its own date; none of those was
+# kept; a run on the day the goods arrived posts on that day, and one
+# after the note and before its bill; a saved run is not moved to
+# before its goods and keeps its date; moved earlier with its later
+# bill taken off, it is saved; a date changed behind the save is not
+# posted, is still a draft, with nothing posted and no stock moved for
+# it; dated after its goods again, it posts).

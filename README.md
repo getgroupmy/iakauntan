@@ -2269,6 +2269,12 @@ Stated plainly so nothing here is mistaken for finished:
   the run, posted after, credited the closed account. It now refuses
   while a draft run names it, as it does for a draft invoice, bill,
   expense or stock adjustment since `0922`
+- A landed cost run follows its goods, since `0928`. A run took any
+  date and posted its journal and its stock movement on it: one dated
+  sixty days before its bill put freight onto stock that was not there
+  yet. It may now not be dated before the goods on any bill it spreads
+  over arrived -- the bill's receipt, or the goods received note's it
+  was raised from -- asked when it is saved and again when it posts
 - ~~E-mail delivery of anything.~~ Built and deployed: documents send
   through Resend, overdue invoices are chased on a schedule, and every
   send is logged per document. What is left is not code — a provider

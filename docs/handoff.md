@@ -5613,6 +5613,39 @@ page and renumbering would quietly break the reference.
     the eight default dates green on this file, on `0921`'s and
     `0922`'s, and on `landed_cost.sql`. Locally `retire_account`
     hashes `a1250d83`, a definer.
+196. ~~A landed cost run could be dated before its goods arrived.~~
+    **Raised and answered 24 November** ("Not before goods arrived").
+    A run's journal and stock movement are dated by the run, and
+    `upsert_landed_cost_run` took any date. Measured locally as the
+    owner with `authenticated`: a hundred tiles billed and received
+    today, a run over that bill dated sixty days ago -- posted on that
+    day; the stock card for the day before the goods arrived read
+    nothing on hand worth RM50, and the freight left 5400 two months
+    before it was spent. Production on 24 November: no landed cost run
+    at all. `0928` adds `app.landed_cost_goods_arrived` -- a bill's
+    latest receipt, or that of the goods received note it was raised
+    from (which moves the stock and leaves the bill none of its own),
+    or failing both its own date -- and a definer trigger,
+    `app.a_landed_cost_run_follows_its_goods`, on
+    `landed_cost_targets` (a bill put on a run) and on
+    `landed_cost_runs` (when it is posted). Not when the date alone
+    changes: the save sets the date before it puts the bills back, so a
+    run moved earlier with its later bill taken off would be asked about
+    a bill it no longer spreads over -- the test saves exactly that.
+    Every save re-inserts every bill, so a save is always asked, and
+    posting catches a date changed by any other writer. New
+    `a_landed_cost_run_follows_its_goods.sql` (16 assertions, failing
+    before the migration at its first: "it was not refused at all");
+    9 / 9 function mutants killed, both triggers dropped in turn
+    killed, controls surviving. Three are recorded in the mutants file
+    as equivalent: reading only the note and not the bill's own receipt
+    (a bill dates its own receipt by its own date, the fallback),
+    `quantity > 0`, and the target branch's company filter. Whole
+    suite 509 files / 18937; the eight default dates green on this
+    file, on `landed_cost.sql`, `goods_received.sql` and `0927`'s.
+    Locally `app.landed_cost_goods_arrived` hashes `cc5ebea4` and
+    `app.a_landed_cost_run_follows_its_goods` `d5028850`, both
+    definers, and the two triggers together `f34bbcb9`.
 And four things that are **known-unverified and must be described that
 way** rather than as working: the voice-note mime-type fix; whether the
 `google-services` Gradle plugin actually applied — the build log does
